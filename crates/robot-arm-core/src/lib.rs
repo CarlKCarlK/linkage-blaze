@@ -70,15 +70,16 @@ impl<P> Arg<P> {
 }
 
 /// A fixed-size linkage description.
-pub struct Linkage<const N: usize, P> {
+pub struct Linkage<P, const N: usize> {
     steps: [Step<P>; N],
+    len: usize,
 }
 
-impl<const N: usize, P> Linkage<N, P> {
-    /// Start building a fixed-size linkage.
-    pub const fn builder() -> LinkageBuilder<N, P> {
+impl<P, const N: usize> Linkage<P, N> {
+    /// Start a fixed-size linkage with an implicit origin row.
+    pub const fn start() -> Self {
         assert!(N > 0, "linkage must have room for the implicit start step");
-        LinkageBuilder {
+        Self {
             steps: [const { Step::Start }; N],
             len: 1,
         }
@@ -90,21 +91,20 @@ impl<const N: usize, P> Linkage<N, P> {
         &self.steps
     }
 
-    /// Create a simulation iterator for this linkage.
-    pub fn simulate<'a>(&'a self, params: &'a P) -> Simulate<'a, N, P> {
-        Simulate::new(self, params)
+    /// Return the number of linkage steps, including the implicit start step.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len
     }
-}
 
-/// Const builder for [`Linkage`].
-pub struct LinkageBuilder<const N: usize, P> {
-    steps: [Step<P>; N],
-    len: usize,
-}
+    /// Return true when the linkage has no steps.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 
-impl<const N: usize, P> LinkageBuilder<N, P> {
     /// Add a yaw step from a user-facing angle in degrees.
-    pub const fn yaw_deg(self, degrees: f32) -> Self {
+    pub const fn yaw(self, degrees: f32) -> Self {
         self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
@@ -114,7 +114,7 @@ impl<const N: usize, P> LinkageBuilder<N, P> {
     }
 
     /// Add a pitch step from a user-facing angle in degrees.
-    pub const fn pitch_deg(self, degrees: f32) -> Self {
+    pub const fn pitch(self, degrees: f32) -> Self {
         self.push(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
@@ -124,7 +124,7 @@ impl<const N: usize, P> LinkageBuilder<N, P> {
     }
 
     /// Add a roll step from a user-facing angle in degrees.
-    pub const fn roll_deg(self, degrees: f32) -> Self {
+    pub const fn roll(self, degrees: f32) -> Self {
         self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
@@ -133,8 +133,8 @@ impl<const N: usize, P> LinkageBuilder<N, P> {
         self.push(Step::Roll(Arg::Param(accessor)))
     }
 
-    /// Add a fixed move step.
-    pub const fn move_forward(self, distance: f32) -> Self {
+    /// Add a fixed forward move step.
+    pub const fn forward(self, distance: f32) -> Self {
         self.push(Step::Move(Arg::Fixed(distance)))
     }
 
@@ -143,17 +143,16 @@ impl<const N: usize, P> LinkageBuilder<N, P> {
         self.push(Step::Move(Arg::Param(accessor)))
     }
 
-    /// Finish building the linkage.
-    pub const fn seal(self) -> Linkage<N, P> {
-        assert!(self.len == N, "linkage step count must match N");
-        Linkage { steps: self.steps }
-    }
-
     const fn push(mut self, step: Step<P>) -> Self {
         assert!(self.len < N, "linkage has more steps than N");
         self.steps[self.len] = step;
         self.len += 1;
         self
+    }
+
+    /// Create a simulation iterator for this linkage.
+    pub fn simulate<'a>(&'a self, params: &'a P) -> Simulate<'a, P, N> {
+        Simulate::new(self, params)
     }
 }
 
@@ -236,16 +235,16 @@ impl Turtle {
 /// Iterator over joint positions produced by simulating a linkage.
 ///
 /// Yields the [`Step::Start`] position `[0,0,0]` and then the position after each [`Step::Move`].
-pub struct Simulate<'a, const N: usize, P> {
-    linkage: &'a Linkage<N, P>,
+pub struct Simulate<'a, P, const N: usize> {
+    linkage: &'a Linkage<P, N>,
     params: &'a P,
     index: usize,
     turtle: Turtle,
 }
 
-impl<'a, const N: usize, P> Simulate<'a, N, P> {
+impl<'a, P, const N: usize> Simulate<'a, P, N> {
     /// Create a new simulation iterator for the given linkage.
-    pub fn new(linkage: &'a Linkage<N, P>, params: &'a P) -> Self {
+    pub fn new(linkage: &'a Linkage<P, N>, params: &'a P) -> Self {
         Self {
             linkage,
             params,
@@ -255,12 +254,15 @@ impl<'a, const N: usize, P> Simulate<'a, N, P> {
     }
 }
 
-impl<const N: usize, P> Iterator for Simulate<'_, N, P> {
+impl<P, const N: usize> Iterator for Simulate<'_, P, N> {
     type Item = Vec3;
 
     fn next(&mut self) -> Option<Vec3> {
         loop {
-            let step = self.linkage.steps.get(self.index)?;
+            if self.index >= self.linkage.len {
+                return None;
+            }
+            let step = &self.linkage.steps[self.index];
             self.index += 1;
             self.turtle.apply(step, self.params);
             if matches!(step, Step::Start | Step::Move(_)) {
@@ -274,7 +276,6 @@ impl<const N: usize, P> Iterator for Simulate<'_, N, P> {
 mod tests {
     use super::{Linkage, Params, Step};
 
-    const LINKAGE_MAX_STEPS: usize = 24;
     const EXCEL_PARAMS: Params = Params::from_degrees(
         -45.15793644,
         -45.26102633,
@@ -308,35 +309,34 @@ mod tests {
         params.spin_hand
     }
 
-    const LINKAGE: Linkage<LINKAGE_MAX_STEPS, Params> = Linkage::builder()
-        .yaw_deg(90.0)
+    const LINKAGE: Linkage<Params, 24> = Linkage::start()
+        .yaw(90.0)
         .yaw_param(lower_hand)
-        .pitch_deg(90.0)
-        .move_forward(2.5)
-        .pitch_deg(-90.0)
-        .pitch_deg(-6.66134e-15)
-        .move_forward(3.0)
+        .pitch(90.0)
+        .forward(2.5)
+        .pitch(-90.0)
+        .pitch(0.0)
+        .forward(3.0)
         .yaw_param(lower_arm)
-        .move_forward(3.0)
+        .forward(3.0)
         .pitch_param(bend_elbow)
-        .move_forward(1.0)
-        .roll_deg(180.0)
-        .move_forward(0.5)
+        .forward(1.0)
+        .roll(180.0)
+        .forward(0.5)
         .yaw_param(spin_wrist)
         .move_param(close_hand)
-        .yaw_deg(-90.0)
-        .move_forward(1.0)
+        .yaw(-90.0)
+        .forward(1.0)
         .yaw_param(spin_hand)
-        .move_forward(1.0)
-        .yaw_deg(90.0)
-        .move_forward(0.49988043)
-        .yaw_deg(90.0)
-        .move_forward(1.0)
-        .seal();
+        .forward(1.0)
+        .yaw(90.0)
+        .forward(0.5)
+        .yaw(90.0)
+        .forward(1.0);
 
     #[test]
     fn test_linkage_structure() {
-        assert_eq!(LINKAGE.steps().len(), LINKAGE_MAX_STEPS);
+        assert_eq!(LINKAGE.len(), 24);
         assert!(matches!(LINKAGE.steps()[0], Step::Start));
         assert!(matches!(LINKAGE.steps()[12], Step::Roll(_)));
         assert!(matches!(LINKAGE.steps()[23], Step::Move(_)));
