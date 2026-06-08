@@ -7,6 +7,8 @@
 /// - v0 = tail → nose (forward), v1 = right → left, v2 = belly → back
 #[derive(Debug, PartialEq)]
 pub enum Step {
+    /// Reset to the origin with the identity orientation.
+    Start,
     /// Rotate around v2 (belly → back): turn left/right.
     Yaw(f64),
     /// Rotate around v1 (right → left): nose up/down.
@@ -45,7 +47,7 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 fn rotation_matrix(step: &Step) -> Mat3 {
     let deg = match step {
         Step::Yaw(a) | Step::Pitch(a) | Step::Roll(a) => *a,
-        Step::Move(_) => return IDENTITY,
+        Step::Start | Step::Move(_) => return IDENTITY,
     };
     let rad = deg * (core::f64::consts::PI / 180.0);
     let c = libm::cos(rad);
@@ -54,7 +56,7 @@ fn rotation_matrix(step: &Step) -> Mat3 {
         Step::Yaw(_)   => [[c, -s, 0.0], [s,  c,  0.0], [0.0, 0.0, 1.0]],
         Step::Pitch(_) => [[c, 0.0, -s], [0.0, 1.0, 0.0], [s,  0.0,  c ]],
         Step::Roll(_)  => [[1.0, 0.0, 0.0], [0.0, c, -s], [0.0,  s,   c ]],
-        Step::Move(_)  => IDENTITY,
+        Step::Start | Step::Move(_) => IDENTITY,
     }
 }
 
@@ -70,6 +72,9 @@ impl Turtle {
 
     fn apply(&mut self, step: &Step) {
         match step {
+            Step::Start => {
+                *self = Self::new();
+            }
             Step::Move(dist) => {
                 // advance along v0 = col 0 of orientation
                 self.position[0] += dist * self.orientation[0][0];
@@ -90,13 +95,12 @@ pub struct Simulate<'a> {
     steps: &'a [Step],
     index: usize,
     turtle: Turtle,
-    started: bool,
 }
 
 impl<'a> Simulate<'a> {
     /// Create a new simulation iterator for the given linkage steps.
     pub fn new(steps: &'a [Step]) -> Self {
-        Self { steps, index: 0, turtle: Turtle::new(), started: false }
+        Self { steps, index: 0, turtle: Turtle::new() }
     }
 }
 
@@ -104,15 +108,11 @@ impl Iterator for Simulate<'_> {
     type Item = Vec3;
 
     fn next(&mut self) -> Option<Vec3> {
-        if !self.started {
-            self.started = true;
-            return Some(self.turtle.position);
-        }
         loop {
             let step = self.steps.get(self.index)?;
             self.index += 1;
             self.turtle.apply(step);
-            if matches!(step, Step::Move(_)) {
+            if matches!(step, Step::Start | Step::Move(_)) {
                 return Some(self.turtle.position);
             }
         }
@@ -124,6 +124,7 @@ mod tests {
     use super::{Simulate, Step};
 
     const LINKAGE: &[Step] = &[
+        Step::Start,
         Step::Yaw(90.0),
         Step::Yaw(-45.15793644),
         Step::Pitch(90.0),
@@ -149,28 +150,12 @@ mod tests {
         Step::Move(1.0),
     ];
 
-    fn assert_vec3_approx_eq(actual: [f64; 3], expected: [f64; 3]) {
-        let close_enough = actual
-            .iter()
-            .zip(expected.iter())
-            .all(|(x, y)| (x - y).abs() < 1e-3);
-        assert!(
-            close_enough,
-            "expected ({:.5},{:.5},{:.5}), got ({:.5},{:.5},{:.5})",
-            expected[0], expected[1], expected[2], actual[0], actual[1], actual[2]
-        );
-    }
-
-    fn position_after_move(move_index: usize) -> [f64; 3] {
-        Simulate::new(LINKAGE).nth(move_index).unwrap()
-    }
-
     #[test]
     fn test_linkage_structure() {
-        assert_eq!(LINKAGE.len(), 23);
-        assert_eq!(LINKAGE[0], Step::Yaw(90.0));
-        assert_eq!(LINKAGE[11], Step::Roll(180.0));
-        assert_eq!(LINKAGE[22], Step::Move(1.0));
+        assert_eq!(LINKAGE.len(), 24);
+        assert_eq!(LINKAGE[0], Step::Start);
+        assert_eq!(LINKAGE[12], Step::Roll(180.0));
+        assert_eq!(LINKAGE[23], Step::Move(1.0));
     }
 
     #[test]
@@ -214,4 +199,22 @@ mod tests {
     fn test_simulate_last_move_matches_excel() {
         assert_vec3_approx_eq(position_after_move(10), [5.32801, 5.647, 0.724]);
     }
+
+    fn assert_vec3_approx_eq(actual: [f64; 3], expected: [f64; 3]) {
+        let close_enough = actual
+            .iter()
+            .zip(expected.iter())
+            .all(|(x, y)| (x - y).abs() < 1e-3);
+        assert!(
+            close_enough,
+            "expected ({:.5},{:.5},{:.5}), got ({:.5},{:.5},{:.5})",
+            expected[0], expected[1], expected[2], actual[0], actual[1], actual[2]
+        );
+    }
+
+    fn position_after_move(move_index: usize) -> [f64; 3] {
+        Simulate::new(LINKAGE).nth(move_index).unwrap()
+    }
+
+
 }
