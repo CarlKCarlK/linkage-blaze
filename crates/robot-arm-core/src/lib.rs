@@ -2,11 +2,15 @@
 #![forbid(unsafe_code)]
 #![doc = "No-allocation robot arm simulation and math primitives."]
 
+//todo0000 Be sure the parameters are connect the same as in Excel.
+//todo0000 Test changing the params and checking the picture.
+//todo000 move some of that global static stuff to be const local.
+//todo000 revisit the name Param and Args
+//todo000 is the way that access functions are passed into parameters Yaw, etc, good? Can methods be used instead of stand-alone functions?
 //todo00 allow splits/DAGs in the models.
 
 #[cfg(test)]
 extern crate std;
-
 
 /// A step in the robot arm linkage description.
 ///
@@ -30,22 +34,28 @@ pub enum Step<P> {
 /// Angle fields are stored in radians. Distance fields are stored in linkage units.
 #[derive(Clone, Copy, Debug)]
 pub struct Params {
+    /// -90 to +90 degrees.
     pub lower_hand: f32,
+    /// -90 to +90 degrees.
     pub bend_elbow: f32,
+    /// 0 to 1 linkage units.
     pub close_hand: f32,
+    /// 0 to 30 degrees.
     pub lower_arm: f32,
-    pub spin_wrist: f32,
+    /// -180 to +180 degrees.
+    pub spin_whole_arm: f32,
+    /// -180 to +180 degrees.
     pub spin_hand: f32,
 }
 
 impl Params {
     /// Create model parameters from user-facing degree values and distances.
-    pub const fn from_degrees(
+    pub const fn new(
         lower_hand: f32,
         bend_elbow: f32,
         close_hand: f32,
         lower_arm: f32,
-        spin_wrist: f32,
+        spin_whole_arm: f32,
         spin_hand: f32,
     ) -> Self {
         Self {
@@ -53,9 +63,22 @@ impl Params {
             bend_elbow: degrees_to_radians(bend_elbow),
             close_hand,
             lower_arm: degrees_to_radians(lower_arm),
-            spin_wrist: degrees_to_radians(spin_wrist),
+            spin_whole_arm: degrees_to_radians(spin_whole_arm),
             spin_hand: degrees_to_radians(spin_hand),
         }
+    }
+
+    /// Set all parameters from normalized fractions in their allowed ranges.
+    ///
+    /// The fractions are ordered as:
+    /// lower hand, bend elbow, close hand, lower arm, spin whole arm, spin hand.
+    pub fn set_fraction(&mut self, fractions: &[f32; 6]) {
+        self.lower_hand = angle_fraction_to_radians(fractions[0], -90.0, 90.0);
+        self.bend_elbow = angle_fraction_to_radians(fractions[1], -90.0, 90.0);
+        self.close_hand = fraction_to_range(fractions[2], 0.0, 1.0);
+        self.lower_arm = angle_fraction_to_radians(fractions[3], 0.0, 30.0);
+        self.spin_whole_arm = angle_fraction_to_radians(fractions[4], -180.0, 180.0);
+        self.spin_hand = angle_fraction_to_radians(fractions[5], -180.0, 180.0);
     }
 }
 
@@ -165,14 +188,27 @@ impl<P, const N: usize> Linkage<P, N> {
 /// 3D position [x, y, z].
 pub type Vec3 = [f32; 3];
 
-// 3×3 rotation matrix, row-major: mat[row][col].
-// Columns are body-frame axes: col 0 = v0 (forward), col 1 = v1 (left), col 2 = v2 (up/back).
-type Mat3 = [[f32; 3]; 3];
+/// 3×3 rotation matrix, row-major: mat[row][col].
+///
+/// Columns are body-frame axes: col 0 = v0 (forward), col 1 = v1 (left), col 2 = v2 (up/back).
+pub type Mat3 = [[f32; 3]; 3];
 
 const IDENTITY: Mat3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 const fn degrees_to_radians(degrees: f32) -> f32 {
     degrees * (core::f32::consts::PI / 180.0)
+}
+
+fn fraction_to_range(fraction: f32, min: f32, max: f32) -> f32 {
+    assert!(
+        (0.0..=1.0).contains(&fraction),
+        "fraction must be in 0.0..=1.0"
+    );
+    min + fraction * (max - min)
+}
+
+fn angle_fraction_to_radians(fraction: f32, min_degrees: f32, max_degrees: f32) -> f32 {
+    degrees_to_radians(fraction_to_range(fraction, max_degrees, min_degrees))
 }
 
 fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
@@ -206,9 +242,11 @@ fn rotation_matrix<P>(step: &Step<P>, params: &P) -> Mat3 {
     }
 }
 
-struct Turtle {
-    orientation: Mat3,
-    position: Vec3,
+/// Full turtle state after evaluating a linkage step.
+#[derive(Clone, Copy, Debug)]
+pub struct Turtle {
+    pub orientation: Mat3,
+    pub position: Vec3,
 }
 
 impl Turtle {
@@ -227,20 +265,22 @@ impl Turtle {
             Step::Move(arg) => {
                 let dist = arg.resolve(params);
                 // advance along v0 = col 0 of orientation
+                //todo000 can we define Vec3 and mat3 operations?
                 self.position[0] += dist * self.orientation[0][0];
                 self.position[1] += dist * self.orientation[1][0];
                 self.position[2] += dist * self.orientation[2][0];
             }
             _ => {
+                //todo000 can we define Vec3 and mat3 operations?
                 self.orientation = mat_mul(self.orientation, rotation_matrix(step, params));
             }
         }
     }
 }
 
-/// Iterator over joint positions produced by simulating a linkage.
+/// Iterator over turtle states produced by simulating a linkage.
 ///
-/// Yields the [`Step::Start`] position `[0,0,0]` and then the position after each [`Step::Move`].
+/// Yields one [`Turtle`] after every linkage step, including the implicit [`Step::Start`].
 pub struct Simulate<'a, P, const N: usize> {
     linkage: &'a Linkage<P, N>,
     params: &'a P,
@@ -261,26 +301,22 @@ impl<'a, P, const N: usize> Simulate<'a, P, N> {
 }
 
 impl<P, const N: usize> Iterator for Simulate<'_, P, N> {
-    type Item = Vec3;
+    type Item = Turtle;
 
-    fn next(&mut self) -> Option<Vec3> {
-        loop {
-            if self.index >= self.linkage.len {
-                return None;
-            }
-            let step = &self.linkage.steps[self.index];
-            self.index += 1;
-            self.turtle.apply(step, self.params);
-            if matches!(step, Step::Start | Step::Move(_)) {
-                return Some(self.turtle.position);
-            }
+    fn next(&mut self) -> Option<Turtle> {
+        if self.index >= self.linkage.len {
+            return None;
         }
+        let step = &self.linkage.steps[self.index];
+        self.index += 1;
+        self.turtle.apply(step, self.params);
+        Some(self.turtle)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Linkage, Params, Step};
+    use super::{Linkage, Params, Step, Turtle};
     use core::convert::Infallible;
     use embedded_graphics::{
         draw_target::DrawTarget,
@@ -293,8 +329,7 @@ mod tests {
     use std::{
         boxed::Box,
         error::Error,
-        format,
-        fs,
+        format, fs,
         fs::File,
         io::BufWriter,
         path::{Path, PathBuf},
@@ -302,61 +337,67 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    const EXCEL_PARAMS: Params = Params::from_degrees(
-        -45.15793644,
-        -45.26102633,
-        0.249940215,
-        -0.036069163,
-        90.0,
-        180.0,
-    );
+    //todo0000 having these be constant isn't the usual use case.
+    const EXCEL_PARAMS: Params =
+        Params::new(-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0);
 
+    // -90 to +90 degrees.
     fn lower_hand(params: &Params) -> f32 {
         params.lower_hand
     }
 
+    // -90 to +90 degrees.
     fn bend_elbow(params: &Params) -> f32 {
         params.bend_elbow
     }
 
-    fn close_hand(params: &Params) -> f32 {
+    // 0 to 1 linkage units.
+    fn close_hand_full(params: &Params) -> f32 {
         params.close_hand
     }
 
+    // 0 to 0.5 linkage units.
+    fn close_hand_half(params: &Params) -> f32 {
+        params.close_hand * 0.5
+    }
+
+    // 0 to 30 degrees.
     fn lower_arm(params: &Params) -> f32 {
         params.lower_arm
     }
 
-    fn spin_wrist(params: &Params) -> f32 {
-        params.spin_wrist
+    // -180 to +180 degrees.
+    fn spin_whole_arm(params: &Params) -> f32 {
+        params.spin_whole_arm
     }
 
+    // -180 to +180 degrees.
     fn spin_hand(params: &Params) -> f32 {
         params.spin_hand
     }
 
     const LINKAGE: Linkage<Params, 24> = Linkage::start()
         .yaw(90.0)
-        .yaw_param(lower_hand)
+        .yaw_param(spin_whole_arm)
         .pitch(90.0)
         .forward(2.5)
         .pitch(-90.0)
-        .pitch(0.0)
+        .pitch_param(lower_arm)
         .forward(3.0)
-        .yaw_param(lower_arm)
+        .yaw_param(bend_elbow)
         .forward(3.0)
-        .pitch_param(bend_elbow)
+        .pitch_param(lower_hand)
         .forward(1.0)
-        .roll(180.0)
+        .roll_param(spin_hand)
         .forward(0.5)
-        .yaw_param(spin_wrist)
-        .move_param(close_hand)
+        .yaw(90.0)
+        .move_param(close_hand_half)
         .yaw(-90.0)
         .forward(1.0)
-        .yaw_param(spin_hand)
+        .yaw(180.0)
         .forward(1.0)
         .yaw(90.0)
-        .forward(0.5)
+        .move_param(close_hand_full)
         .yaw(90.0)
         .forward(1.0);
 
@@ -371,13 +412,12 @@ mod tests {
     #[test]
     fn test_simulate_yields_initial_position() {
         let first = LINKAGE.simulate(&EXCEL_PARAMS).next().unwrap();
-        assert_vec3_approx_eq(first, [0.0, 0.0, 0.0]);
+        assert_vec3_approx_eq(first.position, [0.0, 0.0, 0.0]);
     }
 
     #[test]
     fn test_simulate_position_count() {
-        // 10 Move steps → 11 positions (initial + one per Move)
-        assert_eq!(LINKAGE.simulate(&EXCEL_PARAMS).count(), 11);
+        assert_eq!(LINKAGE.simulate(&EXCEL_PARAMS).count(), LINKAGE.len());
     }
 
     #[test]
@@ -411,9 +451,77 @@ mod tests {
     }
 
     #[test]
+    fn test_fraction_setting_matches_excel_turtle() {
+        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        params.set_fraction(&[
+            0.7514501463,
+            0.49,
+            0.50011957,
+            1.0,
+            0.6254387123,
+            1.0,
+        ]);
+
+        let turtle = LINKAGE
+            .simulate(&params)
+            .last()
+            .expect("linkage must yield final turtle");
+
+        assert_mat3_approx_eq(
+            turtle.orientation,
+            [
+                [0.483250222, 0.727078899, -0.487673557],
+                [0.51177487, -0.686553913, -0.516459299],
+                [-0.710320847, -9.14661e-17, -0.703878039],
+            ],
+        );
+        assert_vec3_approx_eq(turtle.position, [5.213220756, 5.747736152, 0.724197882]);
+    }
+
+    #[test]
+    fn test_mid_fraction_setting_matches_excel_turtle() {
+        let params = mid_fraction_params();
+        let turtle = LINKAGE
+            .simulate(&params)
+            .last()
+            .expect("linkage must yield final turtle");
+
+        assert_mat3_approx_eq(
+            turtle.orientation,
+            [
+                [-0.587785252, -0.809016994, -1.58546e-17],
+                [0.781450409, -0.567756956, -0.258819045],
+                [0.209389006, -0.152130018, 0.965925826],
+            ],
+        );
+        assert_vec3_approx_eq(turtle.position, [-2.82831039, 7.479633205, 4.504161677]);
+    }
+
+    #[test]
     fn test_linkage_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        let canvas = draw_linkage_xy_canvas();
+        let canvas = draw_linkage_xy_canvas(&EXCEL_PARAMS);
         assert_png_matches_expected("linkage_xy.png", &canvas)
+    }
+
+    #[test]
+    fn test_mid_fraction_linkage_png_matches_expected() -> Result<(), Box<dyn Error>> {
+        let params = mid_fraction_params();
+        let canvas = draw_linkage_xy_canvas(&params);
+        assert_png_matches_expected("linkage_xy_mid_fraction.png", &canvas)
+    }
+
+    #[test]
+    fn test_params_set_fraction_maps_to_ranges() {
+        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        params.set_fraction(&[0.0, 0.5, 1.0, 1.0, 0.25, 0.75]);
+
+        let expected = Params::new(90.0, 0.0, 1.0, 0.0, 90.0, -90.0);
+        assert_approx_eq(params.lower_hand, expected.lower_hand);
+        assert_approx_eq(params.bend_elbow, expected.bend_elbow);
+        assert_approx_eq(params.close_hand, expected.close_hand);
+        assert_approx_eq(params.lower_arm, expected.lower_arm);
+        assert_approx_eq(params.spin_whole_arm, expected.spin_whole_arm);
+        assert_approx_eq(params.spin_hand, expected.spin_hand);
     }
 
     fn assert_vec3_approx_eq(actual: [f32; 3], expected: [f32; 3]) {
@@ -428,8 +536,39 @@ mod tests {
         );
     }
 
+    fn assert_approx_eq(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < 1e-6,
+            "expected {expected:.6}, got {actual:.6}"
+        );
+    }
+
+    fn assert_mat3_approx_eq(actual: [[f32; 3]; 3], expected: [[f32; 3]; 3]) {
+        for row_index in 0..3 {
+            assert_vec3_approx_eq(actual[row_index], expected[row_index]);
+        }
+    }
+
     fn position_after_move(move_index: usize) -> [f32; 3] {
-        LINKAGE.simulate(&EXCEL_PARAMS).nth(move_index).unwrap()
+        LINKAGE
+            .steps()
+            .iter()
+            .zip(LINKAGE.simulate(&EXCEL_PARAMS))
+            .filter_map(|(step, turtle)| {
+                if matches!(step, Step::Start | Step::Move(_)) {
+                    Some(turtle.position)
+                } else {
+                    None
+                }
+            })
+            .nth(move_index)
+            .unwrap()
+    }
+
+    fn mid_fraction_params() -> Params {
+        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        params.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
+        params
     }
 
     const CANVAS_WIDTH: usize = 300;
@@ -494,16 +633,16 @@ mod tests {
         }
     }
 
-    fn draw_linkage_xy_canvas() -> Canvas {
+    fn draw_linkage_xy_canvas(params: &Params) -> Canvas {
         let mut canvas = Canvas::new();
-        let mut positions = LINKAGE.simulate(&EXCEL_PARAMS);
-        let mut previous = positions.next().expect("linkage must include start");
+        let mut previous: Option<Turtle> = None;
 
-        draw_point(&mut canvas, previous);
-        for position in positions {
-            draw_segment(&mut canvas, previous, position);
-            draw_point(&mut canvas, position);
-            previous = position;
+        for turtle in LINKAGE.simulate(params) {
+            if let Some(previous_turtle) = previous {
+                draw_segment(&mut canvas, previous_turtle.position, turtle.position);
+            }
+            draw_point(&mut canvas, turtle.position);
+            previous = Some(turtle);
         }
 
         canvas
@@ -559,8 +698,7 @@ mod tests {
         let actual_bytes = fs::read(&output_path)?;
         let _ = fs::remove_file(&output_path);
         assert_eq!(
-            expected_bytes,
-            actual_bytes,
+            expected_bytes, actual_bytes,
             "PNG bytes differ; rerun with ROBOT_ARM_UPDATE_PNGS=1 to accept the new image"
         );
         Ok(())
