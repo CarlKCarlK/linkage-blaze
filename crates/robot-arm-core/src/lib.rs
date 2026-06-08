@@ -10,34 +10,104 @@ pub enum Step {
     /// Reset to the origin with the identity orientation.
     Start,
     /// Rotate around v2 (belly → back): turn left/right.
-    Yaw(f32, &'static Step),
+    Yaw(Arg, &'static Step),
     /// Rotate around v1 (right → left): nose up/down.
-    Pitch(f32, &'static Step),
+    Pitch(Arg, &'static Step),
     /// Rotate around v0 (tail → nose): right side down.
-    Roll(f32, &'static Step),
+    Roll(Arg, &'static Step),
     /// Advance along v0 by the given distance.
-    Move(f32, &'static Step),
+    Move(Arg, &'static Step),
+}
+
+/// Runtime model parameters.
+///
+/// Angle fields are stored in radians. Distance fields are stored in linkage units.
+#[derive(Clone, Copy, Debug)]
+pub struct Params {
+    pub lower_hand: f32,
+    pub bend_elbow: f32,
+    pub close_hand: f32,
+    pub lower_arm: f32,
+    pub spin_wrist: f32,
+    pub spin_hand: f32,
+}
+
+impl Params {
+    /// Create model parameters from user-facing degree values and distances.
+    pub const fn from_degrees(
+        lower_hand: f32,
+        bend_elbow: f32,
+        close_hand: f32,
+        lower_arm: f32,
+        spin_wrist: f32,
+        spin_hand: f32,
+    ) -> Self {
+        Self {
+            lower_hand: degrees_to_radians(lower_hand),
+            bend_elbow: degrees_to_radians(bend_elbow),
+            close_hand,
+            lower_arm: degrees_to_radians(lower_arm),
+            spin_wrist: degrees_to_radians(spin_wrist),
+            spin_hand: degrees_to_radians(spin_hand),
+        }
+    }
+}
+
+/// A fixed argument or a runtime parameter accessor.
+#[derive(Clone, Copy, Debug)]
+pub enum Arg {
+    Fixed(f32),
+    Param(fn(&Params) -> f32),
+}
+
+impl Arg {
+    fn resolve(self, params: &Params) -> f32 {
+        match self {
+            Self::Fixed(value) => value,
+            Self::Param(accessor) => accessor(params),
+        }
+    }
 }
 
 impl Step {
     /// Create a yaw step from a user-facing angle in degrees.
     pub const fn yaw(degrees: f32, previous: &'static Step) -> Self {
-        Self::Yaw(degrees_to_radians(degrees), previous)
+        Self::Yaw(Arg::Fixed(degrees_to_radians(degrees)), previous)
+    }
+
+    /// Create a yaw step from a runtime parameter.
+    pub const fn yaw_param(accessor: fn(&Params) -> f32, previous: &'static Step) -> Self {
+        Self::Yaw(Arg::Param(accessor), previous)
     }
 
     /// Create a pitch step from a user-facing angle in degrees.
     pub const fn pitch(degrees: f32, previous: &'static Step) -> Self {
-        Self::Pitch(degrees_to_radians(degrees), previous)
+        Self::Pitch(Arg::Fixed(degrees_to_radians(degrees)), previous)
+    }
+
+    /// Create a pitch step from a runtime parameter.
+    pub const fn pitch_param(accessor: fn(&Params) -> f32, previous: &'static Step) -> Self {
+        Self::Pitch(Arg::Param(accessor), previous)
     }
 
     /// Create a roll step from a user-facing angle in degrees.
     pub const fn roll(degrees: f32, previous: &'static Step) -> Self {
-        Self::Roll(degrees_to_radians(degrees), previous)
+        Self::Roll(Arg::Fixed(degrees_to_radians(degrees)), previous)
+    }
+
+    /// Create a roll step from a runtime parameter.
+    pub const fn roll_param(accessor: fn(&Params) -> f32, previous: &'static Step) -> Self {
+        Self::Roll(Arg::Param(accessor), previous)
     }
 
     /// Create a move step.
     pub const fn move_forward(distance: f32, previous: &'static Step) -> Self {
-        Self::Move(distance, previous)
+        Self::Move(Arg::Fixed(distance), previous)
+    }
+
+    /// Create a move step from a runtime parameter.
+    pub const fn move_param(accessor: fn(&Params) -> f32, previous: &'static Step) -> Self {
+        Self::Move(Arg::Param(accessor), previous)
     }
 
     fn previous(&self) -> Option<&'static Step> {
@@ -80,9 +150,9 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 // Yaw  = Rz: [[c,-s,0],[s,c,0],[0,0,1]]
 // Pitch = Ry (Excel convention): [[c,0,-s],[0,1,0],[s,0,c]]
 // Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
-fn rotation_matrix(step: &Step) -> Mat3 {
+fn rotation_matrix(step: &Step, params: &Params) -> Mat3 {
     let radians = match step {
-        Step::Yaw(radians, _) | Step::Pitch(radians, _) | Step::Roll(radians, _) => *radians,
+        Step::Yaw(arg, _) | Step::Pitch(arg, _) | Step::Roll(arg, _) => arg.resolve(params),
         Step::Start | Step::Move(_, _) => return IDENTITY,
     };
     let c = libm::cosf(radians);
@@ -108,19 +178,20 @@ impl Turtle {
         }
     }
 
-    fn apply(&mut self, step: &Step) {
+    fn apply(&mut self, step: &Step, params: &Params) {
         match step {
             Step::Start => {
                 *self = Self::new();
             }
-            Step::Move(dist, _) => {
+            Step::Move(arg, _) => {
+                let dist = arg.resolve(params);
                 // advance along v0 = col 0 of orientation
                 self.position[0] += dist * self.orientation[0][0];
                 self.position[1] += dist * self.orientation[1][0];
                 self.position[2] += dist * self.orientation[2][0];
             }
             _ => {
-                self.orientation = mat_mul(self.orientation, rotation_matrix(step));
+                self.orientation = mat_mul(self.orientation, rotation_matrix(step, params));
             }
         }
     }
@@ -129,15 +200,16 @@ impl Turtle {
 /// Iterator over joint positions produced by simulating a linkage.
 ///
 /// Yields the [`Step::Start`] position `[0,0,0]` and then the position after each [`Step::Move`].
-pub struct Simulate<const MAX_STEPS: usize> {
+pub struct Simulate<'a, const MAX_STEPS: usize> {
     steps: [&'static Step; MAX_STEPS],
+    params: &'a Params,
     index: usize,
     turtle: Turtle,
 }
 
-impl<const MAX_STEPS: usize> Simulate<MAX_STEPS> {
+impl<'a, const MAX_STEPS: usize> Simulate<'a, MAX_STEPS> {
     /// Create a new simulation iterator for the given final linkage step.
-    pub fn new(end: &'static Step) -> Self {
+    pub fn new(end: &'static Step, params: &'a Params) -> Self {
         let mut steps = [end; MAX_STEPS];
         let mut len = 0;
         let mut step = Some(end);
@@ -149,20 +221,21 @@ impl<const MAX_STEPS: usize> Simulate<MAX_STEPS> {
         }
         Self {
             steps,
+            params,
             index: len,
             turtle: Turtle::new(),
         }
     }
 }
 
-impl<const MAX_STEPS: usize> Iterator for Simulate<MAX_STEPS> {
+impl<const MAX_STEPS: usize> Iterator for Simulate<'_, MAX_STEPS> {
     type Item = Vec3;
 
     fn next(&mut self) -> Option<Vec3> {
         loop {
             self.index = self.index.checked_sub(1)?;
             let step = self.steps[self.index];
-            self.turtle.apply(step);
+            self.turtle.apply(step, self.params);
             if matches!(step, Step::Start | Step::Move(_, _)) {
                 return Some(self.turtle.position);
             }
@@ -172,29 +245,61 @@ impl<const MAX_STEPS: usize> Iterator for Simulate<MAX_STEPS> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Simulate, Step};
+    use super::{Params, Simulate, Step};
 
     const LINKAGE_MAX_STEPS: usize = 24;
+    const EXCEL_PARAMS: Params = Params::from_degrees(
+        -45.15793644,
+        -45.26102633,
+        0.249940215,
+        -0.036069163,
+        90.0,
+        180.0,
+    );
+
+    fn lower_hand(params: &Params) -> f32 {
+        params.lower_hand
+    }
+
+    fn bend_elbow(params: &Params) -> f32 {
+        params.bend_elbow
+    }
+
+    fn close_hand(params: &Params) -> f32 {
+        params.close_hand
+    }
+
+    fn lower_arm(params: &Params) -> f32 {
+        params.lower_arm
+    }
+
+    fn spin_wrist(params: &Params) -> f32 {
+        params.spin_wrist
+    }
+
+    fn spin_hand(params: &Params) -> f32 {
+        params.spin_hand
+    }
 
     static START: Step = Step::Start;
     static STEP_01: Step = Step::yaw(90.0, &START);
-    static STEP_02: Step = Step::yaw(-45.15793644, &STEP_01);
+    static STEP_02: Step = Step::yaw_param(lower_hand, &STEP_01);
     static STEP_03: Step = Step::pitch(90.0, &STEP_02);
     static STEP_04: Step = Step::move_forward(2.5, &STEP_03);
     static STEP_05: Step = Step::pitch(-90.0, &STEP_04);
     static STEP_06: Step = Step::pitch(-6.66134e-15, &STEP_05);
     static STEP_07: Step = Step::move_forward(3.0, &STEP_06);
-    static STEP_08: Step = Step::yaw(-0.036069163, &STEP_07);
+    static STEP_08: Step = Step::yaw_param(lower_arm, &STEP_07);
     static STEP_09: Step = Step::move_forward(3.0, &STEP_08);
-    static STEP_10: Step = Step::pitch(-45.26102633, &STEP_09);
+    static STEP_10: Step = Step::pitch_param(bend_elbow, &STEP_09);
     static STEP_11: Step = Step::move_forward(1.0, &STEP_10);
     static STEP_12: Step = Step::roll(180.0, &STEP_11);
     static STEP_13: Step = Step::move_forward(0.5, &STEP_12);
-    static STEP_14: Step = Step::yaw(90.0, &STEP_13);
-    static STEP_15: Step = Step::move_forward(0.249940215, &STEP_14);
+    static STEP_14: Step = Step::yaw_param(spin_wrist, &STEP_13);
+    static STEP_15: Step = Step::move_param(close_hand, &STEP_14);
     static STEP_16: Step = Step::yaw(-90.0, &STEP_15);
     static STEP_17: Step = Step::move_forward(1.0, &STEP_16);
-    static STEP_18: Step = Step::yaw(180.0, &STEP_17);
+    static STEP_18: Step = Step::yaw_param(spin_hand, &STEP_17);
     static STEP_19: Step = Step::move_forward(1.0, &STEP_18);
     static STEP_20: Step = Step::yaw(90.0, &STEP_19);
     static STEP_21: Step = Step::move_forward(0.49988043, &STEP_20);
@@ -206,19 +311,24 @@ mod tests {
     fn test_linkage_structure() {
         assert!(matches!(START, Step::Start));
         assert!(matches!(STEP_12, Step::Roll(_, _)));
-        assert!(matches!(STEP_23, Step::Move(1.0, _)));
+        assert!(matches!(STEP_23, Step::Move(_, _)));
     }
 
     #[test]
     fn test_simulate_yields_initial_position() {
-        let first = Simulate::<LINKAGE_MAX_STEPS>::new(LINKAGE).next().unwrap();
+        let first = Simulate::<LINKAGE_MAX_STEPS>::new(LINKAGE, &EXCEL_PARAMS)
+            .next()
+            .unwrap();
         assert_vec3_approx_eq(first, [0.0, 0.0, 0.0]);
     }
 
     #[test]
     fn test_simulate_position_count() {
         // 10 Move steps → 11 positions (initial + one per Move)
-        assert_eq!(Simulate::<LINKAGE_MAX_STEPS>::new(LINKAGE).count(), 11);
+        assert_eq!(
+            Simulate::<LINKAGE_MAX_STEPS>::new(LINKAGE, &EXCEL_PARAMS).count(),
+            11
+        );
     }
 
     #[test]
@@ -264,7 +374,7 @@ mod tests {
     }
 
     fn position_after_move(move_index: usize) -> [f32; 3] {
-        Simulate::<LINKAGE_MAX_STEPS>::new(LINKAGE)
+        Simulate::<LINKAGE_MAX_STEPS>::new(LINKAGE, &EXCEL_PARAMS)
             .nth(move_index)
             .unwrap()
     }
