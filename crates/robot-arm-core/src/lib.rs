@@ -2,6 +2,12 @@
 #![forbid(unsafe_code)]
 #![doc = "No-allocation robot arm simulation and math primitives."]
 
+//todo00 allow splits/DAGs in the models.
+
+#[cfg(test)]
+extern crate std;
+
+
 /// A step in the robot arm linkage description.
 ///
 /// - v0 = tail → nose (forward), v1 = right → left, v2 = belly → back
@@ -275,6 +281,26 @@ impl<P, const N: usize> Iterator for Simulate<'_, P, N> {
 #[cfg(test)]
 mod tests {
     use super::{Linkage, Params, Step};
+    use core::convert::Infallible;
+    use embedded_graphics::{
+        draw_target::DrawTarget,
+        geometry::{OriginDimensions, Size},
+        pixelcolor::Rgb888,
+        prelude::*,
+        primitives::{Circle, Line, PrimitiveStyle},
+    };
+    use png::{BitDepth, ColorType, Encoder};
+    use std::{
+        boxed::Box,
+        error::Error,
+        format,
+        fs,
+        fs::File,
+        io::BufWriter,
+        path::{Path, PathBuf},
+        println,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     const EXCEL_PARAMS: Params = Params::from_degrees(
         -45.15793644,
@@ -384,6 +410,12 @@ mod tests {
         assert_vec3_approx_eq(position_after_move(10), [5.32801, 5.647, 0.724]);
     }
 
+    #[test]
+    fn test_linkage_png_matches_expected() -> Result<(), Box<dyn Error>> {
+        let canvas = draw_linkage_xy_canvas();
+        assert_png_matches_expected("linkage_xy.png", &canvas)
+    }
+
     fn assert_vec3_approx_eq(actual: [f32; 3], expected: [f32; 3]) {
         let close_enough = actual
             .iter()
@@ -398,5 +430,172 @@ mod tests {
 
     fn position_after_move(move_index: usize) -> [f32; 3] {
         LINKAGE.simulate(&EXCEL_PARAMS).nth(move_index).unwrap()
+    }
+
+    const CANVAS_WIDTH: usize = 300;
+    const CANVAS_HEIGHT: usize = 300;
+    const CANVAS_PIXELS: usize = CANVAS_WIDTH * CANVAS_HEIGHT;
+    const WORLD_MIN: f32 = -10.0;
+    const WORLD_MAX: f32 = 10.0;
+    const EXCEL_BLUE: Rgb888 = Rgb888::new(21, 96, 130);
+
+    struct Canvas {
+        pixels: [Rgb888; CANVAS_PIXELS],
+    }
+
+    impl Canvas {
+        fn new() -> Self {
+            Self {
+                pixels: [Rgb888::WHITE; CANVAS_PIXELS],
+            }
+        }
+
+        fn rgb_bytes(&self) -> [u8; CANVAS_PIXELS * 3] {
+            let mut bytes = [0u8; CANVAS_PIXELS * 3];
+            let mut pixel_index = 0;
+            while pixel_index < CANVAS_PIXELS {
+                let pixel = self.pixels[pixel_index];
+                let byte_index = pixel_index * 3;
+                bytes[byte_index] = pixel.r();
+                bytes[byte_index + 1] = pixel.g();
+                bytes[byte_index + 2] = pixel.b();
+                pixel_index += 1;
+            }
+            bytes
+        }
+    }
+
+    impl DrawTarget for Canvas {
+        type Color = Rgb888;
+        type Error = Infallible;
+
+        fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+        where
+            I: IntoIterator<Item = Pixel<Self::Color>>,
+        {
+            for Pixel(point, color) in pixels {
+                if point.x < 0 || point.y < 0 {
+                    continue;
+                }
+                let x_index = point.x as usize;
+                let y_index = point.y as usize;
+                if x_index >= CANVAS_WIDTH || y_index >= CANVAS_HEIGHT {
+                    continue;
+                }
+                self.pixels[y_index * CANVAS_WIDTH + x_index] = color;
+            }
+            Ok(())
+        }
+    }
+
+    impl OriginDimensions for Canvas {
+        fn size(&self) -> Size {
+            Size::new(CANVAS_WIDTH as u32, CANVAS_HEIGHT as u32)
+        }
+    }
+
+    fn draw_linkage_xy_canvas() -> Canvas {
+        let mut canvas = Canvas::new();
+        let mut positions = LINKAGE.simulate(&EXCEL_PARAMS);
+        let mut previous = positions.next().expect("linkage must include start");
+
+        draw_point(&mut canvas, previous);
+        for position in positions {
+            draw_segment(&mut canvas, previous, position);
+            draw_point(&mut canvas, position);
+            previous = position;
+        }
+
+        canvas
+    }
+
+    fn draw_segment(canvas: &mut Canvas, from: [f32; 3], to: [f32; 3]) {
+        Line::new(world_to_point(from), world_to_point(to))
+            .into_styled(PrimitiveStyle::with_stroke(EXCEL_BLUE, 2))
+            .draw(canvas)
+            .expect("line draw must succeed");
+    }
+
+    fn draw_point(canvas: &mut Canvas, position: [f32; 3]) {
+        let center = world_to_point(position);
+        let top_left = Point::new(center.x - 2, center.y - 2);
+        Circle::new(top_left, 4)
+            .into_styled(PrimitiveStyle::with_fill(EXCEL_BLUE))
+            .draw(canvas)
+            .expect("point draw must succeed");
+    }
+
+    fn world_to_point(position: [f32; 3]) -> Point {
+        let x = world_to_pixel(position[0]);
+        let y = (CANVAS_HEIGHT - 1) as i32 - world_to_pixel(position[1]);
+        Point::new(x, y)
+    }
+
+    fn world_to_pixel(value: f32) -> i32 {
+        let normalized = (value - WORLD_MIN) / (WORLD_MAX - WORLD_MIN);
+        (normalized * ((CANVAS_WIDTH - 1) as f32)).round() as i32
+    }
+
+    fn assert_png_matches_expected(filename: &str, canvas: &Canvas) -> Result<(), Box<dyn Error>> {
+        let expected_path = expected_png_path(filename);
+        if std::env::var_os("ROBOT_ARM_UPDATE_PNGS").is_some() {
+            write_png(&expected_path, canvas)?;
+            println!("updated PNG at {}", expected_path.display());
+            return Ok(());
+        }
+
+        if !expected_path.exists() {
+            return Err(format!(
+                "expected PNG is missing at {}; rerun with ROBOT_ARM_UPDATE_PNGS=1 to create it",
+                expected_path.display()
+            )
+            .into());
+        }
+
+        let output_path = temp_output_path(filename);
+        write_png(&output_path, canvas)?;
+
+        let expected_bytes = fs::read(&expected_path)?;
+        let actual_bytes = fs::read(&output_path)?;
+        let _ = fs::remove_file(&output_path);
+        assert_eq!(
+            expected_bytes,
+            actual_bytes,
+            "PNG bytes differ; rerun with ROBOT_ARM_UPDATE_PNGS=1 to accept the new image"
+        );
+        Ok(())
+    }
+
+    fn write_png(path: &Path, canvas: &Canvas) -> Result<(), Box<dyn Error>> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let file = File::create(path)?;
+        let writer = BufWriter::new(file);
+        let mut encoder = Encoder::new(writer, CANVAS_WIDTH as u32, CANVAS_HEIGHT as u32);
+        encoder.set_color(ColorType::Rgb);
+        encoder.set_depth(BitDepth::Eight);
+        let mut png_writer = encoder.write_header()?;
+        png_writer.write_image_data(&canvas.rgb_bytes())?;
+        Ok(())
+    }
+
+    fn expected_png_path(filename: &str) -> PathBuf {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("tests");
+        path.push("assets");
+        path.push(filename);
+        path
+    }
+
+    fn temp_output_path(filename: &str) -> PathBuf {
+        let unix_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time must be valid")
+            .as_nanos();
+        let process_id = std::process::id();
+        let mut path = std::env::temp_dir();
+        path.push(format!("{filename}-{process_id}-{unix_time}"));
+        path
     }
 }

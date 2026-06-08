@@ -6,3 +6,7 @@ license.workspace = true
 
 [dependencies]
 libm = "0.2"
+
+[dev-dependencies]
+embedded-graphics = { version = "0.8", default-features = false }
+png = "0.18"
