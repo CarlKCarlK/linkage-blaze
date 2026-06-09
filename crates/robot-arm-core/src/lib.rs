@@ -12,6 +12,8 @@
 #[cfg(test)]
 extern crate std;
 
+use core::f32::consts::PI;
+
 /// A step in the robot arm linkage description.
 ///
 /// - v0 = tail → nose (forward), v1 = right → left, v2 = belly → back
@@ -46,9 +48,6 @@ pub struct VariableArg {
     span: f32,
 }
 
-//todo00000 each DOF can currently have multiple step-local ranges or no range at
-// all, which makes range metadata/querying ambiguous. We need to decide whether
-// ranges belong to DOFs, step usages, or a separate descriptor table.
 impl Arg {
     fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
         match self {
@@ -196,7 +195,7 @@ pub type Mat3 = [[f32; 3]; 3];
 const IDENTITY: Mat3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 const fn degrees_to_radians(degrees: f32) -> f32 {
-    degrees * (core::f32::consts::PI / 180.0)
+    degrees * (PI / 180.0)
 }
 
 //todo0000 make inline? and elsewhere?
@@ -400,7 +399,7 @@ mod tests {
 
     #[test]
     fn test_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
-        //todo00000 yikes, this is way too ugly.
+        //todo00 might be nice to have the names available somehow.
         let params = [
             0.7514501463, // lower hand
             0.49,         // bend elbow

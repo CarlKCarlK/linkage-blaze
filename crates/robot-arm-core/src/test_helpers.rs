@@ -10,12 +10,13 @@ use embedded_graphics::{
 use png::{BitDepth, ColorType, Encoder};
 use std::{
     boxed::Box,
+    env,
     error::Error,
     format, fs,
     fs::File,
     io::BufWriter,
     path::{Path, PathBuf},
-    println,
+    println, process,
     string::String,
     time::{SystemTime, UNIX_EPOCH},
     vec::Vec,
@@ -40,7 +41,7 @@ where
     let actual_poses: Vec<Pose> = poses.into_iter().collect();
     let expected_path = expected_asset_path(filename);
 
-    if std::env::var_os("ROBOT_ARM_UPDATE_POSE_TRACES").is_some() {
+    if env::var_os("ROBOT_ARM_UPDATE_POSE_TRACES").is_some() {
         fs::write(&expected_path, format_pose_trace(&actual_poses))?;
         println!("updated pose trace at {}", expected_path.display());
         return Ok(());
@@ -263,7 +264,7 @@ pub(super) fn assert_png_matches_expected(
     canvas: &Canvas,
 ) -> Result<(), Box<dyn Error>> {
     let expected_path = expected_png_path(filename);
-    if std::env::var_os("ROBOT_ARM_UPDATE_PNGS").is_some() {
+    if env::var_os("ROBOT_ARM_UPDATE_PNGS").is_some() {
         write_png(&expected_path, canvas)?;
         println!("updated PNG at {}", expected_path.display());
         return Ok(());
@@ -321,8 +322,8 @@ fn temp_output_path(filename: &str) -> PathBuf {
         Ok(duration) => duration.as_nanos(),
         Err(error) => error.duration().as_nanos(),
     };
-    let process_id = std::process::id();
-    let mut path = std::env::temp_dir();
+    let process_id = process::id();
+    let mut path = env::temp_dir();
     path.push(format!("{filename}-{process_id}-{unix_time}"));
     path
 }
