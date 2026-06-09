@@ -4,7 +4,7 @@
 
 //todo000 move some of that global static stuff to be const local.
 //todo000 revisit the name Param and Args
-//todo000 is the way that access functions are passed into parameters Yaw, etc, good? Can methods be used instead of stand-alone functions?
+//todo000 is the way that access functions are passed into parameters Yaw, etc, good? Can methods be used instead of stand-alone functions? (may no longer apply)
 //todo00 allow splits/DAGs in the models.
 //todo00 could have (compile-time?) optimizations that collapse adjacent steps of the same type into one step with a combined angle/distance. Would that be worth it? or even multiple moves if one doesn't have parameters.
 //todo00 might be nice to have invisible or colored links, but that would be more turtle than linkage.
@@ -17,52 +17,71 @@ extern crate std;
 ///
 /// - v0 = tail → nose (forward), v1 = right → left, v2 = belly → back
 #[derive(Debug)]
-pub enum Step<P> {
+pub enum Step {
     /// Reset to the origin with the identity orientation.
     Start,
     /// Rotate around v2 (belly → back): turn left/right.
-    Yaw(Arg<P>),
+    Yaw(Arg),
     /// Rotate around v1 (right → left): nose up/down.
-    Pitch(Arg<P>),
+    Pitch(Arg),
     /// Rotate around v0 (tail → nose): right side down.
-    Roll(Arg<P>),
+    Roll(Arg),
     /// Advance along v0 by the given distance.
-    Move(Arg<P>),
+    Move(Arg),
 }
 
-/// A fixed argument or a runtime parameter accessor.
+/// A fixed argument or a runtime degree-of-freedom parameter.
 ///
 /// Angle steps interpret values as degrees. Move steps interpret values as
 /// linkage distances.
 #[derive(Debug)]
-pub enum Arg<P> {
+pub enum Arg {
     Fixed(f32),
-    Param(fn(&P) -> f32),
+    Param(ParamArg),
 }
 
-impl<P> Arg<P> {
-    fn resolve(&self, params: &P) -> f32 {
+/// A degree-of-freedom parameter reference with its legal range.
+#[derive(Debug)]
+pub struct ParamArg {
+    index: usize,
+    low: f32,
+    high: f32,
+}
+
+//todo00000 each DOF can currently have multiple step-local ranges or no range at
+// all, which makes range metadata/querying ambiguous. We need to decide whether
+// ranges belong to DOFs, step usages, or a separate descriptor table.
+impl Arg {
+    fn resolve<const DOF: usize>(&self, fractions: &[f32; DOF]) -> f32 {
         match self {
             Self::Fixed(value) => *value,
-            Self::Param(accessor) => accessor(params),
+            Self::Param(param_arg) => param_arg.resolve(fractions),
         }
     }
 
-    fn resolve_degrees_as_radians(&self, params: &P) -> f32 {
-        match self {
-            Self::Fixed(value) => degrees_to_radians(*value),
-            Self::Param(accessor) => degrees_to_radians(accessor(params)),
-        }
+    fn resolve_degrees_as_radians<const DOF: usize>(&self, fractions: &[f32; DOF]) -> f32 {
+        degrees_to_radians(self.resolve(fractions))
+    }
+}
+
+impl ParamArg {
+    const fn new(index: usize, low: f32, high: f32) -> Self {
+        Self { index, low, high }
+    }
+
+    fn resolve<const DOF: usize>(&self, fractions: &[f32; DOF]) -> f32 {
+        let fraction = fractions[self.index];
+        self.low + fraction * (self.high - self.low)
     }
 }
 
 /// A fixed-size linkage description.
-pub struct Linkage<P, const N: usize> {
-    steps: [Step<P>; N],
+pub struct Linkage<const DOF: usize, const N: usize> {
+    steps: [Step; N],
     len: usize,
 }
 
-impl<P, const N: usize> Linkage<P, N> {
+impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Start a fixed-size linkage with an implicit origin row.
     pub const fn start() -> Self {
         assert!(N > 0, "linkage must have room for the implicit start step");
@@ -84,8 +103,9 @@ impl<P, const N: usize> Linkage<P, N> {
     }
 
     /// Add a yaw step from a runtime parameter in degrees.
-    pub const fn yaw_param(self, accessor: fn(&P) -> f32) -> Self {
-        self.push(Step::Yaw(Arg::Param(accessor)))
+    pub const fn yaw_param(self, index: usize, low: f32, high: f32) -> Self {
+        assert!(index < DOF, "parameter index must be within DOF");
+        self.push(Step::Yaw(Arg::Param(ParamArg::new(index, low, high))))
     }
 
     /// Add a pitch step from a user-facing angle in degrees.
@@ -94,8 +114,9 @@ impl<P, const N: usize> Linkage<P, N> {
     }
 
     /// Add a pitch step from a runtime parameter in degrees.
-    pub const fn pitch_param(self, accessor: fn(&P) -> f32) -> Self {
-        self.push(Step::Pitch(Arg::Param(accessor)))
+    pub const fn pitch_param(self, index: usize, low: f32, high: f32) -> Self {
+        assert!(index < DOF, "parameter index must be within DOF");
+        self.push(Step::Pitch(Arg::Param(ParamArg::new(index, low, high))))
     }
 
     /// Add a roll step from a user-facing angle in degrees.
@@ -104,8 +125,9 @@ impl<P, const N: usize> Linkage<P, N> {
     }
 
     /// Add a roll step from a runtime parameter in degrees.
-    pub const fn roll_param(self, accessor: fn(&P) -> f32) -> Self {
-        self.push(Step::Roll(Arg::Param(accessor)))
+    pub const fn roll_param(self, index: usize, low: f32, high: f32) -> Self {
+        assert!(index < DOF, "parameter index must be within DOF");
+        self.push(Step::Roll(Arg::Param(ParamArg::new(index, low, high))))
     }
 
     /// Add a fixed forward move step.
@@ -114,31 +136,42 @@ impl<P, const N: usize> Linkage<P, N> {
     }
 
     /// Add a move step from a runtime parameter.
-    pub const fn move_param(self, accessor: fn(&P) -> f32) -> Self {
-        self.push(Step::Move(Arg::Param(accessor)))
+    pub const fn move_param(self, index: usize, low: f32, high: f32) -> Self {
+        assert!(index < DOF, "parameter index must be within DOF");
+        self.push(Step::Move(Arg::Param(ParamArg::new(index, low, high))))
     }
 
-    const fn push(mut self, step: Step<P>) -> Self {
+    const fn push(mut self, step: Step) -> Self {
         assert!(self.len < N, "linkage has more steps than N");
         self.steps[self.len] = step;
         self.len += 1;
         self
     }
 
-    /// Iterate over poses produced by evaluating this linkage.
-    pub fn poses<'a>(&'a self, params: &'a P) -> Poses<'a, P, N> {
-        Poses::new(self, params)
+    /// Iterate over poses produced by evaluating this linkage from 0.0 to 1.0 fractions.
+    pub fn poses<'a>(&'a self, fractions: &'a [f32; DOF]) -> Poses<'a, DOF, N> {
+        Poses::new(self, fractions)
     }
 
-    /// Return the pose produced after evaluating all steps in this linkage.
+    /// Return the pose produced after evaluating all steps from 0.0 to 1.0 fractions.
     ///
     /// This always returns a [`Pose`]. A [`Linkage`] contains an implicit start
     /// step, so the pose sequence is never empty.
     #[must_use]
-    pub fn final_pose(&self, params: &P) -> Pose {
-        self.poses(params)
+    pub fn final_pose(&self, fractions: &[f32; DOF]) -> Pose {
+        self.poses(fractions)
             .last()
             .expect("linkage must yield at least the implicit start pose")
+    }
+}
+
+fn validate_fractions<const DOF: usize>(fractions: &[f32; DOF]) {
+    for param_index in 0..DOF {
+        //todo0 review whether panicking is the right long-term out-of-range behavior.
+        assert!(
+            (0.0..=1.0).contains(&fractions[param_index]),
+            "fraction parameter is out of range"
+        );
     }
 }
 
@@ -178,10 +211,10 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 //todo0000 address this non-standardness (fix excel?)
 // Pitch = Ry: [[c,0,s],[0,1,0],[-s,0,c]]
 // Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
-fn rotation_matrix<P>(step: &Step<P>, params: &P) -> Mat3 {
+fn rotation_matrix<const DOF: usize>(step: &Step, fractions: &[f32; DOF]) -> Mat3 {
     let radians = match step {
         Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => {
-            arg.resolve_degrees_as_radians(params)
+            arg.resolve_degrees_as_radians(fractions)
         }
         Step::Start | Step::Move(_) => return IDENTITY,
     };
@@ -217,13 +250,13 @@ impl Pose {
             && vec3_is_close_to(self.position, other.position, tolerance)
     }
 
-    fn apply<P>(&mut self, step: &Step<P>, params: &P) {
+    fn apply<const DOF: usize>(&mut self, step: &Step, fractions: &[f32; DOF]) {
         match step {
             Step::Start => {
                 *self = Self::start();
             }
             Step::Move(arg) => {
-                let dist = arg.resolve(params);
+                let dist = arg.resolve(fractions);
                 // advance along v0 = col 0 of orientation
                 //todo000 can we define Vec3 and mat3 operations?
                 self.position[0] += dist * self.orientation[0][0];
@@ -232,7 +265,7 @@ impl Pose {
             }
             _ => {
                 //todo000 can we define Vec3 and mat3 operations?
-                self.orientation = mat_mul(self.orientation, rotation_matrix(step, params));
+                self.orientation = mat_mul(self.orientation, rotation_matrix(step, fractions));
             }
         }
     }
@@ -255,26 +288,27 @@ fn mat3_is_close_to(a: Mat3, b: Mat3, tolerance: f32) -> bool {
 /// Iterator over poses produced by evaluating a linkage.
 ///
 /// Yields one [`Pose`] after every linkage step, including the implicit [`Step::Start`].
-pub struct Poses<'a, P, const N: usize> {
-    linkage: &'a Linkage<P, N>,
-    params: &'a P,
+pub struct Poses<'a, const DOF: usize, const N: usize> {
+    linkage: &'a Linkage<DOF, N>,
+    fractions: &'a [f32; DOF],
     index: usize,
     pose: Pose,
 }
 
-impl<'a, P, const N: usize> Poses<'a, P, N> {
+impl<'a, const DOF: usize, const N: usize> Poses<'a, DOF, N> {
     /// Create a new pose iterator for the given linkage.
-    pub fn new(linkage: &'a Linkage<P, N>, params: &'a P) -> Self {
+    fn new(linkage: &'a Linkage<DOF, N>, fractions: &'a [f32; DOF]) -> Self {
+        validate_fractions(fractions);
         Self {
             linkage,
-            params,
+            fractions,
             index: 0,
             pose: Pose::start(),
         }
     }
 }
 
-impl<P, const N: usize> Iterator for Poses<'_, P, N> {
+impl<const DOF: usize, const N: usize> Iterator for Poses<'_, DOF, N> {
     type Item = Pose;
 
     fn next(&mut self) -> Option<Pose> {
@@ -283,7 +317,7 @@ impl<P, const N: usize> Iterator for Poses<'_, P, N> {
         }
         let step = &self.linkage.steps[self.index];
         self.index += 1;
-        self.pose.apply(step, self.params);
+        self.pose.apply(step, self.fractions);
         Some(self.pose)
     }
 }
@@ -295,83 +329,72 @@ mod test_helpers;
 mod tests {
     use super::{Linkage, Pose};
     use crate::test_helpers::{
-        assert_params_approx_eq, assert_png_matches_expected, assert_pose_approx_eq,
-        assert_pose_trace_matches_expected, draw_linkage_xy_canvas,
+        assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
+        draw_linkage_xy_canvas,
     };
     use std::{boxed::Box, error::Error};
 
-    const LINKAGE0: Linkage<[f32; 6], 24> = Linkage::start()
+    const LINKAGE0: Linkage<6, 24> = Linkage::start()
         .yaw(90.0)
-        // params[4]: spin whole arm, -180 to +180 degrees.
-        .yaw_param(|params: &[f32; 6]| params[4])
+        .yaw_param(4, 180.0, -180.0) // spin whole arm
         .pitch(90.0)
         .forward(2.5)
         .pitch(-90.0)
-        // params[3]: lower arm, 0 to 30 degrees.
-        .pitch_param(|params: &[f32; 6]| params[3])
+        .pitch_param(3, 30.0, 0.0) // lower arm
         .forward(3.0)
-        // params[1]: bend elbow, -90 to +90 degrees.
-        .yaw_param(|params: &[f32; 6]| params[1])
+        .yaw_param(1, 90.0, -90.0) // bend elbow
         .forward(3.0)
-        // params[0]: lower hand, -90 to +90 degrees.
-        .pitch_param(|params: &[f32; 6]| params[0])
+        .pitch_param(0, 90.0, -90.0) // lower hand
         .forward(1.0)
-        // params[5]: spin hand, -180 to +180 degrees.
-        .roll_param(|params: &[f32; 6]| params[5])
+        .roll_param(5, 180.0, -180.0) // spin hand
         .forward(0.5)
         .yaw(90.0)
-        // params[2]: close hand, scaled to 0 to 0.5 linkage units.
-        .move_param(|params: &[f32; 6]| params[2] * 0.5)
+        .move_param(2, 0.0, 0.5) // close hand
         .yaw(-90.0)
         .forward(1.0)
         .yaw(180.0)
         .forward(1.0)
         .yaw(90.0)
-        // params[2]: close hand, 0 to 1 linkage units.
-        .move_param(|params: &[f32; 6]| params[2])
+        .move_param(2, 0.0, 1.0) // close hand
         .yaw(90.0)
         .forward(1.0);
 
-    const LINKAGE1: Linkage<[f32; 3], 16> = Linkage::start()
+    const LINKAGE1: Linkage<3, 16> = Linkage::start()
         .yaw(90.0)
-        // params[0]: spin whole arm, -180 to +180 degrees.
-        .yaw_param(|params: &[f32; 3]| params[0])
+        .yaw_param(0, 180.0, -180.0) // spin whole arm
         .forward(3.0)
-        // params[1]: bend elbow, -90 to +90 degrees.
-        .yaw_param(|params: &[f32; 3]| params[1])
+        .yaw_param(1, 90.0, -90.0) // bend elbow
         .forward(3.0)
         .yaw(90.0)
-        // params[2]: close hand, scaled to 0 to 0.5 linkage units.
-        .move_param(|params: &[f32; 3]| params[2] * 0.5)
+        .move_param(2, 0.5, 0.0) // close hand
         .yaw(-90.0)
         .forward(1.0)
         .yaw(-180.0)
         .forward(1.0)
         .yaw(90.0)
-        // params[2]: close hand, 0 to 1 linkage units. A value of 1 is fully closed.
-        .move_param(|params: &[f32; 3]| params[2])
+        .move_param(2, 1.0, 0.0) // close hand
         .yaw(90.0)
         .forward(1.0);
 
     #[test]
     fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {
-        // [lower hand degrees, bend elbow degrees, close hand distance,
-        //  lower arm degrees, spin whole arm degrees, spin hand degrees]
-        let params = [-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0];
+        // Fractions for [lower hand, bend elbow, close hand,
+        //  lower arm, spin whole arm, spin hand].
+        let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
         assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.poses(&params))
     }
 
     #[test]
     fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn Error>> {
-        // [spin whole arm degrees, bend elbow degrees, close hand distance]
-        let params = [72.0, 86.4, 0.9];
+        // [spin whole arm fraction, bend elbow fraction, close hand fraction]
+        let params = [0.30, 0.02, 0.10];
         assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.poses(&params))
     }
 
     #[test]
     fn test_fraction_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
         //todo00000 yikes, this is way too ugly.
-        let fractions = [
+        let params = [
             0.7514501463, // lower hand
             0.49,         // bend elbow
             0.50011957,   // close hand
@@ -379,17 +402,6 @@ mod tests {
             0.6254387123, // spin whole arm
             1.0,          // spin hand
         ];
-        // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
-        // Distance fraction maps normally from 0.0 to 1.0 linkage units.
-        let params = [
-            90.0 + fractions[0] * (-90.0 - 90.0), // lower hand, -90 to +90 degrees
-            90.0 + fractions[1] * (-90.0 - 90.0), // bend elbow, -90 to +90 degrees
-            0.0 + fractions[2] * (1.0 - 0.0),     // close hand, 0 to 1 linkage units
-            30.0 + fractions[3] * (0.0 - 30.0),   // lower arm, 0 to 30 degrees
-            180.0 + fractions[4] * (-180.0 - 180.0), // spin whole arm, -180 to +180 degrees
-            180.0 + fractions[5] * (-180.0 - 180.0), // spin hand, -180 to +180 degrees
-        ];
-
         let pose = LINKAGE0.final_pose(&params);
         let expected = Pose {
             orientation: [
@@ -406,19 +418,11 @@ mod tests {
 
     #[test]
     fn test_fraction_setting1_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
-        let fractions = [
+        let params = [
             0.30, // spin whole arm
             0.02, // bend elbow
             0.10, // close hand
         ];
-        // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
-        // Close-hand fraction is inverted: 0 is fully closed and 1 is fully open.
-        let params = [
-            180.0 + fractions[0] * (-180.0 - 180.0), // spin whole arm, -180 to +180 degrees
-            90.0 + fractions[1] * (-90.0 - 90.0),    // bend elbow, -90 to +90 degrees
-            1.0 + fractions[2] * (0.0 - 1.0),        // close hand, 0 to 1 linkage units
-        ];
-
         let pose = LINKAGE1.final_pose(&params);
         let expected = Pose {
             orientation: [
@@ -435,7 +439,7 @@ mod tests {
 
     #[test]
     fn test_mid_fraction_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
-        let fractions = [
+        let params = [
             0.5, // lower hand
             0.3, // bend elbow
             1.0, // close hand
@@ -443,17 +447,6 @@ mod tests {
             0.5, // spin whole arm
             0.5, // spin hand
         ];
-        // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
-        // Distance fraction maps normally from 0.0 to 1.0 linkage units.
-        let params = [
-            90.0 + fractions[0] * (-90.0 - 90.0), // lower hand, -90 to +90 degrees
-            90.0 + fractions[1] * (-90.0 - 90.0), // bend elbow, -90 to +90 degrees
-            0.0 + fractions[2] * (1.0 - 0.0),     // close hand, 0 to 1 linkage units
-            30.0 + fractions[3] * (0.0 - 30.0),   // lower arm, 0 to 30 degrees
-            180.0 + fractions[4] * (-180.0 - 180.0), // spin whole arm, -180 to +180 degrees
-            180.0 + fractions[5] * (-180.0 - 180.0), // spin hand, -180 to +180 degrees
-        ];
-
         let pose = LINKAGE0.final_pose(&params);
         let expected = Pose {
             orientation: [
@@ -472,9 +465,9 @@ mod tests {
 
     #[test]
     fn test_linkage0_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        // [lower hand degrees, bend elbow degrees, close hand distance,
-        //  lower arm degrees, spin whole arm degrees, spin hand degrees]
-        let params = [-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0];
+        // Fractions for [lower hand, bend elbow, close hand,
+        //  lower arm, spin whole arm, spin hand].
+        let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
 
         let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params);
         assert_png_matches_expected("linkage0_xy.png", &canvas)
@@ -482,54 +475,25 @@ mod tests {
 
     #[test]
     fn test_linkage1_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        // [spin whole arm degrees, bend elbow degrees, close hand distance]
-        let params = [72.0, 86.4, 0.9];
+        // [spin whole arm fraction, bend elbow fraction, close hand fraction]
+        let params = [0.30, 0.02, 0.10];
 
         let canvas = draw_linkage_xy_canvas(&LINKAGE1, &params);
         assert_png_matches_expected("linkage1_xy.png", &canvas)
     }
 
     #[test]
-    fn test_params0_fraction_math_maps_to_ranges() {
-        let fractions = [
-            0.0,  // lower hand
-            0.5,  // bend elbow
-            1.0,  // close hand
-            1.0,  // lower arm
-            0.25, // spin whole arm
-            0.75, // spin hand
-        ];
-        // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
-        // Distance fraction maps normally from 0.0 to 1.0 linkage units.
+    #[should_panic(expected = "fraction parameter is out of range")]
+    fn test_fraction_inputs_are_range_checked() {
         let params = [
-            90.0 + fractions[0] * (-90.0 - 90.0), // lower hand, -90 to +90 degrees
-            90.0 + fractions[1] * (-90.0 - 90.0), // bend elbow, -90 to +90 degrees
-            0.0 + fractions[2] * (1.0 - 0.0),     // close hand, 0 to 1 linkage units
-            30.0 + fractions[3] * (0.0 - 30.0),   // lower arm, 0 to 30 degrees
-            180.0 + fractions[4] * (-180.0 - 180.0), // spin whole arm, -180 to +180 degrees
-            180.0 + fractions[5] * (-180.0 - 180.0), // spin hand, -180 to +180 degrees
+            0.0, // lower hand
+            0.5, // bend elbow
+            1.1, // close hand, invalid fraction
+            1.0, // lower arm
+            0.0, // spin whole arm
+            0.5, // spin hand
         ];
 
-        let expected = [90.0, 0.0, 1.0, 0.0, 90.0, -90.0];
-        assert_params_approx_eq(params, expected);
-    }
-
-    #[test]
-    fn test_params1_fraction_math_maps_to_ranges() {
-        let fractions = [
-            0.30, // spin whole arm
-            0.02, // bend elbow
-            0.10, // close hand
-        ];
-        // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
-        // Close-hand fraction is inverted: 0 is fully closed and 1 is fully open.
-        let params = [
-            180.0 + fractions[0] * (-180.0 - 180.0), // spin whole arm, -180 to +180 degrees
-            90.0 + fractions[1] * (-90.0 - 90.0),    // bend elbow, -90 to +90 degrees
-            1.0 + fractions[2] * (0.0 - 1.0),        // close hand, 0 to 1 linkage units
-        ];
-
-        let expected = [72.0, 86.4, 0.9];
-        assert_params_approx_eq(params, expected);
+        let _ = LINKAGE0.final_pose(&params);
     }
 }

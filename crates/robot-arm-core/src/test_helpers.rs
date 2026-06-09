@@ -30,18 +30,6 @@ pub(super) fn assert_pose_approx_eq(actual: Pose, expected: Pose) {
     );
 }
 
-pub(super) fn assert_params_approx_eq<const N: usize>(actual: [f32; N], expected: [f32; N]) {
-    assert!(
-        actual
-            .iter()
-            .zip(expected.iter())
-            .all(|(actual_value, expected_value)| (actual_value - expected_value).abs() <= 1e-5),
-        "expected {:?}, got {:?}",
-        expected,
-        actual
-    );
-}
-
 pub(super) fn assert_pose_trace_matches_expected<I>(
     filename: &str,
     poses: I,
@@ -212,14 +200,21 @@ impl OriginDimensions for Canvas {
     }
 }
 
-pub(super) fn draw_linkage_xy_canvas<P, const N: usize>(
-    linkage: &Linkage<P, N>,
-    params: &P,
+pub(super) fn draw_linkage_xy_canvas<const DOF: usize, const N: usize>(
+    linkage: &Linkage<DOF, N>,
+    fractions: &[f32; DOF],
 ) -> Canvas {
+    draw_linkage_xy_canvas_from_poses(linkage.poses(fractions))
+}
+
+fn draw_linkage_xy_canvas_from_poses<I>(poses: I) -> Canvas
+where
+    I: IntoIterator<Item = Pose>,
+{
     let mut canvas = Canvas::new();
     let mut previous: Option<Pose> = None;
 
-    for pose in linkage.poses(params) {
+    for pose in poses {
         if let Some(previous_pose) = previous {
             draw_segment(&mut canvas, previous_pose.position, pose.position);
         }
