@@ -298,24 +298,10 @@ mod test_helpers;
 mod tests {
     use super::{Linkage, Pose, Step};
     use crate::test_helpers::{
-        assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
-        draw_linkage_xy_canvas,
+        assert_params_approx_eq, assert_png_matches_expected, assert_pose_approx_eq,
+        assert_pose_trace_matches_expected, draw_linkage_xy_canvas,
     };
     use std::{boxed::Box, error::Error};
-
-    fn assert_params0_approx_eq(actual: [f32; 6], expected: [f32; 6]) {
-        assert!(
-            actual
-                .iter()
-                .zip(expected.iter())
-                .all(|(actual_value, expected_value)| {
-                    super::f32_is_close_to(*actual_value, *expected_value, 1e-5)
-                }),
-            "expected {:?}, got {:?}",
-            expected,
-            actual
-        );
-    }
 
     const LINKAGE0: Linkage<[f32; 6], 24> = Linkage::start()
         .yaw(90.0)
@@ -348,20 +334,6 @@ mod tests {
         .move_param(|params: &[f32; 6]| params[2])
         .yaw(90.0)
         .forward(1.0);
-
-    fn assert_params1_approx_eq(actual: [f32; 3], expected: [f32; 3]) {
-        assert!(
-            actual
-                .iter()
-                .zip(expected.iter())
-                .all(|(actual_value, expected_value)| {
-                    super::f32_is_close_to(*actual_value, *expected_value, 1e-5)
-                }),
-            "expected {:?}, got {:?}",
-            expected,
-            actual
-        );
-    }
 
     const LINKAGE1: Linkage<[f32; 3], 16> = Linkage::start()
         .yaw(90.0)
@@ -418,11 +390,9 @@ mod tests {
 
     #[test]
     fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {
-        //todo0000 having these be constant isn't the usual use case.
         // [lower hand degrees, bend elbow degrees, close hand distance,
         //  lower arm degrees, spin whole arm degrees, spin hand degrees]
         let params = [-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0];
-
         assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.poses(&params))
     }
 
@@ -430,7 +400,6 @@ mod tests {
     fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn Error>> {
         // [spin whole arm degrees, bend elbow degrees, close hand distance]
         let params = [72.0, 86.4, 0.9];
-
         assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.poses(&params))
     }
 
@@ -577,7 +546,7 @@ mod tests {
         ];
 
         let expected = [90.0, 0.0, 1.0, 0.0, 90.0, -90.0];
-        assert_params0_approx_eq(params0, expected);
+        assert_params_approx_eq(params0, expected);
     }
 
     #[test]
@@ -596,6 +565,6 @@ mod tests {
         ];
 
         let expected = [72.0, 86.4, 0.9];
-        assert_params1_approx_eq(params1, expected);
+        assert_params_approx_eq(params1, expected);
     }
 }

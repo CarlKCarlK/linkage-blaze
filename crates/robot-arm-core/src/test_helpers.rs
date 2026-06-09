@@ -30,6 +30,18 @@ pub(super) fn assert_pose_approx_eq(actual: Pose, expected: Pose) {
     );
 }
 
+pub(super) fn assert_params_approx_eq<const N: usize>(actual: [f32; N], expected: [f32; N]) {
+    assert!(
+        actual
+            .iter()
+            .zip(expected.iter())
+            .all(|(actual_value, expected_value)| (actual_value - expected_value).abs() <= 1e-5),
+        "expected {:?}, got {:?}",
+        expected,
+        actual
+    );
+}
+
 pub(super) fn assert_pose_trace_matches_expected<I>(
     filename: &str,
     poses: I,
