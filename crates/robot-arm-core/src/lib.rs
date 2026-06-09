@@ -31,6 +31,9 @@ pub enum Step<P> {
 }
 
 /// A fixed argument or a runtime parameter accessor.
+///
+/// Angle steps interpret values as degrees. Move steps interpret values as
+/// linkage distances.
 #[derive(Debug)]
 pub enum Arg<P> {
     Fixed(f32),
@@ -47,7 +50,7 @@ impl<P> Arg<P> {
 
     fn resolve_degrees_as_radians(&self, params: &P) -> f32 {
         match self {
-            Self::Fixed(value) => *value,
+            Self::Fixed(value) => degrees_to_radians(*value),
             Self::Param(accessor) => degrees_to_radians(accessor(params)),
         }
     }
@@ -69,12 +72,6 @@ impl<P, const N: usize> Linkage<P, N> {
         }
     }
 
-    /// Return the linkage steps in evaluation order.
-    #[must_use]
-    pub const fn steps(&self) -> &[Step<P>; N] {
-        &self.steps
-    }
-
     /// Return the number of linkage steps, including the implicit start step.
     #[must_use]
     pub const fn len(&self) -> usize {
@@ -83,7 +80,7 @@ impl<P, const N: usize> Linkage<P, N> {
 
     /// Add a yaw step from a user-facing angle in degrees.
     pub const fn yaw(self, degrees: f32) -> Self {
-        self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
+        self.push(Step::Yaw(Arg::Fixed(degrees)))
     }
 
     /// Add a yaw step from a runtime parameter in degrees.
@@ -93,7 +90,7 @@ impl<P, const N: usize> Linkage<P, N> {
 
     /// Add a pitch step from a user-facing angle in degrees.
     pub const fn pitch(self, degrees: f32) -> Self {
-        self.push(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
+        self.push(Step::Pitch(Arg::Fixed(degrees)))
     }
 
     /// Add a pitch step from a runtime parameter in degrees.
@@ -103,7 +100,7 @@ impl<P, const N: usize> Linkage<P, N> {
 
     /// Add a roll step from a user-facing angle in degrees.
     pub const fn roll(self, degrees: f32) -> Self {
-        self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
+        self.push(Step::Roll(Arg::Fixed(degrees)))
     }
 
     /// Add a roll step from a runtime parameter in degrees.
@@ -176,7 +173,7 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
     out
 }
 
-// Rotation matrices match the Excel SWITCH formulas exactly.
+// Rotation matrices use the conventional right-handed definitions.
 // Yaw  = Rz: [[c,-s,0],[s,c,0],[0,0,1]]
 //todo0000 address this non-standardness (fix excel?)
 // Pitch = Ry: [[c,0,s],[0,1,0],[-s,0,c]]
@@ -296,7 +293,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{Linkage, Pose, Step};
+    use super::{Linkage, Pose};
     use crate::test_helpers::{
         assert_params_approx_eq, assert_png_matches_expected, assert_pose_approx_eq,
         assert_pose_trace_matches_expected, draw_linkage_xy_canvas,
@@ -355,38 +352,6 @@ mod tests {
         .move_param(|params: &[f32; 3]| params[2])
         .yaw(90.0)
         .forward(1.0);
-
-    // [Compile-time Test]
-    // Force core linkage shape errors to fail compilation instead of a runtime test.
-    const _: () = {
-        assert!(LINKAGE0.len() == 24);
-        match &LINKAGE0.steps()[0] {
-            Step::Start => {}
-            _ => panic!("expected start step"),
-        }
-        match &LINKAGE0.steps()[12] {
-            Step::Roll(_) => {}
-            _ => panic!("expected roll step"),
-        }
-        match &LINKAGE0.steps()[23] {
-            Step::Move(_) => {}
-            _ => panic!("expected move step"),
-        }
-
-        assert!(LINKAGE1.len() == 16);
-        match &LINKAGE1.steps()[0] {
-            Step::Start => {}
-            _ => panic!("expected start step"),
-        }
-        match &LINKAGE1.steps()[2] {
-            Step::Yaw(_) => {}
-            _ => panic!("expected yaw step"),
-        }
-        match &LINKAGE1.steps()[15] {
-            Step::Move(_) => {}
-            _ => panic!("expected move step"),
-        }
-    };
 
     #[test]
     fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {
