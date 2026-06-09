@@ -8,7 +8,7 @@ export class CydSim {
     constructor();
     rgba(): Uint8Array;
     touch_down(x: number, y: number): void;
-    touch_move(x: number, _y: number): void;
+    touch_move(x: number, y: number): void;
     touch_up(): void;
     width(): number;
 }

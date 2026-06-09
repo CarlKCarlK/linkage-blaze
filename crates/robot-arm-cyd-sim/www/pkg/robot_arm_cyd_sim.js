@@ -42,10 +42,10 @@ export class CydSim {
     }
     /**
      * @param {number} x
-     * @param {number} _y
+     * @param {number} y
      */
-    touch_move(x, _y) {
-        wasm.cydsim_touch_move(this.__wbg_ptr, x, _y);
+    touch_move(x, y) {
+        wasm.cydsim_touch_move(this.__wbg_ptr, x, y);
     }
     touch_up() {
         wasm.cydsim_touch_up(this.__wbg_ptr);
@@ -194,7 +194,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('robot_arm_cyd_sim_bg.wasm', import.meta.url);
+        module_or_path = new URL('robot_arm_cyd_sim_bg.wasm?v=center-view-1', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

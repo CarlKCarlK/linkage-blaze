@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use core::{convert::Infallible, f32::consts::FRAC_PI_2};
+use core::{convert::Infallible, f32::consts::TAU};
 
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -8,7 +8,7 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::{Rgb565, RgbColor},
     prelude::*,
-    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
+    primitives::{Circle, Line, PrimitiveStyle},
     text::{Baseline, Text},
 };
 use robot_arm_core::{Linkage, Pose, Vec3};
@@ -17,15 +17,29 @@ use wasm_bindgen::prelude::wasm_bindgen;
 const SCREEN_WIDTH: usize = 320;
 const SCREEN_HEIGHT: usize = 240;
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
-const ARM_WIDTH: i32 = 224;
+const HORIZONTAL_MIN: f32 = -8.0;
+const HORIZONTAL_MAX: f32 = 8.0;
+const Z_MIN: f32 = 0.0;
+const Z_MAX: f32 = 10.0;
+const TILT_X: i32 = 16;
+const TILT_TOP: i32 = 24;
+const TILT_BOTTOM: i32 = 224;
 const SLIDER_LEFT: i32 = 230;
 const SLIDER_RIGHT: i32 = 312;
+const SLIDER_TRACK_LEFT: i32 = 230;
 const SLIDER_TOP: i32 = 13;
 const SLIDER_STEP: i32 = 32;
 const SLIDER_COUNT: usize = 7;
 
-const PARAM_NAMES: [&str; SLIDER_COUNT] =
-    ["hand", "elbow", "close", "lower", "spin", "roll", "x/y"];
+const PARAM_NAMES: [&str; SLIDER_COUNT] = [
+    "lower hand",
+    "bend elbow",
+    "close hand",
+    "lower arm",
+    "spin whole",
+    "spin hand",
+    "x/y view",
+];
 
 const LINKAGE: Linkage<6, 24> = Linkage::start()
     .yaw(90.0)
@@ -57,7 +71,8 @@ pub struct CydSim {
     buffer: FrameBuffer,
     params: [f32; 6],
     xy_mix: f32,
-    active_slider: Option<usize>,
+    z_mix: f32,
+    active_control: Option<ActiveControl>,
 }
 
 #[wasm_bindgen]
@@ -68,7 +83,8 @@ impl CydSim {
             buffer: FrameBuffer::new(),
             params: [0.5, 0.5, 0.0, 0.5, 0.5, 0.5],
             xy_mix: 0.5,
-            active_slider: None,
+            z_mix: 0.0,
+            active_control: None,
         };
         sim.render();
         sim
@@ -87,16 +103,16 @@ impl CydSim {
     }
 
     pub fn touch_down(&mut self, x: f32, y: f32) {
-        self.active_slider = slider_at(y);
-        self.update_touch(x);
+        self.active_control = control_at(x, y);
+        self.update_touch(x, y);
     }
 
-    pub fn touch_move(&mut self, x: f32, _y: f32) {
-        self.update_touch(x);
+    pub fn touch_move(&mut self, x: f32, y: f32) {
+        self.update_touch(x, y);
     }
 
     pub fn touch_up(&mut self) {
-        self.active_slider = None;
+        self.active_control = None;
     }
 }
 
@@ -107,41 +123,59 @@ impl Default for CydSim {
 }
 
 impl CydSim {
-    fn update_touch(&mut self, x: f32) {
-        let Some(slider_index) = self.active_slider else {
+    fn update_touch(&mut self, x: f32, y: f32) {
+        let Some(active_control) = self.active_control else {
             return;
         };
 
-        let value =
-            ((x - SLIDER_LEFT as f32) / (SLIDER_RIGHT - SLIDER_LEFT) as f32).clamp(0.0, 1.0);
-        if slider_index < self.params.len() {
-            self.params[slider_index] = value;
-        } else {
-            self.xy_mix = value;
+        match active_control {
+            ActiveControl::RightSlider(slider_index) => {
+                let value = ((x - SLIDER_TRACK_LEFT as f32)
+                    / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
+                    .clamp(0.0, 1.0);
+                if slider_index < self.params.len() {
+                    self.params[slider_index] = value;
+                } else {
+                    self.xy_mix = value;
+                }
+            }
+            ActiveControl::Tilt => {
+                self.z_mix =
+                    (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32).clamp(0.0, 1.0);
+            }
         }
         self.render();
     }
 
     fn render(&mut self) {
         self.buffer.clear(Rgb565::BLACK);
-        self.draw_viewport();
+        self.draw_grid();
         self.draw_sliders();
+        self.draw_arm();
     }
 
-    fn draw_viewport(&mut self) {
-        let border = PrimitiveStyle::with_stroke(Rgb565::CSS_GRAY, 1);
-        Rectangle::new(
-            Point::new(0, 0),
-            Size::new(ARM_WIDTH as u32, SCREEN_HEIGHT as u32),
-        )
-        .into_styled(border)
-        .draw(&mut self.buffer)
-        .ok();
+    fn draw_grid(&mut self) {
+        let style = PrimitiveStyle::with_stroke(Rgb565::CSS_DARK_SLATE_GRAY, 1);
+        for horizontal in [-8.0, -4.0, 0.0, 4.0, 8.0] {
+            let x = horizontal_to_screen(horizontal);
+            Line::new(Point::new(x, 0), Point::new(x, SCREEN_HEIGHT as i32 - 1))
+                .into_styled(style)
+                .draw(&mut self.buffer)
+                .ok();
+        }
+        for z in [0.0, 2.5, 5.0, 7.5, 10.0] {
+            let y = vertical_to_screen(z, self.z_mix);
+            Line::new(Point::new(0, y), Point::new(SCREEN_WIDTH as i32 - 1, y))
+                .into_styled(style)
+                .draw(&mut self.buffer)
+                .ok();
+        }
+    }
 
-        let bounds = self.arm_bounds();
+    fn draw_arm(&mut self) {
         let mut previous: Option<Point> = None;
         for pose in LINKAGE.poses(&self.params) {
-            let point = self.pose_to_screen(pose, bounds);
+            let point = self.pose_to_screen(pose);
             if let Some(previous_point) = previous {
                 Line::new(previous_point, point)
                     .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_DARK_CYAN, 3))
@@ -158,6 +192,23 @@ impl CydSim {
 
     fn draw_sliders(&mut self) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        Text::with_baseline("z/depth", Point::new(4, 5), text_style, Baseline::Top)
+            .draw(&mut self.buffer)
+            .ok();
+        Line::new(
+            Point::new(TILT_X, TILT_TOP),
+            Point::new(TILT_X, TILT_BOTTOM),
+        )
+        .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
+        .draw(&mut self.buffer)
+        .ok();
+        let tilt_knob_y =
+            TILT_TOP + ((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.z_mix)).round() as i32;
+        Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW))
+            .draw(&mut self.buffer)
+            .ok();
+
         for slider_index in 0..SLIDER_COUNT {
             let y = SLIDER_TOP + slider_index as i32 * SLIDER_STEP;
             let value = if slider_index < self.params.len() {
@@ -165,99 +216,93 @@ impl CydSim {
             } else {
                 self.xy_mix
             };
+
             Text::with_baseline(
                 PARAM_NAMES[slider_index],
-                Point::new(SLIDER_LEFT, y - 10),
+                Point::new(SLIDER_LEFT, y - 12),
                 text_style,
                 Baseline::Top,
             )
             .draw(&mut self.buffer)
             .ok();
 
-            Line::new(Point::new(SLIDER_LEFT, y), Point::new(SLIDER_RIGHT, y))
-                .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
-                .draw(&mut self.buffer)
-                .ok();
+            Line::new(
+                Point::new(SLIDER_TRACK_LEFT, y + 8),
+                Point::new(SLIDER_RIGHT, y + 8),
+            )
+            .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
+            .draw(&mut self.buffer)
+            .ok();
 
-            let knob_x = SLIDER_LEFT + ((SLIDER_RIGHT - SLIDER_LEFT) as f32 * value).round() as i32;
-            Circle::with_center(Point::new(knob_x, y), 9)
+            let knob_x = SLIDER_TRACK_LEFT
+                + ((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value).round() as i32;
+            Circle::with_center(Point::new(knob_x, y + 8), 9)
                 .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW))
                 .draw(&mut self.buffer)
                 .ok();
         }
     }
 
-    fn arm_bounds(&self) -> Bounds {
-        let mut bounds = Bounds::new();
-        for pose in LINKAGE.poses(&self.params) {
-            let Vec3([x, y, z]) = pose.position();
-            bounds.include(project_horizontal(x, y, self.xy_mix), -z);
-        }
-        bounds
-    }
-
-    fn pose_to_screen(&self, pose: Pose, bounds: Bounds) -> Point {
+    fn pose_to_screen(&self, pose: Pose) -> Point {
         let Vec3([x, y, z]) = pose.position();
-        let horizontal = project_horizontal(x, y, self.xy_mix);
-        let vertical = -z;
-        let scale_x = (ARM_WIDTH as f32 - 24.0) / bounds.width().max(1.0);
-        let scale_y = (SCREEN_HEIGHT as f32 - 24.0) / bounds.height().max(1.0);
-        let scale = scale_x.min(scale_y);
-        let center_x = (bounds.min_x + bounds.max_x) * 0.5;
-        let center_y = (bounds.min_y + bounds.max_y) * 0.5;
-        let screen_x = ARM_WIDTH as f32 * 0.5 + (horizontal - center_x) * scale;
-        let screen_y = SCREEN_HEIGHT as f32 * 0.5 - (vertical - center_y) * scale;
-        Point::new(screen_x.round() as i32, screen_y.round() as i32)
+        let projection = project(x, y, -z, self.xy_mix, self.z_mix);
+        Point::new(
+            horizontal_to_screen(projection.horizontal),
+            vertical_to_screen(projection.vertical, self.z_mix),
+        )
     }
 }
 
-fn slider_at(y: f32) -> Option<usize> {
+#[derive(Clone, Copy)]
+enum ActiveControl {
+    RightSlider(usize),
+    Tilt,
+}
+
+#[derive(Clone, Copy)]
+struct Projection {
+    horizontal: f32,
+    vertical: f32,
+}
+
+fn project(x: f32, y: f32, z: f32, xy_mix: f32, z_mix: f32) -> Projection {
+    let angle = (xy_mix - 0.5) * TAU;
+    let cos = angle.cos();
+    let sin = angle.sin();
+    let horizontal = x * cos + y * sin;
+    let depth = -x * sin + y * cos;
+    Projection {
+        horizontal,
+        vertical: z * (1.0 - z_mix) + depth * z_mix,
+    }
+}
+
+fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
+    if (x - TILT_X as f32).abs() <= 14.0 && (TILT_TOP as f32..=TILT_BOTTOM as f32).contains(&y) {
+        return Some(ActiveControl::Tilt);
+    }
     for slider_index in 0..SLIDER_COUNT {
         let slider_y = SLIDER_TOP + slider_index as i32 * SLIDER_STEP;
-        if (y - slider_y as f32).abs() <= 13.0 {
-            return Some(slider_index);
+        if x >= SLIDER_LEFT as f32 && (y - (slider_y + 8) as f32).abs() <= 13.0 {
+            return Some(ActiveControl::RightSlider(slider_index));
         }
     }
     None
 }
 
-fn project_horizontal(x: f32, y: f32, xy_mix: f32) -> f32 {
-    let angle = xy_mix * FRAC_PI_2;
-    x * angle.cos() + y * angle.sin()
+fn horizontal_to_screen(horizontal: f32) -> i32 {
+    scale_to_screen(horizontal, HORIZONTAL_MIN, HORIZONTAL_MAX, SCREEN_WIDTH)
 }
 
-#[derive(Clone, Copy)]
-struct Bounds {
-    min_x: f32,
-    max_x: f32,
-    min_y: f32,
-    max_y: f32,
+fn vertical_to_screen(vertical: f32, z_mix: f32) -> i32 {
+    let low = Z_MIN * (1.0 - z_mix) + HORIZONTAL_MIN * z_mix;
+    let high = Z_MAX * (1.0 - z_mix) + HORIZONTAL_MAX * z_mix;
+    (SCREEN_HEIGHT as i32 - 1) - scale_to_screen(vertical, low, high, SCREEN_HEIGHT)
 }
 
-impl Bounds {
-    fn new() -> Self {
-        Self {
-            min_x: f32::INFINITY,
-            max_x: f32::NEG_INFINITY,
-            min_y: f32::INFINITY,
-            max_y: f32::NEG_INFINITY,
-        }
-    }
-
-    fn include(&mut self, x: f32, y: f32) {
-        self.min_x = self.min_x.min(x);
-        self.max_x = self.max_x.max(x);
-        self.min_y = self.min_y.min(y);
-        self.max_y = self.max_y.max(y);
-    }
-
-    fn width(self) -> f32 {
-        self.max_x - self.min_x
-    }
-
-    fn height(self) -> f32 {
-        self.max_y - self.min_y
-    }
+fn scale_to_screen(value: f32, low: f32, high: f32, pixels: usize) -> i32 {
+    let fraction = ((value - low) / (high - low)).clamp(0.0, 1.0);
+    (fraction * (pixels - 1) as f32).round() as i32
 }
 
 struct FrameBuffer {
