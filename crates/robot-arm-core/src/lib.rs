@@ -176,8 +176,12 @@ impl<P, const N: usize> Linkage<P, N> {
         Poses::new(self, params)
     }
 
-    /// Return the final pose produced by evaluating this linkage.
-    pub fn end_pose(&self, params: &P) -> Pose {
+    /// Return the pose produced after evaluating all steps in this linkage.
+    ///
+    /// This always returns a [`Pose`]. A [`Linkage`] contains an implicit start
+    /// step, so the pose sequence is never empty.
+    #[must_use]
+    pub fn final_pose(&self, params: &P) -> Pose {
         self.poses(params)
             .last()
             .expect("linkage must yield at least the implicit start pose")
@@ -249,17 +253,24 @@ pub struct Pose {
 }
 
 impl Pose {
-    fn new() -> Self {
+    fn start() -> Self {
         Self {
             orientation: IDENTITY,
             position: [0.0, 0.0, 0.0],
         }
     }
 
+    /// Return true when all orientation and position components are within `tolerance`.
+    #[must_use]
+    pub fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
+        mat3_is_close_to(self.orientation, other.orientation, tolerance)
+            && vec3_is_close_to(self.position, other.position, tolerance)
+    }
+
     fn apply<P>(&mut self, step: &Step<P>, params: &P) {
         match step {
             Step::Start => {
-                *self = Self::new();
+                *self = Self::start();
             }
             Step::Move(arg) => {
                 let dist = arg.resolve(params);
@@ -275,6 +286,18 @@ impl Pose {
             }
         }
     }
+}
+
+fn vec3_is_close_to(a: Vec3, b: Vec3, tolerance: f32) -> bool {
+    a.iter()
+        .zip(b.iter())
+        .all(|(left, right)| (left - right).abs() <= tolerance)
+}
+
+fn mat3_is_close_to(a: Mat3, b: Mat3, tolerance: f32) -> bool {
+    a.iter()
+        .zip(b.iter())
+        .all(|(left, right)| vec3_is_close_to(*left, *right, tolerance))
 }
 
 /// Iterator over poses produced by evaluating a linkage.
@@ -294,7 +317,7 @@ impl<'a, P, const N: usize> Poses<'a, P, N> {
             linkage,
             params,
             index: 0,
-            pose: Pose::new(),
+            pose: Pose::start(),
         }
     }
 }
@@ -460,41 +483,40 @@ mod tests {
     }
 
     #[test]
-    fn test_fraction_setting_matches_excel_end_pose() -> Result<(), Box<dyn Error>> {
+    fn test_fraction_setting_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
         let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         params.set_fraction(&[0.7514501463, 0.49, 0.50011957, 1.0, 0.6254387123, 1.0]);
 
-        let pose = LINKAGE.end_pose(&params);
-
-        assert_mat3_approx_eq(
-            pose.orientation,
-            [
+        let pose = LINKAGE.final_pose(&params);
+        let expected = Pose {
+            orientation: [
                 [0.483250222, 0.727078899, -0.487673557],
                 [0.51177487, -0.686553913, -0.516459299],
                 [-0.710320847, 0.0, -0.703878039],
             ],
-        );
-        assert_vec3_approx_eq(pose.position, [5.213220756, 5.747736152, 0.724197882]);
+            position: [5.213220756, 5.747736152, 0.724197882],
+        };
+
+        assert_pose_approx_eq(pose, expected);
         Ok(())
     }
 
     #[test]
-    fn test_mid_fraction_setting_matches_excel_end_pose_and_png() -> Result<(), Box<dyn Error>> {
+    fn test_mid_fraction_setting_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
         let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         params.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
 
-        let pose = LINKAGE.end_pose(&params);
-
-        // todo0000000 stream line pose creation and comparison.
-        assert_mat3_approx_eq(
-            pose.orientation,
-            [
+        let pose = LINKAGE.final_pose(&params);
+        let expected = Pose {
+            orientation: [
                 [-0.587785252, -0.809016994, 0.0],
                 [0.781450409, -0.567756956, -0.258819045],
                 [0.209389006, -0.152130018, 0.965925826],
             ],
-        );
-        assert_vec3_approx_eq(pose.position, [-2.82831039, 7.479633205, 4.504161677]);
+            position: [-2.82831039, 7.479633205, 4.504161677],
+        };
+
+        assert_pose_approx_eq(pose, expected);
 
         // todo00000 combine the png and the numeric tests. (done here)
         let canvas = draw_linkage_xy_canvas(&params);
@@ -540,10 +562,14 @@ mod tests {
         );
     }
 
-    fn assert_mat3_approx_eq(actual: [[f32; 3]; 3], expected: [[f32; 3]; 3]) {
-        for row_index in 0..3 {
-            assert_vec3_approx_eq(actual[row_index], expected[row_index]);
-        }
+    // todo0000000 stream line pose creation and comparison. (done with Pose::is_close_to)
+    fn assert_pose_approx_eq(actual: Pose, expected: Pose) {
+        assert!(
+            actual.is_close_to(&expected, 1e-3),
+            "expected {:?}, got {:?}",
+            expected,
+            actual
+        );
     }
 
     fn position_after_move(move_index: usize) -> Result<[f32; 3], Box<dyn Error>> {
