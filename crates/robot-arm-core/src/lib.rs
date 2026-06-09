@@ -30,19 +30,19 @@ pub enum Step {
     Move(Arg),
 }
 
-/// A fixed argument or a runtime degree-of-freedom parameter.
+/// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
 ///
 /// Angle steps interpret values as degrees. Move steps interpret values as
 /// linkage distances.
 #[derive(Debug)]
 pub enum Arg {
     Fixed(f32),
-    Param(ParamArg),
+    Variable(VariableArg),
 }
 
-/// A degree-of-freedom parameter reference with its legal range.
+/// A variable argument with its degree-of-freedom index and legal range.
 #[derive(Debug)]
-pub struct ParamArg {
+pub struct VariableArg {
     index: usize,
     low: f32,
     high: f32,
@@ -55,7 +55,7 @@ impl Arg {
     fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
         match self {
             Self::Fixed(value) => *value,
-            Self::Param(param_arg) => param_arg.resolve(params),
+            Self::Variable(variable_arg) => variable_arg.resolve(params),
         }
     }
 
@@ -65,7 +65,7 @@ impl Arg {
     }
 }
 
-impl ParamArg {
+impl VariableArg {
     const fn new(index: usize, low: f32, high: f32) -> Self {
         Self { index, low, high }
     }
@@ -106,7 +106,7 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Add a yaw step from a runtime parameter in degrees.
     pub const fn yaw_param(self, index: usize, low: f32, high: f32) -> Self {
         assert!(index < DOF, "parameter index must be within DOF");
-        self.push(Step::Yaw(Arg::Param(ParamArg::new(index, low, high))))
+        self.push(Step::Yaw(Arg::Variable(VariableArg::new(index, low, high))))
     }
 
     /// Add a pitch step from a user-facing angle in degrees.
@@ -117,7 +117,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Add a pitch step from a runtime parameter in degrees.
     pub const fn pitch_param(self, index: usize, low: f32, high: f32) -> Self {
         assert!(index < DOF, "parameter index must be within DOF");
-        self.push(Step::Pitch(Arg::Param(ParamArg::new(index, low, high))))
+        self.push(Step::Pitch(Arg::Variable(VariableArg::new(
+            index, low, high,
+        ))))
     }
 
     /// Add a roll step from a user-facing angle in degrees.
@@ -128,7 +130,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Add a roll step from a runtime parameter in degrees.
     pub const fn roll_param(self, index: usize, low: f32, high: f32) -> Self {
         assert!(index < DOF, "parameter index must be within DOF");
-        self.push(Step::Roll(Arg::Param(ParamArg::new(index, low, high))))
+        self.push(Step::Roll(Arg::Variable(VariableArg::new(
+            index, low, high,
+        ))))
     }
 
     /// Add a fixed forward move step.
@@ -139,7 +143,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Add a move step from a runtime parameter.
     pub const fn move_param(self, index: usize, low: f32, high: f32) -> Self {
         assert!(index < DOF, "parameter index must be within DOF");
-        self.push(Step::Move(Arg::Param(ParamArg::new(index, low, high))))
+        self.push(Step::Move(Arg::Variable(VariableArg::new(
+            index, low, high,
+        ))))
     }
 
     const fn push(mut self, step: Step) -> Self {
