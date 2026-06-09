@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Robot Arm</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="viewport" aria-label="Robot arm projection">
+        <canvas id="arm-canvas"></canvas>
+      </section>
+      <aside class="controls" aria-label="Robot arm controls">
+        <div class="toolbar">
+          <button id="reset-view" type="button">Reset View</button>
+          <button id="reset-params" type="button">Reset Params</button>
+        </div>
+        <div id="sliders" class="sliders"></div>
+      </aside>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

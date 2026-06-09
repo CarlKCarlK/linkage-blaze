@@ -287,6 +287,7 @@ mod tests {
     };
     use std::{boxed::Box, error::Error};
 
+    //todo000 *_param might not be a good suffix.
     const LINKAGE0: Linkage<6, 24> = Linkage::start()
         .yaw(90.0)
         .yaw_param(4, 180.0, -180.0) // spin whole arm

@@ -9,3 +9,4 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 robot-arm-core.workspace = true
+wasm-bindgen = "=0.2.118"
