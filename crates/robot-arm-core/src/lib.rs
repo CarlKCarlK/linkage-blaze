@@ -78,6 +78,17 @@ impl Params {
         self.spin_whole_arm = angle_fraction_to_radians(fractions[4], -180.0, 180.0);
         self.spin_hand = angle_fraction_to_radians(fractions[5], -180.0, 180.0);
     }
+
+    /// Return true when all parameter components are within `tolerance`.
+    #[must_use]
+    pub fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
+        f32_is_close_to(self.lower_hand, other.lower_hand, tolerance)
+            && f32_is_close_to(self.bend_elbow, other.bend_elbow, tolerance)
+            && f32_is_close_to(self.close_hand, other.close_hand, tolerance)
+            && f32_is_close_to(self.lower_arm, other.lower_arm, tolerance)
+            && f32_is_close_to(self.spin_whole_arm, other.spin_whole_arm, tolerance)
+            && f32_is_close_to(self.spin_hand, other.spin_hand, tolerance)
+    }
 }
 
 /// A fixed argument or a runtime parameter accessor.
@@ -214,6 +225,10 @@ fn angle_fraction_to_radians(fraction: f32, min_degrees: f32, max_degrees: f32) 
     degrees_to_radians(fraction_to_range(fraction, max_degrees, min_degrees))
 }
 
+fn f32_is_close_to(a: f32, b: f32, tolerance: f32) -> bool {
+    (a - b).abs() <= tolerance
+}
+
 fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
     let mut out = [[0.0f32; 3]; 3];
     for row in 0..3 {
@@ -291,7 +306,7 @@ impl Pose {
 fn vec3_is_close_to(a: Vec3, b: Vec3, tolerance: f32) -> bool {
     a.iter()
         .zip(b.iter())
-        .all(|(left, right)| (left - right).abs() <= tolerance)
+        .all(|(left, right)| f32_is_close_to(*left, *right, tolerance))
 }
 
 fn mat3_is_close_to(a: Mat3, b: Mat3, tolerance: f32) -> bool {
@@ -343,8 +358,8 @@ mod test_helpers;
 mod tests {
     use super::{Linkage, Params, Pose, Step};
     use crate::test_helpers::{
-        assert_approx_eq, assert_png_matches_expected, assert_pose_approx_eq,
-        assert_vec3_approx_eq, draw_linkage_xy_canvas, position_after_move,
+        assert_params_approx_eq, assert_png_matches_expected, assert_pose_approx_eq,
+        assert_pose_trace_matches_expected, draw_linkage_xy_canvas,
     };
     use std::{boxed::Box, error::Error};
 
@@ -412,6 +427,7 @@ mod tests {
         .yaw(90.0)
         .forward(1.0);
 
+    //todo0000 compile time test?
     #[test]
     fn test_linkage_structure() {
         assert_eq!(LINKAGE.len(), 24);
@@ -421,72 +437,8 @@ mod tests {
     }
 
     #[test]
-    fn test_poses_yields_initial_position() -> Result<(), Box<dyn Error>> {
-        let first = LINKAGE
-            .poses(&EXCEL_PARAMS)
-            .next()
-            .ok_or("linkage must include start")?;
-        assert_vec3_approx_eq(first.position, [0.0, 0.0, 0.0]);
-        Ok(())
-    }
-
-    #[test]
-    fn test_poses_position_count() {
-        assert_eq!(LINKAGE.poses(&EXCEL_PARAMS).count(), LINKAGE.len());
-    }
-
-    #[test]
-    fn test_poses_first_move_matches_excel() -> Result<(), Box<dyn Error>> {
-        assert_vec3_approx_eq(
-            position_after_move(&LINKAGE, &EXCEL_PARAMS, 1)?,
-            [0.0, 0.0, 2.5],
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_poses_second_move_matches_excel() -> Result<(), Box<dyn Error>> {
-        assert_vec3_approx_eq(
-            position_after_move(&LINKAGE, &EXCEL_PARAMS, 2)?,
-            [2.12716, 2.115, 2.5],
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_poses_third_move_matches_excel() -> Result<(), Box<dyn Error>> {
-        assert_vec3_approx_eq(
-            position_after_move(&LINKAGE, &EXCEL_PARAMS, 3)?,
-            [4.25565, 4.23, 2.5],
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_poses_fourth_move_matches_excel() -> Result<(), Box<dyn Error>> {
-        assert_vec3_approx_eq(
-            position_after_move(&LINKAGE, &EXCEL_PARAMS, 4)?,
-            [4.75565, 4.726, 1.79],
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_poses_fifth_move_matches_excel() -> Result<(), Box<dyn Error>> {
-        assert_vec3_approx_eq(
-            position_after_move(&LINKAGE, &EXCEL_PARAMS, 5)?,
-            [5.00475, 4.974, 1.435],
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_poses_last_move_matches_excel() -> Result<(), Box<dyn Error>> {
-        assert_vec3_approx_eq(
-            position_after_move(&LINKAGE, &EXCEL_PARAMS, 10)?,
-            [5.32801, 5.647, 0.724],
-        );
-        Ok(())
+    fn test_excel_pose_trace_matches_expected() -> Result<(), Box<dyn Error>> {
+        assert_pose_trace_matches_expected("excel_pose_trace.csv", LINKAGE.poses(&EXCEL_PARAMS))
     }
 
     #[test]
@@ -542,11 +494,6 @@ mod tests {
         params.set_fraction(&[0.0, 0.5, 1.0, 1.0, 0.25, 0.75]);
 
         let expected = Params::new(90.0, 0.0, 1.0, 0.0, 90.0, -90.0);
-        assert_approx_eq(params.lower_hand, expected.lower_hand);
-        assert_approx_eq(params.bend_elbow, expected.bend_elbow);
-        assert_approx_eq(params.close_hand, expected.close_hand);
-        assert_approx_eq(params.lower_arm, expected.lower_arm);
-        assert_approx_eq(params.spin_whole_arm, expected.spin_whole_arm);
-        assert_approx_eq(params.spin_hand, expected.spin_hand);
+        assert_params_approx_eq(params, expected);
     }
 }

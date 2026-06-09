@@ -1,4 +1,4 @@
-use crate::{Linkage, Params, Pose, Step, Vec3};
+use crate::{Linkage, Params, Pose, Vec3};
 use core::convert::Infallible;
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -16,29 +16,20 @@ use std::{
     io::BufWriter,
     path::{Path, PathBuf},
     println,
+    string::String,
     time::{SystemTime, UNIX_EPOCH},
+    vec::Vec,
 };
 
-pub(super) fn assert_vec3_approx_eq(actual: Vec3, expected: Vec3) {
-    let close_enough = actual
-        .iter()
-        .zip(expected.iter())
-        .all(|(x, y)| (x - y).abs() < 1e-3);
+pub(super) fn assert_params_approx_eq(actual: Params, expected: Params) {
     assert!(
-        close_enough,
-        "expected ({:.5},{:.5},{:.5}), got ({:.5},{:.5},{:.5})",
-        expected[0], expected[1], expected[2], actual[0], actual[1], actual[2]
+        actual.is_close_to(&expected, 1e-6),
+        "expected {:?}, got {:?}",
+        expected,
+        actual
     );
 }
 
-pub(super) fn assert_approx_eq(actual: f32, expected: f32) {
-    assert!(
-        (actual - expected).abs() < 1e-6,
-        "expected {expected:.6}, got {actual:.6}"
-    );
-}
-
-// todo0000000 stream line pose creation and comparison. (done with Pose::is_close_to)
 pub(super) fn assert_pose_approx_eq(actual: Pose, expected: Pose) {
     assert!(
         actual.is_close_to(&expected, 1e-3),
@@ -48,24 +39,112 @@ pub(super) fn assert_pose_approx_eq(actual: Pose, expected: Pose) {
     );
 }
 
-pub(super) fn position_after_move<const N: usize>(
-    linkage: &Linkage<Params, N>,
-    params: &Params,
-    move_index: usize,
-) -> Result<Vec3, Box<dyn Error>> {
-    linkage
-        .steps()
-        .iter()
-        .zip(linkage.poses(params))
-        .filter_map(|(step, pose)| {
-            if matches!(step, Step::Start | Step::Move(_)) {
-                Some(pose.position)
-            } else {
-                None
-            }
-        })
-        .nth(move_index)
-        .ok_or_else(|| format!("missing move position at index {move_index}").into())
+pub(super) fn assert_pose_trace_matches_expected<I>(
+    filename: &str,
+    poses: I,
+) -> Result<(), Box<dyn Error>>
+where
+    I: IntoIterator<Item = Pose>,
+{
+    let actual_poses: Vec<Pose> = poses.into_iter().collect();
+    let expected_path = expected_asset_path(filename);
+
+    if std::env::var_os("ROBOT_ARM_UPDATE_POSE_TRACES").is_some() {
+        fs::write(&expected_path, format_pose_trace(&actual_poses))?;
+        println!("updated pose trace at {}", expected_path.display());
+        return Ok(());
+    }
+
+    if !expected_path.exists() {
+        return Err(format!(
+            "expected pose trace is missing at {}; rerun with ROBOT_ARM_UPDATE_POSE_TRACES=1 to create it",
+            expected_path.display()
+        )
+        .into());
+    }
+
+    let expected_text = fs::read_to_string(&expected_path)?;
+    let expected_poses = parse_pose_trace(&expected_text)?;
+    assert_eq!(
+        actual_poses.len(),
+        expected_poses.len(),
+        "expected {} poses, got {}",
+        expected_poses.len(),
+        actual_poses.len()
+    );
+
+    for (index, (actual, expected)) in actual_poses.iter().zip(expected_poses.iter()).enumerate() {
+        assert!(
+            actual.is_close_to(expected, 1e-3),
+            "pose {index}: expected {:?}, got {:?}",
+            expected,
+            actual
+        );
+    }
+
+    Ok(())
+}
+
+fn format_pose_trace(poses: &[Pose]) -> String {
+    let mut text = String::from("step,t00,t01,t02,t10,t11,t12,t20,t21,t22,x,y,z\n");
+    for (index, pose) in poses.iter().enumerate() {
+        text.push_str(&format!(
+            "{},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9}\n",
+            index,
+            pose.orientation[0][0],
+            pose.orientation[0][1],
+            pose.orientation[0][2],
+            pose.orientation[1][0],
+            pose.orientation[1][1],
+            pose.orientation[1][2],
+            pose.orientation[2][0],
+            pose.orientation[2][1],
+            pose.orientation[2][2],
+            pose.position[0],
+            pose.position[1],
+            pose.position[2]
+        ));
+    }
+    text
+}
+
+fn parse_pose_trace(text: &str) -> Result<Vec<Pose>, Box<dyn Error>> {
+    let mut poses = Vec::new();
+
+    for (line_index, line) in text.lines().enumerate() {
+        if line_index == 0 {
+            continue;
+        }
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let fields: Vec<&str> = line.split(',').collect();
+        if fields.len() != 13 {
+            return Err(format!(
+                "pose trace line {} has {} fields, expected 13",
+                line_index + 1,
+                fields.len()
+            )
+            .into());
+        }
+
+        let mut values = [0.0f32; 12];
+        for value_index in 0..12 {
+            values[value_index] = fields[value_index + 1].parse::<f32>()?;
+        }
+
+        poses.push(Pose {
+            orientation: [
+                [values[0], values[1], values[2]],
+                [values[3], values[4], values[5]],
+                [values[6], values[7], values[8]],
+            ],
+            position: [values[9], values[10], values[11]],
+        });
+    }
+
+    Ok(poses)
 }
 
 const CANVAS_WIDTH: usize = 300;
@@ -228,6 +307,10 @@ fn write_png(path: &Path, canvas: &Canvas) -> Result<(), Box<dyn Error>> {
 }
 
 fn expected_png_path(filename: &str) -> PathBuf {
+    expected_asset_path(filename)
+}
+
+fn expected_asset_path(filename: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
     path.push("assets");
