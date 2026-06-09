@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Robot Arm</title>
     <link rel="stylesheet" href="./styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
   </head>
   <body>
     <main class="app">
-      <section class="viewport" aria-label="Robot arm projection">
+      <section class="viewport" aria-label="Robot arm 3D view">
         <canvas id="arm-canvas"></canvas>
       </section>
       <aside class="controls" aria-label="Robot arm controls">
@@ -19,6 +27,6 @@
         <div id="sliders" class="sliders"></div>
       </aside>
     </main>
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=3d-rods-1"></script>
   </body>
 </html>

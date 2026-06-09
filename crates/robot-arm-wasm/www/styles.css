@@ -37,12 +37,8 @@ input {
   display: block;
   width: 100%;
   height: 100%;
-  cursor: grab;
   touch-action: none;
-}
-
-#arm-canvas.dragging {
-  cursor: grabbing;
+  cursor: default;
 }
 
 .controls {

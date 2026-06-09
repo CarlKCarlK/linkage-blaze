@@ -1,44 +1,91 @@
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import init, { linkage0_points } from "./pkg/robot_arm_wasm.js";
 
 const PARAMS = [
-  { name: "lower hand", value: 0.7514501463 },
-  { name: "bend elbow", value: 0.5002003842 },
-  { name: "close hand", value: 0.5 },
-  { name: "lower arm", value: 1.0 },
-  { name: "spin whole arm", value: 0.6254387123 },
-  { name: "spin hand", value: 0.0 },
+  { name: "lower hand", value: 0.5 },
+  { name: "bend elbow", value: 0.5 },
+  { name: "close hand", value: 0.0 },
+  { name: "lower arm", value: 0.5 },
+  { name: "spin whole arm", value: 0.5 },
+  { name: "spin hand", value: 0.5 },
 ];
 
 const DEFAULT_PARAMS = PARAMS.map((param) => param.value);
 const canvas = document.querySelector("#arm-canvas");
-const context = canvas.getContext("2d");
 const sliders = document.querySelector("#sliders");
 const resetView = document.querySelector("#reset-view");
 const resetParams = document.querySelector("#reset-params");
 
 let selectedIndex = 0;
 let points = [];
-let view = {
-  scale: 28,
-  offsetX: 0,
-  offsetY: 0,
+let firstFit = true;
+
+const renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: true,
+  alpha: false,
+});
+renderer.setClearColor(0xffffff, 1);
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+camera.up.set(0, 0, 1);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.screenSpacePanning = true;
+controls.enableZoom = false;
+controls.minDistance = 0.75;
+controls.maxDistance = 80;
+controls.mouseButtons = {
+  LEFT: THREE.MOUSE.ROTATE,
+  MIDDLE: THREE.MOUSE.PAN,
+  RIGHT: THREE.MOUSE.PAN,
 };
-let dragging = false;
-let lastPointer = { x: 0, y: 0 };
+
+const grid = new THREE.GridHelper(20, 20, 0x9ca8b4, 0xd7dce2);
+grid.rotation.x = Math.PI / 2;
+scene.add(grid);
+
+const armColor = 0x156082;
+const rodRadius = 0.08;
+const jointRadius = rodRadius * 2;
+const rodMaterial = new THREE.MeshBasicMaterial({ color: armColor });
+const jointMaterial = new THREE.MeshBasicMaterial({ color: armColor });
+const jointGeometry = new THREE.SphereGeometry(jointRadius, 24, 16);
+const rodMeshes = [];
+const joints = [];
 
 await init();
 buildControls();
 resize();
 update();
+animate();
 
 window.addEventListener("resize", () => {
   resize();
-  draw();
+  render();
 });
+
+renderer.domElement.addEventListener(
+  "wheel",
+  (event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    zoomCamera(event.deltaY);
+    render();
+  },
+  { capture: true, passive: false },
+);
 
 resetView.addEventListener("click", () => {
   fitView();
-  draw();
+  render();
 });
 
 resetParams.addEventListener("click", () => {
@@ -49,59 +96,9 @@ resetParams.addEventListener("click", () => {
   update();
 });
 
-canvas.addEventListener("pointerdown", (event) => {
-  canvas.setPointerCapture(event.pointerId);
-  dragging = true;
-  canvas.classList.add("dragging");
-  lastPointer = { x: event.clientX, y: event.clientY };
-});
-
-canvas.addEventListener("pointermove", (event) => {
-  if (!dragging) {
-    return;
-  }
-  const dx = event.clientX - lastPointer.x;
-  const dy = event.clientY - lastPointer.y;
-  view.offsetX += dx;
-  view.offsetY += dy;
-  lastPointer = { x: event.clientX, y: event.clientY };
-  draw();
-});
-
-canvas.addEventListener("pointerup", (event) => {
-  canvas.releasePointerCapture(event.pointerId);
-  dragging = false;
-  canvas.classList.remove("dragging");
-});
-
-canvas.addEventListener("pointercancel", () => {
-  dragging = false;
-  canvas.classList.remove("dragging");
-});
-
-canvas.addEventListener(
-  "wheel",
-  (event) => {
-    event.preventDefault();
-    const before = screenToWorld(event.offsetX, event.offsetY);
-    const zoom = Math.exp(-event.deltaY * 0.001);
-    view.scale = clamp(view.scale * zoom, 8, 220);
-    const after = screenToWorld(event.offsetX, event.offsetY);
-    view.offsetX += (after.x - before.x) * view.scale;
-    view.offsetY -= (after.y - before.y) * view.scale;
-    draw();
-  },
-  { passive: false },
-);
-
-canvas.addEventListener("dblclick", () => {
-  fitView();
-  draw();
-});
-
 window.addEventListener("keydown", (event) => {
-  const sliderTag = document.activeElement?.tagName === "INPUT";
-  if (!sliderTag && event.key >= "1" && event.key <= "6") {
+  const sliderFocused = document.activeElement?.tagName === "INPUT";
+  if (!sliderFocused && event.key >= "1" && event.key <= "6") {
     selectedIndex = Number(event.key) - 1;
     focusSelectedSlider();
     return;
@@ -160,7 +157,7 @@ function buildControls() {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent =
-    "Drag to pan. Mouse wheel zooms. Double click resets view. Number keys select a parameter; arrow keys nudge it.";
+    "Left drag orbits. Right drag pans. Mouse wheel zooms. Number keys select a parameter; arrow keys nudge it.";
   sliders.append(hint);
   syncControls();
 }
@@ -181,130 +178,112 @@ function focusSelectedSlider() {
 
 function update() {
   points = unpackPoints(linkage0_points(PARAMS.map((param) => param.value)));
-  if (view.offsetX === 0 && view.offsetY === 0) {
+  updateGeometry();
+  if (firstFit) {
     fitView();
+    firstFit = false;
   }
-  draw();
+  render();
 }
 
 function unpackPoints(flatPoints) {
   const nextPoints = [];
   for (let index = 0; index < flatPoints.length; index += 3) {
-    nextPoints.push({
-      x: flatPoints[index],
-      y: flatPoints[index + 1],
-      z: flatPoints[index + 2],
-    });
+    nextPoints.push(new THREE.Vector3(flatPoints[index], flatPoints[index + 1], -flatPoints[index + 2]));
   }
   return nextPoints;
 }
 
+function updateGeometry() {
+  const segmentCount = Math.max(0, points.length - 1);
+  while (rodMeshes.length < segmentCount) {
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(rodRadius, rodRadius, 1, 16), rodMaterial);
+    rodMeshes.push(rod);
+    scene.add(rod);
+  }
+  while (rodMeshes.length > segmentCount) {
+    const rod = rodMeshes.pop();
+    scene.remove(rod);
+    rod.geometry.dispose();
+  }
+  for (let index = 0; index < segmentCount; index += 1) {
+    positionRod(rodMeshes[index], points[index], points[index + 1]);
+  }
+
+  while (joints.length < points.length) {
+    const joint = new THREE.Mesh(jointGeometry, jointMaterial);
+    joints.push(joint);
+    scene.add(joint);
+  }
+  while (joints.length > points.length) {
+    const joint = joints.pop();
+    scene.remove(joint);
+  }
+  for (let index = 0; index < points.length; index += 1) {
+    joints[index].position.copy(points[index]);
+  }
+}
+
+function positionRod(rod, start, end) {
+  const direction = end.clone().sub(start);
+  const length = direction.length();
+  rod.visible = length > 0;
+  if (!rod.visible) {
+    return;
+  }
+  rod.position.copy(start).add(end).multiplyScalar(0.5);
+  rod.scale.set(1, length, 1);
+  rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+}
+
 function resize() {
   const bounds = canvas.getBoundingClientRect();
-  const pixelRatio = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.round(bounds.width * pixelRatio));
-  canvas.height = Math.max(1, Math.round(bounds.height * pixelRatio));
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  renderer.setSize(Math.max(1, bounds.width), Math.max(1, bounds.height), false);
+  camera.aspect = bounds.width / Math.max(1, bounds.height);
+  camera.updateProjectionMatrix();
 }
 
 function fitView() {
   if (points.length === 0) {
     return;
   }
-  const bounds = points.reduce(
-    (accumulator, point) => ({
-      minX: Math.min(accumulator.minX, point.x),
-      maxX: Math.max(accumulator.maxX, point.x),
-      minY: Math.min(accumulator.minY, point.y),
-      maxY: Math.max(accumulator.maxY, point.y),
-    }),
-    { minX: points[0].x, maxX: points[0].x, minY: points[0].y, maxY: points[0].y },
-  );
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const spanX = Math.max(1, bounds.maxX - bounds.minX);
-  const spanY = Math.max(1, bounds.maxY - bounds.minY);
-  view.scale = Math.min(width / spanX, height / spanY) * 0.72;
-  view.offsetX = -(bounds.minX + bounds.maxX) * 0.5 * view.scale;
-  view.offsetY = (bounds.minY + bounds.maxY) * 0.5 * view.scale;
+  const bounds = new THREE.Box3().setFromPoints(points);
+  const center = bounds.getCenter(new THREE.Vector3());
+  const size = bounds.getSize(new THREE.Vector3());
+  const radius = Math.max(size.length() * 0.5, 2);
+
+  controls.target.copy(center);
+  camera.position.copy(center).add(new THREE.Vector3(radius * 1.8, -radius * 2.2, radius * 1.4));
+  camera.near = Math.max(0.01, radius / 100);
+  camera.far = radius * 100;
+  controls.minDistance = Math.max(0.25, radius * 0.2);
+  controls.maxDistance = Math.max(20, radius * 8);
+  camera.updateProjectionMatrix();
+  controls.update();
 }
 
-function draw() {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  context.clearRect(0, 0, width, height);
-  drawGrid(width, height);
-
-  if (points.length === 0) {
+function zoomCamera(deltaY) {
+  const direction = camera.position.clone().sub(controls.target);
+  const currentDistance = direction.length();
+  if (currentDistance === 0) {
     return;
   }
 
-  context.lineWidth = 3;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.strokeStyle = "#156082";
-  context.beginPath();
-  for (let index = 0; index < points.length; index += 1) {
-    const screen = worldToScreen(points[index]);
-    if (index === 0) {
-      context.moveTo(screen.x, screen.y);
-    } else {
-      context.lineTo(screen.x, screen.y);
-    }
-  }
-  context.stroke();
-
-  for (const point of points) {
-    const screen = worldToScreen(point);
-    context.beginPath();
-    context.arc(screen.x, screen.y, 4, 0, Math.PI * 2);
-    context.fillStyle = "#156082";
-    context.fill();
-  }
+  const zoomFactor = Math.exp(clamp(deltaY, -80, 80) * 0.0015);
+  const nextDistance = clamp(currentDistance * zoomFactor, controls.minDistance, controls.maxDistance);
+  camera.position.copy(controls.target).add(direction.multiplyScalar(nextDistance / currentDistance));
+  camera.updateProjectionMatrix();
+  controls.update();
 }
 
-function drawGrid(width, height) {
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, width, height);
-  context.strokeStyle = "#d7dce2";
-  context.lineWidth = 1;
-
-  const step = view.scale;
-  const origin = worldToScreen({ x: 0, y: 0, z: 0 });
-  for (let x = origin.x % step; x < width; x += step) {
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
-    context.stroke();
-  }
-  for (let y = origin.y % step; y < height; y += step) {
-    context.beginPath();
-    context.moveTo(0, y);
-    context.lineTo(width, y);
-    context.stroke();
-  }
-
-  context.strokeStyle = "#9ca8b4";
-  context.beginPath();
-  context.moveTo(origin.x, 0);
-  context.lineTo(origin.x, height);
-  context.moveTo(0, origin.y);
-  context.lineTo(width, origin.y);
-  context.stroke();
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  render();
 }
 
-function worldToScreen(point) {
-  return {
-    x: canvas.clientWidth * 0.5 + view.offsetX + point.x * view.scale,
-    y: canvas.clientHeight * 0.5 + view.offsetY - point.y * view.scale,
-  };
-}
-
-function screenToWorld(x, y) {
-  return {
-    x: (x - canvas.clientWidth * 0.5 - view.offsetX) / view.scale,
-    y: -(y - canvas.clientHeight * 0.5 - view.offsetY) / view.scale,
-  };
+function render() {
+  renderer.render(scene, camera);
 }
 
 function clamp(value, min, max) {

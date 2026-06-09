@@ -24,13 +24,13 @@ const LINKAGE0: Linkage<DOF_COUNT, POINT_COUNT> = Linkage::start()
     .roll_param(5, 180.0, -180.0) // spin hand
     .forward(0.5)
     .yaw(90.0)
-    .move_param(2, 0.0, 0.5) // close hand
+    .move_param(2, 0.5, 0.0) // close hand
     .yaw(-90.0)
     .forward(1.0)
     .yaw(180.0)
     .forward(1.0)
     .yaw(90.0)
-    .move_param(2, 0.0, 1.0) // close hand
+    .move_param(2, 1.0, 0.0) // close hand
     .yaw(90.0)
     .forward(1.0);
 
