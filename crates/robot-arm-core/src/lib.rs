@@ -427,14 +427,23 @@ mod tests {
         .yaw(90.0)
         .forward(1.0);
 
-    //todo0000 compile time test?
-    #[test]
-    fn test_linkage_structure() {
-        assert_eq!(LINKAGE.len(), 24);
-        assert!(matches!(LINKAGE.steps()[0], Step::Start));
-        assert!(matches!(LINKAGE.steps()[12], Step::Roll(_)));
-        assert!(matches!(LINKAGE.steps()[23], Step::Move(_)));
-    }
+    // [Compile-time Test]
+    // Force core linkage shape errors to fail compilation instead of a runtime test.
+    const _: () = {
+        assert!(LINKAGE.len() == 24);
+        match &LINKAGE.steps()[0] {
+            Step::Start => {}
+            _ => panic!("expected start step"),
+        }
+        match &LINKAGE.steps()[12] {
+            Step::Roll(_) => {}
+            _ => panic!("expected roll step"),
+        }
+        match &LINKAGE.steps()[23] {
+            Step::Move(_) => {}
+            _ => panic!("expected move step"),
+        }
+    };
 
     #[test]
     fn test_excel_pose_trace_matches_expected() -> Result<(), Box<dyn Error>> {
@@ -477,7 +486,6 @@ mod tests {
 
         assert_pose_approx_eq(pose, expected);
 
-        // todo00000 combine the png and the numeric tests. (done here)
         let canvas = draw_linkage_xy_canvas(&LINKAGE, &params);
         assert_png_matches_expected("linkage_xy_mid_fraction.png", &canvas)
     }
