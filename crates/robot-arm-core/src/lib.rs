@@ -4,7 +4,6 @@
 
 //todo000 move some of that global static stuff to be const local.
 //todo000 revisit the name Param and Args
-//todo000 is the way that access functions are passed into parameters Yaw, etc, good? Can methods be used instead of stand-alone functions? (may no longer apply)
 //todo00 allow splits/DAGs in the models.
 //todo00 could have (compile-time?) optimizations that collapse adjacent steps of the same type into one step with a combined angle/distance. Would that be worth it? or even multiple moves if one doesn't have parameters.
 //todo00 might be nice to have invisible or colored links, but that would be more turtle than linkage.
@@ -32,8 +31,7 @@ pub enum Step {
 
 /// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
 ///
-/// Angle steps interpret values as degrees. Move steps interpret values as
-/// linkage distances.
+/// Rotation arguments are stored as radians. Move arguments are stored as linkage distances.
 #[derive(Debug)]
 pub enum Arg {
     Fixed(f32),
@@ -45,7 +43,7 @@ pub enum Arg {
 pub struct VariableArg {
     index: usize,
     low: f32,
-    high: f32,
+    span: f32,
 }
 
 //todo00000 each DOF can currently have multiple step-local ranges or no range at
@@ -58,21 +56,24 @@ impl Arg {
             Self::Variable(variable_arg) => variable_arg.resolve(params),
         }
     }
-
-    // todo0000 It looks like fixed arguments are converted to radians every time they're resolved, which is inefficient.
-    fn resolve_degrees_as_radians<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
-        degrees_to_radians(self.resolve(params))
-    }
 }
 
 impl VariableArg {
     const fn new(index: usize, low: f32, high: f32) -> Self {
-        Self { index, low, high }
+        Self {
+            index,
+            low,
+            span: high - low,
+        }
+    }
+
+    const fn from_degrees(index: usize, low: f32, high: f32) -> Self {
+        Self::new(index, degrees_to_radians(low), degrees_to_radians(high))
     }
 
     fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
         let param = params[self.index];
-        self.low + param * (self.high - self.low)
+        self.low + param * self.span
     }
 }
 
@@ -100,37 +101,39 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
 
     /// Add a yaw step from a user-facing angle in degrees.
     pub const fn yaw(self, degrees: f32) -> Self {
-        self.push(Step::Yaw(Arg::Fixed(degrees)))
+        self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
     /// Add a yaw step from a runtime parameter in degrees.
     pub const fn yaw_param(self, index: usize, low: f32, high: f32) -> Self {
         assert!(index < DOF, "parameter index must be within DOF");
-        self.push(Step::Yaw(Arg::Variable(VariableArg::new(index, low, high))))
+        self.push(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
+            index, low, high,
+        ))))
     }
 
     /// Add a pitch step from a user-facing angle in degrees.
     pub const fn pitch(self, degrees: f32) -> Self {
-        self.push(Step::Pitch(Arg::Fixed(degrees)))
+        self.push(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
     /// Add a pitch step from a runtime parameter in degrees.
     pub const fn pitch_param(self, index: usize, low: f32, high: f32) -> Self {
         assert!(index < DOF, "parameter index must be within DOF");
-        self.push(Step::Pitch(Arg::Variable(VariableArg::new(
+        self.push(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
             index, low, high,
         ))))
     }
 
     /// Add a roll step from a user-facing angle in degrees.
     pub const fn roll(self, degrees: f32) -> Self {
-        self.push(Step::Roll(Arg::Fixed(degrees)))
+        self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
     /// Add a roll step from a runtime parameter in degrees.
     pub const fn roll_param(self, index: usize, low: f32, high: f32) -> Self {
         assert!(index < DOF, "parameter index must be within DOF");
-        self.push(Step::Roll(Arg::Variable(VariableArg::new(
+        self.push(Step::Roll(Arg::Variable(VariableArg::from_degrees(
             index, low, high,
         ))))
     }
@@ -219,9 +222,7 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 // Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
 fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
     let radians = match step {
-        Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => {
-            arg.resolve_degrees_as_radians(params)
-        }
+        Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => arg.resolve(params),
         Step::Start | Step::Move(_) => return IDENTITY,
     };
     let cos = libm::cosf(radians);
