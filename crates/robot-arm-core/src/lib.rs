@@ -6,6 +6,7 @@
 //todo000 revisit the name Param and Args
 //todo000 is the way that access functions are passed into parameters Yaw, etc, good? Can methods be used instead of stand-alone functions?
 //todo00 allow splits/DAGs in the models.
+//todo00 could have (compile-time?) optimizations that collapse adjacent steps of the same type into one step with a combined angle/distance. Would that be worth it? or even multiple moves if one doesn't have parameters.
 
 #[cfg(test)]
 extern crate std;
@@ -149,6 +150,7 @@ const fn degrees_to_radians(degrees: f32) -> f32 {
     degrees * (core::f32::consts::PI / 180.0)
 }
 
+//todo0000 make inline? and elsewhere?
 fn f32_is_close_to(a: f32, b: f32, tolerance: f32) -> bool {
     (a - b).abs() <= tolerance
 }
@@ -167,6 +169,7 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 
 // Rotation matrices match the Excel SWITCH formulas exactly.
 // Yaw  = Rz: [[c,-s,0],[s,c,0],[0,0,1]]
+//todo0000 address this non-standardness (fix excel?)
 // Pitch = Ry (Excel convention): [[c,0,-s],[0,1,0],[s,0,c]]
 // Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
 fn rotation_matrix<P>(step: &Step<P>, params: &P) -> Mat3 {
@@ -227,12 +230,14 @@ impl Pose {
     }
 }
 
+//todo0000 why free functions?
 fn vec3_is_close_to(a: Vec3, b: Vec3, tolerance: f32) -> bool {
     a.iter()
         .zip(b.iter())
         .all(|(left, right)| f32_is_close_to(*left, *right, tolerance))
 }
 
+//todo0000 why free functions?
 fn mat3_is_close_to(a: Mat3, b: Mat3, tolerance: f32) -> bool {
     a.iter()
         .zip(b.iter())
@@ -287,11 +292,11 @@ mod tests {
     };
     use std::{boxed::Box, error::Error};
 
-    /// Runtime parameters for this test robot model.
+    /// Runtime parameters for test robot model 0.
     ///
     /// Angle fields are stored in radians. Distance fields are stored in linkage units.
     #[derive(Clone, Copy, Debug)]
-    struct Params {
+    struct Params0 {
         /// -90 to +90 degrees.
         lower_hand: f32,
         /// -90 to +90 degrees.
@@ -306,7 +311,8 @@ mod tests {
         spin_hand: f32,
     }
 
-    impl Params {
+    //todo00000 yikes, this is way too ugly.
+    impl Params0 {
         /// Create model parameters from user-facing degree values and distances.
         const fn new(
             lower_hand: f32,
@@ -363,7 +369,7 @@ mod tests {
         super::degrees_to_radians(fraction_to_range(fraction, max_degrees, min_degrees))
     }
 
-    fn assert_params_approx_eq(actual: Params, expected: Params) {
+    fn assert_params0_approx_eq(actual: Params0, expected: Params0) {
         assert!(
             actual.is_close_to(&expected, 1e-6),
             "expected {:?}, got {:?}",
@@ -373,98 +379,206 @@ mod tests {
     }
 
     //todo0000 having these be constant isn't the usual use case.
-    const EXCEL_PARAMS: Params =
-        Params::new(-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0);
+    const EXCEL_PARAMS0: Params0 =
+        Params0::new(-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0);
 
     // -90 to +90 degrees.
-    fn lower_hand(params: &Params) -> f32 {
-        params.lower_hand
+    fn lower_hand0(params0: &Params0) -> f32 {
+        params0.lower_hand
     }
 
     // -90 to +90 degrees.
-    fn bend_elbow(params: &Params) -> f32 {
-        params.bend_elbow
+    fn bend_elbow0(params0: &Params0) -> f32 {
+        params0.bend_elbow
     }
 
     // 0 to 1 linkage units.
-    fn close_hand_full(params: &Params) -> f32 {
-        params.close_hand
+    fn close_hand_full0(params0: &Params0) -> f32 {
+        params0.close_hand
     }
 
     // 0 to 0.5 linkage units.
-    fn close_hand_half(params: &Params) -> f32 {
-        params.close_hand * 0.5
+    fn close_hand_half0(params0: &Params0) -> f32 {
+        params0.close_hand * 0.5
     }
 
     // 0 to 30 degrees.
-    fn lower_arm(params: &Params) -> f32 {
-        params.lower_arm
+    fn lower_arm0(params0: &Params0) -> f32 {
+        params0.lower_arm
     }
 
     // -180 to +180 degrees.
-    fn spin_whole_arm(params: &Params) -> f32 {
-        params.spin_whole_arm
+    fn spin_whole_arm0(params0: &Params0) -> f32 {
+        params0.spin_whole_arm
     }
 
     // -180 to +180 degrees.
-    fn spin_hand(params: &Params) -> f32 {
-        params.spin_hand
+    fn spin_hand0(params0: &Params0) -> f32 {
+        params0.spin_hand
     }
 
-    const LINKAGE: Linkage<Params, 24> = Linkage::start()
+    const LINKAGE0: Linkage<Params0, 24> = Linkage::start()
         .yaw(90.0)
-        .yaw_param(spin_whole_arm)
+        .yaw_param(spin_whole_arm0)
         .pitch(90.0)
         .forward(2.5)
         .pitch(-90.0)
-        .pitch_param(lower_arm)
+        .pitch_param(lower_arm0)
         .forward(3.0)
-        .yaw_param(bend_elbow)
+        .yaw_param(bend_elbow0)
         .forward(3.0)
-        .pitch_param(lower_hand)
+        .pitch_param(lower_hand0)
         .forward(1.0)
-        .roll_param(spin_hand)
+        .roll_param(spin_hand0)
         .forward(0.5)
         .yaw(90.0)
-        .move_param(close_hand_half)
+        .move_param(close_hand_half0)
         .yaw(-90.0)
         .forward(1.0)
         .yaw(180.0)
         .forward(1.0)
         .yaw(90.0)
-        .move_param(close_hand_full)
+        .move_param(close_hand_full0)
+        .yaw(90.0)
+        .forward(1.0);
+
+    /// Runtime parameters for test robot model 1.
+    ///
+    /// Angle fields are stored in radians. Distance fields are stored in linkage units.
+    #[derive(Clone, Copy, Debug)]
+    struct Params1 {
+        /// -180 to +180 degrees.
+        spin_whole_arm: f32,
+        /// -90 to +90 degrees.
+        bend_elbow: f32,
+        /// 0 to 1 linkage units. A value of 1 is fully closed.
+        close_hand: f32,
+    }
+
+    impl Params1 {
+        /// Create model parameters from user-facing degree values and distances.
+        const fn new(spin_whole_arm: f32, bend_elbow: f32, close_hand: f32) -> Self {
+            Self {
+                spin_whole_arm: super::degrees_to_radians(spin_whole_arm),
+                bend_elbow: super::degrees_to_radians(bend_elbow),
+                close_hand,
+            }
+        }
+
+        /// Set all parameters from normalized fractions in their allowed ranges.
+        ///
+        /// The fractions are ordered as: spin whole arm, bend elbow, close hand.
+        fn set_fraction(&mut self, fractions: &[f32; 3]) {
+            self.spin_whole_arm = angle_fraction_to_radians(fractions[0], -180.0, 180.0);
+            self.bend_elbow = angle_fraction_to_radians(fractions[1], -90.0, 90.0);
+            self.close_hand = fraction_to_range(fractions[2], 1.0, 0.0);
+        }
+
+        /// Return true when all parameter components are within `tolerance`.
+        #[must_use]
+        fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
+            super::f32_is_close_to(self.spin_whole_arm, other.spin_whole_arm, tolerance)
+                && super::f32_is_close_to(self.bend_elbow, other.bend_elbow, tolerance)
+                && super::f32_is_close_to(self.close_hand, other.close_hand, tolerance)
+        }
+    }
+
+    fn assert_params1_approx_eq(actual: Params1, expected: Params1) {
+        assert!(
+            actual.is_close_to(&expected, 1e-6),
+            "expected {:?}, got {:?}",
+            expected,
+            actual
+        );
+    }
+
+    const EXCEL_PARAMS1: Params1 = Params1::new(72.0, 86.4, 0.9);
+
+    // -180 to +180 degrees.
+    fn spin_whole_arm1(params1: &Params1) -> f32 {
+        params1.spin_whole_arm
+    }
+
+    // -90 to +90 degrees.
+    fn bend_elbow1(params1: &Params1) -> f32 {
+        params1.bend_elbow
+    }
+
+    // 0 to 1 linkage units.
+    fn close_hand_full1(params1: &Params1) -> f32 {
+        params1.close_hand
+    }
+
+    // 0 to 0.5 linkage units.
+    fn close_hand_half1(params1: &Params1) -> f32 {
+        params1.close_hand * 0.5
+    }
+
+    const LINKAGE1: Linkage<Params1, 16> = Linkage::start()
+        .yaw(90.0)
+        .yaw_param(spin_whole_arm1)
+        .forward(3.0)
+        .yaw_param(bend_elbow1)
+        .forward(3.0)
+        .yaw(90.0)
+        .move_param(close_hand_half1)
+        .yaw(-90.0)
+        .forward(1.0)
+        .yaw(-180.0)
+        .forward(1.0)
+        .yaw(90.0)
+        .move_param(close_hand_full1)
         .yaw(90.0)
         .forward(1.0);
 
     // [Compile-time Test]
     // Force core linkage shape errors to fail compilation instead of a runtime test.
     const _: () = {
-        assert!(LINKAGE.len() == 24);
-        match &LINKAGE.steps()[0] {
+        assert!(LINKAGE0.len() == 24);
+        match &LINKAGE0.steps()[0] {
             Step::Start => {}
             _ => panic!("expected start step"),
         }
-        match &LINKAGE.steps()[12] {
+        match &LINKAGE0.steps()[12] {
             Step::Roll(_) => {}
             _ => panic!("expected roll step"),
         }
-        match &LINKAGE.steps()[23] {
+        match &LINKAGE0.steps()[23] {
+            Step::Move(_) => {}
+            _ => panic!("expected move step"),
+        }
+
+        assert!(LINKAGE1.len() == 16);
+        match &LINKAGE1.steps()[0] {
+            Step::Start => {}
+            _ => panic!("expected start step"),
+        }
+        match &LINKAGE1.steps()[2] {
+            Step::Yaw(_) => {}
+            _ => panic!("expected yaw step"),
+        }
+        match &LINKAGE1.steps()[15] {
             Step::Move(_) => {}
             _ => panic!("expected move step"),
         }
     };
 
     #[test]
-    fn test_excel_pose_trace_matches_expected() -> Result<(), Box<dyn Error>> {
-        assert_pose_trace_matches_expected("excel_pose_trace.csv", LINKAGE.poses(&EXCEL_PARAMS))
+    fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {
+        assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.poses(&EXCEL_PARAMS0))
     }
 
     #[test]
-    fn test_fraction_setting_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
-        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params.set_fraction(&[0.7514501463, 0.49, 0.50011957, 1.0, 0.6254387123, 1.0]);
+    fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn Error>> {
+        assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.poses(&EXCEL_PARAMS1))
+    }
 
-        let pose = LINKAGE.final_pose(&params);
+    #[test]
+    fn test_fraction_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
+        let mut params0 = Params0::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        params0.set_fraction(&[0.7514501463, 0.49, 0.50011957, 1.0, 0.6254387123, 1.0]);
+
+        let pose = LINKAGE0.final_pose(&params0);
         let expected = Pose {
             orientation: [
                 [0.483250222, 0.727078899, -0.487673557],
@@ -479,11 +593,30 @@ mod tests {
     }
 
     #[test]
-    fn test_mid_fraction_setting_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
-        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
+    fn test_fraction_setting1_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
+        let mut params1 = Params1::new(0.0, 0.0, 0.0);
+        params1.set_fraction(&[0.30, 0.02, 0.10]);
 
-        let pose = LINKAGE.final_pose(&params);
+        let pose = LINKAGE1.final_pose(&params1);
+        let expected = Pose {
+            orientation: [
+                [-0.368124515, 0.929776430, 0.0],
+                [-0.929776430, -0.368124515, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            position: [-4.744067192, -2.626399040, 0.0],
+        };
+
+        assert_pose_approx_eq(pose, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_mid_fraction_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
+        let mut params0 = Params0::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        params0.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
+
+        let pose = LINKAGE0.final_pose(&params0);
         let expected = Pose {
             orientation: [
                 [-0.587785252, -0.809016994, 0.0],
@@ -495,22 +628,37 @@ mod tests {
 
         assert_pose_approx_eq(pose, expected);
 
-        let canvas = draw_linkage_xy_canvas(&LINKAGE, &params);
-        assert_png_matches_expected("linkage_xy_mid_fraction.png", &canvas)
+        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params0);
+        assert_png_matches_expected("linkage0_xy_mid_fraction.png", &canvas)
     }
 
     #[test]
-    fn test_linkage_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        let canvas = draw_linkage_xy_canvas(&LINKAGE, &EXCEL_PARAMS);
-        assert_png_matches_expected("linkage_xy.png", &canvas)
+    fn test_linkage0_png_matches_expected() -> Result<(), Box<dyn Error>> {
+        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &EXCEL_PARAMS0);
+        assert_png_matches_expected("linkage0_xy.png", &canvas)
     }
 
     #[test]
-    fn test_params_set_fraction_maps_to_ranges() {
-        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params.set_fraction(&[0.0, 0.5, 1.0, 1.0, 0.25, 0.75]);
+    fn test_linkage1_png_matches_expected() -> Result<(), Box<dyn Error>> {
+        let canvas = draw_linkage_xy_canvas(&LINKAGE1, &EXCEL_PARAMS1);
+        assert_png_matches_expected("linkage1_xy.png", &canvas)
+    }
 
-        let expected = Params::new(90.0, 0.0, 1.0, 0.0, 90.0, -90.0);
-        assert_params_approx_eq(params, expected);
+    #[test]
+    fn test_params0_set_fraction_maps_to_ranges() {
+        let mut params0 = Params0::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        params0.set_fraction(&[0.0, 0.5, 1.0, 1.0, 0.25, 0.75]);
+
+        let expected = Params0::new(90.0, 0.0, 1.0, 0.0, 90.0, -90.0);
+        assert_params0_approx_eq(params0, expected);
+    }
+
+    #[test]
+    fn test_params1_set_fraction_maps_to_ranges() {
+        let mut params1 = Params1::new(0.0, 0.0, 0.0);
+        params1.set_fraction(&[0.30, 0.02, 0.10]);
+
+        let expected = Params1::new(72.0, 86.4, 0.9);
+        assert_params1_approx_eq(params1, expected);
     }
 }
