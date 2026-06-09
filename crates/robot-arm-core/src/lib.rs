@@ -7,6 +7,8 @@
 //todo000 is the way that access functions are passed into parameters Yaw, etc, good? Can methods be used instead of stand-alone functions?
 //todo00 allow splits/DAGs in the models.
 //todo00 could have (compile-time?) optimizations that collapse adjacent steps of the same type into one step with a combined angle/distance. Would that be worth it? or even multiple moves if one doesn't have parameters.
+//todo00 might be nice to have invisible or colored links, but that would be more turtle than linkage.
+//todo00 if we did have colored links RGBA, could use a fluent command.
 
 #[cfg(test)]
 extern crate std;
@@ -294,67 +296,53 @@ mod tests {
 
     /// Runtime parameters for test robot model 0.
     ///
-    /// Angle fields are stored in radians. Distance fields are stored in linkage units.
-    #[derive(Clone, Copy, Debug)]
-    struct Params0 {
-        /// -90 to +90 degrees.
+    /// Angles are stored in user-facing degrees. Distances are stored in linkage units.
+    type Params0 = [f32; 6];
+
+    // Params0[0]: lower hand, -90 to +90 degrees.
+    const PARAMS0_LOWER_HAND: usize = 0;
+    // Params0[1]: bend elbow, -90 to +90 degrees.
+    const PARAMS0_BEND_ELBOW: usize = 1;
+    // Params0[2]: close hand, 0 to 1 linkage units.
+    const PARAMS0_CLOSE_HAND: usize = 2;
+    // Params0[3]: lower arm, 0 to 30 degrees.
+    const PARAMS0_LOWER_ARM: usize = 3;
+    // Params0[4]: spin whole arm, -180 to +180 degrees.
+    const PARAMS0_SPIN_WHOLE_ARM: usize = 4;
+    // Params0[5]: spin hand, -180 to +180 degrees.
+    const PARAMS0_SPIN_HAND: usize = 5;
+
+    const fn params0_from_degrees(
         lower_hand: f32,
-        /// -90 to +90 degrees.
         bend_elbow: f32,
-        /// 0 to 1 linkage units.
         close_hand: f32,
-        /// 0 to 30 degrees.
         lower_arm: f32,
-        /// -180 to +180 degrees.
         spin_whole_arm: f32,
-        /// -180 to +180 degrees.
         spin_hand: f32,
+    ) -> Params0 {
+        [
+            lower_hand,
+            bend_elbow,
+            close_hand,
+            lower_arm,
+            spin_whole_arm,
+            spin_hand,
+        ]
     }
 
     //todo00000 yikes, this is way too ugly.
-    impl Params0 {
-        /// Create model parameters from user-facing degree values and distances.
-        const fn new(
-            lower_hand: f32,
-            bend_elbow: f32,
-            close_hand: f32,
-            lower_arm: f32,
-            spin_whole_arm: f32,
-            spin_hand: f32,
-        ) -> Self {
-            Self {
-                lower_hand: -super::degrees_to_radians(lower_hand),
-                bend_elbow: super::degrees_to_radians(bend_elbow),
-                close_hand,
-                lower_arm: -super::degrees_to_radians(lower_arm),
-                spin_whole_arm: super::degrees_to_radians(spin_whole_arm),
-                spin_hand: super::degrees_to_radians(spin_hand),
-            }
-        }
-
-        /// Set all parameters from normalized fractions in their allowed ranges.
-        ///
-        /// The fractions are ordered as:
-        /// lower hand, bend elbow, close hand, lower arm, spin whole arm, spin hand.
-        fn set_fraction(&mut self, fractions: &[f32; 6]) {
-            self.lower_hand = -angle_fraction_to_radians(fractions[0], -90.0, 90.0);
-            self.bend_elbow = angle_fraction_to_radians(fractions[1], -90.0, 90.0);
-            self.close_hand = fraction_to_range(fractions[2], 0.0, 1.0);
-            self.lower_arm = -angle_fraction_to_radians(fractions[3], 0.0, 30.0);
-            self.spin_whole_arm = angle_fraction_to_radians(fractions[4], -180.0, 180.0);
-            self.spin_hand = angle_fraction_to_radians(fractions[5], -180.0, 180.0);
-        }
-
-        /// Return true when all parameter components are within `tolerance`.
-        #[must_use]
-        fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
-            super::f32_is_close_to(self.lower_hand, other.lower_hand, tolerance)
-                && super::f32_is_close_to(self.bend_elbow, other.bend_elbow, tolerance)
-                && super::f32_is_close_to(self.close_hand, other.close_hand, tolerance)
-                && super::f32_is_close_to(self.lower_arm, other.lower_arm, tolerance)
-                && super::f32_is_close_to(self.spin_whole_arm, other.spin_whole_arm, tolerance)
-                && super::f32_is_close_to(self.spin_hand, other.spin_hand, tolerance)
-        }
+    fn params0_from_fractions(fractions: &[f32; 6]) -> Params0 {
+        // The angle sliders match the spreadsheet: fraction 0 maps to the maximum
+        // angle and fraction 1 maps to the minimum angle. The distance slider maps
+        // normally from open/short to closed/long.
+        params0_from_degrees(
+            angle_fraction_to_degrees(fractions[0], -90.0, 90.0),
+            angle_fraction_to_degrees(fractions[1], -90.0, 90.0),
+            fraction_to_range(fractions[2], 0.0, 1.0),
+            angle_fraction_to_degrees(fractions[3], 0.0, 30.0),
+            angle_fraction_to_degrees(fractions[4], -180.0, 180.0),
+            angle_fraction_to_degrees(fractions[5], -180.0, 180.0),
+        )
     }
 
     fn fraction_to_range(fraction: f32, min: f32, max: f32) -> f32 {
@@ -365,13 +353,18 @@ mod tests {
         min + fraction * (max - min)
     }
 
-    fn angle_fraction_to_radians(fraction: f32, min_degrees: f32, max_degrees: f32) -> f32 {
-        super::degrees_to_radians(fraction_to_range(fraction, max_degrees, min_degrees))
+    fn angle_fraction_to_degrees(fraction: f32, min_degrees: f32, max_degrees: f32) -> f32 {
+        fraction_to_range(fraction, max_degrees, min_degrees)
     }
 
     fn assert_params0_approx_eq(actual: Params0, expected: Params0) {
         assert!(
-            actual.is_close_to(&expected, 1e-6),
+            actual
+                .iter()
+                .zip(expected.iter())
+                .all(|(actual_value, expected_value)| {
+                    super::f32_is_close_to(*actual_value, *expected_value, 1e-5)
+                }),
             "expected {:?}, got {:?}",
             expected,
             actual
@@ -380,41 +373,41 @@ mod tests {
 
     //todo0000 having these be constant isn't the usual use case.
     const EXCEL_PARAMS0: Params0 =
-        Params0::new(-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0);
+        params0_from_degrees(-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0);
 
     // -90 to +90 degrees.
     fn lower_hand0(params0: &Params0) -> f32 {
-        params0.lower_hand
+        -super::degrees_to_radians(params0[PARAMS0_LOWER_HAND])
     }
 
     // -90 to +90 degrees.
     fn bend_elbow0(params0: &Params0) -> f32 {
-        params0.bend_elbow
+        super::degrees_to_radians(params0[PARAMS0_BEND_ELBOW])
     }
 
     // 0 to 1 linkage units.
     fn close_hand_full0(params0: &Params0) -> f32 {
-        params0.close_hand
+        params0[PARAMS0_CLOSE_HAND]
     }
 
     // 0 to 0.5 linkage units.
     fn close_hand_half0(params0: &Params0) -> f32 {
-        params0.close_hand * 0.5
+        params0[PARAMS0_CLOSE_HAND] * 0.5
     }
 
     // 0 to 30 degrees.
     fn lower_arm0(params0: &Params0) -> f32 {
-        params0.lower_arm
+        -super::degrees_to_radians(params0[PARAMS0_LOWER_ARM])
     }
 
     // -180 to +180 degrees.
     fn spin_whole_arm0(params0: &Params0) -> f32 {
-        params0.spin_whole_arm
+        super::degrees_to_radians(params0[PARAMS0_SPIN_WHOLE_ARM])
     }
 
     // -180 to +180 degrees.
     fn spin_hand0(params0: &Params0) -> f32 {
-        params0.spin_hand
+        super::degrees_to_radians(params0[PARAMS0_SPIN_HAND])
     }
 
     const LINKAGE0: Linkage<Params0, 24> = Linkage::start()
@@ -444,74 +437,69 @@ mod tests {
 
     /// Runtime parameters for test robot model 1.
     ///
-    /// Angle fields are stored in radians. Distance fields are stored in linkage units.
-    #[derive(Clone, Copy, Debug)]
-    struct Params1 {
-        /// -180 to +180 degrees.
+    /// Angles are stored in user-facing degrees. Distances are stored in linkage units.
+    type Params1 = [f32; 3];
+
+    // Params1[0]: spin whole arm, -180 to +180 degrees.
+    const PARAMS1_SPIN_WHOLE_ARM: usize = 0;
+    // Params1[1]: bend elbow, -90 to +90 degrees.
+    const PARAMS1_BEND_ELBOW: usize = 1;
+    // Params1[2]: close hand, 0 to 1 linkage units. A value of 1 is fully closed.
+    const PARAMS1_CLOSE_HAND: usize = 2;
+
+    const fn params1_from_degrees(
         spin_whole_arm: f32,
-        /// -90 to +90 degrees.
         bend_elbow: f32,
-        /// 0 to 1 linkage units. A value of 1 is fully closed.
         close_hand: f32,
+    ) -> Params1 {
+        [spin_whole_arm, bend_elbow, close_hand]
     }
 
-    impl Params1 {
-        /// Create model parameters from user-facing degree values and distances.
-        const fn new(spin_whole_arm: f32, bend_elbow: f32, close_hand: f32) -> Self {
-            Self {
-                spin_whole_arm: super::degrees_to_radians(spin_whole_arm),
-                bend_elbow: super::degrees_to_radians(bend_elbow),
-                close_hand,
-            }
-        }
-
-        /// Set all parameters from normalized fractions in their allowed ranges.
-        ///
-        /// The fractions are ordered as: spin whole arm, bend elbow, close hand.
-        fn set_fraction(&mut self, fractions: &[f32; 3]) {
-            self.spin_whole_arm = angle_fraction_to_radians(fractions[0], -180.0, 180.0);
-            self.bend_elbow = angle_fraction_to_radians(fractions[1], -90.0, 90.0);
-            self.close_hand = fraction_to_range(fractions[2], 1.0, 0.0);
-        }
-
-        /// Return true when all parameter components are within `tolerance`.
-        #[must_use]
-        fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
-            super::f32_is_close_to(self.spin_whole_arm, other.spin_whole_arm, tolerance)
-                && super::f32_is_close_to(self.bend_elbow, other.bend_elbow, tolerance)
-                && super::f32_is_close_to(self.close_hand, other.close_hand, tolerance)
-        }
+    fn params1_from_fractions(fractions: &[f32; 3]) -> Params1 {
+        // The angle sliders match the spreadsheet: fraction 0 maps to the maximum
+        // angle and fraction 1 maps to the minimum angle. The close-hand slider is
+        // inverted: fraction 0 is fully closed and fraction 1 is fully open.
+        params1_from_degrees(
+            angle_fraction_to_degrees(fractions[0], -180.0, 180.0),
+            angle_fraction_to_degrees(fractions[1], -90.0, 90.0),
+            fraction_to_range(fractions[2], 1.0, 0.0),
+        )
     }
 
     fn assert_params1_approx_eq(actual: Params1, expected: Params1) {
         assert!(
-            actual.is_close_to(&expected, 1e-6),
+            actual
+                .iter()
+                .zip(expected.iter())
+                .all(|(actual_value, expected_value)| {
+                    super::f32_is_close_to(*actual_value, *expected_value, 1e-5)
+                }),
             "expected {:?}, got {:?}",
             expected,
             actual
         );
     }
 
-    const EXCEL_PARAMS1: Params1 = Params1::new(72.0, 86.4, 0.9);
+    const EXCEL_PARAMS1: Params1 = params1_from_degrees(72.0, 86.4, 0.9);
 
     // -180 to +180 degrees.
     fn spin_whole_arm1(params1: &Params1) -> f32 {
-        params1.spin_whole_arm
+        super::degrees_to_radians(params1[PARAMS1_SPIN_WHOLE_ARM])
     }
 
     // -90 to +90 degrees.
     fn bend_elbow1(params1: &Params1) -> f32 {
-        params1.bend_elbow
+        super::degrees_to_radians(params1[PARAMS1_BEND_ELBOW])
     }
 
     // 0 to 1 linkage units.
     fn close_hand_full1(params1: &Params1) -> f32 {
-        params1.close_hand
+        params1[PARAMS1_CLOSE_HAND]
     }
 
     // 0 to 0.5 linkage units.
     fn close_hand_half1(params1: &Params1) -> f32 {
-        params1.close_hand * 0.5
+        params1[PARAMS1_CLOSE_HAND] * 0.5
     }
 
     const LINKAGE1: Linkage<Params1, 16> = Linkage::start()
@@ -575,8 +563,8 @@ mod tests {
 
     #[test]
     fn test_fraction_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
-        let mut params0 = Params0::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params0.set_fraction(&[0.7514501463, 0.49, 0.50011957, 1.0, 0.6254387123, 1.0]);
+        let params0 =
+            params0_from_fractions(&[0.7514501463, 0.49, 0.50011957, 1.0, 0.6254387123, 1.0]);
 
         let pose = LINKAGE0.final_pose(&params0);
         let expected = Pose {
@@ -594,8 +582,7 @@ mod tests {
 
     #[test]
     fn test_fraction_setting1_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
-        let mut params1 = Params1::new(0.0, 0.0, 0.0);
-        params1.set_fraction(&[0.30, 0.02, 0.10]);
+        let params1 = params1_from_fractions(&[0.30, 0.02, 0.10]);
 
         let pose = LINKAGE1.final_pose(&params1);
         let expected = Pose {
@@ -613,8 +600,7 @@ mod tests {
 
     #[test]
     fn test_mid_fraction_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
-        let mut params0 = Params0::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params0.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
+        let params0 = params0_from_fractions(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
 
         let pose = LINKAGE0.final_pose(&params0);
         let expected = Pose {
@@ -645,20 +631,18 @@ mod tests {
     }
 
     #[test]
-    fn test_params0_set_fraction_maps_to_ranges() {
-        let mut params0 = Params0::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params0.set_fraction(&[0.0, 0.5, 1.0, 1.0, 0.25, 0.75]);
+    fn test_params0_from_fractions_maps_to_ranges() {
+        let params0 = params0_from_fractions(&[0.0, 0.5, 1.0, 1.0, 0.25, 0.75]);
 
-        let expected = Params0::new(90.0, 0.0, 1.0, 0.0, 90.0, -90.0);
+        let expected = params0_from_degrees(90.0, 0.0, 1.0, 0.0, 90.0, -90.0);
         assert_params0_approx_eq(params0, expected);
     }
 
     #[test]
-    fn test_params1_set_fraction_maps_to_ranges() {
-        let mut params1 = Params1::new(0.0, 0.0, 0.0);
-        params1.set_fraction(&[0.30, 0.02, 0.10]);
+    fn test_params1_from_fractions_maps_to_ranges() {
+        let params1 = params1_from_fractions(&[0.30, 0.02, 0.10]);
 
-        let expected = Params1::new(72.0, 86.4, 0.9);
+        let expected = params1_from_degrees(72.0, 86.4, 0.9);
         assert_params1_approx_eq(params1, expected);
     }
 }
