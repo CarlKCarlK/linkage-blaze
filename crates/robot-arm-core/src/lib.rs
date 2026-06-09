@@ -304,17 +304,17 @@ mod tests {
         .yaw(90.0)
         // params[4]: spin whole arm, -180 to +180 degrees.
         .yaw_param(|params: &[f32; 6]| params[4])
-        .pitch(-90.0)
-        .forward(2.5)
         .pitch(90.0)
-        // params[3]: lower arm, 0 to 30 degrees. Negated to match model pitch direction.
-        .pitch_param(|params: &[f32; 6]| -params[3])
+        .forward(2.5)
+        .pitch(-90.0)
+        // params[3]: lower arm, 0 to 30 degrees.
+        .pitch_param(|params: &[f32; 6]| params[3])
         .forward(3.0)
         // params[1]: bend elbow, -90 to +90 degrees.
         .yaw_param(|params: &[f32; 6]| params[1])
         .forward(3.0)
-        // params[0]: lower hand, -90 to +90 degrees. Negated to match model pitch direction.
-        .pitch_param(|params: &[f32; 6]| -params[0])
+        // params[0]: lower hand, -90 to +90 degrees.
+        .pitch_param(|params: &[f32; 6]| params[0])
         .forward(1.0)
         // params[5]: spin hand, -180 to +180 degrees.
         .roll_param(|params: &[f32; 6]| params[5])
@@ -381,7 +381,7 @@ mod tests {
         ];
         // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
         // Distance fraction maps normally from 0.0 to 1.0 linkage units.
-        let params0 = [
+        let params = [
             90.0 + fractions[0] * (-90.0 - 90.0), // lower hand, -90 to +90 degrees
             90.0 + fractions[1] * (-90.0 - 90.0), // bend elbow, -90 to +90 degrees
             0.0 + fractions[2] * (1.0 - 0.0),     // close hand, 0 to 1 linkage units
@@ -390,14 +390,14 @@ mod tests {
             180.0 + fractions[5] * (-180.0 - 180.0), // spin hand, -180 to +180 degrees
         ];
 
-        let pose = LINKAGE0.final_pose(&params0);
+        let pose = LINKAGE0.final_pose(&params);
         let expected = Pose {
             orientation: [
-                [0.483250222, 0.727078899, -0.487673557],
-                [0.51177487, -0.686553913, -0.516459299],
-                [-0.710320847, 0.0, -0.703878039],
+                [0.48325038, 0.7270788, 0.48767346],
+                [0.5117748, -0.68655396, 0.51645917],
+                [0.7103207, 0.0, -0.70387816],
             ],
-            position: [5.213220756, 5.747736152, 0.724197882],
+            position: [5.213134, 5.747819, -0.7241982],
         };
 
         assert_pose_approx_eq(pose, expected);
@@ -413,13 +413,13 @@ mod tests {
         ];
         // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
         // Close-hand fraction is inverted: 0 is fully closed and 1 is fully open.
-        let params1 = [
+        let params = [
             180.0 + fractions[0] * (-180.0 - 180.0), // spin whole arm, -180 to +180 degrees
             90.0 + fractions[1] * (-90.0 - 90.0),    // bend elbow, -90 to +90 degrees
             1.0 + fractions[2] * (0.0 - 1.0),        // close hand, 0 to 1 linkage units
         ];
 
-        let pose = LINKAGE1.final_pose(&params1);
+        let pose = LINKAGE1.final_pose(&params);
         let expected = Pose {
             orientation: [
                 [-0.368124515, 0.929776430, 0.0],
@@ -445,7 +445,7 @@ mod tests {
         ];
         // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
         // Distance fraction maps normally from 0.0 to 1.0 linkage units.
-        let params0 = [
+        let params = [
             90.0 + fractions[0] * (-90.0 - 90.0), // lower hand, -90 to +90 degrees
             90.0 + fractions[1] * (-90.0 - 90.0), // bend elbow, -90 to +90 degrees
             0.0 + fractions[2] * (1.0 - 0.0),     // close hand, 0 to 1 linkage units
@@ -454,19 +454,19 @@ mod tests {
             180.0 + fractions[5] * (-180.0 - 180.0), // spin hand, -180 to +180 degrees
         ];
 
-        let pose = LINKAGE0.final_pose(&params0);
+        let pose = LINKAGE0.final_pose(&params);
         let expected = Pose {
             orientation: [
-                [-0.587785252, -0.809016994, 0.0],
-                [0.781450409, -0.567756956, -0.258819045],
-                [0.209389006, -0.152130018, 0.965925826],
+                [-0.5877855, -0.80901694, 0.0],
+                [0.78145033, -0.5677572, 0.25881904],
+                [-0.20938899, 0.15213005, 0.9659258],
             ],
-            position: [-2.82831039, 7.479633205, 4.504161677],
+            position: [-2.828311, 7.4796333, -4.504162],
         };
 
         assert_pose_approx_eq(pose, expected);
 
-        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params0);
+        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params);
         assert_png_matches_expected("linkage0_xy_mid_fraction.png", &canvas)
     }
 
@@ -501,7 +501,7 @@ mod tests {
         ];
         // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
         // Distance fraction maps normally from 0.0 to 1.0 linkage units.
-        let params0 = [
+        let params = [
             90.0 + fractions[0] * (-90.0 - 90.0), // lower hand, -90 to +90 degrees
             90.0 + fractions[1] * (-90.0 - 90.0), // bend elbow, -90 to +90 degrees
             0.0 + fractions[2] * (1.0 - 0.0),     // close hand, 0 to 1 linkage units
@@ -511,7 +511,7 @@ mod tests {
         ];
 
         let expected = [90.0, 0.0, 1.0, 0.0, 90.0, -90.0];
-        assert_params_approx_eq(params0, expected);
+        assert_params_approx_eq(params, expected);
     }
 
     #[test]
@@ -523,13 +523,13 @@ mod tests {
         ];
         // Angle fractions match the spreadsheet: 0 maps to max and 1 maps to min.
         // Close-hand fraction is inverted: 0 is fully closed and 1 is fully open.
-        let params1 = [
+        let params = [
             180.0 + fractions[0] * (-180.0 - 180.0), // spin whole arm, -180 to +180 degrees
             90.0 + fractions[1] * (-90.0 - 90.0),    // bend elbow, -90 to +90 degrees
             1.0 + fractions[2] * (0.0 - 1.0),        // close hand, 0 to 1 linkage units
         ];
 
         let expected = [72.0, 86.4, 0.9];
-        assert_params_approx_eq(params1, expected);
+        assert_params_approx_eq(params, expected);
     }
 }
