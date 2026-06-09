@@ -124,12 +124,6 @@ impl<P, const N: usize> Linkage<P, N> {
         self.len
     }
 
-    /// Return true when the linkage has no steps.
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
     /// Add a yaw step from a user-facing angle in degrees.
     pub const fn yaw(self, degrees: f32) -> Self {
         self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
@@ -177,9 +171,16 @@ impl<P, const N: usize> Linkage<P, N> {
         self
     }
 
-    /// Create a simulation iterator for this linkage.
-    pub fn simulate<'a>(&'a self, params: &'a P) -> Simulate<'a, P, N> {
-        Simulate::new(self, params)
+    /// Iterate over poses produced by evaluating this linkage.
+    pub fn poses<'a>(&'a self, params: &'a P) -> Poses<'a, P, N> {
+        Poses::new(self, params)
+    }
+
+    /// Return the final pose produced by evaluating this linkage.
+    pub fn end_pose(&self, params: &P) -> Pose {
+        self.poses(params)
+            .last()
+            .expect("linkage must yield at least the implicit start pose")
     }
 }
 
@@ -240,14 +241,14 @@ fn rotation_matrix<P>(step: &Step<P>, params: &P) -> Mat3 {
     }
 }
 
-/// Full turtle state after evaluating a linkage step.
+/// Full pose after evaluating a linkage step.
 #[derive(Clone, Copy, Debug)]
-pub struct Turtle {
+pub struct Pose {
     pub orientation: Mat3,
     pub position: Vec3,
 }
 
-impl Turtle {
+impl Pose {
     fn new() -> Self {
         Self {
             orientation: IDENTITY,
@@ -276,45 +277,45 @@ impl Turtle {
     }
 }
 
-/// Iterator over turtle states produced by simulating a linkage.
+/// Iterator over poses produced by evaluating a linkage.
 ///
-/// Yields one [`Turtle`] after every linkage step, including the implicit [`Step::Start`].
-pub struct Simulate<'a, P, const N: usize> {
+/// Yields one [`Pose`] after every linkage step, including the implicit [`Step::Start`].
+pub struct Poses<'a, P, const N: usize> {
     linkage: &'a Linkage<P, N>,
     params: &'a P,
     index: usize,
-    turtle: Turtle,
+    pose: Pose,
 }
 
-impl<'a, P, const N: usize> Simulate<'a, P, N> {
-    /// Create a new simulation iterator for the given linkage.
+impl<'a, P, const N: usize> Poses<'a, P, N> {
+    /// Create a new pose iterator for the given linkage.
     pub fn new(linkage: &'a Linkage<P, N>, params: &'a P) -> Self {
         Self {
             linkage,
             params,
             index: 0,
-            turtle: Turtle::new(),
+            pose: Pose::new(),
         }
     }
 }
 
-impl<P, const N: usize> Iterator for Simulate<'_, P, N> {
-    type Item = Turtle;
+impl<P, const N: usize> Iterator for Poses<'_, P, N> {
+    type Item = Pose;
 
-    fn next(&mut self) -> Option<Turtle> {
+    fn next(&mut self) -> Option<Pose> {
         if self.index >= self.linkage.len {
             return None;
         }
         let step = &self.linkage.steps[self.index];
         self.index += 1;
-        self.turtle.apply(step, self.params);
-        Some(self.turtle)
+        self.pose.apply(step, self.params);
+        Some(self.pose)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Linkage, Params, Step, Turtle};
+    use super::{Linkage, Params, Pose, Step};
     use core::convert::Infallible;
     use embedded_graphics::{
         draw_target::DrawTarget,
@@ -408,9 +409,9 @@ mod tests {
     }
 
     #[test]
-    fn test_simulate_yields_initial_position() -> Result<(), Box<dyn Error>> {
+    fn test_poses_yields_initial_position() -> Result<(), Box<dyn Error>> {
         let first = LINKAGE
-            .simulate(&EXCEL_PARAMS)
+            .poses(&EXCEL_PARAMS)
             .next()
             .ok_or("linkage must include start")?;
         assert_vec3_approx_eq(first.position, [0.0, 0.0, 0.0]);
@@ -418,88 +419,82 @@ mod tests {
     }
 
     #[test]
-    fn test_simulate_position_count() {
-        assert_eq!(LINKAGE.simulate(&EXCEL_PARAMS).count(), LINKAGE.len());
+    fn test_poses_position_count() {
+        assert_eq!(LINKAGE.poses(&EXCEL_PARAMS).count(), LINKAGE.len());
     }
 
     #[test]
-    fn test_simulate_first_move_matches_excel() -> Result<(), Box<dyn Error>> {
+    fn test_poses_first_move_matches_excel() -> Result<(), Box<dyn Error>> {
         assert_vec3_approx_eq(position_after_move(1)?, [0.0, 0.0, 2.5]);
         Ok(())
     }
 
     #[test]
-    fn test_simulate_second_move_matches_excel() -> Result<(), Box<dyn Error>> {
+    fn test_poses_second_move_matches_excel() -> Result<(), Box<dyn Error>> {
         assert_vec3_approx_eq(position_after_move(2)?, [2.12716, 2.115, 2.5]);
         Ok(())
     }
 
     #[test]
-    fn test_simulate_third_move_matches_excel() -> Result<(), Box<dyn Error>> {
+    fn test_poses_third_move_matches_excel() -> Result<(), Box<dyn Error>> {
         assert_vec3_approx_eq(position_after_move(3)?, [4.25565, 4.23, 2.5]);
         Ok(())
     }
 
     #[test]
-    fn test_simulate_fourth_move_matches_excel() -> Result<(), Box<dyn Error>> {
+    fn test_poses_fourth_move_matches_excel() -> Result<(), Box<dyn Error>> {
         assert_vec3_approx_eq(position_after_move(4)?, [4.75565, 4.726, 1.79]);
         Ok(())
     }
 
     #[test]
-    fn test_simulate_fifth_move_matches_excel() -> Result<(), Box<dyn Error>> {
+    fn test_poses_fifth_move_matches_excel() -> Result<(), Box<dyn Error>> {
         assert_vec3_approx_eq(position_after_move(5)?, [5.00475, 4.974, 1.435]);
         Ok(())
     }
 
     #[test]
-    fn test_simulate_last_move_matches_excel() -> Result<(), Box<dyn Error>> {
+    fn test_poses_last_move_matches_excel() -> Result<(), Box<dyn Error>> {
         assert_vec3_approx_eq(position_after_move(10)?, [5.32801, 5.647, 0.724]);
         Ok(())
     }
 
     #[test]
-    fn test_fraction_setting_matches_excel_turtle() -> Result<(), Box<dyn Error>> {
+    fn test_fraction_setting_matches_excel_end_pose() -> Result<(), Box<dyn Error>> {
         let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         params.set_fraction(&[0.7514501463, 0.49, 0.50011957, 1.0, 0.6254387123, 1.0]);
 
-        let turtle = LINKAGE
-            .simulate(&params)
-            .last()
-            .ok_or("linkage must yield final turtle")?;
+        let pose = LINKAGE.end_pose(&params);
 
         assert_mat3_approx_eq(
-            turtle.orientation,
+            pose.orientation,
             [
                 [0.483250222, 0.727078899, -0.487673557],
                 [0.51177487, -0.686553913, -0.516459299],
                 [-0.710320847, 0.0, -0.703878039],
             ],
         );
-        assert_vec3_approx_eq(turtle.position, [5.213220756, 5.747736152, 0.724197882]);
+        assert_vec3_approx_eq(pose.position, [5.213220756, 5.747736152, 0.724197882]);
         Ok(())
     }
 
     #[test]
-    fn test_mid_fraction_setting_matches_excel_turtle_and_png() -> Result<(), Box<dyn Error>> {
+    fn test_mid_fraction_setting_matches_excel_end_pose_and_png() -> Result<(), Box<dyn Error>> {
         let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         params.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
 
-        let turtle = LINKAGE
-            .simulate(&params)
-            .last()
-            .ok_or("linkage must yield final turtle")?;
+        let pose = LINKAGE.end_pose(&params);
 
-        // todo0000000 stream line turtle creation and comparison.
+        // todo0000000 stream line pose creation and comparison.
         assert_mat3_approx_eq(
-            turtle.orientation,
+            pose.orientation,
             [
                 [-0.587785252, -0.809016994, 0.0],
                 [0.781450409, -0.567756956, -0.258819045],
                 [0.209389006, -0.152130018, 0.965925826],
             ],
         );
-        assert_vec3_approx_eq(turtle.position, [-2.82831039, 7.479633205, 4.504161677]);
+        assert_vec3_approx_eq(pose.position, [-2.82831039, 7.479633205, 4.504161677]);
 
         // todo00000 combine the png and the numeric tests. (done here)
         let canvas = draw_linkage_xy_canvas(&params);
@@ -555,10 +550,10 @@ mod tests {
         LINKAGE
             .steps()
             .iter()
-            .zip(LINKAGE.simulate(&EXCEL_PARAMS))
-            .filter_map(|(step, turtle)| {
+            .zip(LINKAGE.poses(&EXCEL_PARAMS))
+            .filter_map(|(step, pose)| {
                 if matches!(step, Step::Start | Step::Move(_)) {
-                    Some(turtle.position)
+                    Some(pose.position)
                 } else {
                     None
                 }
@@ -631,14 +626,14 @@ mod tests {
 
     fn draw_linkage_xy_canvas(params: &Params) -> Canvas {
         let mut canvas = Canvas::new();
-        let mut previous: Option<Turtle> = None;
+        let mut previous: Option<Pose> = None;
 
-        for turtle in LINKAGE.simulate(params) {
-            if let Some(previous_turtle) = previous {
-                draw_segment(&mut canvas, previous_turtle.position, turtle.position);
+        for pose in LINKAGE.poses(params) {
+            if let Some(previous_pose) = previous {
+                draw_segment(&mut canvas, previous_pose.position, pose.position);
             }
-            draw_point(&mut canvas, turtle.position);
-            previous = Some(turtle);
+            draw_point(&mut canvas, pose.position);
+            previous = Some(pose);
         }
 
         canvas
