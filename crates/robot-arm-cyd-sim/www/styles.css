@@ -1,0 +1,31 @@
+:root {
+  color-scheme: dark;
+  background: #111418;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+.shell {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+#screen {
+  width: min(96vw, calc(96vh * 4 / 3));
+  max-width: 960px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+  border: 1px solid #414852;
+  touch-action: none;
+}

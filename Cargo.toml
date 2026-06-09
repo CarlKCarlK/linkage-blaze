@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/robot-arm-core",
+    "crates/robot-arm-cyd-sim",
     "crates/robot-arm-wasm",
 ]
 resolver = "3"
