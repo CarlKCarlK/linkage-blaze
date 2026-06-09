@@ -317,40 +317,35 @@ mod tests {
         );
     }
 
-    //todo0000 having these be constant isn't the usual use case.
-    // [lower hand degrees, bend elbow degrees, close hand distance,
-    //  lower arm degrees, spin whole arm degrees, spin hand degrees]
-    const EXCEL_PARAMS0: [f32; 6] = [-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0];
-
     const LINKAGE0: Linkage<[f32; 6], 24> = Linkage::start()
         .yaw(90.0)
-        // params0[4]: spin whole arm, -180 to +180 degrees.
-        .yaw_param(|params0: &[f32; 6]| params0[4])
+        // params[4]: spin whole arm, -180 to +180 degrees.
+        .yaw_param(|params: &[f32; 6]| params[4])
         .pitch(-90.0)
         .forward(2.5)
         .pitch(90.0)
-        // params0[3]: lower arm, 0 to 30 degrees. Negated to match model pitch direction.
-        .pitch_param(|params0: &[f32; 6]| -params0[3])
+        // params[3]: lower arm, 0 to 30 degrees. Negated to match model pitch direction.
+        .pitch_param(|params: &[f32; 6]| -params[3])
         .forward(3.0)
-        // params0[1]: bend elbow, -90 to +90 degrees.
-        .yaw_param(|params0: &[f32; 6]| params0[1])
+        // params[1]: bend elbow, -90 to +90 degrees.
+        .yaw_param(|params: &[f32; 6]| params[1])
         .forward(3.0)
-        // params0[0]: lower hand, -90 to +90 degrees. Negated to match model pitch direction.
-        .pitch_param(|params0: &[f32; 6]| -params0[0])
+        // params[0]: lower hand, -90 to +90 degrees. Negated to match model pitch direction.
+        .pitch_param(|params: &[f32; 6]| -params[0])
         .forward(1.0)
-        // params0[5]: spin hand, -180 to +180 degrees.
-        .roll_param(|params0: &[f32; 6]| params0[5])
+        // params[5]: spin hand, -180 to +180 degrees.
+        .roll_param(|params: &[f32; 6]| params[5])
         .forward(0.5)
         .yaw(90.0)
-        // params0[2]: close hand, scaled to 0 to 0.5 linkage units.
-        .move_param(|params0: &[f32; 6]| params0[2] * 0.5)
+        // params[2]: close hand, scaled to 0 to 0.5 linkage units.
+        .move_param(|params: &[f32; 6]| params[2] * 0.5)
         .yaw(-90.0)
         .forward(1.0)
         .yaw(180.0)
         .forward(1.0)
         .yaw(90.0)
-        // params0[2]: close hand, 0 to 1 linkage units.
-        .move_param(|params0: &[f32; 6]| params0[2])
+        // params[2]: close hand, 0 to 1 linkage units.
+        .move_param(|params: &[f32; 6]| params[2])
         .yaw(90.0)
         .forward(1.0);
 
@@ -368,27 +363,24 @@ mod tests {
         );
     }
 
-    // [spin whole arm degrees, bend elbow degrees, close hand distance]
-    const EXCEL_PARAMS1: [f32; 3] = [72.0, 86.4, 0.9];
-
     const LINKAGE1: Linkage<[f32; 3], 16> = Linkage::start()
         .yaw(90.0)
-        // params1[0]: spin whole arm, -180 to +180 degrees.
-        .yaw_param(|params1: &[f32; 3]| params1[0])
+        // params[0]: spin whole arm, -180 to +180 degrees.
+        .yaw_param(|params: &[f32; 3]| params[0])
         .forward(3.0)
-        // params1[1]: bend elbow, -90 to +90 degrees.
-        .yaw_param(|params1: &[f32; 3]| params1[1])
+        // params[1]: bend elbow, -90 to +90 degrees.
+        .yaw_param(|params: &[f32; 3]| params[1])
         .forward(3.0)
         .yaw(90.0)
-        // params1[2]: close hand, scaled to 0 to 0.5 linkage units.
-        .move_param(|params1: &[f32; 3]| params1[2] * 0.5)
+        // params[2]: close hand, scaled to 0 to 0.5 linkage units.
+        .move_param(|params: &[f32; 3]| params[2] * 0.5)
         .yaw(-90.0)
         .forward(1.0)
         .yaw(-180.0)
         .forward(1.0)
         .yaw(90.0)
-        // params1[2]: close hand, 0 to 1 linkage units. A value of 1 is fully closed.
-        .move_param(|params1: &[f32; 3]| params1[2])
+        // params[2]: close hand, 0 to 1 linkage units. A value of 1 is fully closed.
+        .move_param(|params: &[f32; 3]| params[2])
         .yaw(90.0)
         .forward(1.0);
 
@@ -426,12 +418,20 @@ mod tests {
 
     #[test]
     fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {
-        assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.poses(&EXCEL_PARAMS0))
+        //todo0000 having these be constant isn't the usual use case.
+        // [lower hand degrees, bend elbow degrees, close hand distance,
+        //  lower arm degrees, spin whole arm degrees, spin hand degrees]
+        let params = [-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0];
+
+        assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.poses(&params))
     }
 
     #[test]
     fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn Error>> {
-        assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.poses(&EXCEL_PARAMS1))
+        // [spin whole arm degrees, bend elbow degrees, close hand distance]
+        let params = [72.0, 86.4, 0.9];
+
+        assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.poses(&params))
     }
 
     #[test]
@@ -538,13 +538,20 @@ mod tests {
 
     #[test]
     fn test_linkage0_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &EXCEL_PARAMS0);
+        // [lower hand degrees, bend elbow degrees, close hand distance,
+        //  lower arm degrees, spin whole arm degrees, spin hand degrees]
+        let params = [-45.26102633, -0.036069163, 0.5, 0.0, -45.15793644, 180.0];
+
+        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params);
         assert_png_matches_expected("linkage0_xy.png", &canvas)
     }
 
     #[test]
     fn test_linkage1_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        let canvas = draw_linkage_xy_canvas(&LINKAGE1, &EXCEL_PARAMS1);
+        // [spin whole arm degrees, bend elbow degrees, close hand distance]
+        let params = [72.0, 86.4, 0.9];
+
+        let canvas = draw_linkage_xy_canvas(&LINKAGE1, &params);
         assert_png_matches_expected("linkage1_xy.png", &canvas)
     }
 
