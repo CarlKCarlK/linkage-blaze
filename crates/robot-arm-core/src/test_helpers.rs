@@ -1,4 +1,4 @@
-use crate::{Linkage, Params, Pose, Vec3};
+use crate::{Linkage, Pose, Vec3};
 use core::convert::Infallible;
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -20,15 +20,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
     vec::Vec,
 };
-
-pub(super) fn assert_params_approx_eq(actual: Params, expected: Params) {
-    assert!(
-        actual.is_close_to(&expected, 1e-6),
-        "expected {:?}, got {:?}",
-        expected,
-        actual
-    );
-}
 
 pub(super) fn assert_pose_approx_eq(actual: Pose, expected: Pose) {
     assert!(
@@ -209,9 +200,9 @@ impl OriginDimensions for Canvas {
     }
 }
 
-pub(super) fn draw_linkage_xy_canvas<const N: usize>(
-    linkage: &Linkage<Params, N>,
-    params: &Params,
+pub(super) fn draw_linkage_xy_canvas<P, const N: usize>(
+    linkage: &Linkage<P, N>,
+    params: &P,
 ) -> Canvas {
     let mut canvas = Canvas::new();
     let mut previous: Option<Pose> = None;

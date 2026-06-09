@@ -27,70 +27,6 @@ pub enum Step<P> {
     Move(Arg<P>),
 }
 
-/// Runtime model parameters.
-///
-/// Angle fields are stored in radians. Distance fields are stored in linkage units.
-#[derive(Clone, Copy, Debug)]
-pub struct Params {
-    /// -90 to +90 degrees.
-    pub lower_hand: f32,
-    /// -90 to +90 degrees.
-    pub bend_elbow: f32,
-    /// 0 to 1 linkage units.
-    pub close_hand: f32,
-    /// 0 to 30 degrees.
-    pub lower_arm: f32,
-    /// -180 to +180 degrees.
-    pub spin_whole_arm: f32,
-    /// -180 to +180 degrees.
-    pub spin_hand: f32,
-}
-
-impl Params {
-    /// Create model parameters from user-facing degree values and distances.
-    pub const fn new(
-        lower_hand: f32,
-        bend_elbow: f32,
-        close_hand: f32,
-        lower_arm: f32,
-        spin_whole_arm: f32,
-        spin_hand: f32,
-    ) -> Self {
-        Self {
-            lower_hand: degrees_to_radians(lower_hand),
-            bend_elbow: degrees_to_radians(bend_elbow),
-            close_hand,
-            lower_arm: degrees_to_radians(lower_arm),
-            spin_whole_arm: degrees_to_radians(spin_whole_arm),
-            spin_hand: degrees_to_radians(spin_hand),
-        }
-    }
-
-    /// Set all parameters from normalized fractions in their allowed ranges.
-    ///
-    /// The fractions are ordered as:
-    /// lower hand, bend elbow, close hand, lower arm, spin whole arm, spin hand.
-    pub fn set_fraction(&mut self, fractions: &[f32; 6]) {
-        self.lower_hand = angle_fraction_to_radians(fractions[0], -90.0, 90.0);
-        self.bend_elbow = angle_fraction_to_radians(fractions[1], -90.0, 90.0);
-        self.close_hand = fraction_to_range(fractions[2], 0.0, 1.0);
-        self.lower_arm = angle_fraction_to_radians(fractions[3], 0.0, 30.0);
-        self.spin_whole_arm = angle_fraction_to_radians(fractions[4], -180.0, 180.0);
-        self.spin_hand = angle_fraction_to_radians(fractions[5], -180.0, 180.0);
-    }
-
-    /// Return true when all parameter components are within `tolerance`.
-    #[must_use]
-    pub fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
-        f32_is_close_to(self.lower_hand, other.lower_hand, tolerance)
-            && f32_is_close_to(self.bend_elbow, other.bend_elbow, tolerance)
-            && f32_is_close_to(self.close_hand, other.close_hand, tolerance)
-            && f32_is_close_to(self.lower_arm, other.lower_arm, tolerance)
-            && f32_is_close_to(self.spin_whole_arm, other.spin_whole_arm, tolerance)
-            && f32_is_close_to(self.spin_hand, other.spin_hand, tolerance)
-    }
-}
-
 /// A fixed argument or a runtime parameter accessor.
 #[derive(Debug)]
 pub enum Arg<P> {
@@ -211,18 +147,6 @@ const IDENTITY: Mat3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 const fn degrees_to_radians(degrees: f32) -> f32 {
     degrees * (core::f32::consts::PI / 180.0)
-}
-
-fn fraction_to_range(fraction: f32, min: f32, max: f32) -> f32 {
-    assert!(
-        (0.0..=1.0).contains(&fraction),
-        "fraction must be in 0.0..=1.0"
-    );
-    min + fraction * (max - min)
-}
-
-fn angle_fraction_to_radians(fraction: f32, min_degrees: f32, max_degrees: f32) -> f32 {
-    degrees_to_radians(fraction_to_range(fraction, max_degrees, min_degrees))
 }
 
 fn f32_is_close_to(a: f32, b: f32, tolerance: f32) -> bool {
@@ -356,12 +280,97 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{Linkage, Params, Pose, Step};
+    use super::{Linkage, Pose, Step};
     use crate::test_helpers::{
-        assert_params_approx_eq, assert_png_matches_expected, assert_pose_approx_eq,
-        assert_pose_trace_matches_expected, draw_linkage_xy_canvas,
+        assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
+        draw_linkage_xy_canvas,
     };
     use std::{boxed::Box, error::Error};
+
+    /// Runtime parameters for this test robot model.
+    ///
+    /// Angle fields are stored in radians. Distance fields are stored in linkage units.
+    #[derive(Clone, Copy, Debug)]
+    struct Params {
+        /// -90 to +90 degrees.
+        lower_hand: f32,
+        /// -90 to +90 degrees.
+        bend_elbow: f32,
+        /// 0 to 1 linkage units.
+        close_hand: f32,
+        /// 0 to 30 degrees.
+        lower_arm: f32,
+        /// -180 to +180 degrees.
+        spin_whole_arm: f32,
+        /// -180 to +180 degrees.
+        spin_hand: f32,
+    }
+
+    impl Params {
+        /// Create model parameters from user-facing degree values and distances.
+        const fn new(
+            lower_hand: f32,
+            bend_elbow: f32,
+            close_hand: f32,
+            lower_arm: f32,
+            spin_whole_arm: f32,
+            spin_hand: f32,
+        ) -> Self {
+            Self {
+                lower_hand: super::degrees_to_radians(lower_hand),
+                bend_elbow: super::degrees_to_radians(bend_elbow),
+                close_hand,
+                lower_arm: super::degrees_to_radians(lower_arm),
+                spin_whole_arm: super::degrees_to_radians(spin_whole_arm),
+                spin_hand: super::degrees_to_radians(spin_hand),
+            }
+        }
+
+        /// Set all parameters from normalized fractions in their allowed ranges.
+        ///
+        /// The fractions are ordered as:
+        /// lower hand, bend elbow, close hand, lower arm, spin whole arm, spin hand.
+        fn set_fraction(&mut self, fractions: &[f32; 6]) {
+            self.lower_hand = angle_fraction_to_radians(fractions[0], -90.0, 90.0);
+            self.bend_elbow = angle_fraction_to_radians(fractions[1], -90.0, 90.0);
+            self.close_hand = fraction_to_range(fractions[2], 0.0, 1.0);
+            self.lower_arm = angle_fraction_to_radians(fractions[3], 0.0, 30.0);
+            self.spin_whole_arm = angle_fraction_to_radians(fractions[4], -180.0, 180.0);
+            self.spin_hand = angle_fraction_to_radians(fractions[5], -180.0, 180.0);
+        }
+
+        /// Return true when all parameter components are within `tolerance`.
+        #[must_use]
+        fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
+            super::f32_is_close_to(self.lower_hand, other.lower_hand, tolerance)
+                && super::f32_is_close_to(self.bend_elbow, other.bend_elbow, tolerance)
+                && super::f32_is_close_to(self.close_hand, other.close_hand, tolerance)
+                && super::f32_is_close_to(self.lower_arm, other.lower_arm, tolerance)
+                && super::f32_is_close_to(self.spin_whole_arm, other.spin_whole_arm, tolerance)
+                && super::f32_is_close_to(self.spin_hand, other.spin_hand, tolerance)
+        }
+    }
+
+    fn fraction_to_range(fraction: f32, min: f32, max: f32) -> f32 {
+        assert!(
+            (0.0..=1.0).contains(&fraction),
+            "fraction must be in 0.0..=1.0"
+        );
+        min + fraction * (max - min)
+    }
+
+    fn angle_fraction_to_radians(fraction: f32, min_degrees: f32, max_degrees: f32) -> f32 {
+        super::degrees_to_radians(fraction_to_range(fraction, max_degrees, min_degrees))
+    }
+
+    fn assert_params_approx_eq(actual: Params, expected: Params) {
+        assert!(
+            actual.is_close_to(&expected, 1e-6),
+            "expected {:?}, got {:?}",
+            expected,
+            actual
+        );
+    }
 
     //todo0000 having these be constant isn't the usual use case.
     const EXCEL_PARAMS: Params =
