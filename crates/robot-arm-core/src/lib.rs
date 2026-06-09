@@ -12,7 +12,11 @@
 #[cfg(test)]
 extern crate std;
 
-use core::f32::consts::PI;
+mod math;
+
+pub use math::{Mat3, Vec3};
+
+use math::degrees_to_radians;
 
 /// A step in the robot arm linkage description.
 ///
@@ -184,53 +188,16 @@ fn validate_params<const DOF: usize>(params: &[f32; DOF]) {
     }
 }
 
-/// 3D position [x, y, z].
-pub type Vec3 = [f32; 3];
-
-/// 3×3 rotation matrix, row-major: mat[row][col].
-///
-/// Columns are body-frame axes: col 0 = v0 (forward), col 1 = v1 (left), col 2 = v2 (up/back).
-pub type Mat3 = [[f32; 3]; 3];
-
-const IDENTITY: Mat3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-
-const fn degrees_to_radians(degrees: f32) -> f32 {
-    degrees * (PI / 180.0)
-}
-
-//todo0000 make inline? and elsewhere?
-fn f32_is_close_to(a: f32, b: f32, tolerance: f32) -> bool {
-    (a - b).abs() <= tolerance
-}
-
-fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
-    let mut out = [[0.0f32; 3]; 3];
-    for row in 0..3 {
-        for col in 0..3 {
-            for k in 0..3 {
-                out[row][col] += a[row][k] * b[k][col];
-            }
-        }
-    }
-    out
-}
-
-// Rotation matrices use the conventional right-handed definitions.
-// Yaw  = Rz: [[c,-s,0],[s,c,0],[0,0,1]]
-// Pitch = Ry: [[c,0,s],[0,1,0],[-s,0,c]]
-// Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
 fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
     let radians = match step {
         Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => arg.resolve(params),
-        Step::Start | Step::Move(_) => return IDENTITY,
+        Step::Start | Step::Move(_) => return Mat3::IDENTITY,
     };
-    let cos = libm::cosf(radians);
-    let sin = libm::sinf(radians);
     match step {
-        Step::Yaw(_) => [[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]],
-        Step::Pitch(_) => [[cos, 0.0, sin], [0.0, 1.0, 0.0], [-sin, 0.0, cos]],
-        Step::Roll(_) => [[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]],
-        Step::Start | Step::Move(_) => IDENTITY,
+        Step::Yaw(_) => Mat3::yaw(radians),
+        Step::Pitch(_) => Mat3::pitch(radians),
+        Step::Roll(_) => Mat3::roll(radians),
+        Step::Start | Step::Move(_) => Mat3::IDENTITY,
     }
 }
 
@@ -244,16 +211,16 @@ pub struct Pose {
 impl Pose {
     fn start() -> Self {
         Self {
-            orientation: IDENTITY,
-            position: [0.0, 0.0, 0.0],
+            orientation: Mat3::IDENTITY,
+            position: Vec3::ZERO,
         }
     }
 
     /// Return true when all orientation and position components are within `tolerance`.
     #[must_use]
     pub fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
-        mat3_is_close_to(self.orientation, other.orientation, tolerance)
-            && vec3_is_close_to(self.position, other.position, tolerance)
+        self.orientation.is_close_to(&other.orientation, tolerance)
+            && self.position.is_close_to(&other.position, tolerance)
     }
 
     fn apply<const DOF: usize>(&mut self, step: &Step, params: &[f32; DOF]) {
@@ -262,33 +229,13 @@ impl Pose {
                 *self = Self::start();
             }
             Step::Move(arg) => {
-                let dist = arg.resolve(params);
-                // advance along v0 = col 0 of orientation
-                //todo000 can we define Vec3 and mat3 operations?
-                self.position[0] += dist * self.orientation[0][0];
-                self.position[1] += dist * self.orientation[1][0];
-                self.position[2] += dist * self.orientation[2][0];
+                self.position += self.orientation.forward() * arg.resolve(params);
             }
             _ => {
-                //todo000 can we define Vec3 and mat3 operations?
-                self.orientation = mat_mul(self.orientation, rotation_matrix(step, params));
+                self.orientation = self.orientation * rotation_matrix(step, params);
             }
         }
     }
-}
-
-//todo0000 why free functions?
-fn vec3_is_close_to(a: Vec3, b: Vec3, tolerance: f32) -> bool {
-    a.iter()
-        .zip(b.iter())
-        .all(|(left, right)| f32_is_close_to(*left, *right, tolerance))
-}
-
-//todo0000 why free functions?
-fn mat3_is_close_to(a: Mat3, b: Mat3, tolerance: f32) -> bool {
-    a.iter()
-        .zip(b.iter())
-        .all(|(left, right)| vec3_is_close_to(*left, *right, tolerance))
 }
 
 /// Iterator over poses produced by evaluating a linkage.
@@ -414,8 +361,9 @@ mod tests {
                 [0.48325038, 0.7270788, 0.48767346],
                 [0.5117748, -0.68655396, 0.51645917],
                 [0.7103207, 0.0, -0.70387816],
-            ],
-            position: [5.213134, 5.747819, -0.7241982],
+            ]
+            .into(),
+            position: [5.213134, 5.747819, -0.7241982].into(),
         };
 
         assert_pose_approx_eq(pose, expected);
@@ -435,8 +383,9 @@ mod tests {
                 [-0.368124515, 0.929776430, 0.0],
                 [-0.929776430, -0.368124515, 0.0],
                 [0.0, 0.0, 1.0],
-            ],
-            position: [-4.744067192, -2.626399040, 0.0],
+            ]
+            .into(),
+            position: [-4.744067192, -2.626399040, 0.0].into(),
         };
 
         assert_pose_approx_eq(pose, expected);
@@ -459,8 +408,9 @@ mod tests {
                 [-0.5877855, -0.80901694, 0.0],
                 [0.78145033, -0.5677572, 0.25881904],
                 [-0.20938899, 0.15213005, 0.9659258],
-            ],
-            position: [-2.828311, 7.4796333, -4.504162],
+            ]
+            .into(),
+            position: [-2.828311, 7.4796333, -4.504162].into(),
         };
 
         assert_pose_approx_eq(pose, expected);

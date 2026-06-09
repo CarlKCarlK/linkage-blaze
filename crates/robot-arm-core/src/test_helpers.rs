@@ -131,8 +131,9 @@ fn parse_pose_trace(text: &str) -> Result<Vec<Pose>, Box<dyn Error>> {
                 [values[0], values[1], values[2]],
                 [values[3], values[4], values[5]],
                 [values[6], values[7], values[8]],
-            ],
-            position: [values[9], values[10], values[11]],
+            ]
+            .into(),
+            position: [values[9], values[10], values[11]].into(),
         });
     }
 
