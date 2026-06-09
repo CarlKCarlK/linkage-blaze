@@ -2,8 +2,6 @@
 #![forbid(unsafe_code)]
 #![doc = "No-allocation robot arm simulation and math primitives."]
 
-//todo0000 Be sure the parameters are connect the same as in Excel.
-//todo0000 Test changing the params and checking the picture.
 //todo000 move some of that global static stuff to be const local.
 //todo000 revisit the name Param and Args
 //todo000 is the way that access functions are passed into parameters Yaw, etc, good? Can methods be used instead of stand-alone functions?
@@ -410,9 +408,13 @@ mod tests {
     }
 
     #[test]
-    fn test_simulate_yields_initial_position() {
-        let first = LINKAGE.simulate(&EXCEL_PARAMS).next().unwrap();
+    fn test_simulate_yields_initial_position() -> Result<(), Box<dyn Error>> {
+        let first = LINKAGE
+            .simulate(&EXCEL_PARAMS)
+            .next()
+            .ok_or("linkage must include start")?;
         assert_vec3_approx_eq(first.position, [0.0, 0.0, 0.0]);
+        Ok(())
     }
 
     #[test]
@@ -421,93 +423,93 @@ mod tests {
     }
 
     #[test]
-    fn test_simulate_first_move_matches_excel() {
-        assert_vec3_approx_eq(position_after_move(1), [0.0, 0.0, 2.5]);
+    fn test_simulate_first_move_matches_excel() -> Result<(), Box<dyn Error>> {
+        assert_vec3_approx_eq(position_after_move(1)?, [0.0, 0.0, 2.5]);
+        Ok(())
     }
 
     #[test]
-    fn test_simulate_second_move_matches_excel() {
-        assert_vec3_approx_eq(position_after_move(2), [2.12716, 2.115, 2.5]);
+    fn test_simulate_second_move_matches_excel() -> Result<(), Box<dyn Error>> {
+        assert_vec3_approx_eq(position_after_move(2)?, [2.12716, 2.115, 2.5]);
+        Ok(())
     }
 
     #[test]
-    fn test_simulate_third_move_matches_excel() {
-        assert_vec3_approx_eq(position_after_move(3), [4.25565, 4.23, 2.5]);
+    fn test_simulate_third_move_matches_excel() -> Result<(), Box<dyn Error>> {
+        assert_vec3_approx_eq(position_after_move(3)?, [4.25565, 4.23, 2.5]);
+        Ok(())
     }
 
     #[test]
-    fn test_simulate_fourth_move_matches_excel() {
-        assert_vec3_approx_eq(position_after_move(4), [4.75565, 4.726, 1.79]);
+    fn test_simulate_fourth_move_matches_excel() -> Result<(), Box<dyn Error>> {
+        assert_vec3_approx_eq(position_after_move(4)?, [4.75565, 4.726, 1.79]);
+        Ok(())
     }
 
     #[test]
-    fn test_simulate_fifth_move_matches_excel() {
-        assert_vec3_approx_eq(position_after_move(5), [5.00475, 4.974, 1.435]);
+    fn test_simulate_fifth_move_matches_excel() -> Result<(), Box<dyn Error>> {
+        assert_vec3_approx_eq(position_after_move(5)?, [5.00475, 4.974, 1.435]);
+        Ok(())
     }
 
     #[test]
-    fn test_simulate_last_move_matches_excel() {
-        assert_vec3_approx_eq(position_after_move(10), [5.32801, 5.647, 0.724]);
+    fn test_simulate_last_move_matches_excel() -> Result<(), Box<dyn Error>> {
+        assert_vec3_approx_eq(position_after_move(10)?, [5.32801, 5.647, 0.724]);
+        Ok(())
     }
 
     #[test]
-    fn test_fraction_setting_matches_excel_turtle() {
+    fn test_fraction_setting_matches_excel_turtle() -> Result<(), Box<dyn Error>> {
         let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params.set_fraction(&[
-            0.7514501463,
-            0.49,
-            0.50011957,
-            1.0,
-            0.6254387123,
-            1.0,
-        ]);
+        params.set_fraction(&[0.7514501463, 0.49, 0.50011957, 1.0, 0.6254387123, 1.0]);
 
         let turtle = LINKAGE
             .simulate(&params)
             .last()
-            .expect("linkage must yield final turtle");
+            .ok_or("linkage must yield final turtle")?;
 
         assert_mat3_approx_eq(
             turtle.orientation,
             [
                 [0.483250222, 0.727078899, -0.487673557],
                 [0.51177487, -0.686553913, -0.516459299],
-                [-0.710320847, -9.14661e-17, -0.703878039],
+                [-0.710320847, 0.0, -0.703878039],
             ],
         );
         assert_vec3_approx_eq(turtle.position, [5.213220756, 5.747736152, 0.724197882]);
+        Ok(())
     }
 
     #[test]
-    fn test_mid_fraction_setting_matches_excel_turtle() {
-        let params = mid_fraction_params();
+    fn test_mid_fraction_setting_matches_excel_turtle_and_png() -> Result<(), Box<dyn Error>> {
+        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        params.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
+
         let turtle = LINKAGE
             .simulate(&params)
             .last()
-            .expect("linkage must yield final turtle");
+            .ok_or("linkage must yield final turtle")?;
 
+        // todo0000000 stream line turtle creation and comparison.
         assert_mat3_approx_eq(
             turtle.orientation,
             [
-                [-0.587785252, -0.809016994, -1.58546e-17],
+                [-0.587785252, -0.809016994, 0.0],
                 [0.781450409, -0.567756956, -0.258819045],
                 [0.209389006, -0.152130018, 0.965925826],
             ],
         );
         assert_vec3_approx_eq(turtle.position, [-2.82831039, 7.479633205, 4.504161677]);
+
+        // todo00000 combine the png and the numeric tests. (done here)
+        let canvas = draw_linkage_xy_canvas(&params);
+        assert_png_matches_expected("linkage_xy_mid_fraction.png", &canvas)
     }
 
     #[test]
     fn test_linkage_png_matches_expected() -> Result<(), Box<dyn Error>> {
         let canvas = draw_linkage_xy_canvas(&EXCEL_PARAMS);
         assert_png_matches_expected("linkage_xy.png", &canvas)
-    }
-
-    #[test]
-    fn test_mid_fraction_linkage_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        let params = mid_fraction_params();
-        let canvas = draw_linkage_xy_canvas(&params);
-        assert_png_matches_expected("linkage_xy_mid_fraction.png", &canvas)
     }
 
     #[test]
@@ -549,7 +551,7 @@ mod tests {
         }
     }
 
-    fn position_after_move(move_index: usize) -> [f32; 3] {
+    fn position_after_move(move_index: usize) -> Result<[f32; 3], Box<dyn Error>> {
         LINKAGE
             .steps()
             .iter()
@@ -562,13 +564,7 @@ mod tests {
                 }
             })
             .nth(move_index)
-            .unwrap()
-    }
-
-    fn mid_fraction_params() -> Params {
-        let mut params = Params::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        params.set_fraction(&[0.5, 0.3, 1.0, 0.5, 0.5, 0.5]);
-        params
+            .ok_or_else(|| format!("missing move position at index {move_index}").into())
     }
 
     const CANVAS_WIDTH: usize = 300;
@@ -649,19 +645,25 @@ mod tests {
     }
 
     fn draw_segment(canvas: &mut Canvas, from: [f32; 3], to: [f32; 3]) {
-        Line::new(world_to_point(from), world_to_point(to))
+        let draw_result = Line::new(world_to_point(from), world_to_point(to))
             .into_styled(PrimitiveStyle::with_stroke(EXCEL_BLUE, 2))
-            .draw(canvas)
-            .expect("line draw must succeed");
+            .draw(canvas);
+        match draw_result {
+            Ok(()) => {}
+            Err(infallible) => match infallible {},
+        }
     }
 
     fn draw_point(canvas: &mut Canvas, position: [f32; 3]) {
         let center = world_to_point(position);
         let top_left = Point::new(center.x - 2, center.y - 2);
-        Circle::new(top_left, 4)
+        let draw_result = Circle::new(top_left, 4)
             .into_styled(PrimitiveStyle::with_fill(EXCEL_BLUE))
-            .draw(canvas)
-            .expect("point draw must succeed");
+            .draw(canvas);
+        match draw_result {
+            Ok(()) => {}
+            Err(infallible) => match infallible {},
+        }
     }
 
     fn world_to_point(position: [f32; 3]) -> Point {
@@ -727,10 +729,10 @@ mod tests {
     }
 
     fn temp_output_path(filename: &str) -> PathBuf {
-        let unix_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time must be valid")
-            .as_nanos();
+        let unix_time = match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos(),
+            Err(error) => error.duration().as_nanos(),
+        };
         let process_id = std::process::id();
         let mut path = std::env::temp_dir();
         path.push(format!("{filename}-{process_id}-{unix_time}"));
