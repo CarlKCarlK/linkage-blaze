@@ -170,7 +170,7 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 // Rotation matrices match the Excel SWITCH formulas exactly.
 // Yaw  = Rz: [[c,-s,0],[s,c,0],[0,0,1]]
 //todo0000 address this non-standardness (fix excel?)
-// Pitch = Ry (Excel convention): [[c,0,-s],[0,1,0],[s,0,c]]
+// Pitch = Ry: [[c,0,s],[0,1,0],[-s,0,c]]
 // Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
 fn rotation_matrix<P>(step: &Step<P>, params: &P) -> Mat3 {
     let radians = match step {
@@ -181,7 +181,7 @@ fn rotation_matrix<P>(step: &Step<P>, params: &P) -> Mat3 {
     let sin = libm::sinf(radians);
     match step {
         Step::Yaw(_) => [[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]],
-        Step::Pitch(_) => [[cos, 0.0, -sin], [0.0, 1.0, 0.0], [sin, 0.0, cos]],
+        Step::Pitch(_) => [[cos, 0.0, sin], [0.0, 1.0, 0.0], [-sin, 0.0, cos]],
         Step::Roll(_) => [[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]],
         Step::Start | Step::Move(_) => IDENTITY,
     }
@@ -323,10 +323,10 @@ mod tests {
             spin_hand: f32,
         ) -> Self {
             Self {
-                lower_hand: super::degrees_to_radians(lower_hand),
+                lower_hand: -super::degrees_to_radians(lower_hand),
                 bend_elbow: super::degrees_to_radians(bend_elbow),
                 close_hand,
-                lower_arm: super::degrees_to_radians(lower_arm),
+                lower_arm: -super::degrees_to_radians(lower_arm),
                 spin_whole_arm: super::degrees_to_radians(spin_whole_arm),
                 spin_hand: super::degrees_to_radians(spin_hand),
             }
@@ -337,10 +337,10 @@ mod tests {
         /// The fractions are ordered as:
         /// lower hand, bend elbow, close hand, lower arm, spin whole arm, spin hand.
         fn set_fraction(&mut self, fractions: &[f32; 6]) {
-            self.lower_hand = angle_fraction_to_radians(fractions[0], -90.0, 90.0);
+            self.lower_hand = -angle_fraction_to_radians(fractions[0], -90.0, 90.0);
             self.bend_elbow = angle_fraction_to_radians(fractions[1], -90.0, 90.0);
             self.close_hand = fraction_to_range(fractions[2], 0.0, 1.0);
-            self.lower_arm = angle_fraction_to_radians(fractions[3], 0.0, 30.0);
+            self.lower_arm = -angle_fraction_to_radians(fractions[3], 0.0, 30.0);
             self.spin_whole_arm = angle_fraction_to_radians(fractions[4], -180.0, 180.0);
             self.spin_hand = angle_fraction_to_radians(fractions[5], -180.0, 180.0);
         }
@@ -420,9 +420,9 @@ mod tests {
     const LINKAGE0: Linkage<Params0, 24> = Linkage::start()
         .yaw(90.0)
         .yaw_param(spin_whole_arm0)
-        .pitch(90.0)
-        .forward(2.5)
         .pitch(-90.0)
+        .forward(2.5)
+        .pitch(90.0)
         .pitch_param(lower_arm0)
         .forward(3.0)
         .yaw_param(bend_elbow0)
