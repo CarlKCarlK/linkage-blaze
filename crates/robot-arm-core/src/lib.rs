@@ -44,6 +44,13 @@ impl<P> Arg<P> {
             Self::Param(accessor) => accessor(params),
         }
     }
+
+    fn resolve_degrees_as_radians(&self, params: &P) -> f32 {
+        match self {
+            Self::Fixed(value) => *value,
+            Self::Param(accessor) => degrees_to_radians(accessor(params)),
+        }
+    }
 }
 
 /// A fixed-size linkage description.
@@ -79,7 +86,7 @@ impl<P, const N: usize> Linkage<P, N> {
         self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
-    /// Add a yaw step from a runtime parameter.
+    /// Add a yaw step from a runtime parameter in degrees.
     pub const fn yaw_param(self, accessor: fn(&P) -> f32) -> Self {
         self.push(Step::Yaw(Arg::Param(accessor)))
     }
@@ -89,7 +96,7 @@ impl<P, const N: usize> Linkage<P, N> {
         self.push(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
-    /// Add a pitch step from a runtime parameter.
+    /// Add a pitch step from a runtime parameter in degrees.
     pub const fn pitch_param(self, accessor: fn(&P) -> f32) -> Self {
         self.push(Step::Pitch(Arg::Param(accessor)))
     }
@@ -99,7 +106,7 @@ impl<P, const N: usize> Linkage<P, N> {
         self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
-    /// Add a roll step from a runtime parameter.
+    /// Add a roll step from a runtime parameter in degrees.
     pub const fn roll_param(self, accessor: fn(&P) -> f32) -> Self {
         self.push(Step::Roll(Arg::Param(accessor)))
     }
@@ -176,7 +183,9 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 // Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
 fn rotation_matrix<P>(step: &Step<P>, params: &P) -> Mat3 {
     let radians = match step {
-        Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => arg.resolve(params),
+        Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => {
+            arg.resolve_degrees_as_radians(params)
+        }
         Step::Start | Step::Move(_) => return IDENTITY,
     };
     let cos = libm::cosf(radians);
@@ -316,21 +325,21 @@ mod tests {
     const LINKAGE0: Linkage<[f32; 6], 24> = Linkage::start()
         .yaw(90.0)
         // params0[4]: spin whole arm, -180 to +180 degrees.
-        .yaw_param(|params0: &[f32; 6]| super::degrees_to_radians(params0[4]))
+        .yaw_param(|params0: &[f32; 6]| params0[4])
         .pitch(-90.0)
         .forward(2.5)
         .pitch(90.0)
         // params0[3]: lower arm, 0 to 30 degrees. Negated to match model pitch direction.
-        .pitch_param(|params0: &[f32; 6]| -super::degrees_to_radians(params0[3]))
+        .pitch_param(|params0: &[f32; 6]| -params0[3])
         .forward(3.0)
         // params0[1]: bend elbow, -90 to +90 degrees.
-        .yaw_param(|params0: &[f32; 6]| super::degrees_to_radians(params0[1]))
+        .yaw_param(|params0: &[f32; 6]| params0[1])
         .forward(3.0)
         // params0[0]: lower hand, -90 to +90 degrees. Negated to match model pitch direction.
-        .pitch_param(|params0: &[f32; 6]| -super::degrees_to_radians(params0[0]))
+        .pitch_param(|params0: &[f32; 6]| -params0[0])
         .forward(1.0)
         // params0[5]: spin hand, -180 to +180 degrees.
-        .roll_param(|params0: &[f32; 6]| super::degrees_to_radians(params0[5]))
+        .roll_param(|params0: &[f32; 6]| params0[5])
         .forward(0.5)
         .yaw(90.0)
         // params0[2]: close hand, scaled to 0 to 0.5 linkage units.
@@ -365,10 +374,10 @@ mod tests {
     const LINKAGE1: Linkage<[f32; 3], 16> = Linkage::start()
         .yaw(90.0)
         // params1[0]: spin whole arm, -180 to +180 degrees.
-        .yaw_param(|params1: &[f32; 3]| super::degrees_to_radians(params1[0]))
+        .yaw_param(|params1: &[f32; 3]| params1[0])
         .forward(3.0)
         // params1[1]: bend elbow, -90 to +90 degrees.
-        .yaw_param(|params1: &[f32; 3]| super::degrees_to_radians(params1[1]))
+        .yaw_param(|params1: &[f32; 3]| params1[1])
         .forward(3.0)
         .yaw(90.0)
         // params1[2]: close hand, scaled to 0 to 0.5 linkage units.
