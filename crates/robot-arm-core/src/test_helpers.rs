@@ -202,9 +202,9 @@ impl OriginDimensions for Canvas {
 
 pub(super) fn draw_linkage_xy_canvas<const DOF: usize, const N: usize>(
     linkage: &Linkage<DOF, N>,
-    fractions: &[f32; DOF],
+    params: &[f32; DOF],
 ) -> Canvas {
-    draw_linkage_xy_canvas_from_poses(linkage.poses(fractions))
+    draw_linkage_xy_canvas_from_poses(linkage.poses(params))
 }
 
 fn draw_linkage_xy_canvas_from_poses<I>(poses: I) -> Canvas

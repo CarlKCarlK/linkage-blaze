@@ -52,15 +52,16 @@ pub struct ParamArg {
 // all, which makes range metadata/querying ambiguous. We need to decide whether
 // ranges belong to DOFs, step usages, or a separate descriptor table.
 impl Arg {
-    fn resolve<const DOF: usize>(&self, fractions: &[f32; DOF]) -> f32 {
+    fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
         match self {
             Self::Fixed(value) => *value,
-            Self::Param(param_arg) => param_arg.resolve(fractions),
+            Self::Param(param_arg) => param_arg.resolve(params),
         }
     }
 
-    fn resolve_degrees_as_radians<const DOF: usize>(&self, fractions: &[f32; DOF]) -> f32 {
-        degrees_to_radians(self.resolve(fractions))
+    // todo0000 It looks like fixed arguments are converted to radians every time they're resolved, which is inefficient.
+    fn resolve_degrees_as_radians<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
+        degrees_to_radians(self.resolve(params))
     }
 }
 
@@ -69,9 +70,9 @@ impl ParamArg {
         Self { index, low, high }
     }
 
-    fn resolve<const DOF: usize>(&self, fractions: &[f32; DOF]) -> f32 {
-        let fraction = fractions[self.index];
-        self.low + fraction * (self.high - self.low)
+    fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
+        let param = params[self.index];
+        self.low + param * (self.high - self.low)
     }
 }
 
@@ -148,29 +149,29 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self
     }
 
-    /// Iterate over poses produced by evaluating this linkage from 0.0 to 1.0 fractions.
-    pub fn poses<'a>(&'a self, fractions: &'a [f32; DOF]) -> Poses<'a, DOF, N> {
-        Poses::new(self, fractions)
+    /// Iterate over poses produced by evaluating this linkage from 0.0 to 1.0 params.
+    pub fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> Poses<'a, DOF, N> {
+        Poses::new(self, params)
     }
 
-    /// Return the pose produced after evaluating all steps from 0.0 to 1.0 fractions.
+    /// Return the pose produced after evaluating all steps from 0.0 to 1.0 params.
     ///
     /// This always returns a [`Pose`]. A [`Linkage`] contains an implicit start
     /// step, so the pose sequence is never empty.
     #[must_use]
-    pub fn final_pose(&self, fractions: &[f32; DOF]) -> Pose {
-        self.poses(fractions)
+    pub fn final_pose(&self, params: &[f32; DOF]) -> Pose {
+        self.poses(params)
             .last()
             .expect("linkage must yield at least the implicit start pose")
     }
 }
 
-fn validate_fractions<const DOF: usize>(fractions: &[f32; DOF]) {
+fn validate_params<const DOF: usize>(params: &[f32; DOF]) {
     for param_index in 0..DOF {
         //todo0 review whether panicking is the right long-term out-of-range behavior.
         assert!(
-            (0.0..=1.0).contains(&fractions[param_index]),
-            "fraction parameter is out of range"
+            (0.0..=1.0).contains(&params[param_index]),
+            "parameter is out of range"
         );
     }
 }
@@ -208,13 +209,12 @@ fn mat_mul(a: Mat3, b: Mat3) -> Mat3 {
 
 // Rotation matrices use the conventional right-handed definitions.
 // Yaw  = Rz: [[c,-s,0],[s,c,0],[0,0,1]]
-//todo0000 address this non-standardness (fix excel?)
 // Pitch = Ry: [[c,0,s],[0,1,0],[-s,0,c]]
 // Roll  = Rx: [[1,0,0],[0,c,-s],[0,s,c]]
-fn rotation_matrix<const DOF: usize>(step: &Step, fractions: &[f32; DOF]) -> Mat3 {
+fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
     let radians = match step {
         Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => {
-            arg.resolve_degrees_as_radians(fractions)
+            arg.resolve_degrees_as_radians(params)
         }
         Step::Start | Step::Move(_) => return IDENTITY,
     };
@@ -250,13 +250,13 @@ impl Pose {
             && vec3_is_close_to(self.position, other.position, tolerance)
     }
 
-    fn apply<const DOF: usize>(&mut self, step: &Step, fractions: &[f32; DOF]) {
+    fn apply<const DOF: usize>(&mut self, step: &Step, params: &[f32; DOF]) {
         match step {
             Step::Start => {
                 *self = Self::start();
             }
             Step::Move(arg) => {
-                let dist = arg.resolve(fractions);
+                let dist = arg.resolve(params);
                 // advance along v0 = col 0 of orientation
                 //todo000 can we define Vec3 and mat3 operations?
                 self.position[0] += dist * self.orientation[0][0];
@@ -265,7 +265,7 @@ impl Pose {
             }
             _ => {
                 //todo000 can we define Vec3 and mat3 operations?
-                self.orientation = mat_mul(self.orientation, rotation_matrix(step, fractions));
+                self.orientation = mat_mul(self.orientation, rotation_matrix(step, params));
             }
         }
     }
@@ -290,18 +290,18 @@ fn mat3_is_close_to(a: Mat3, b: Mat3, tolerance: f32) -> bool {
 /// Yields one [`Pose`] after every linkage step, including the implicit [`Step::Start`].
 pub struct Poses<'a, const DOF: usize, const N: usize> {
     linkage: &'a Linkage<DOF, N>,
-    fractions: &'a [f32; DOF],
+    params: &'a [f32; DOF],
     index: usize,
     pose: Pose,
 }
 
 impl<'a, const DOF: usize, const N: usize> Poses<'a, DOF, N> {
     /// Create a new pose iterator for the given linkage.
-    fn new(linkage: &'a Linkage<DOF, N>, fractions: &'a [f32; DOF]) -> Self {
-        validate_fractions(fractions);
+    fn new(linkage: &'a Linkage<DOF, N>, params: &'a [f32; DOF]) -> Self {
+        validate_params(params);
         Self {
             linkage,
-            fractions,
+            params,
             index: 0,
             pose: Pose::start(),
         }
@@ -317,7 +317,7 @@ impl<const DOF: usize, const N: usize> Iterator for Poses<'_, DOF, N> {
         }
         let step = &self.linkage.steps[self.index];
         self.index += 1;
-        self.pose.apply(step, self.fractions);
+        self.pose.apply(step, self.params);
         Some(self.pose)
     }
 }
@@ -386,13 +386,13 @@ mod tests {
 
     #[test]
     fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn Error>> {
-        // [spin whole arm fraction, bend elbow fraction, close hand fraction]
+        // [spin whole arm, bend elbow, close hand]
         let params = [0.30, 0.02, 0.10];
         assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.poses(&params))
     }
 
     #[test]
-    fn test_fraction_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
+    fn test_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
         //todo00000 yikes, this is way too ugly.
         let params = [
             0.7514501463, // lower hand
@@ -417,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fraction_setting1_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
+    fn test_setting1_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
         let params = [
             0.30, // spin whole arm
             0.02, // bend elbow
@@ -438,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mid_fraction_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
+    fn test_mid_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
         let params = [
             0.5, // lower hand
             0.3, // bend elbow
@@ -475,7 +475,7 @@ mod tests {
 
     #[test]
     fn test_linkage1_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        // [spin whole arm fraction, bend elbow fraction, close hand fraction]
+        // [spin whole arm, bend elbow, close hand]
         let params = [0.30, 0.02, 0.10];
 
         let canvas = draw_linkage_xy_canvas(&LINKAGE1, &params);
@@ -483,12 +483,12 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "fraction parameter is out of range")]
-    fn test_fraction_inputs_are_range_checked() {
+    #[should_panic(expected = "parameter is out of range")]
+    fn test_params_are_range_checked() {
         let params = [
             0.0, // lower hand
             0.5, // bend elbow
-            1.1, // close hand, invalid fraction
+            1.1, // close hand, invalid param
             1.0, // lower arm
             0.0, // spin whole arm
             0.5, // spin hand
