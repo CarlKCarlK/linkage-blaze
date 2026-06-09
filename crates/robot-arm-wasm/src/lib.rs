@@ -1,15 +1,11 @@
 #![forbid(unsafe_code)]
 
-use robot_arm_core::Linkage;
+use robot_arm_core::{Linkage, Pose, Vec3};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 pub use robot_arm_core as core;
 
-//todo0000 reconsider all these constant definitions.
-const DOF_COUNT: usize = 6;
-const POINT_COUNT: usize = 24;
-
-const LINKAGE0: Linkage<DOF_COUNT, POINT_COUNT> = Linkage::start()
+const LINKAGE: Linkage<6, 24> = Linkage::start()
     .yaw(90.0)
     .yaw_param(4, 180.0, -180.0) // spin whole arm
     .pitch(90.0)
@@ -35,33 +31,25 @@ const LINKAGE0: Linkage<DOF_COUNT, POINT_COUNT> = Linkage::start()
     .forward(1.0);
 
 #[wasm_bindgen]
-pub fn linkage0_dof_count() -> usize {
-    DOF_COUNT
+pub fn dof() -> usize {
+    LINKAGE.dof()
 }
 
 #[wasm_bindgen]
-pub fn linkage0_point_count() -> usize {
-    POINT_COUNT
+pub fn len() -> usize {
+    LINKAGE.len()
 }
 
 #[wasm_bindgen]
-pub fn linkage0_points(params: Vec<f32>) -> Vec<f32> {
-    assert!(params.len() == DOF_COUNT, "expected 6 params");
+pub fn linkage_points(params: Vec<f32>) -> Vec<f32> {
+    let params = params
+        .as_slice()
+        .try_into()
+        .expect("expected linkage param count");
 
-    let params = [
-        params[0], // lower hand
-        params[1], // bend elbow
-        params[2], // close hand
-        params[3], // lower arm
-        params[4], // spin whole arm
-        params[5], // spin hand
-    ];
-
-    let mut points = Vec::with_capacity(POINT_COUNT * 3);
-    for pose in LINKAGE0.poses(&params) {
-        points.push(pose.position[0]);
-        points.push(pose.position[1]);
-        points.push(pose.position[2]);
-    }
-    points
+    LINKAGE
+        .poses(params)
+        .map(Pose::position)
+        .flat_map(Vec3::into_array)
+        .collect()
 }

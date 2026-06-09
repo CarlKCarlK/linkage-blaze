@@ -80,21 +80,23 @@ where
 fn format_pose_trace(poses: &[Pose]) -> String {
     let mut text = String::from("step,t00,t01,t02,t10,t11,t12,t20,t21,t22,x,y,z\n");
     for (index, pose) in poses.iter().enumerate() {
+        let orientation = pose.orientation();
+        let position = pose.position();
         text.push_str(&format!(
             "{},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9},{:.9}\n",
             index,
-            pose.orientation[0][0],
-            pose.orientation[0][1],
-            pose.orientation[0][2],
-            pose.orientation[1][0],
-            pose.orientation[1][1],
-            pose.orientation[1][2],
-            pose.orientation[2][0],
-            pose.orientation[2][1],
-            pose.orientation[2][2],
-            pose.position[0],
-            pose.position[1],
-            pose.position[2]
+            orientation[0][0],
+            orientation[0][1],
+            orientation[0][2],
+            orientation[1][0],
+            orientation[1][1],
+            orientation[1][2],
+            orientation[2][0],
+            orientation[2][1],
+            orientation[2][2],
+            position[0],
+            position[1],
+            position[2]
         ));
     }
     text
@@ -126,15 +128,15 @@ fn parse_pose_trace(text: &str) -> Result<Vec<Pose>, Box<dyn Error>> {
             values[value_index] = fields[value_index + 1].parse::<f32>()?;
         }
 
-        poses.push(Pose {
-            orientation: [
+        poses.push(Pose::new(
+            [
                 [values[0], values[1], values[2]],
                 [values[3], values[4], values[5]],
                 [values[6], values[7], values[8]],
             ]
             .into(),
-            position: [values[9], values[10], values[11]].into(),
-        });
+            [values[9], values[10], values[11]].into(),
+        ));
     }
 
     Ok(poses)
@@ -218,9 +220,9 @@ where
 
     for pose in poses {
         if let Some(previous_pose) = previous {
-            draw_segment(&mut canvas, previous_pose.position, pose.position);
+            draw_segment(&mut canvas, previous_pose.position(), pose.position());
         }
-        draw_point(&mut canvas, pose.position);
+        draw_point(&mut canvas, pose.position());
         previous = Some(pose);
     }
 

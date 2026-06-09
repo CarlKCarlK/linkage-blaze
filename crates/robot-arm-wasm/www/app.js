@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import init, { linkage0_points } from "./pkg/robot_arm_wasm.js";
+import init, { linkage_points } from "./pkg/robot_arm_wasm.js";
 
 const PARAMS = [
   { name: "lower hand", value: 0.5 },
@@ -177,7 +177,7 @@ function focusSelectedSlider() {
 }
 
 function update() {
-  points = unpackPoints(linkage0_points(PARAMS.map((param) => param.value)));
+  points = unpackPoints(linkage_points(PARAMS.map((param) => param.value)));
   updateGeometry();
   if (firstFit) {
     fitView();

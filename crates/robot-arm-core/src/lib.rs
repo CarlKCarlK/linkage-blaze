@@ -102,6 +102,12 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.len
     }
 
+    /// Return the number of runtime parameters this linkage expects.
+    #[must_use]
+    pub const fn dof(&self) -> usize {
+        DOF
+    }
+
     /// Add a yaw step from a user-facing angle in degrees.
     pub const fn yaw(self, degrees: f32) -> Self {
         self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
@@ -204,16 +210,39 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
 /// Full pose after evaluating a linkage step.
 #[derive(Clone, Copy, Debug)]
 pub struct Pose {
-    pub orientation: Mat3,
-    pub position: Vec3,
+    orientation: Mat3,
+    position: Vec3,
 }
 
 impl Pose {
-    fn start() -> Self {
+    /// Create a pose from an orientation and position.
+    #[must_use]
+    pub const fn new(orientation: Mat3, position: Vec3) -> Self {
+        Self {
+            orientation,
+            position,
+        }
+    }
+
+    /// Return the origin pose with identity orientation.
+    #[must_use]
+    pub const fn start() -> Self {
         Self {
             orientation: Mat3::IDENTITY,
             position: Vec3::ZERO,
         }
+    }
+
+    /// Return this pose's orientation matrix.
+    #[must_use]
+    pub const fn orientation(self) -> Mat3 {
+        self.orientation
+    }
+
+    /// Return this pose's position.
+    #[must_use]
+    pub const fn position(self) -> Vec3 {
+        self.position
     }
 
     /// Return true when all orientation and position components are within `tolerance`.
@@ -357,15 +386,15 @@ mod tests {
             1.0,          // spin hand
         ];
         let pose = LINKAGE0.final_pose(&params);
-        let expected = Pose {
-            orientation: [
+        let expected = Pose::new(
+            [
                 [0.48325038, 0.7270788, 0.48767346],
                 [0.5117748, -0.68655396, 0.51645917],
                 [0.7103207, 0.0, -0.70387816],
             ]
             .into(),
-            position: [5.213134, 5.747819, -0.7241982].into(),
-        };
+            [5.213134, 5.747819, -0.7241982].into(),
+        );
 
         assert_pose_approx_eq(pose, expected);
         Ok(())
@@ -379,15 +408,15 @@ mod tests {
             0.10, // close hand
         ];
         let pose = LINKAGE1.final_pose(&params);
-        let expected = Pose {
-            orientation: [
+        let expected = Pose::new(
+            [
                 [-0.368124515, 0.929776430, 0.0],
                 [-0.929776430, -0.368124515, 0.0],
                 [0.0, 0.0, 1.0],
             ]
             .into(),
-            position: [-4.744067192, -2.626399040, 0.0].into(),
-        };
+            [-4.744067192, -2.626399040, 0.0].into(),
+        );
 
         assert_pose_approx_eq(pose, expected);
         Ok(())
@@ -404,15 +433,15 @@ mod tests {
             0.5, // spin hand
         ];
         let pose = LINKAGE0.final_pose(&params);
-        let expected = Pose {
-            orientation: [
+        let expected = Pose::new(
+            [
                 [-0.5877855, -0.80901694, 0.0],
                 [0.78145033, -0.5677572, 0.25881904],
                 [-0.20938899, 0.15213005, 0.9659258],
             ]
             .into(),
-            position: [-2.828311, 7.4796333, -4.504162].into(),
-        };
+            [-2.828311, 7.4796333, -4.504162].into(),
+        );
 
         assert_pose_approx_eq(pose, expected);
 

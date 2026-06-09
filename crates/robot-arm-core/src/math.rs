@@ -20,6 +20,18 @@ impl F32Ext for f32 {
 impl Vec3 {
     pub const ZERO: Self = Self([0.0, 0.0, 0.0]);
 
+    /// Borrow the underlying array.
+    #[must_use]
+    pub const fn as_array(&self) -> &[f32; 3] {
+        &self.0
+    }
+
+    /// Return the underlying array.
+    #[must_use]
+    pub const fn into_array(self) -> [f32; 3] {
+        self.0
+    }
+
     /// Return true when all components are within `tolerance`.
     #[must_use]
     pub fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
@@ -33,6 +45,12 @@ impl Vec3 {
 impl From<[f32; 3]> for Vec3 {
     fn from(value: [f32; 3]) -> Self {
         Self(value)
+    }
+}
+
+impl From<Vec3> for [f32; 3] {
+    fn from(value: Vec3) -> Self {
+        value.into_array()
     }
 }
 
@@ -81,6 +99,18 @@ pub struct Mat3(pub [[f32; 3]; 3]);
 impl Mat3 {
     pub const IDENTITY: Self = Self([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
 
+    /// Borrow the underlying array.
+    #[must_use]
+    pub const fn as_array(&self) -> &[[f32; 3]; 3] {
+        &self.0
+    }
+
+    /// Return the underlying array.
+    #[must_use]
+    pub const fn into_array(self) -> [[f32; 3]; 3] {
+        self.0
+    }
+
     /// Rotation around z. Yaw = Rz: [[c,-s,0],[s,c,0],[0,0,1]].
     pub fn yaw(radians: f32) -> Self {
         let cos = libm::cosf(radians);
@@ -121,6 +151,12 @@ impl Mat3 {
 impl From<[[f32; 3]; 3]> for Mat3 {
     fn from(value: [[f32; 3]; 3]) -> Self {
         Self(value)
+    }
+}
+
+impl From<Mat3> for [[f32; 3]; 3] {
+    fn from(value: Mat3) -> Self {
+        value.into_array()
     }
 }
 
@@ -182,12 +218,31 @@ mod tests {
     }
 
     #[test]
+    fn test_vec3_array_conversions() {
+        let vec = Vec3::from([1.0, 2.0, 3.0]);
+
+        assert_eq!(vec.as_array(), &[1.0, 2.0, 3.0]);
+        assert_eq!(vec.into_array(), [1.0, 2.0, 3.0]);
+        assert_eq!(<[f32; 3]>::from(vec), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
     fn test_mat3_mul() {
         let left = Mat3::from([[1.0, 2.0, 3.0], [0.0, 1.0, 4.0], [5.0, 6.0, 0.0]]);
         let right = Mat3::from([[-2.0, 1.0, 0.0], [3.0, 0.0, 0.0], [4.0, 5.0, 1.0]]);
         let expected = Mat3::from([[16.0, 16.0, 3.0], [19.0, 20.0, 4.0], [8.0, 5.0, 0.0]]);
 
         assert!((left * right).is_close_to(&expected, 1e-6));
+    }
+
+    #[test]
+    fn test_mat3_array_conversions() {
+        let mat = Mat3::from([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]);
+        let expected = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
+
+        assert_eq!(mat.as_array(), &expected);
+        assert_eq!(mat.into_array(), expected);
+        assert_eq!(<[[f32; 3]; 3]>::from(mat), expected);
     }
 
     #[test]
