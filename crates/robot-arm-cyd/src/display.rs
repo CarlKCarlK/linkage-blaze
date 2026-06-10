@@ -167,6 +167,14 @@ where
         self.spi.write(data).expect("ILI9341 data write failed");
         let _ = self.cs.set_high();
     }
+
+    /// Perform a read/write SPI transaction for touch controller access.
+    /// Caller is responsible for managing touch CS pin state and DC pin (left as-is).
+    pub fn touch_spi_transact(&mut self, tx_buf: &[u8], rx_buf: &mut [u8]) {
+        self.spi
+            .transfer(rx_buf, tx_buf)
+            .expect("touch SPI transaction failed");
+    }
 }
 
 impl<SPI, DC, RST, CS> RectDisplay for Ili9341RectWriter<SPI, DC, RST, CS>

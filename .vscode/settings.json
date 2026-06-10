@@ -1,4 +1,16 @@
 {
+    "editor.formatOnSave": true,
+    "files.watcherExclude": {
+        "**/target/**": true
+    },
+    "search.exclude": {
+        "**/target/**": true
+    },
+    "rust-analyzer.cargo.allTargets": false,
+    "rust-analyzer.cargo.target": "xtensa-esp32-none-elf",
+    "rust-analyzer.checkOnSave.enable": false,
+    "rust-analyzer.check.enable": false,
+    "rust-analyzer.diagnostics.enable": false,
     "cSpell.words": [
         "cosf",
         "sinf"

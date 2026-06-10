@@ -1764,7 +1764,6 @@ dependencies = [
  "esp-rtos",
  "log",
  "robot-arm-core",
- "static_cell",
 ]
 
 [[package]]
