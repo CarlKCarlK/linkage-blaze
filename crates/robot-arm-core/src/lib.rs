@@ -12,6 +12,7 @@
 #[cfg(test)]
 extern crate std;
 
+pub mod cyd;
 mod math;
 
 pub use math::{Mat3, Vec3};

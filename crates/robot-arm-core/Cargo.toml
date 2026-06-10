@@ -5,8 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+embedded-graphics = { version = "0.8", default-features = false }
 libm = "0.2"
+nanorand = { version = "0.8", default-features = false, features = ["wyrand"] }
 
 [dev-dependencies]
-embedded-graphics = { version = "0.8", default-features = false }
 png = "0.18"

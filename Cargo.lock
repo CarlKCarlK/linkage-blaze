@@ -184,6 +184,7 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "libm",
+ "nanorand",
  "png",
 ]
 
@@ -192,7 +193,6 @@ name = "robot-arm-cyd-sim"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
- "nanorand",
  "robot-arm-core",
  "wasm-bindgen",
 ]

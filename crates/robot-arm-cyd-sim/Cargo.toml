@@ -9,6 +9,5 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 embedded-graphics = { version = "0.8", default-features = false }
-nanorand = { version = "0.8", default-features = false, features = ["wyrand"] }
 robot-arm-core.workspace = true
 wasm-bindgen = "=0.2.118"
