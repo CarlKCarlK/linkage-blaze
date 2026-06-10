@@ -13,6 +13,7 @@ use esp_hal::{
 };
 use log::info;
 use robot_arm_core::cyd::CydSim;
+use static_cell::StaticCell;
 
 use device_envoy_esp::{Result, init_and_start};
 
@@ -23,6 +24,8 @@ use display::{DisplayRect, Ili9341RectWriter, Ili9341Rotation, RectDisplay};
 use touch::{NullTouchInput, TouchEvent, TouchInput};
 
 esp_bootloader_esp_idf::esp_app_desc!();
+
+static PREVIOUS_FRAME: StaticCell<[u16; robot_arm_core::cyd::SCREEN_PIXELS]> = StaticCell::new();
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
@@ -59,10 +62,11 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible> {
     let mut display_rect_writer =
         Ili9341RectWriter::new(spi, dc, rst, cs, width, height, Ili9341Rotation::Landscape);
     let mut touch_input = NullTouchInput;
+    let previous_frame = PREVIOUS_FRAME.init([0; robot_arm_core::cyd::SCREEN_PIXELS]);
 
     info!("robot-arm-cyd started: {width}x{height}");
 
-    flush_full_frame(&mut display_rect_writer, &cyd_sim);
+    flush_full_frame(&mut display_rect_writer, &cyd_sim, previous_frame);
 
     let mut previous_tick = Instant::now();
     loop {
@@ -76,28 +80,73 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible> {
                 TouchEvent::Move { x, y } => cyd_sim.touch_move(x, y),
                 TouchEvent::Up => cyd_sim.touch_up(),
             }
-            flush_full_frame(&mut display_rect_writer, &cyd_sim);
+            flush_dirty_rows(&mut display_rect_writer, &cyd_sim, previous_frame);
         }
 
         if cyd_sim.tick_reverse_kinematics(dt_seconds) {
-            flush_full_frame(&mut display_rect_writer, &cyd_sim);
+            flush_dirty_rows(&mut display_rect_writer, &cyd_sim, previous_frame);
         }
 
         Timer::after(Duration::from_millis(16)).await;
     }
 }
 
-fn flush_full_frame(display_rect_writer: &mut impl RectDisplay, cyd_sim: &CydSim) {
+fn flush_full_frame(
+    display_rect_writer: &mut impl RectDisplay,
+    cyd_sim: &CydSim,
+    previous_frame: &mut [u16; robot_arm_core::cyd::SCREEN_PIXELS],
+) {
     let width = cyd_sim.width() as u16;
     let height = cyd_sim.height() as u16;
-    let mut rgb565_pixels = [0u16; robot_arm_core::cyd::SCREEN_PIXELS];
-
     for (pixel_index, pixel) in cyd_sim.pixels().iter().enumerate() {
-        rgb565_pixels[pixel_index] = rgb565_word(pixel.r(), pixel.g(), pixel.b());
+        previous_frame[pixel_index] = rgb565_word(pixel.r(), pixel.g(), pixel.b());
     }
 
     let full_frame = DisplayRect::new(0, 0, width, height);
-    display_rect_writer.write_rect_rgb565(full_frame, &rgb565_pixels);
+    display_rect_writer.write_rect_rgb565(full_frame, previous_frame);
+}
+
+fn flush_dirty_rows(
+    display_rect_writer: &mut impl RectDisplay,
+    cyd_sim: &CydSim,
+    previous_frame: &mut [u16; robot_arm_core::cyd::SCREEN_PIXELS],
+) {
+    let width = cyd_sim.width();
+    let mut left = width;
+    let mut right = 0usize;
+    let mut top = cyd_sim.height();
+    let mut bottom = 0usize;
+    let mut has_changes = false;
+
+    for (pixel_index, pixel) in cyd_sim.pixels().iter().enumerate() {
+        let current_word = rgb565_word(pixel.r(), pixel.g(), pixel.b());
+        if current_word != previous_frame[pixel_index] {
+            previous_frame[pixel_index] = current_word;
+            has_changes = true;
+
+            let x = pixel_index % width;
+            let y = pixel_index / width;
+            left = left.min(x);
+            right = right.max(x);
+            top = top.min(y);
+            bottom = bottom.max(y);
+        }
+    }
+
+    if !has_changes {
+        return;
+    }
+
+    let dirty_left = left as u16;
+    let dirty_width = (right - left + 1) as u16;
+
+    for row in top..=bottom {
+        let row_start = row * width + left;
+        let row_end_exclusive = row_start + dirty_width as usize;
+        let row_pixels = &previous_frame[row_start..row_end_exclusive];
+        let row_rect = DisplayRect::new(dirty_left, row as u16, dirty_width, 1);
+        display_rect_writer.write_rect_rgb565(row_rect, row_pixels);
+    }
 }
 
 const fn rgb565_word(red_5: u8, green_6: u8, blue_5: u8) -> u16 {
