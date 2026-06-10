@@ -8,9 +8,10 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::{Rgb565, RgbColor},
     prelude::*,
-    primitives::{Circle, Line, PrimitiveStyle},
+    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
     text::{Baseline, Text},
 };
+use nanorand::{Rng, WyRand};
 use robot_arm_core::{Linkage, Pose, Vec3};
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -33,9 +34,16 @@ const SLIDER_TRACK_LEFT: i32 = 230;
 const SLIDER_TOP: i32 = 24;
 const SLIDER_STEP: i32 = 32;
 const SLIDER_COUNT: usize = 6;
-const VIEW_SLIDER_LEFT: i32 = 50;
-const VIEW_SLIDER_RIGHT: i32 = 290;
+const VIEW_SLIDER_LEFT: i32 = 40;
+const VIEW_SLIDER_RIGHT: i32 = 280;
 const VIEW_SLIDER_Y: i32 = 226;
+const SEED_BUTTON_TOP: i32 = 17;
+const SEED_BUTTON_LEFT: i32 = 125;
+const SEED_BUTTON_WIDTH: u32 = 70;
+const SEED_BUTTON_HEIGHT: u32 = 14;
+const TARGET_MIN_DIAMETER: f32 = 0.1;
+const TARGET_MAX_DIAMETER: f32 = 0.9;
+const HAND_CORNER_POSE_INDICES: [usize; 4] = [15, 17, 21, 23];
 
 const PARAM_NAMES: [&str; SLIDER_COUNT] = [
     "lower hand",
@@ -78,6 +86,7 @@ pub struct CydSim {
     xy_mix: f32,
     z_mix: f32,
     zoom: f32,
+    target_seed: u32,
     active_control: Option<ActiveControl>,
 }
 
@@ -91,6 +100,7 @@ impl CydSim {
             xy_mix: 0.5 + 30.0 / 360.0,
             z_mix: 0.3,
             zoom: 0.5,
+            target_seed: 0,
             active_control: None,
         };
         sim.render();
@@ -111,6 +121,12 @@ impl CydSim {
 
     pub fn touch_down(&mut self, x: f32, y: f32) {
         self.active_control = control_at(x, y);
+        if matches!(self.active_control, Some(ActiveControl::NextTarget)) {
+            self.target_seed = self.target_seed.wrapping_add(1);
+            self.active_control = None;
+            self.render();
+            return;
+        }
         self.update_touch(x, y);
     }
 
@@ -155,6 +171,7 @@ impl CydSim {
                     / (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32)
                     .clamp(0.0, 1.0);
             }
+            ActiveControl::NextTarget => {}
         }
         self.render();
     }
@@ -162,8 +179,10 @@ impl CydSim {
     fn render(&mut self) {
         self.buffer.clear(Rgb565::BLACK);
         self.draw_grid();
+        self.draw_target();
         self.draw_sliders();
         self.draw_arm();
+        self.draw_report();
     }
 
     fn draw_grid(&mut self) {
@@ -211,6 +230,17 @@ impl CydSim {
         }
     }
 
+    fn draw_target(&mut self) {
+        let target = target_from_seed(self.target_seed);
+        let Vec3([x, y, z]) = target.center;
+        let diameter = world_diameter_to_screen(target.diameter, self.zoom);
+
+        Circle::with_center(self.world_to_screen(x, y, z), diameter)
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::RED))
+            .draw(&mut self.buffer)
+            .ok();
+    }
+
     fn draw_sliders(&mut self) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
         Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
@@ -246,6 +276,22 @@ impl CydSim {
             .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW))
             .draw(&mut self.buffer)
             .ok();
+
+        Rectangle::new(
+            Point::new(SEED_BUTTON_LEFT, SEED_BUTTON_TOP),
+            Size::new(SEED_BUTTON_WIDTH, SEED_BUTTON_HEIGHT),
+        )
+        .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 1))
+        .draw(&mut self.buffer)
+        .ok();
+        Text::with_baseline(
+            "new target",
+            Point::new(SEED_BUTTON_LEFT + 5, SEED_BUTTON_TOP + 2),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(&mut self.buffer)
+        .ok();
 
         for slider_index in 0..SLIDER_COUNT {
             let y = SLIDER_TOP + slider_index as i32 * SLIDER_STEP;
@@ -299,6 +345,14 @@ impl CydSim {
             .ok();
     }
 
+    fn draw_report(&mut self) {
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        let report = format!("dist {:.2}", self.target_distance());
+        Text::with_baseline(&report, Point::new(124, 5), text_style, Baseline::Top)
+            .draw(&mut self.buffer)
+            .ok();
+    }
+
     fn pose_to_screen(&self, pose: Pose) -> Point {
         let Vec3([x, y, z]) = pose.position();
         self.world_to_screen(x, y, -z)
@@ -311,6 +365,20 @@ impl CydSim {
             vertical_to_screen(projection.vertical, self.z_mix, self.zoom),
         )
     }
+
+    fn target_distance(&self) -> f32 {
+        let hand = hand_measurement(&self.params);
+        let target = target_from_seed(self.target_seed);
+        let Vec3([hand_x, hand_y, hand_z]) = hand.center;
+        let Vec3([target_x, target_y, target_z]) = target.center;
+        let size_delta = hand.width - target.diameter;
+
+        ((hand_x - target_x).powi(2)
+            + (hand_y - target_y).powi(2)
+            + (hand_z - target_z).powi(2)
+            + size_delta.powi(2))
+        .sqrt()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -319,6 +387,7 @@ enum ActiveControl {
     Tilt,
     Zoom,
     XyView,
+    NextTarget,
 }
 
 #[derive(Clone, Copy)]
@@ -345,6 +414,12 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
     }
     if (x - ZOOM_X as f32).abs() <= 14.0 && (ZOOM_TOP as f32..=ZOOM_BOTTOM as f32).contains(&y) {
         return Some(ActiveControl::Zoom);
+    }
+    if (SEED_BUTTON_LEFT as f32..=(SEED_BUTTON_LEFT + SEED_BUTTON_WIDTH as i32) as f32).contains(&x)
+        && (SEED_BUTTON_TOP as f32..=(SEED_BUTTON_TOP + SEED_BUTTON_HEIGHT as i32) as f32)
+            .contains(&y)
+    {
+        return Some(ActiveControl::NextTarget);
     }
     if (VIEW_SLIDER_Y as f32 - y).abs() <= 14.0
         && (VIEW_SLIDER_LEFT as f32..=VIEW_SLIDER_RIGHT as f32).contains(&x)
@@ -389,6 +464,76 @@ fn zoom_to_scale(zoom: f32) -> f32 {
 
 fn zoomed_pixels(base_pixels: u32, zoom: f32) -> u32 {
     ((base_pixels as f32 * zoom_to_scale(zoom)).round() as u32).max(1)
+}
+
+fn world_diameter_to_screen(diameter: f32, zoom: f32) -> u32 {
+    ((diameter * (SCREEN_WIDTH - 1) as f32 / (HORIZONTAL_MAX - HORIZONTAL_MIN)
+        * zoom_to_scale(zoom))
+    .round() as u32)
+        .max(1)
+}
+
+#[derive(Clone, Copy)]
+struct HandMeasurement {
+    center: Vec3,
+    width: f32,
+}
+
+#[derive(Clone, Copy)]
+struct Target {
+    center: Vec3,
+    diameter: f32,
+}
+
+fn hand_measurement(params: &[f32; 6]) -> HandMeasurement {
+    let mut corners = [Vec3::ZERO; 4];
+    for (pose_index, pose) in LINKAGE.poses(params).enumerate() {
+        for (corner_index, hand_pose_index) in HAND_CORNER_POSE_INDICES.iter().enumerate() {
+            if pose_index == *hand_pose_index {
+                corners[corner_index] = display_world_position(pose);
+            }
+        }
+    }
+
+    let center = (corners[0] + corners[1] + corners[2] + corners[3]) * 0.25;
+    let width = (distance(corners[0], corners[2]) + distance(corners[1], corners[3])) * 0.5;
+
+    HandMeasurement { center, width }
+}
+
+fn display_world_position(pose: Pose) -> Vec3 {
+    let Vec3([x, y, z]) = pose.position();
+    Vec3([x, y, -z])
+}
+
+fn target_from_seed(seed: u32) -> Target {
+    let mut rng = WyRand::new_seed(u64::from(seed));
+    let mut target_params = [0.0; 6];
+    for (param_index, param) in target_params.iter_mut().enumerate() {
+        *param = if param_index == 2 {
+            0.0
+        } else {
+            random_fraction(&mut rng)
+        };
+    }
+
+    let diameter = TARGET_MIN_DIAMETER
+        + random_fraction(&mut rng) * (TARGET_MAX_DIAMETER - TARGET_MIN_DIAMETER);
+
+    Target {
+        center: hand_measurement(&target_params).center,
+        diameter,
+    }
+}
+
+fn random_fraction(rng: &mut WyRand) -> f32 {
+    rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0)
+}
+
+fn distance(left: Vec3, right: Vec3) -> f32 {
+    let Vec3([left_x, left_y, left_z]) = left;
+    let Vec3([right_x, right_y, right_z]) = right;
+    ((left_x - right_x).powi(2) + (left_y - right_y).powi(2) + (left_z - right_z).powi(2)).sqrt()
 }
 
 struct FrameBuffer {
