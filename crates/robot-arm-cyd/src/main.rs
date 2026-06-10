@@ -7,6 +7,10 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Instant, Timer};
 use embedded_graphics::pixelcolor::RgbColor;
 use esp_backtrace as _;
+use esp_hal::{
+    gpio::{Level, Output, OutputConfig},
+    spi,
+};
 use log::info;
 use robot_arm_core::cyd::CydSim;
 
@@ -15,7 +19,7 @@ use device_envoy_esp::{Result, init_and_start};
 mod display;
 mod touch;
 
-use display::{DisplayRect, NullDisplayRectWriter, RectDisplay};
+use display::{DisplayRect, Ili9341RectWriter, Ili9341Rotation, RectDisplay};
 use touch::{NullTouchInput, TouchEvent, TouchInput};
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -35,7 +39,25 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible> {
     let mut cyd_sim = CydSim::new();
     let width = cyd_sim.width() as u16;
     let height = cyd_sim.height() as u16;
-    let mut display_rect_writer = NullDisplayRectWriter::new(width, height);
+
+    // Common CYD TFT wiring: SCK=GPIO14, MOSI=GPIO13, MISO=GPIO12, CS=GPIO15,
+    // DC=GPIO2, RST=GPIO4, BL=GPIO21.
+    let spi_config = spi::master::Config::default()
+        .with_frequency(esp_hal::time::Rate::from_hz(26_000_000))
+        .with_mode(spi::Mode::_0);
+    let spi = spi::master::Spi::new(p.SPI2, spi_config)
+        .map_err(device_envoy_esp::Error::SpiConfig)?
+        .with_sck(p.GPIO14)
+        .with_mosi(p.GPIO13)
+        .with_miso(p.GPIO12);
+
+    let dc = Output::new(p.GPIO2, Level::Low, OutputConfig::default());
+    let rst = Output::new(p.GPIO4, Level::High, OutputConfig::default());
+    let cs = Output::new(p.GPIO15, Level::High, OutputConfig::default());
+    let _display_backlight = Output::new(p.GPIO21, Level::High, OutputConfig::default());
+
+    let mut display_rect_writer =
+        Ili9341RectWriter::new(spi, dc, rst, cs, width, height, Ili9341Rotation::Landscape);
     let mut touch_input = NullTouchInput;
 
     info!("robot-arm-cyd started: {width}x{height}");
