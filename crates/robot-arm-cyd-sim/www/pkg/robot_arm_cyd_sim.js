@@ -18,11 +18,25 @@ export class CydSim {
         const ret = wasm.cydsim_height(this.__wbg_ptr);
         return ret >>> 0;
     }
+    /**
+     * @returns {boolean}
+     */
+    is_reverse_kinematics_running() {
+        const ret = wasm.cydsim_is_reverse_kinematics_running(this.__wbg_ptr);
+        return ret !== 0;
+    }
     constructor() {
         const ret = wasm.cydsim_new();
         this.__wbg_ptr = ret >>> 0;
         CydSimFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+     * @returns {number}
+     */
+    reverse_kinematics() {
+        const ret = wasm.cydsim_reverse_kinematics(this.__wbg_ptr);
+        return ret;
     }
     /**
      * @returns {Uint8Array}
@@ -32,6 +46,20 @@ export class CydSim {
         var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
         return v1;
+    }
+    start_reverse_kinematics() {
+        wasm.cydsim_start_reverse_kinematics(this.__wbg_ptr);
+    }
+    stop_reverse_kinematics() {
+        wasm.cydsim_stop_reverse_kinematics(this.__wbg_ptr);
+    }
+    /**
+     * @param {number} dt_seconds
+     * @returns {boolean}
+     */
+    tick_reverse_kinematics(dt_seconds) {
+        const ret = wasm.cydsim_tick_reverse_kinematics(this.__wbg_ptr, dt_seconds);
+        return ret !== 0;
     }
     /**
      * @param {number} x
@@ -194,7 +222,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('robot_arm_cyd_sim_bg.wasm?v=prev-next-target-1', import.meta.url);
+        module_or_path = new URL('robot_arm_cyd_sim_bg.wasm?v=paired-rk-1', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

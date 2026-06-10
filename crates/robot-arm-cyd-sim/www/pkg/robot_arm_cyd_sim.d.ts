@@ -5,8 +5,13 @@ export class CydSim {
     free(): void;
     [Symbol.dispose](): void;
     height(): number;
+    is_reverse_kinematics_running(): boolean;
     constructor();
+    reverse_kinematics(): number;
     rgba(): Uint8Array;
+    start_reverse_kinematics(): void;
+    stop_reverse_kinematics(): void;
+    tick_reverse_kinematics(dt_seconds: number): boolean;
     touch_down(x: number, y: number): void;
     touch_move(x: number, y: number): void;
     touch_up(): void;
@@ -19,8 +24,13 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_cydsim_free: (a: number, b: number) => void;
     readonly cydsim_height: (a: number) => number;
+    readonly cydsim_is_reverse_kinematics_running: (a: number) => number;
     readonly cydsim_new: () => number;
+    readonly cydsim_reverse_kinematics: (a: number) => number;
     readonly cydsim_rgba: (a: number) => [number, number];
+    readonly cydsim_start_reverse_kinematics: (a: number) => void;
+    readonly cydsim_stop_reverse_kinematics: (a: number) => void;
+    readonly cydsim_tick_reverse_kinematics: (a: number, b: number) => number;
     readonly cydsim_touch_down: (a: number, b: number, c: number) => void;
     readonly cydsim_touch_move: (a: number, b: number, c: number) => void;
     readonly cydsim_touch_up: (a: number) => void;

@@ -6,7 +6,7 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::{Rgb565, RgbColor},
     prelude::*,
-    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
+    primitives::{Circle, Line, PrimitiveStyle, Rectangle, Triangle},
     text::{Baseline, Text},
 };
 use nanorand::{Rng, WyRand};
@@ -27,6 +27,11 @@ const TILT_TOP: i32 = 24;
 const TILT_BOTTOM: i32 = 224;
 const ZOOM_TOP: i32 = 24;
 const ZOOM_BOTTOM: i32 = 74;
+const RK_CONTROL_TOP: i32 = 86;
+const RK_PLAY_LEFT: i32 = 27;
+const RK_STOP_LEFT: i32 = 55;
+const RK_BUTTON_SIZE: i32 = 18;
+const RK_LABEL_LEFT: i32 = RK_PLAY_LEFT + (RK_BUTTON_SIZE - 2 * TEXT_CHAR_WIDTH) / 2;
 const SLIDER_LEFT: i32 = 230;
 const SLIDER_RIGHT: i32 = 312;
 const SLIDER_TRACK_LEFT: i32 = 230;
@@ -53,6 +58,23 @@ const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CO
 const TARGET_MIN_DIAMETER: f32 = 0.1;
 const TARGET_MAX_DIAMETER: f32 = 0.9;
 const HAND_CORNER_POSE_INDICES: [usize; 4] = [15, 17, 21, 23];
+const PARAM_BEND_ELBOW: usize = 1;
+const PARAM_SPIN_WHOLE_ARM: usize = 4;
+const RK_INITIAL_STEP: f32 = 0.125;
+const RK_MIN_STEP: f32 = 0.001;
+const RK_PARAM_FULL_TRAVEL_SECONDS: f32 = 10.0;
+const RK_MAX_TICK_SECONDS: f32 = 0.1;
+const RK_PAIRED_CANDIDATES: [(f32, f32); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)];
+const RK_CANDIDATE_COUNT: usize = SLIDER_COUNT + RK_PAIRED_CANDIDATES.len();
+const ARM_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_DARK_CYAN);
+const TARGET_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::RED);
+const SLIDER_TRACK_STYLE: PrimitiveStyle<Rgb565> =
+    PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2);
+const BUTTON_STROKE_STYLE: PrimitiveStyle<Rgb565> =
+    PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 1);
+const YELLOW_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW);
+const PLAY_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::GREEN);
+const STOP_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::WHITE);
 
 const PARAM_NAMES: [&str; SLIDER_COUNT] = [
     "lower hand",
@@ -65,7 +87,7 @@ const PARAM_NAMES: [&str; SLIDER_COUNT] = [
 
 const LINKAGE: Linkage<6, 24> = Linkage::start()
     .yaw(90.0)
-    .yaw_param(4, 180.0, -180.0) // spin whole arm
+    .yaw_param(4, 360.0, -360.0) // spin whole arm
     .pitch(90.0)
     .forward(2.5)
     .pitch(-90.0)
@@ -75,7 +97,7 @@ const LINKAGE: Linkage<6, 24> = Linkage::start()
     .forward(3.0)
     .pitch_param(0, 90.0, -90.0) // lower hand
     .forward(1.0)
-    .roll_param(5, 180.0, -180.0) // spin hand
+    .roll_param(5, 360.0, -360.0) // spin hand
     .forward(0.5)
     .yaw(90.0)
     .move_param(2, 0.5, 0.0) // close hand
@@ -96,6 +118,7 @@ pub struct CydSim {
     zoom: f32,
     target_seed: u32,
     active_control: Option<ActiveControl>,
+    reverse_kinematics_run: Option<ReverseKinematicsRun>,
 }
 
 impl CydSim {
@@ -109,6 +132,7 @@ impl CydSim {
             zoom: 0.5,
             target_seed: 0,
             active_control: None,
+            reverse_kinematics_run: None,
         };
         sim.render();
         sim
@@ -132,13 +156,33 @@ impl CydSim {
     pub fn touch_down(&mut self, x: f32, y: f32) {
         self.active_control = control_at(x, y);
         if matches!(self.active_control, Some(ActiveControl::PreviousTarget)) {
+            self.reverse_kinematics_run = None;
             self.target_seed = self.target_seed.wrapping_sub(1);
             self.active_control = None;
             self.render();
             return;
         }
         if matches!(self.active_control, Some(ActiveControl::NextTarget)) {
+            self.reverse_kinematics_run = None;
             self.target_seed = self.target_seed.wrapping_add(1);
+            self.active_control = None;
+            self.render();
+            return;
+        }
+        if matches!(
+            self.active_control,
+            Some(ActiveControl::StartReverseKinematics)
+        ) {
+            self.start_reverse_kinematics();
+            self.active_control = None;
+            self.render();
+            return;
+        }
+        if matches!(
+            self.active_control,
+            Some(ActiveControl::StopReverseKinematics)
+        ) {
+            self.stop_reverse_kinematics();
             self.active_control = None;
             self.render();
             return;
@@ -154,6 +198,52 @@ impl CydSim {
         self.active_control = None;
     }
 
+    pub fn start_reverse_kinematics(&mut self) {
+        self.reverse_kinematics_run = Some(ReverseKinematicsRun::new(
+            &self.params,
+            target_from_seed(self.target_seed),
+        ));
+    }
+
+    pub fn stop_reverse_kinematics(&mut self) {
+        self.reverse_kinematics_run = None;
+    }
+
+    #[must_use]
+    pub const fn is_reverse_kinematics_running(&self) -> bool {
+        self.reverse_kinematics_run.is_some()
+    }
+
+    pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
+        let Some(mut run) = self.reverse_kinematics_run.take() else {
+            return false;
+        };
+
+        let search_running = run.tick_search();
+        let visible_moving = move_params_toward(
+            &mut self.params,
+            &run.search_params,
+            reverse_kinematics_visible_param_step(dt_seconds),
+        );
+        let running = search_running || visible_moving;
+        if running {
+            self.reverse_kinematics_run = Some(run);
+        }
+        self.render();
+        running
+    }
+
+    /// Run a no-allocation local reverse-kinematics search over the six robot parameters.
+    ///
+    /// This tries each parameter in both directions, keeps improvements, and
+    /// shrinks the step when stuck.
+    pub fn reverse_kinematics(&mut self) -> f32 {
+        let target = target_from_seed(self.target_seed);
+        let distance = reverse_kinematics(&mut self.params, target);
+        self.render();
+        distance
+    }
+
     fn update_touch(&mut self, x: f32, y: f32) {
         let Some(active_control) = self.active_control else {
             return;
@@ -161,6 +251,7 @@ impl CydSim {
 
         match active_control {
             ActiveControl::RightSlider(slider_index) => {
+                self.reverse_kinematics_run = None;
                 let value = ((x - SLIDER_TRACK_LEFT as f32)
                     / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
                     .clamp(0.0, 1.0);
@@ -181,6 +272,8 @@ impl CydSim {
             }
             ActiveControl::PreviousTarget => {}
             ActiveControl::NextTarget => {}
+            ActiveControl::StartReverseKinematics => {}
+            ActiveControl::StopReverseKinematics => {}
         }
         self.render();
     }
@@ -195,8 +288,7 @@ impl CydSim {
     }
 
     fn draw_grid(&mut self) {
-        let style =
-            PrimitiveStyle::with_stroke(Rgb565::CSS_DARK_SLATE_GRAY, zoomed_pixels(2, self.zoom));
+        let style = grid_stroke_style(self.zoom);
         for grid in -4..=4 {
             let grid = grid as f32;
             Line::new(
@@ -224,15 +316,12 @@ impl CydSim {
             let point = self.pose_to_screen(pose);
             if let Some(previous_point) = previous {
                 Line::new(previous_point, point)
-                    .into_styled(PrimitiveStyle::with_stroke(
-                        Rgb565::CSS_DARK_CYAN,
-                        rod_width,
-                    ))
+                    .into_styled(arm_stroke_style(rod_width))
                     .draw(&mut self.buffer)
                     .ok();
             }
             Circle::with_center(point, joint_diameter)
-                .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_DARK_CYAN))
+                .into_styled(ARM_FILL_STYLE)
                 .draw(&mut self.buffer)
                 .ok();
             previous = Some(point);
@@ -245,7 +334,7 @@ impl CydSim {
         let diameter = world_diameter_to_screen(target.diameter, self.zoom);
 
         Circle::with_center(self.world_to_screen(x, y, z), diameter)
-            .into_styled(PrimitiveStyle::with_fill(Rgb565::RED))
+            .into_styled(TARGET_FILL_STYLE)
             .draw(&mut self.buffer)
             .ok();
     }
@@ -259,13 +348,13 @@ impl CydSim {
             Point::new(TILT_X, TILT_TOP),
             Point::new(TILT_X, TILT_BOTTOM),
         )
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
+        .into_styled(SLIDER_TRACK_STYLE)
         .draw(&mut self.buffer)
         .ok();
         let tilt_knob_y =
             TILT_TOP + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.z_mix));
         Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
-            .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW))
+            .into_styled(YELLOW_FILL_STYLE)
             .draw(&mut self.buffer)
             .ok();
 
@@ -276,21 +365,48 @@ impl CydSim {
             Point::new(ZOOM_X, ZOOM_TOP),
             Point::new(ZOOM_X, ZOOM_BOTTOM),
         )
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
+        .into_styled(SLIDER_TRACK_STYLE)
         .draw(&mut self.buffer)
         .ok();
         let zoom_knob_y =
             ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * (1.0 - self.zoom));
         Circle::with_center(Point::new(ZOOM_X, zoom_knob_y), 9)
-            .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW))
+            .into_styled(YELLOW_FILL_STYLE)
             .draw(&mut self.buffer)
             .ok();
+
+        Triangle::new(
+            Point::new(RK_PLAY_LEFT, RK_CONTROL_TOP),
+            Point::new(RK_PLAY_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
+            Point::new(
+                RK_PLAY_LEFT + RK_BUTTON_SIZE,
+                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+            ),
+        )
+        .into_styled(PLAY_FILL_STYLE)
+        .draw(&mut self.buffer)
+        .ok();
+        Text::with_baseline(
+            "RK",
+            Point::new(RK_LABEL_LEFT, RK_CONTROL_TOP + 4),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(&mut self.buffer)
+        .ok();
+        Rectangle::new(
+            Point::new(RK_STOP_LEFT + 4, RK_CONTROL_TOP + 4),
+            Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
+        )
+        .into_styled(STOP_FILL_STYLE)
+        .draw(&mut self.buffer)
+        .ok();
 
         Rectangle::new(
             Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 1))
+        .into_styled(BUTTON_STROKE_STYLE)
         .draw(&mut self.buffer)
         .ok();
         Text::with_baseline(
@@ -316,7 +432,7 @@ impl CydSim {
             Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 1))
+        .into_styled(BUTTON_STROKE_STYLE)
         .draw(&mut self.buffer)
         .ok();
         Text::with_baseline(
@@ -348,14 +464,14 @@ impl CydSim {
                 Point::new(SLIDER_TRACK_LEFT, y + 8),
                 Point::new(SLIDER_RIGHT, y + 8),
             )
-            .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
+            .into_styled(SLIDER_TRACK_STYLE)
             .draw(&mut self.buffer)
             .ok();
 
             let knob_x =
                 SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
             Circle::with_center(Point::new(knob_x, y + 8), 9)
-                .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW))
+                .into_styled(YELLOW_FILL_STYLE)
                 .draw(&mut self.buffer)
                 .ok();
         }
@@ -372,13 +488,13 @@ impl CydSim {
             Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
             Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
         )
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
+        .into_styled(SLIDER_TRACK_STYLE)
         .draw(&mut self.buffer)
         .ok();
         let view_knob_x = VIEW_SLIDER_LEFT
             + round_to_i32((VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.xy_mix);
         Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
-            .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW))
+            .into_styled(YELLOW_FILL_STYLE)
             .draw(&mut self.buffer)
             .ok();
     }
@@ -410,18 +526,7 @@ impl CydSim {
     }
 
     fn target_distance(&self) -> f32 {
-        let hand = hand_measurement(&self.params);
-        let target = target_from_seed(self.target_seed);
-        let Vec3([hand_x, hand_y, hand_z]) = hand.center;
-        let Vec3([target_x, target_y, target_z]) = target.center;
-        let size_delta = hand.width - target.diameter;
-
-        libm::sqrtf(
-            square(hand_x - target_x)
-                + square(hand_y - target_y)
-                + square(hand_z - target_z)
-                + square(size_delta),
-        )
+        target_distance(&self.params, target_from_seed(self.target_seed))
     }
 }
 
@@ -439,6 +544,8 @@ enum ActiveControl {
     XyView,
     PreviousTarget,
     NextTarget,
+    StartReverseKinematics,
+    StopReverseKinematics,
 }
 
 #[derive(Clone, Copy)]
@@ -465,6 +572,16 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
     }
     if (x - ZOOM_X as f32).abs() <= 14.0 && (ZOOM_TOP as f32..=ZOOM_BOTTOM as f32).contains(&y) {
         return Some(ActiveControl::Zoom);
+    }
+    if (RK_PLAY_LEFT as f32..=(RK_PLAY_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
+        && (RK_CONTROL_TOP as f32..=(RK_CONTROL_TOP + RK_BUTTON_SIZE) as f32).contains(&y)
+    {
+        return Some(ActiveControl::StartReverseKinematics);
+    }
+    if (RK_STOP_LEFT as f32..=(RK_STOP_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
+        && (RK_CONTROL_TOP as f32..=(RK_CONTROL_TOP + RK_BUTTON_SIZE) as f32).contains(&y)
+    {
+        return Some(ActiveControl::StopReverseKinematics);
     }
     if (PREV_BUTTON_LEFT as f32..=(PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
         .contains(&x)
@@ -533,6 +650,14 @@ fn world_diameter_to_screen(diameter: f32, zoom: f32) -> u32 {
     .max(1)
 }
 
+fn grid_stroke_style(zoom: f32) -> PrimitiveStyle<Rgb565> {
+    PrimitiveStyle::with_stroke(Rgb565::CSS_DARK_SLATE_GRAY, zoomed_pixels(2, zoom))
+}
+
+fn arm_stroke_style(width: u32) -> PrimitiveStyle<Rgb565> {
+    PrimitiveStyle::with_stroke(Rgb565::CSS_DARK_CYAN, width)
+}
+
 #[derive(Clone, Copy)]
 struct HandMeasurement {
     center: Vec3,
@@ -543,6 +668,191 @@ struct HandMeasurement {
 struct Target {
     center: Vec3,
     diameter: f32,
+}
+
+#[derive(Clone, Copy)]
+struct ReverseKinematicsRun {
+    search_params: [f32; 6],
+    target: Target,
+    best_distance: f32,
+    step: f32,
+    candidate_index: usize,
+    sweep_improved: bool,
+    phase: ReverseKinematicsPhase,
+}
+
+#[derive(Clone, Copy)]
+enum ReverseKinematicsPhase {
+    BeginCandidate,
+    EvaluateSingleHigh {
+        index: usize,
+        original: f32,
+    },
+    EvaluateSingleLow {
+        index: usize,
+        original: f32,
+    },
+    EvaluatePair {
+        bend_original: f32,
+        spin_original: f32,
+    },
+}
+
+impl ReverseKinematicsRun {
+    fn new(params: &[f32; 6], target: Target) -> Self {
+        Self {
+            search_params: *params,
+            target,
+            best_distance: target_distance(params, target),
+            step: RK_INITIAL_STEP,
+            candidate_index: 0,
+            sweep_improved: false,
+            phase: ReverseKinematicsPhase::BeginCandidate,
+        }
+    }
+
+    fn tick_search(&mut self) -> bool {
+        loop {
+            match self.phase {
+                ReverseKinematicsPhase::BeginCandidate => {
+                    if !self.prepare_next_candidate() {
+                        return false;
+                    }
+
+                    if self.candidate_index >= SLIDER_COUNT {
+                        let bend_original = self.search_params[PARAM_BEND_ELBOW];
+                        let spin_original = self.search_params[PARAM_SPIN_WHOLE_ARM];
+                        let pair_index = self.candidate_index - SLIDER_COUNT;
+                        if apply_paired_candidate(&mut self.search_params, pair_index, self.step) {
+                            self.phase = ReverseKinematicsPhase::EvaluatePair {
+                                bend_original,
+                                spin_original,
+                            };
+                            return true;
+                        }
+
+                        self.finish_candidate();
+                        continue;
+                    }
+
+                    let original = self.search_params[self.candidate_index];
+                    let high = (original + self.step).min(1.0);
+                    if high != original {
+                        self.search_params[self.candidate_index] = high;
+                        self.phase = ReverseKinematicsPhase::EvaluateSingleHigh {
+                            index: self.candidate_index,
+                            original,
+                        };
+                        return true;
+                    }
+
+                    self.phase = ReverseKinematicsPhase::EvaluateSingleHigh {
+                        index: self.candidate_index,
+                        original,
+                    };
+                }
+                ReverseKinematicsPhase::EvaluateSingleHigh { index, original } => {
+                    if self.keep_if_improved() {
+                        self.finish_candidate();
+                        return true;
+                    }
+
+                    self.search_params[index] = original;
+                    let low = (original - self.step).max(0.0);
+                    if low != original {
+                        self.search_params[index] = low;
+                        self.phase = ReverseKinematicsPhase::EvaluateSingleLow { index, original };
+                        return true;
+                    }
+
+                    self.finish_candidate();
+                    return true;
+                }
+                ReverseKinematicsPhase::EvaluateSingleLow { index, original } => {
+                    if !self.keep_if_improved() {
+                        self.search_params[index] = original;
+                    }
+                    self.finish_candidate();
+                    return true;
+                }
+                ReverseKinematicsPhase::EvaluatePair {
+                    bend_original,
+                    spin_original,
+                } => {
+                    if !self.keep_if_improved() {
+                        self.search_params[PARAM_BEND_ELBOW] = bend_original;
+                        self.search_params[PARAM_SPIN_WHOLE_ARM] = spin_original;
+                    }
+                    self.finish_candidate();
+                    return true;
+                }
+            }
+        }
+    }
+
+    fn prepare_next_candidate(&mut self) -> bool {
+        while self.candidate_index >= RK_CANDIDATE_COUNT {
+            if self.sweep_improved {
+                self.sweep_improved = false;
+            } else {
+                self.step *= 0.5;
+                if self.step < RK_MIN_STEP {
+                    return false;
+                }
+            }
+            self.candidate_index = 0;
+        }
+
+        true
+    }
+
+    fn keep_if_improved(&mut self) -> bool {
+        let distance = target_distance(&self.search_params, self.target);
+        if distance < self.best_distance {
+            self.best_distance = distance;
+            self.sweep_improved = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn finish_candidate(&mut self) {
+        self.candidate_index += 1;
+        self.phase = ReverseKinematicsPhase::BeginCandidate;
+    }
+}
+
+fn move_params_toward(params: &mut [f32; 6], target_params: &[f32; 6], max_change: f32) -> bool {
+    let mut moved = false;
+
+    for param_index in 0..params.len() {
+        let delta = target_params[param_index] - params[param_index];
+        if delta == 0.0 {
+            continue;
+        }
+
+        let change = delta.clamp(-max_change, max_change);
+        params[param_index] = (params[param_index] + change).clamp(0.0, 1.0);
+        moved = true;
+    }
+
+    moved
+}
+
+fn reverse_kinematics_visible_param_step(dt_seconds: f32) -> f32 {
+    dt_seconds.clamp(0.0, RK_MAX_TICK_SECONDS) / RK_PARAM_FULL_TRAVEL_SECONDS
+}
+
+fn apply_paired_candidate(params: &mut [f32; 6], pair_index: usize, step: f32) -> bool {
+    let (bend_direction, spin_direction) = RK_PAIRED_CANDIDATES[pair_index];
+    let bend_original = params[PARAM_BEND_ELBOW];
+    let spin_original = params[PARAM_SPIN_WHOLE_ARM];
+
+    params[PARAM_BEND_ELBOW] = (bend_original + bend_direction * step).clamp(0.0, 1.0);
+    params[PARAM_SPIN_WHOLE_ARM] = (spin_original + spin_direction * step).clamp(0.0, 1.0);
+
+    params[PARAM_BEND_ELBOW] != bend_original || params[PARAM_SPIN_WHOLE_ARM] != spin_original
 }
 
 fn hand_measurement(params: &[f32; 6]) -> HandMeasurement {
@@ -584,6 +894,80 @@ fn target_from_seed(seed: u32) -> Target {
         center: hand_measurement(&target_params).center,
         diameter,
     }
+}
+
+fn reverse_kinematics(params: &mut [f32; 6], target: Target) -> f32 {
+    let mut best_distance = target_distance(params, target);
+    let mut step = RK_INITIAL_STEP;
+
+    while step >= RK_MIN_STEP {
+        let mut improved = false;
+
+        for param_index in 0..params.len() {
+            let original = params[param_index];
+
+            let high = (original + step).min(1.0);
+            if high != original {
+                params[param_index] = high;
+                let distance = target_distance(params, target);
+                if distance < best_distance {
+                    best_distance = distance;
+                    improved = true;
+                    continue;
+                }
+            }
+
+            let low = (original - step).max(0.0);
+            if low != original {
+                params[param_index] = low;
+                let distance = target_distance(params, target);
+                if distance < best_distance {
+                    best_distance = distance;
+                    improved = true;
+                    continue;
+                }
+            }
+
+            params[param_index] = original;
+        }
+
+        for pair_index in 0..RK_PAIRED_CANDIDATES.len() {
+            let bend_original = params[PARAM_BEND_ELBOW];
+            let spin_original = params[PARAM_SPIN_WHOLE_ARM];
+            if !apply_paired_candidate(params, pair_index, step) {
+                continue;
+            }
+
+            let distance = target_distance(params, target);
+            if distance < best_distance {
+                best_distance = distance;
+                improved = true;
+            } else {
+                params[PARAM_BEND_ELBOW] = bend_original;
+                params[PARAM_SPIN_WHOLE_ARM] = spin_original;
+            }
+        }
+
+        if !improved {
+            step *= 0.5;
+        }
+    }
+
+    best_distance
+}
+
+fn target_distance(params: &[f32; 6], target: Target) -> f32 {
+    let hand = hand_measurement(params);
+    let Vec3([hand_x, hand_y, hand_z]) = hand.center;
+    let Vec3([target_x, target_y, target_z]) = target.center;
+    let size_delta = hand.width - target.diameter;
+
+    libm::sqrtf(
+        square(hand_x - target_x)
+            + square(hand_y - target_y)
+            + square(hand_z - target_z)
+            + square(size_delta),
+    )
 }
 
 fn random_fraction(rng: &mut WyRand) -> f32 {
@@ -682,5 +1066,49 @@ impl DrawTarget for FrameBuffer {
 impl OriginDimensions for FrameBuffer {
     fn size(&self) -> Size {
         Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CydSim, reverse_kinematics_visible_param_step};
+
+    #[test]
+    fn test_reverse_kinematics_does_not_increase_distance() {
+        let mut sim = CydSim::new();
+        let before = sim.target_distance();
+        let after = sim.reverse_kinematics();
+
+        assert!(after <= before, "expected {after} <= {before}");
+    }
+
+    #[test]
+    fn test_stepped_reverse_kinematics_does_not_increase_distance() {
+        let mut sim = CydSim::new();
+        let before = sim.target_distance();
+        sim.start_reverse_kinematics();
+
+        for _ in 0..512 {
+            if !sim.tick_reverse_kinematics(1.0 / 60.0) {
+                break;
+            }
+        }
+
+        let after = sim.target_distance();
+        assert!(after <= before, "expected {after} <= {before}");
+    }
+
+    #[test]
+    fn test_stepped_reverse_kinematics_limits_visible_param_change() {
+        let mut sim = CydSim::new();
+        let before = sim.params;
+        sim.start_reverse_kinematics();
+        let dt_seconds = 0.5;
+        sim.tick_reverse_kinematics(dt_seconds);
+        let max_change = reverse_kinematics_visible_param_step(dt_seconds);
+
+        for (before, after) in before.iter().zip(sim.params.iter()) {
+            assert!((after - before).abs() <= max_change + 1e-6);
+        }
     }
 }

@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/robot_arm_cyd_sim.js?v=prev-next-target-1";
+import init, { CydSim } from "./pkg/robot_arm_cyd_sim.js?v=paired-rk-1";
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
@@ -7,6 +7,8 @@ await init();
 
 const sim = new CydSim();
 const image = context.createImageData(sim.width(), sim.height());
+let animationFrame = null;
+let previousAnimationTimestamp = null;
 
 render();
 
@@ -15,6 +17,7 @@ canvas.addEventListener("pointerdown", (event) => {
   const point = eventToScreen(event);
   sim.touch_down(point.x, point.y);
   render();
+  scheduleReverseKinematics();
 });
 
 canvas.addEventListener("pointermove", (event) => {
@@ -24,17 +27,20 @@ canvas.addEventListener("pointermove", (event) => {
   const point = eventToScreen(event);
   sim.touch_move(point.x, point.y);
   render();
+  scheduleReverseKinematics();
 });
 
 canvas.addEventListener("pointerup", (event) => {
   canvas.releasePointerCapture(event.pointerId);
   sim.touch_up();
   render();
+  scheduleReverseKinematics();
 });
 
 canvas.addEventListener("pointercancel", () => {
   sim.touch_up();
   render();
+  scheduleReverseKinematics();
 });
 
 function render() {
@@ -48,4 +54,28 @@ function eventToScreen(event) {
     x: ((event.clientX - bounds.left) * canvas.width) / bounds.width,
     y: ((event.clientY - bounds.top) * canvas.height) / bounds.height,
   };
+}
+
+function scheduleReverseKinematics() {
+  if (animationFrame !== null || !sim.is_reverse_kinematics_running()) {
+    return;
+  }
+  animationFrame = requestAnimationFrame(tickReverseKinematics);
+}
+
+function tickReverseKinematics(timestamp) {
+  animationFrame = null;
+  const dtSeconds =
+    previousAnimationTimestamp === null
+      ? 1 / 60
+      : (timestamp - previousAnimationTimestamp) / 1000;
+  previousAnimationTimestamp = timestamp;
+
+  const running = sim.tick_reverse_kinematics(dtSeconds);
+  render();
+  if (running) {
+    scheduleReverseKinematics();
+  } else {
+    previousAnimationTimestamp = null;
+  }
 }

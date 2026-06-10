@@ -48,6 +48,26 @@ impl CydSim {
     pub fn touch_up(&mut self) {
         self.sim.touch_up();
     }
+
+    pub fn reverse_kinematics(&mut self) -> f32 {
+        self.sim.reverse_kinematics()
+    }
+
+    pub fn start_reverse_kinematics(&mut self) {
+        self.sim.start_reverse_kinematics();
+    }
+
+    pub fn stop_reverse_kinematics(&mut self) {
+        self.sim.stop_reverse_kinematics();
+    }
+
+    pub fn is_reverse_kinematics_running(&self) -> bool {
+        self.sim.is_reverse_kinematics_running()
+    }
+
+    pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
+        self.sim.tick_reverse_kinematics(dt_seconds)
+    }
 }
 
 impl Default for CydSim {
