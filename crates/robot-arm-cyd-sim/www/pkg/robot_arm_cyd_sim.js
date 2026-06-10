@@ -194,7 +194,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('robot_arm_cyd_sim_bg.wasm?v=center-view-1', import.meta.url);
+        module_or_path = new URL('robot_arm_cyd_sim_bg.wasm?v=xy-start-30deg-1', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
