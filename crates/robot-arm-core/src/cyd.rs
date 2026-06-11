@@ -40,8 +40,12 @@ const SLIDER_TOP: i32 = 24;
 const SLIDER_STEP: i32 = 32;
 const SLIDER_COUNT: usize = 6;
 const VIEW_SLIDER_LEFT: i32 = 40;
-const VIEW_SLIDER_RIGHT: i32 = 280;
+const VIEW_SLIDER_RIGHT: i32 = 252;
 const VIEW_SLIDER_Y: i32 = 226;
+const CALIBRATE_BUTTON_LEFT: i32 = 288;
+const CALIBRATE_BUTTON_TOP: i32 = 212;
+const CALIBRATE_BUTTON_WIDTH: u32 = 30;
+const CALIBRATE_BUTTON_HEIGHT: u32 = 14;
 const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
@@ -126,6 +130,7 @@ pub struct CydSim {
     reverse_kinematics_run: Option<ReverseKinematicsRun>,
     reverse_kinematics_playing: bool,
     frames_per_second: Option<u16>,
+    calibration_requested: bool,
 }
 
 impl CydSim {
@@ -141,6 +146,7 @@ impl CydSim {
             reverse_kinematics_run: None,
             reverse_kinematics_playing: false,
             frames_per_second: None,
+            calibration_requested: false,
         }
     }
 
@@ -172,8 +178,19 @@ impl CydSim {
         self.frames_per_second = Some(round_to_u32(1.0 / dt_seconds).min(999) as u16);
     }
 
+    pub fn take_calibration_request(&mut self) -> bool {
+        let calibration_requested = self.calibration_requested;
+        self.calibration_requested = false;
+        calibration_requested
+    }
+
     pub fn touch_down(&mut self, x: f32, y: f32) {
         self.active_control = control_at(x, y);
+        if matches!(self.active_control, Some(ActiveControl::Calibrate)) {
+            self.calibration_requested = true;
+            self.active_control = None;
+            return;
+        }
         if matches!(self.active_control, Some(ActiveControl::PreviousTarget)) {
             self.clear_reverse_kinematics();
             self.target_seed = self.target_seed.wrapping_sub(1);
@@ -340,6 +357,7 @@ impl CydSim {
             ActiveControl::NextTarget => {}
             ActiveControl::ToggleReverseKinematics => {}
             ActiveControl::StepReverseKinematics => {}
+            ActiveControl::Calibrate => {}
         }
     }
 
@@ -442,6 +460,8 @@ impl CydSim {
         .draw(buffer)
         .ok();
         self.draw_reverse_kinematics_step_button(buffer);
+        #[cfg(not(target_arch = "wasm32"))]
+        self.draw_calibrate_button(buffer);
 
         Rectangle::new(
             Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
@@ -538,6 +558,25 @@ impl CydSim {
             .into_styled(YELLOW_FILL_STYLE)
             .draw(buffer)
             .ok();
+    }
+
+    fn draw_calibrate_button(&self, buffer: &mut FrameBuffer) {
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        Rectangle::new(
+            Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
+            Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
+        )
+        .into_styled(BUTTON_STROKE_STYLE)
+        .draw(buffer)
+        .ok();
+        Text::with_baseline(
+            "cal",
+            Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(buffer)
+        .ok();
     }
 
     fn draw_reverse_kinematics_run_button(&self, buffer: &mut FrameBuffer) {
@@ -655,6 +694,7 @@ enum ActiveControl {
     NextTarget,
     ToggleReverseKinematics,
     StepReverseKinematics,
+    Calibrate,
 }
 
 #[derive(Clone, Copy)]
@@ -710,6 +750,16 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
         && (VIEW_SLIDER_LEFT as f32..=VIEW_SLIDER_RIGHT as f32).contains(&x)
     {
         return Some(ActiveControl::XyView);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if (CALIBRATE_BUTTON_LEFT as f32
+        ..=(CALIBRATE_BUTTON_LEFT + CALIBRATE_BUTTON_WIDTH as i32) as f32)
+        .contains(&x)
+        && (CALIBRATE_BUTTON_TOP as f32
+            ..=(CALIBRATE_BUTTON_TOP + CALIBRATE_BUTTON_HEIGHT as i32) as f32)
+            .contains(&y)
+    {
+        return Some(ActiveControl::Calibrate);
     }
     for slider_index in 0..SLIDER_COUNT {
         let slider_y = SLIDER_TOP + slider_index as i32 * SLIDER_STEP;

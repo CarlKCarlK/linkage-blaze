@@ -1777,6 +1777,7 @@ dependencies = [
  "log",
  "mipidsi",
  "robot-arm-core",
+ "serde",
  "static_cell",
 ]
 

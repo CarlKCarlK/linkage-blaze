@@ -3,6 +3,10 @@
 
 use core::cell::RefCell;
 
+use device_envoy_esp::{
+    button::{Button as _, ButtonEsp, PressedTo},
+    flash_block::{FlashBlock as _, FlashBlockEsp},
+};
 use embedded_graphics::{
     Drawable,
     pixelcolor::Rgb565,
@@ -38,8 +42,10 @@ static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
 
 const DISPLAY_SPI_HZ: u32 = 60_000_000;
 const DISPLAY_INTERFACE_BUFFER_BYTES: usize = 4096;
-const FRAME_PROFILE_LOGGING: bool = true;
+const FRAME_PROFILE_LOGGING: bool = false;
 const TOUCH_LOGGING: bool = false;
+const TOUCH_CALIBRATION_MAGIC: u32 = 0x5241_4344;
+const TOUCH_CALIBRATION_VERSION: u16 = 2;
 
 static DISPLAY_INTERFACE_BUFFER: StaticCell<[u8; DISPLAY_INTERFACE_BUFFER_BYTES]> =
     StaticCell::new();
@@ -50,7 +56,7 @@ struct RawPoint {
     y: u16,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
 struct TouchCalibrationConfig {
     ax: f32,
     bx: f32,
@@ -60,10 +66,47 @@ struct TouchCalibrationConfig {
     cy: f32,
 }
 
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
+struct StoredTouchCalibrationV2 {
+    magic: u32,
+    version: u16,
+    config: TouchCalibrationConfig,
+    checksum: u32,
+}
+
+impl StoredTouchCalibrationV2 {
+    fn new(config: TouchCalibrationConfig) -> Self {
+        Self {
+            magic: TOUCH_CALIBRATION_MAGIC,
+            version: TOUCH_CALIBRATION_VERSION,
+            config,
+            checksum: touch_calibration_checksum(
+                TOUCH_CALIBRATION_MAGIC,
+                TOUCH_CALIBRATION_VERSION,
+                config,
+            ),
+        }
+    }
+
+    fn valid_config(self) -> Option<TouchCalibrationConfig> {
+        let checksum = touch_calibration_checksum(self.magic, self.version, self.config);
+        if self.magic == TOUCH_CALIBRATION_MAGIC
+            && self.version == TOUCH_CALIBRATION_VERSION
+            && self.checksum == checksum
+            && touch_calibration_config_is_finite(self.config)
+        {
+            Some(self.config)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum CalibrationCorner {
     UpperLeft,
     UpperRight,
+    LowerRight,
     LowerLeft,
 }
 
@@ -101,6 +144,38 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     let width = cyd_sim.width() as u16;
     let height = cyd_sim.height() as u16;
     esp_println::println!("boot: after cyd sim init");
+
+    let boot_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
+    let force_calibration = boot_button.is_pressed();
+    if force_calibration {
+        esp_println::println!("cal: BOOT held, ignoring stored calibration");
+    }
+
+    let [mut touch_calibration_flash_block] =
+        FlashBlockEsp::new_array::<1>(p.FLASH).expect("boot: failed to create flash block");
+    let mut touch_calibration_config = if force_calibration {
+        None
+    } else {
+        match touch_calibration_flash_block.load::<StoredTouchCalibrationV2>() {
+            Ok(Some(stored_touch_calibration_v2)) => {
+                let config = stored_touch_calibration_v2.valid_config();
+                if config.is_some() {
+                    esp_println::println!("cal: loaded valid calibration from flash");
+                } else {
+                    esp_println::println!("cal: stored calibration failed app validation");
+                }
+                config
+            }
+            Ok(None) => {
+                esp_println::println!("cal: no calibration in flash");
+                None
+            }
+            Err(error) => {
+                esp_println::println!("cal: failed to load calibration from flash: {:?}", error);
+                None
+            }
+        }
+    };
 
     esp_println::println!("boot: before display spi init");
     let spi_config = spi::master::Config::default()
@@ -159,38 +234,20 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         .expect("boot: failed to initialize mipidsi display");
     esp_println::println!("boot: after display init");
 
-    esp_println::println!("boot: before display probe write");
     display_backlight.set_high();
-    display
-        .clear(Rgb565::RED)
-        .expect("boot: failed to clear display red");
-    esp_println::println!("boot: full-screen red");
-    delay.delay_millis(200);
-    display
-        .clear(Rgb565::GREEN)
-        .expect("boot: failed to clear display green");
-    esp_println::println!("boot: full-screen green");
-    delay.delay_millis(200);
-    display
-        .clear(Rgb565::BLUE)
-        .expect("boot: failed to clear display blue");
-    esp_println::println!("boot: full-screen blue");
-    delay.delay_millis(200);
-    display
-        .clear(Rgb565::WHITE)
-        .expect("boot: failed to clear display white");
-    esp_println::println!("boot: full-screen white");
-    delay.delay_millis(100);
-    esp_println::println!("boot: after display probe write");
 
     esp_println::println!("boot: before initial frame flush");
     cyd_sim.touch_up();
     // Keep RK off while validating touch behavior.
     // cyd_sim.start_reverse_kinematics();
     esp_println::println!("boot: RK off, touch test mode");
-    frame_buffer.clear(Rgb565::BLACK);
-    if let Some(calibration_corner) = calibration_corner_for_index(0) {
-        draw_calibration_cross(frame_buffer, calibration_corner, width, height);
+    if touch_calibration_config.is_some() {
+        cyd_sim.render_to(frame_buffer);
+    } else {
+        frame_buffer.clear(Rgb565::BLACK);
+        if let Some(calibration_corner) = calibration_corner_for_index(0) {
+            draw_calibration_cross(frame_buffer, calibration_corner, width, height);
+        }
     }
     flush_full_frame(&mut display, frame_buffer, width, height);
     esp_println::println!("boot: after initial frame flush");
@@ -200,18 +257,20 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     let mut touch_poll_counter: u32 = 0;
     let mut touch_move_log_counter: u32 = 0;
     let mut last_touch_irq_low = false;
-    let mut calibration_prompt_counter: u32 = 0;
-    let mut touch_calibration_config: Option<TouchCalibrationConfig> = None;
     let mut calibration_index: usize = 0;
-    let mut calibration_points: [RawPoint; 3] = [RawPoint { x: 0, y: 0 }; 3];
+    let mut calibration_points: [RawPoint; 4] = [RawPoint { x: 0, y: 0 }; 4];
     let mut touch_cursor: Option<Point> = None;
+    let mut calibration_screen_dirty = false;
 
-    esp_println::println!("cal: tap corners in order UL -> UR -> LL");
-    esp_println::println!("cal: next tap UL");
+    if touch_calibration_config.is_none() {
+        esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
+        esp_println::println!("cal: next tap UL");
+    }
     esp_println::println!("boot: entering app loop");
 
     let mut previous_frame_flush = Instant::now();
     let mut rendered_frame_count: u32 = 0;
+    let mut last_boot_button_pressed = false;
 
     loop {
         let now = Instant::now();
@@ -222,9 +281,25 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         let calibration_corner = calibration_corner_for_index(calibration_index);
         let calibration_active = touch_calibration_config.is_none();
 
-        if calibration_active {
+        if calibration_active && calibration_screen_dirty {
             should_flush = true;
         }
+
+        // Check if BOOT button was pressed (rising edge) to trigger calibration.
+        let boot_button_pressed = boot_button.is_pressed();
+        if boot_button_pressed && !last_boot_button_pressed && !calibration_active {
+            esp_println::println!("cal: BOOT pressed during runtime, entering calibration");
+            touch_calibration_config = None;
+            calibration_index = 0;
+            calibration_points = [RawPoint { x: 0, y: 0 }; 4];
+            touch_cursor = None;
+            calibration_screen_dirty = true;
+            esp_println::println!(
+                "cal: tap corners in order UL -> UR -> LR -> LL"
+            );
+            esp_println::println!("cal: next tap UL");
+        }
+        last_boot_button_pressed = boot_button_pressed;
 
         touch_poll_counter = touch_poll_counter.wrapping_add(1);
         let touch_irq_low = touch_input.irq_is_low_for_log();
@@ -237,18 +312,10 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             last_touch_irq_low = touch_irq_low;
         }
 
-        if calibration_active && calibration_index < 3 {
-            calibration_prompt_counter = calibration_prompt_counter.wrapping_add(1);
-            if calibration_prompt_counter % 1200 == 0 {
-                let corner_label = ["UL", "UR", "LL"][calibration_index];
-                esp_println::println!("cal: next tap {}", corner_label);
-            }
-        }
-
         if let Some(raw_touch_event) = touch_input.read_raw_touch_event(&mut touch_spi_device) {
             match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
-                    if calibration_active && calibration_index < 3 {
+                    if calibration_active && calibration_index < 4 {
                         calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
                         calibration_index += 1;
                         esp_println::println!(
@@ -257,15 +324,18 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                             raw_x,
                             raw_y
                         );
-                        if calibration_index < 3 {
-                            let corner_label = ["UL", "UR", "LL"][calibration_index];
+                        if calibration_index < 4 {
+                            let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
                             esp_println::println!("cal: next tap {}", corner_label);
+                            calibration_screen_dirty = true;
                         } else {
-                            touch_calibration_config = Some(compute_calibration_three_point(
-                                calibration_points,
-                                width,
-                                height,
-                            ));
+                            let config =
+                                compute_calibration_four_point(calibration_points, width, height);
+                            let stored_touch_calibration_v2 = StoredTouchCalibrationV2::new(config);
+                            touch_calibration_flash_block
+                                .save(&stored_touch_calibration_v2)
+                                .expect("cal: failed to save calibration to flash");
+                            touch_calibration_config = Some(config);
                             calibration_just_completed = true;
                             if let Some(config) = touch_calibration_config {
                                 esp_println::println!(
@@ -298,6 +368,17 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                             );
                         }
                         cyd_sim.touch_down(mapped_x, mapped_y);
+                        if cyd_sim.take_calibration_request() {
+                            cyd_sim.touch_up();
+                            touch_calibration_config = None;
+                            calibration_index = 0;
+                            calibration_points = [RawPoint { x: 0, y: 0 }; 4];
+                            touch_cursor = None;
+                            calibration_screen_dirty = true;
+                            esp_println::println!("cal: requested from UI");
+                            esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
+                            esp_println::println!("cal: next tap UL");
+                        }
                         should_flush = true;
                     }
                 }
@@ -344,11 +425,13 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
             let render_start = Instant::now();
-            if calibration_active {
+            let render_calibration_active = touch_calibration_config.is_none();
+            if render_calibration_active {
                 frame_buffer.clear(Rgb565::BLACK);
                 if let Some(calibration_corner) = calibration_corner {
                     draw_calibration_cross(frame_buffer, calibration_corner, width, height);
                 }
+                calibration_screen_dirty = false;
             } else {
                 cyd_sim.render_to(frame_buffer);
                 if let Some(cursor) = touch_cursor {
@@ -360,7 +443,8 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             let flush_end = Instant::now();
 
             rendered_frame_count = rendered_frame_count.wrapping_add(1);
-            if FRAME_PROFILE_LOGGING && !calibration_active && rendered_frame_count % 60 == 0 {
+            if FRAME_PROFILE_LOGGING && !render_calibration_active && rendered_frame_count % 60 == 0
+            {
                 let render_ms = (flush_start - render_start).as_micros() as f32 / 1000.0;
                 let flush_ms = (flush_end - flush_start).as_micros() as f32 / 1000.0;
                 esp_println::println!(
@@ -383,63 +467,103 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     }
 }
 
-fn solve_affine_axis(
-    points: [RawPoint; 3],
-    screen: [Point; 3],
-    map_x_axis: bool,
-) -> (f32, f32, f32) {
-    let raw0_x = points[0].x as f32;
-    let raw0_y = points[0].y as f32;
-    let raw1_x = points[1].x as f32;
-    let raw1_y = points[1].y as f32;
-    let raw2_x = points[2].x as f32;
-    let raw2_y = points[2].y as f32;
-
-    let out0 = if map_x_axis {
-        screen[0].x as f32
-    } else {
-        screen[0].y as f32
-    };
-    let out1 = if map_x_axis {
-        screen[1].x as f32
-    } else {
-        screen[1].y as f32
-    };
-    let out2 = if map_x_axis {
-        screen[2].x as f32
-    } else {
-        screen[2].y as f32
-    };
-
-    let denominator =
-        raw0_x * (raw1_y - raw2_y) + raw1_x * (raw2_y - raw0_y) + raw2_x * (raw0_y - raw1_y);
+fn solve_3x3(system_matrix: [[f32; 3]; 3], rhs_vector: [f32; 3]) -> (f32, f32, f32) {
+    let determinant = system_matrix[0][0]
+        * (system_matrix[1][1] * system_matrix[2][2] - system_matrix[1][2] * system_matrix[2][1])
+        - system_matrix[0][1]
+            * (system_matrix[1][0] * system_matrix[2][2]
+                - system_matrix[1][2] * system_matrix[2][0])
+        + system_matrix[0][2]
+            * (system_matrix[1][0] * system_matrix[2][1]
+                - system_matrix[1][1] * system_matrix[2][0]);
 
     assert!(
-        denominator.abs() >= 0.001,
+        determinant.abs() >= 0.000_001,
         "cal: invalid touch calibration geometry"
     );
 
-    let axis_a = (out0 * (raw1_y - raw2_y) + out1 * (raw2_y - raw0_y) + out2 * (raw0_y - raw1_y))
-        / denominator;
-    let axis_b = (out0 * (raw2_x - raw1_x) + out1 * (raw0_x - raw2_x) + out2 * (raw1_x - raw0_x))
-        / denominator;
-    let axis_c = (out0 * (raw1_x * raw2_y - raw2_x * raw1_y)
-        + out1 * (raw2_x * raw0_y - raw0_x * raw2_y)
-        + out2 * (raw0_x * raw1_y - raw1_x * raw0_y))
-        / denominator;
+    let determinant_ax = rhs_vector[0]
+        * (system_matrix[1][1] * system_matrix[2][2] - system_matrix[1][2] * system_matrix[2][1])
+        - system_matrix[0][1]
+            * (rhs_vector[1] * system_matrix[2][2] - system_matrix[1][2] * rhs_vector[2])
+        + system_matrix[0][2]
+            * (rhs_vector[1] * system_matrix[2][1] - system_matrix[1][1] * rhs_vector[2]);
 
-    (axis_a, axis_b, axis_c)
+    let determinant_bx = system_matrix[0][0]
+        * (rhs_vector[1] * system_matrix[2][2] - system_matrix[1][2] * rhs_vector[2])
+        - rhs_vector[0]
+            * (system_matrix[1][0] * system_matrix[2][2]
+                - system_matrix[1][2] * system_matrix[2][0])
+        + system_matrix[0][2]
+            * (system_matrix[1][0] * rhs_vector[2] - rhs_vector[1] * system_matrix[2][0]);
+
+    let determinant_cx = system_matrix[0][0]
+        * (system_matrix[1][1] * rhs_vector[2] - rhs_vector[1] * system_matrix[2][1])
+        - system_matrix[0][1]
+            * (system_matrix[1][0] * rhs_vector[2] - rhs_vector[1] * system_matrix[2][0])
+        + rhs_vector[0]
+            * (system_matrix[1][0] * system_matrix[2][1]
+                - system_matrix[1][1] * system_matrix[2][0]);
+
+    (
+        determinant_ax / determinant,
+        determinant_bx / determinant,
+        determinant_cx / determinant,
+    )
 }
 
-fn compute_calibration_three_point(
-    points: [RawPoint; 3],
+fn solve_affine_axis(
+    points: [RawPoint; 4],
+    screen: [Point; 4],
+    map_x_axis: bool,
+) -> (f32, f32, f32) {
+    let mut sum_xx = 0.0;
+    let mut sum_xy = 0.0;
+    let mut sum_x = 0.0;
+    let mut sum_yy = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_xo = 0.0;
+    let mut sum_yo = 0.0;
+    let mut sum_o = 0.0;
+
+    for sample_index in 0..4 {
+        let raw_x = points[sample_index].x as f32;
+        let raw_y = points[sample_index].y as f32;
+        let output = if map_x_axis {
+            screen[sample_index].x as f32
+        } else {
+            screen[sample_index].y as f32
+        };
+
+        sum_xx += raw_x * raw_x;
+        sum_xy += raw_x * raw_y;
+        sum_x += raw_x;
+        sum_yy += raw_y * raw_y;
+        sum_y += raw_y;
+        sum_xo += raw_x * output;
+        sum_yo += raw_y * output;
+        sum_o += output;
+    }
+
+    let system_matrix = [
+        [sum_xx, sum_xy, sum_x],
+        [sum_xy, sum_yy, sum_y],
+        [sum_x, sum_y, 4.0],
+    ];
+    let rhs_vector = [sum_xo, sum_yo, sum_o];
+    solve_3x3(system_matrix, rhs_vector)
+}
+
+fn compute_calibration_four_point(
+    points: [RawPoint; 4],
     width: u16,
     height: u16,
 ) -> TouchCalibrationConfig {
     let ul = calibration_corner_center(CalibrationCorner::UpperLeft, width, height);
     let ur = calibration_corner_center(CalibrationCorner::UpperRight, width, height);
+    let lr = calibration_corner_center(CalibrationCorner::LowerRight, width, height);
     let ll = calibration_corner_center(CalibrationCorner::LowerLeft, width, height);
-    let screen_targets = [ul, ur, ll];
+    let screen_targets = [ul, ur, lr, ll];
 
     let (ax, bx, cx) = solve_affine_axis(points, screen_targets, true);
     let (ay, by, cy) = solve_affine_axis(points, screen_targets, false);
@@ -473,11 +597,37 @@ fn map_raw_to_screen(
     (mapped_x, mapped_y)
 }
 
+fn touch_calibration_config_is_finite(config: TouchCalibrationConfig) -> bool {
+    config.ax.is_finite()
+        && config.bx.is_finite()
+        && config.cx.is_finite()
+        && config.ay.is_finite()
+        && config.by.is_finite()
+        && config.cy.is_finite()
+}
+
+fn touch_calibration_checksum(magic: u32, version: u16, config: TouchCalibrationConfig) -> u32 {
+    let mut checksum = 0x811C_9DC5u32;
+    checksum = mix_checksum_word(checksum, magic);
+    checksum = mix_checksum_word(checksum, version as u32);
+    checksum = mix_checksum_word(checksum, config.ax.to_bits());
+    checksum = mix_checksum_word(checksum, config.bx.to_bits());
+    checksum = mix_checksum_word(checksum, config.cx.to_bits());
+    checksum = mix_checksum_word(checksum, config.ay.to_bits());
+    checksum = mix_checksum_word(checksum, config.by.to_bits());
+    mix_checksum_word(checksum, config.cy.to_bits())
+}
+
+fn mix_checksum_word(checksum: u32, word: u32) -> u32 {
+    checksum.rotate_left(5) ^ word.wrapping_mul(0x045D_9F3B)
+}
+
 fn calibration_corner_for_index(calibration_index: usize) -> Option<CalibrationCorner> {
     match calibration_index {
         0 => Some(CalibrationCorner::UpperLeft),
         1 => Some(CalibrationCorner::UpperRight),
-        2 => Some(CalibrationCorner::LowerLeft),
+        2 => Some(CalibrationCorner::LowerRight),
+        3 => Some(CalibrationCorner::LowerLeft),
         _ => None,
     }
 }
@@ -496,6 +646,10 @@ fn calibration_corner_center(
         CalibrationCorner::UpperRight => Point::new(
             width - 1 - CALIBRATION_CROSS_MARGIN,
             CALIBRATION_CROSS_MARGIN,
+        ),
+        CalibrationCorner::LowerRight => Point::new(
+            width - 1 - CALIBRATION_CROSS_MARGIN,
+            height - 1 - CALIBRATION_CROSS_MARGIN,
         ),
         CalibrationCorner::LowerLeft => Point::new(
             CALIBRATION_CROSS_MARGIN,
@@ -549,11 +703,6 @@ fn draw_touch_cursor(frame_buffer: &mut FrameBuffer, cursor: Point) {
     .into_styled(TOUCH_CURSOR_STYLE)
     .draw(frame_buffer)
     .expect("boot: failed to draw touch cursor");
-}
-
-fn remap_touch_for_display_rotation(x: f32, y: f32, width: f32, height: f32) -> (f32, f32) {
-    // Raw mapping now matches display orientation after calibration.
-    (x.clamp(0.0, width), y.clamp(0.0, height))
 }
 
 fn flush_full_frame(
