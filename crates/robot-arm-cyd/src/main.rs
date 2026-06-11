@@ -294,9 +294,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             calibration_points = [RawPoint { x: 0, y: 0 }; 4];
             touch_cursor = None;
             calibration_screen_dirty = true;
-            esp_println::println!(
-                "cal: tap corners in order UL -> UR -> LR -> LL"
-            );
+            esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
             esp_println::println!("cal: next tap UL");
         }
         last_boot_button_pressed = boot_button_pressed;
