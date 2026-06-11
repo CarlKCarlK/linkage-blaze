@@ -62,11 +62,11 @@ const PARAM_BEND_ELBOW: usize = 1;
 const PARAM_SPIN_WHOLE_ARM: usize = 4;
 const RK_INITIAL_STEP: f32 = 0.125;
 const RK_MIN_STEP: f32 = 0.001;
-const RK_PARAM_FULL_TRAVEL_SECONDS: f32 = 10.0;
+const RK_PARAM_FULL_TRAVEL_SECONDS: f32 = 0.5;
 const RK_MAX_TICK_SECONDS: f32 = 0.1;
 const RK_PAIRED_CANDIDATES: [(f32, f32); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)];
 const RK_CANDIDATE_COUNT: usize = SLIDER_COUNT + RK_PAIRED_CANDIDATES.len();
-const ARM_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_DARK_CYAN);
+const ARM_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_CYAN);
 const TARGET_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::RED);
 const SLIDER_TRACK_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2);

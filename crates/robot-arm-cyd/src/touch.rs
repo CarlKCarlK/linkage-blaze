@@ -8,12 +8,7 @@ pub enum TouchEvent {
 pub trait TouchInput {
     fn read_touch_event(
         &mut self,
-        display: &mut crate::display::Ili9341RectWriter<
-            impl embedded_hal::spi::SpiBus,
-            impl embedded_hal::digital::OutputPin,
-            impl embedded_hal::digital::OutputPin,
-            impl embedded_hal::digital::OutputPin,
-        >,
+        touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
     ) -> Option<TouchEvent>;
 }
 
@@ -25,21 +20,18 @@ const XPT2046_RAW_Y_MIN: u16 = 100;
 const XPT2046_RAW_Y_MAX: u16 = 3900;
 
 /// Concrete XPT2046 touch controller input for CYD with shared SPI.
-/// Hard-coded for CYD pins: touch CS on GPIO33, touch IRQ on GPIO36.
-pub struct Xpt2046TouchInput<TouchCs, TouchIrq> {
-    touch_cs: TouchCs,
+/// Hard-coded for CYD pin: touch IRQ on GPIO36.
+pub struct Xpt2046TouchInput<TouchIrq> {
     touch_irq: TouchIrq,
     was_pressed: bool,
 }
 
-impl<TouchCs, TouchIrq> Xpt2046TouchInput<TouchCs, TouchIrq>
+impl<TouchIrq> Xpt2046TouchInput<TouchIrq>
 where
-    TouchCs: embedded_hal::digital::OutputPin,
     TouchIrq: embedded_hal::digital::InputPin,
 {
-    pub fn new(touch_cs: TouchCs, touch_irq: TouchIrq) -> Self {
+    pub fn new(touch_irq: TouchIrq) -> Self {
         Self {
-            touch_cs,
             touch_irq,
             was_pressed: false,
         }
@@ -50,25 +42,17 @@ where
         self.touch_irq.is_low().unwrap_or(false)
     }
 
-    fn read_raw_xy<SPI, DC, RST, CS>(
+    fn read_raw_xy(
         &mut self,
-        display: &mut crate::display::Ili9341RectWriter<SPI, DC, RST, CS>,
-    ) -> Option<(u16, u16)>
-    where
-        SPI: embedded_hal::spi::SpiBus,
-        DC: embedded_hal::digital::OutputPin,
-        RST: embedded_hal::digital::OutputPin,
-        CS: embedded_hal::digital::OutputPin,
-    {
-        let _ = self.touch_cs.set_low();
-
+        touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
+    ) -> Option<(u16, u16)> {
         // XPT2046 command: 0xD1 (read Y+), 0x91 (read X+) with 12-bit resolution.
         let tx_buf = [0xD1u8, 0x00, 0x91, 0x00];
         let mut rx_buf = [0u8; 4];
 
-        display.touch_spi_transact(&tx_buf, &mut rx_buf);
-
-        let _ = self.touch_cs.set_high();
+        touch_spi_device
+            .transfer(&mut rx_buf, &tx_buf)
+            .expect("touch SPI transaction failed");
 
         // Extract 12-bit raw values (16-bit words, MSB-first).
         let raw_y = (((rx_buf[0] as u16) << 8) | (rx_buf[1] as u16)) >> 4;
@@ -94,26 +78,31 @@ where
 
         (screen_x, screen_y)
     }
+
+    pub fn read_touch_position_for_log(
+        &mut self,
+        touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
+    ) -> Option<(f32, f32, bool)> {
+        let irq_pressed = self.is_pressed();
+        self.read_raw_xy(touch_spi_device).map(|(raw_x, raw_y)| {
+            let (screen_x, screen_y) = Self::raw_to_screen(raw_x, raw_y);
+            (screen_x, screen_y, irq_pressed)
+        })
+    }
 }
 
-impl<TouchCs, TouchIrq> TouchInput for Xpt2046TouchInput<TouchCs, TouchIrq>
+impl<TouchIrq> TouchInput for Xpt2046TouchInput<TouchIrq>
 where
-    TouchCs: embedded_hal::digital::OutputPin,
     TouchIrq: embedded_hal::digital::InputPin,
 {
     fn read_touch_event(
         &mut self,
-        display: &mut crate::display::Ili9341RectWriter<
-            impl embedded_hal::spi::SpiBus,
-            impl embedded_hal::digital::OutputPin,
-            impl embedded_hal::digital::OutputPin,
-            impl embedded_hal::digital::OutputPin,
-        >,
+        touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
     ) -> Option<TouchEvent> {
         let is_pressed_now = self.is_pressed();
 
         if is_pressed_now {
-            if let Some((raw_x, raw_y)) = self.read_raw_xy(display) {
+            if let Some((raw_x, raw_y)) = self.read_raw_xy(touch_spi_device) {
                 let (screen_x, screen_y) = Self::raw_to_screen(raw_x, raw_y);
 
                 let event = if self.was_pressed {
