@@ -35,9 +35,14 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 static CYD_SIM: StaticCell<CydSim> = StaticCell::new();
 static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
-static DISPLAY_INTERFACE_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
 
+const DISPLAY_SPI_HZ: u32 = 60_000_000;
+const DISPLAY_INTERFACE_BUFFER_BYTES: usize = 4096;
+const FRAME_PROFILE_LOGGING: bool = true;
 const TOUCH_LOGGING: bool = false;
+
+static DISPLAY_INTERFACE_BUFFER: StaticCell<[u8; DISPLAY_INTERFACE_BUFFER_BYTES]> =
+    StaticCell::new();
 
 #[derive(Clone, Copy)]
 struct RawPoint {
@@ -99,7 +104,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
 
     esp_println::println!("boot: before display spi init");
     let spi_config = spi::master::Config::default()
-        .with_frequency(esp_hal::time::Rate::from_hz(40_000_000))
+        .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
         .with_mode(spi::Mode::_0);
     let spi = spi::master::Spi::new(p.SPI2, spi_config)
         .expect("boot: failed to configure display spi")
@@ -134,7 +139,8 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         .expect("boot: failed to create touch spi device");
     let mut touch_input = Xpt2046TouchInput::new(touch_irq);
 
-    let display_interface_buffer = DISPLAY_INTERFACE_BUFFER.init([0u8; 512]);
+    let display_interface_buffer =
+        DISPLAY_INTERFACE_BUFFER.init([0u8; DISPLAY_INTERFACE_BUFFER_BYTES]);
     let display_interface = SpiInterface::new(display_spi_device, dc, display_interface_buffer);
     esp_println::println!("boot: after display pin init");
 
@@ -205,6 +211,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     esp_println::println!("boot: entering app loop");
 
     let mut previous_frame_flush = Instant::now();
+    let mut rendered_frame_count: u32 = 0;
 
     loop {
         let now = Instant::now();
@@ -336,6 +343,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             previous_frame_flush = now;
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
+            let render_start = Instant::now();
             if calibration_active {
                 frame_buffer.clear(Rgb565::BLACK);
                 if let Some(calibration_corner) = calibration_corner {
@@ -347,7 +355,21 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                     draw_touch_cursor(frame_buffer, cursor);
                 }
             }
+            let flush_start = Instant::now();
             flush_full_frame(&mut display, frame_buffer, width, height);
+            let flush_end = Instant::now();
+
+            rendered_frame_count = rendered_frame_count.wrapping_add(1);
+            if FRAME_PROFILE_LOGGING && !calibration_active && rendered_frame_count % 60 == 0 {
+                let render_ms = (flush_start - render_start).as_micros() as f32 / 1000.0;
+                let flush_ms = (flush_end - flush_start).as_micros() as f32 / 1000.0;
+                esp_println::println!(
+                    "frame: period_ms={:.1} render_ms={:.1} flush_ms={:.1}",
+                    frame_dt_seconds * 1000.0,
+                    render_ms,
+                    flush_ms
+                );
+            }
         }
 
         alive_tick_count = alive_tick_count.wrapping_add(1);
@@ -355,7 +377,9 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             esp_println::println!("boot: alive");
         }
 
-        delay.delay_millis(1);
+        if !should_flush {
+            delay.delay_millis(1);
+        }
     }
 }
 
