@@ -4,10 +4,10 @@
 use core::cell::RefCell;
 
 use embedded_graphics::{
-    Drawable, Pixel,
+    Drawable,
     pixelcolor::Rgb565,
-    prelude::{DrawTarget, Point, Primitive, RgbColor},
-    primitives::{Circle, Line, PrimitiveStyle},
+    prelude::{DrawTarget, Point, Primitive, RgbColor, Size},
+    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
 };
 use embedded_hal_bus::spi::RefCellDevice;
 use esp_backtrace as _;
@@ -534,23 +534,13 @@ fn flush_full_frame(
     display: &mut impl DrawTarget<Color = Rgb565>,
     frame_buffer: &FrameBuffer,
     width: u16,
-    _height: u16,
+    height: u16,
 ) {
-    let width_usize = width as usize;
-    let pixel_iter = frame_buffer
-        .pixels()
-        .iter()
-        .enumerate()
-        .map(|(pixel_index, color_pixel)| {
-            let column = (pixel_index % width_usize) as i32;
-            let row = (pixel_index / width_usize) as i32;
-            Pixel(
-                embedded_graphics::prelude::Point::new(column, row),
-                *color_pixel,
-            )
-        });
-
-    if display.draw_iter(pixel_iter).is_err() {
-        panic!("boot: failed to draw framebuffer");
+    let full_screen = Rectangle::new(Point::new(0, 0), Size::new(width as u32, height as u32));
+    if display
+        .fill_contiguous(&full_screen, frame_buffer.pixels().iter().copied())
+        .is_err()
+    {
+        panic!("boot: failed to flush framebuffer");
     }
 }
