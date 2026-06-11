@@ -47,6 +47,12 @@ export class CydSim {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
         return v1;
     }
+    /**
+     * @param {number} dt_seconds
+     */
+    set_frame_dt_seconds(dt_seconds) {
+        wasm.cydsim_set_frame_dt_seconds(this.__wbg_ptr, dt_seconds);
+    }
     start_reverse_kinematics() {
         wasm.cydsim_start_reverse_kinematics(this.__wbg_ptr);
     }

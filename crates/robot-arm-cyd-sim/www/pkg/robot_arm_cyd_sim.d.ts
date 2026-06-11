@@ -9,6 +9,7 @@ export class CydSim {
     constructor();
     reverse_kinematics(): number;
     rgba(): Uint8Array;
+    set_frame_dt_seconds(dt_seconds: number): void;
     start_reverse_kinematics(): void;
     stop_reverse_kinematics(): void;
     tick_reverse_kinematics(dt_seconds: number): boolean;
@@ -28,6 +29,7 @@ export interface InitOutput {
     readonly cydsim_new: () => number;
     readonly cydsim_reverse_kinematics: (a: number) => number;
     readonly cydsim_rgba: (a: number) => [number, number];
+    readonly cydsim_set_frame_dt_seconds: (a: number, b: number) => void;
     readonly cydsim_start_reverse_kinematics: (a: number) => void;
     readonly cydsim_stop_reverse_kinematics: (a: number) => void;
     readonly cydsim_tick_reverse_kinematics: (a: number, b: number) => number;

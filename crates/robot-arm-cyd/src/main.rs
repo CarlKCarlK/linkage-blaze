@@ -210,6 +210,8 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     }
     esp_println::println!("boot: entering app loop");
 
+    let mut previous_frame_flush = Instant::now();
+
     loop {
         let now = Instant::now();
         let dt_seconds = (now - previous_tick).as_micros() as f32 / 1_000_000.0;
@@ -328,6 +330,10 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         }
 
         if should_flush {
+            let frame_dt_seconds = (now - previous_frame_flush).as_micros() as f32 / 1_000_000.0;
+            previous_frame_flush = now;
+            cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
+
             if calibration_active {
                 frame_buffer.clear(Rgb565::BLACK);
                 if let Some(calibration_corner) = calibration_corner {

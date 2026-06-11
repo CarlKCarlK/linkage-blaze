@@ -7,6 +7,7 @@ export const cydsim_is_reverse_kinematics_running: (a: number) => number;
 export const cydsim_new: () => number;
 export const cydsim_reverse_kinematics: (a: number) => number;
 export const cydsim_rgba: (a: number) => [number, number];
+export const cydsim_set_frame_dt_seconds: (a: number, b: number) => void;
 export const cydsim_start_reverse_kinematics: (a: number) => void;
 export const cydsim_stop_reverse_kinematics: (a: number) => void;
 export const cydsim_tick_reverse_kinematics: (a: number, b: number) => number;

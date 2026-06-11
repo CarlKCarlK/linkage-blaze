@@ -75,6 +75,11 @@ impl CydSim {
         self.sim.is_reverse_kinematics_running()
     }
 
+    pub fn set_frame_dt_seconds(&mut self, dt_seconds: f32) {
+        self.sim.set_frame_dt_seconds(dt_seconds);
+        self.sim.render_to(&mut self.frame_buffer);
+    }
+
     pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
         let running = self.sim.tick_reverse_kinematics(dt_seconds);
         self.sim.render_to(&mut self.frame_buffer);

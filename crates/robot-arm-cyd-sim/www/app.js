@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/robot_arm_cyd_sim.js?v=play-step-2";
+import init, { CydSim } from "./pkg/robot_arm_cyd_sim.js?v=shared-fps-1";
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
@@ -71,6 +71,7 @@ function tickReverseKinematics(timestamp) {
       : (timestamp - previousAnimationTimestamp) / 1000;
   previousAnimationTimestamp = timestamp;
 
+  sim.set_frame_dt_seconds(dtSeconds);
   const running = sim.tick_reverse_kinematics(dtSeconds);
   render();
   if (running) {

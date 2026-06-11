@@ -45,6 +45,9 @@ const VIEW_SLIDER_Y: i32 = 226;
 const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
+const FPS_REPORT_WIDTH: i32 = 7 * TEXT_CHAR_WIDTH;
+const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH - 2;
+const FPS_REPORT_TOP: i32 = SCREEN_HEIGHT as i32 - 11;
 const TARGET_CONTROL_TOP: i32 = 17;
 const TARGET_BUTTON_WIDTH: u32 = 42;
 const TARGET_BUTTON_HEIGHT: u32 = 14;
@@ -63,9 +66,10 @@ const PARAM_BEND_ELBOW: usize = 1;
 const PARAM_SPIN_WHOLE_ARM: usize = 4;
 const RK_INITIAL_STEP: f32 = 0.125;
 const RK_MIN_STEP: f32 = 0.001;
-const RK_PARAM_FULL_TRAVEL_SECONDS: f32 = 0.5;
+const RK_VISIBLE_PARAM_POINTS_PER_SECOND: f32 = 0.6;
 const RK_MAX_TICK_SECONDS: f32 = 0.1;
-const RK_SINGLE_STEP_VISIBLE_PARAM_STEP: f32 = 1.0;
+const RK_SINGLE_STEP_VISIBLE_PARAM_STEP: f32 = 0.01;
+const RK_SEARCH_CANDIDATES_PER_TICK: usize = 4;
 const RK_PAIRED_CANDIDATES: [(f32, f32); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)];
 const RK_CANDIDATE_COUNT: usize = SLIDER_COUNT + RK_PAIRED_CANDIDATES.len();
 const ARM_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_CYAN);
@@ -121,6 +125,7 @@ pub struct CydSim {
     active_control: Option<ActiveControl>,
     reverse_kinematics_run: Option<ReverseKinematicsRun>,
     reverse_kinematics_playing: bool,
+    frames_per_second: Option<u16>,
 }
 
 impl CydSim {
@@ -135,6 +140,7 @@ impl CydSim {
             active_control: None,
             reverse_kinematics_run: None,
             reverse_kinematics_playing: false,
+            frames_per_second: None,
         }
     }
 
@@ -155,6 +161,15 @@ impl CydSim {
         self.draw_sliders(buffer);
         self.draw_arm(buffer);
         self.draw_report(buffer);
+        self.draw_fps(buffer);
+    }
+
+    pub fn set_frame_dt_seconds(&mut self, dt_seconds: f32) {
+        if dt_seconds <= 0.0 {
+            return;
+        }
+
+        self.frames_per_second = Some(round_to_u32(1.0 / dt_seconds).min(999) as u16);
     }
 
     pub fn touch_down(&mut self, x: f32, y: f32) {
@@ -244,10 +259,16 @@ impl CydSim {
             return false;
         };
 
-        let search_running = run.tick_search();
+        let mut search_running = false;
+        for _ in 0..RK_SEARCH_CANDIDATES_PER_TICK {
+            if !run.tick_search_candidate() {
+                break;
+            }
+            search_running = true;
+        }
         let visible_moving = move_params_toward(
             &mut self.params,
-            &run.search_params,
+            &run.best_params,
             reverse_kinematics_visible_param_step(dt_seconds),
         );
         let running = search_running || visible_moving;
@@ -267,10 +288,10 @@ impl CydSim {
             return false;
         };
 
-        let search_running = run.tick_search();
+        let search_running = run.tick_search_candidate();
         let visible_moving = move_params_toward(
             &mut self.params,
-            &run.search_params,
+            &run.best_params,
             RK_SINGLE_STEP_VISIBLE_PARAM_STEP,
         );
         let running = search_running || visible_moving;
@@ -587,6 +608,19 @@ impl CydSim {
         .ok();
     }
 
+    fn draw_fps(&self, buffer: &mut FrameBuffer) {
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
+        let mut report = FpsReport::new();
+        Text::with_baseline(
+            report.as_str(self.frames_per_second),
+            Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(buffer)
+        .ok();
+    }
+
     fn pose_to_screen(&self, pose: Pose) -> Point {
         let Vec3([x, y, z]) = pose.position();
         self.world_to_screen(x, y, -z)
@@ -748,6 +782,7 @@ struct Target {
 #[derive(Clone, Copy)]
 struct ReverseKinematicsRun {
     search_params: [f32; 6],
+    best_params: [f32; 6],
     target: Target,
     best_distance: f32,
     step: f32,
@@ -777,12 +812,31 @@ impl ReverseKinematicsRun {
     fn new(params: &[f32; 6], target: Target) -> Self {
         Self {
             search_params: *params,
+            best_params: *params,
             target,
             best_distance: target_distance(params, target),
             step: RK_INITIAL_STEP,
             candidate_index: 0,
             sweep_improved: false,
             phase: ReverseKinematicsPhase::BeginCandidate,
+        }
+    }
+
+    fn tick_search_candidate(&mut self) -> bool {
+        let candidate_index = self.candidate_index;
+        let mut searched = false;
+
+        loop {
+            if !self.tick_search() {
+                return searched;
+            }
+
+            searched = true;
+            if matches!(self.phase, ReverseKinematicsPhase::BeginCandidate)
+                && self.candidate_index != candidate_index
+            {
+                return true;
+            }
         }
     }
 
@@ -885,6 +939,7 @@ impl ReverseKinematicsRun {
         let distance = target_distance(&self.search_params, self.target);
         if distance < self.best_distance {
             self.best_distance = distance;
+            self.best_params = self.search_params;
             self.sweep_improved = true;
             true
         } else {
@@ -916,7 +971,7 @@ fn move_params_toward(params: &mut [f32; 6], target_params: &[f32; 6], max_chang
 }
 
 fn reverse_kinematics_visible_param_step(dt_seconds: f32) -> f32 {
-    dt_seconds.clamp(0.0, RK_MAX_TICK_SECONDS) / RK_PARAM_FULL_TRAVEL_SECONDS
+    dt_seconds.clamp(0.0, RK_MAX_TICK_SECONDS) * RK_VISIBLE_PARAM_POINTS_PER_SECOND
 }
 
 fn apply_paired_candidate(params: &mut [f32; 6], pair_index: usize, step: f32) -> bool {
@@ -1130,6 +1185,59 @@ impl DistanceReport {
     }
 }
 
+struct FpsReport {
+    bytes: [u8; 7],
+    len: usize,
+}
+
+impl FpsReport {
+    fn new() -> Self {
+        Self {
+            bytes: *b"-- fps ",
+            len: 6,
+        }
+    }
+
+    fn as_str(&mut self, value: Option<u16>) -> &str {
+        let Some(value) = value else {
+            return core::str::from_utf8(&self.bytes[..self.len]).expect("FPS report is ASCII");
+        };
+
+        let value = value.min(999);
+        let hundreds = value / 100;
+        let tens = (value / 10) % 10;
+        let ones = value % 10;
+
+        if hundreds > 0 {
+            self.bytes[0] = b'0' + hundreds as u8;
+            self.bytes[1] = b'0' + tens as u8;
+            self.bytes[2] = b'0' + ones as u8;
+            self.bytes[3] = b' ';
+            self.bytes[4] = b'f';
+            self.bytes[5] = b'p';
+            self.bytes[6] = b's';
+            self.len = 7;
+        } else if tens > 0 {
+            self.bytes[0] = b'0' + tens as u8;
+            self.bytes[1] = b'0' + ones as u8;
+            self.bytes[2] = b' ';
+            self.bytes[3] = b'f';
+            self.bytes[4] = b'p';
+            self.bytes[5] = b's';
+            self.len = 6;
+        } else {
+            self.bytes[0] = b'0' + ones as u8;
+            self.bytes[1] = b' ';
+            self.bytes[2] = b'f';
+            self.bytes[3] = b'p';
+            self.bytes[4] = b's';
+            self.len = 5;
+        }
+
+        core::str::from_utf8(&self.bytes[..self.len]).expect("FPS report is ASCII")
+    }
+}
+
 pub struct FrameBuffer {
     pixels: [Rgb565; SCREEN_PIXELS],
 }
@@ -1187,7 +1295,10 @@ impl OriginDimensions for FrameBuffer {
 
 #[cfg(test)]
 mod tests {
-    use super::{CydSim, reverse_kinematics_visible_param_step};
+    use super::{
+        CydSim, RK_SINGLE_STEP_VISIBLE_PARAM_STEP, RK_VISIBLE_PARAM_POINTS_PER_SECOND,
+        reverse_kinematics_visible_param_step,
+    };
 
     #[test]
     fn test_reverse_kinematics_does_not_increase_distance() {
@@ -1248,5 +1359,28 @@ mod tests {
 
         assert!(!sim.is_reverse_kinematics_running());
         assert_ne!(sim.params, before);
+        assert!(max_param_delta(before, sim.params) <= RK_SINGLE_STEP_VISIBLE_PARAM_STEP + 1e-6);
+    }
+
+    #[test]
+    fn test_reverse_kinematics_long_tick_uses_bounded_speed() {
+        let mut sim = CydSim::new();
+        let before = sim.params;
+        sim.start_reverse_kinematics();
+
+        sim.tick_reverse_kinematics(1.0);
+
+        assert!(max_param_delta(before, sim.params) <= 0.1 * RK_VISIBLE_PARAM_POINTS_PER_SECOND);
+    }
+
+    fn max_param_delta(before: [f32; 6], after: [f32; 6]) -> f32 {
+        let mut max_delta = 0.0;
+        for (before, after) in before.iter().zip(after.iter()) {
+            let delta = (after - before).abs();
+            if delta > max_delta {
+                max_delta = delta;
+            }
+        }
+        max_delta
     }
 }
