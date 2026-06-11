@@ -108,16 +108,10 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     esp_println::println!("boot: after cyd sim init");
 
     let boot_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
-    let force_calibration = boot_button.is_pressed();
-    if force_calibration {
-        esp_println::println!("cal: BOOT held, ignoring stored calibration");
-    }
 
     let [mut touch_calibration_flash_block] =
         FlashBlockEsp::new_array::<1>(p.FLASH).expect("boot: failed to create flash block");
-    let mut touch_calibration_config = if force_calibration {
-        None
-    } else {
+    let mut touch_calibration_config =
         match touch_calibration_flash_block.load::<TouchCalibrationConfig>() {
             Ok(Some(touch_calibration_config)) => {
                 if touch_calibration_config_is_finite(touch_calibration_config) {
@@ -136,8 +130,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                 esp_println::println!("cal: failed to load calibration from flash: {:?}", error);
                 None
             }
-        }
-    };
+        };
 
     esp_println::println!("boot: before display spi init");
     let spi_config = spi::master::Config::default()
