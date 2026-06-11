@@ -30,10 +30,6 @@ where
         self.touch_irq.is_low().unwrap_or(false)
     }
 
-    pub fn irq_is_low_for_log(&mut self) -> bool {
-        self.is_pressed()
-    }
-
     fn read_single_axis(
         touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
         command: u8,

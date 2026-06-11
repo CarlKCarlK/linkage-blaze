@@ -139,6 +139,11 @@ pub struct CydSim {
 }
 
 impl CydSim {
+    pub const WIDTH: usize = SCREEN_WIDTH;
+    pub const HEIGHT: usize = SCREEN_HEIGHT;
+    pub const WIDTH_U16: u16 = Self::WIDTH as u16;
+    pub const HEIGHT_U16: u16 = Self::HEIGHT as u16;
+
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -158,12 +163,12 @@ impl CydSim {
 
     #[must_use]
     pub const fn width(&self) -> usize {
-        SCREEN_WIDTH
+        Self::WIDTH
     }
 
     #[must_use]
     pub const fn height(&self) -> usize {
-        SCREEN_HEIGHT
+        Self::HEIGHT
     }
 
     pub fn render_to(&self, buffer: &mut FrameBuffer) {

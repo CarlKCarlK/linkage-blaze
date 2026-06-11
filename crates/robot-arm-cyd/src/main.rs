@@ -2,6 +2,7 @@
 #![no_main]
 
 use core::cell::RefCell;
+use core::convert::Infallible;
 
 use device_envoy_esp::{
     button::{Button as _, ButtonEsp, PressedTo},
@@ -37,16 +38,8 @@ use touch::{RawTouchEvent, Xpt2046TouchInput};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-static CYD_SIM: StaticCell<CydSim> = StaticCell::new();
-static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
-
 const DISPLAY_SPI_HZ: u32 = 60_000_000;
-const DISPLAY_INTERFACE_BUFFER_BYTES: usize = 4096;
-const FRAME_PROFILE_LOGGING: bool = false;
-const TOUCH_LOGGING: bool = false;
-
-static DISPLAY_INTERFACE_BUFFER: StaticCell<[u8; DISPLAY_INTERFACE_BUFFER_BYTES]> =
-    StaticCell::new();
+const SPI_BUFFER_LEN: usize = 512;
 
 #[derive(Clone, Copy)]
 struct RawPoint {
@@ -72,6 +65,12 @@ enum CalibrationCorner {
     LowerLeft,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CalibrationCompletion {
+    NotCompleted,
+    JustCompleted,
+}
+
 const CALIBRATION_CROSS_MARGIN: i32 = 28;
 const CALIBRATION_CROSS_HALF_SIZE: i32 = 18;
 const CALIBRATION_CENTER_DOT_RADIUS: i32 = 3;
@@ -82,35 +81,47 @@ const CALIBRATION_CENTER_DOT_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_fill(Rgb565::WHITE);
 const TOUCH_CURSOR_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CYAN);
 
-#[esp_hal::main]
-fn main() -> ! {
-    let p = esp_hal::init(Config::default());
-    esp_println::logger::init_logger(log::LevelFilter::Info);
-    esp_println::println!("boot: after esp_hal::init");
-    run_after_init(p)
+#[derive(Clone, Copy, Debug)]
+enum MainError {
+    CreateFlashBlock,
+    ConfigureDisplaySpi,
+    CreateDisplaySpiDevice,
+    ConfigureTouchSpi,
+    CreateTouchSpiDevice,
+    InitDisplay,
 }
 
-fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
-    let mut delay = Delay::new();
+#[esp_hal::main]
+fn main() -> ! {
+    let err = inner_main().unwrap_err();
+    panic!("{err:?}");
+}
 
-    esp_println::println!("boot: before cyd sim init");
-    let cyd_sim = CYD_SIM.init_with(CydSim::new);
-    esp_println::println!("boot: after cyd sim new");
-    esp_println::println!("boot: before frame buffer init");
+fn allocate_buffers() -> (&'static mut FrameBuffer, &'static mut [u8; SPI_BUFFER_LEN]) {
+    static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
     let frame_buffer = FRAME_BUFFER.init_with(FrameBuffer::new);
-    esp_println::println!("boot: after frame buffer init");
-    esp_println::println!("boot: before cyd sim render");
+
+    static SPI_BUFFER: StaticCell<[u8; SPI_BUFFER_LEN]> = StaticCell::new();
+    let spi_buffer = SPI_BUFFER.init([0u8; SPI_BUFFER_LEN]);
+
+    (frame_buffer, spi_buffer)
+}
+
+fn inner_main() -> Result<Infallible, MainError> {
+    let p = esp_hal::init(Config::default());
+    esp_println::logger::init_logger(log::LevelFilter::Info);
+
+    let mut delay = Delay::new(); // todo00 use Embassy timers?
+
+    let (frame_buffer, spi_buffer) = allocate_buffers();
+    let mut cyd_sim = CydSim::new(); // todo000 review this
+
     cyd_sim.render_to(frame_buffer);
-    esp_println::println!("boot: after cyd sim render");
-    let mut calibration_just_completed: bool = false;
-    let width = cyd_sim.width() as u16;
-    let height = cyd_sim.height() as u16;
-    esp_println::println!("boot: after cyd sim init");
 
-    let boot_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
-
+    let mut calibration_completion = CalibrationCompletion::NotCompleted;
+    let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
     let [mut touch_calibration_flash_block] =
-        FlashBlockEsp::new_array::<1>(p.FLASH).expect("boot: failed to create flash block");
+        FlashBlockEsp::new_array::<1>(p.FLASH).map_err(|_| MainError::CreateFlashBlock)?;
     let mut touch_calibration_config =
         match touch_calibration_flash_block.load::<TouchCalibrationConfig>() {
             Ok(Some(touch_calibration_config)) => {
@@ -132,19 +143,16 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             }
         };
 
-    esp_println::println!("boot: before display spi init");
     let spi_config = spi::master::Config::default()
         .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
         .with_mode(spi::Mode::_0);
     let spi = spi::master::Spi::new(p.SPI2, spi_config)
-        .expect("boot: failed to configure display spi")
+        .map_err(|_| MainError::ConfigureDisplaySpi)?
         .with_sck(p.GPIO14)
         .with_mosi(p.GPIO13)
         .with_miso(p.GPIO12);
     let spi_bus = RefCell::new(spi);
-    esp_println::println!("boot: after display spi init");
 
-    esp_println::println!("boot: before display pin init");
     let display_cs = Output::new(p.GPIO15, Level::High, OutputConfig::default());
     let dc = Output::new(p.GPIO2, Level::Low, OutputConfig::default());
     let rst = Output::new(p.GPIO4, Level::High, OutputConfig::default());
@@ -153,28 +161,24 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     let mut display_backlight = Output::new(p.GPIO21, Level::High, OutputConfig::default());
 
     let display_spi_device = RefCellDevice::new_no_delay(&spi_bus, display_cs)
-        .expect("boot: failed to create display spi device");
+        .map_err(|_| MainError::CreateDisplaySpiDevice)?;
 
     // Touch has its own dedicated SPI bus (VSPI/SPI3) on GPIO25/32/39.
     let touch_spi_config = spi::master::Config::default()
         .with_frequency(esp_hal::time::Rate::from_hz(2_500_000))
         .with_mode(spi::Mode::_0);
     let touch_spi = spi::master::Spi::new(p.SPI3, touch_spi_config)
-        .expect("boot: failed to configure touch spi")
+        .map_err(|_| MainError::ConfigureTouchSpi)?
         .with_sck(p.GPIO25)
         .with_mosi(p.GPIO32)
         .with_miso(p.GPIO39);
     let touch_spi_bus = RefCell::new(touch_spi);
     let mut touch_spi_device = RefCellDevice::new_no_delay(&touch_spi_bus, touch_cs)
-        .expect("boot: failed to create touch spi device");
+        .map_err(|_| MainError::CreateTouchSpiDevice)?;
     let mut touch_input = Xpt2046TouchInput::new(touch_irq);
 
-    let display_interface_buffer =
-        DISPLAY_INTERFACE_BUFFER.init([0u8; DISPLAY_INTERFACE_BUFFER_BYTES]);
-    let display_interface = SpiInterface::new(display_spi_device, dc, display_interface_buffer);
-    esp_println::println!("boot: after display pin init");
+    let display_interface = SpiInterface::new(display_spi_device, dc, spi_buffer);
 
-    esp_println::println!("boot: before display init");
     let mut display = Builder::new(ILI9341Rgb565, display_interface)
         .reset_pin(rst)
         .display_size(240, 320)
@@ -186,32 +190,34 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                 .rotate(Rotation::Deg180),
         )
         .init(&mut delay)
-        .expect("boot: failed to initialize mipidsi display");
-    esp_println::println!("boot: after display init");
+        .map_err(|_| MainError::InitDisplay)?;
 
     display_backlight.set_high();
 
-    esp_println::println!("boot: before initial frame flush");
     cyd_sim.touch_up();
     // Keep RK off while validating touch behavior.
     // cyd_sim.start_reverse_kinematics();
-    esp_println::println!("boot: RK off, touch test mode");
     if touch_calibration_config.is_some() {
         cyd_sim.render_to(frame_buffer);
     } else {
         frame_buffer.clear(Rgb565::BLACK);
         if let Some(calibration_corner) = calibration_corner_for_index(0) {
-            draw_calibration_cross(frame_buffer, calibration_corner, width, height);
+            draw_calibration_cross(
+                frame_buffer,
+                calibration_corner,
+                CydSim::WIDTH_U16,
+                CydSim::HEIGHT_U16,
+            );
         }
     }
-    flush_full_frame(&mut display, frame_buffer, width, height);
-    esp_println::println!("boot: after initial frame flush");
+    flush_full_frame(
+        &mut display,
+        frame_buffer,
+        CydSim::WIDTH_U16,
+        CydSim::HEIGHT_U16,
+    );
 
     let mut previous_tick = Instant::now();
-    let mut alive_tick_count: u32 = 0;
-    let mut touch_poll_counter: u32 = 0;
-    let mut touch_move_log_counter: u32 = 0;
-    let mut last_touch_irq_low = false;
     let mut calibration_index: usize = 0;
     let mut calibration_points: [RawPoint; 4] = [RawPoint { x: 0, y: 0 }; 4];
     let mut touch_cursor: Option<Point> = None;
@@ -221,11 +227,9 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
         esp_println::println!("cal: next tap UL");
     }
-    esp_println::println!("boot: entering app loop");
 
     let mut previous_frame_flush = Instant::now();
-    let mut rendered_frame_count: u32 = 0;
-    let mut last_boot_button_pressed = false;
+    let mut last_calibration_button_pressed = false;
 
     loop {
         let now = Instant::now();
@@ -239,13 +243,15 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             should_flush = true;
         }
 
-        // Check if BOOT button was pressed (rising edge) to trigger/restart calibration.
-        let boot_button_pressed = boot_button.is_pressed();
-        if boot_button_pressed && !last_boot_button_pressed {
+        // Check if calibration button was pressed (rising edge) to trigger/restart calibration.
+        let calibration_button_pressed = calibration_button.is_pressed();
+        if calibration_button_pressed && !last_calibration_button_pressed {
             if !calibration_active {
-                esp_println::println!("cal: BOOT pressed during runtime, entering calibration");
+                esp_println::println!(
+                    "cal: calibration button pressed during runtime, entering calibration"
+                );
             } else {
-                esp_println::println!("cal: BOOT pressed, restarting calibration");
+                esp_println::println!("cal: calibration button pressed, restarting calibration");
             }
             touch_calibration_config = None;
             calibration_index = 0;
@@ -257,18 +263,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
             esp_println::println!("cal: next tap UL");
         }
-        last_boot_button_pressed = boot_button_pressed;
-
-        touch_poll_counter = touch_poll_counter.wrapping_add(1);
-        let touch_irq_low = touch_input.irq_is_low_for_log();
-        if TOUCH_LOGGING && touch_irq_low != last_touch_irq_low {
-            esp_println::println!("touch: irq_low={} (state change)", touch_irq_low);
-            last_touch_irq_low = touch_irq_low;
-        } else if TOUCH_LOGGING && !calibration_active && touch_poll_counter % 1000 == 0 {
-            esp_println::println!("touch: heartbeat irq_low={}", touch_irq_low);
-        } else {
-            last_touch_irq_low = touch_irq_low;
-        }
+        last_calibration_button_pressed = calibration_button_pressed;
 
         if let Some(raw_touch_event) = touch_input.read_raw_touch_event(&mut touch_spi_device) {
             match raw_touch_event {
@@ -287,13 +282,16 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                             esp_println::println!("cal: next tap {}", corner_label);
                             calibration_screen_dirty = true;
                         } else {
-                            let config =
-                                compute_calibration_four_point(calibration_points, width, height);
+                            let config = compute_calibration_four_point(
+                                calibration_points,
+                                CydSim::WIDTH_U16,
+                                CydSim::HEIGHT_U16,
+                            );
                             touch_calibration_flash_block
                                 .save(&config)
                                 .expect("cal: failed to save calibration to flash");
                             touch_calibration_config = Some(config);
-                            calibration_just_completed = true;
+                            calibration_completion = CalibrationCompletion::JustCompleted;
                             if let Some(config) = touch_calibration_config {
                                 esp_println::println!(
                                     "cal: done ax={:.5} bx={:.5} cx={:.1} ay={:.5} by={:.5} cy={:.1}",
@@ -313,17 +311,14 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                     }
 
                     if let Some(config) = touch_calibration_config {
-                        let (mapped_x, mapped_y) =
-                            map_raw_to_screen(raw_x, raw_y, config, width as f32, height as f32);
+                        let (mapped_x, mapped_y) = map_raw_to_screen(
+                            raw_x,
+                            raw_y,
+                            config,
+                            CydSim::WIDTH_U16 as f32,
+                            CydSim::HEIGHT_U16 as f32,
+                        );
                         touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        if TOUCH_LOGGING {
-                            esp_println::println!(
-                                "touch: down x={:.1} y={:.1} irq_low={}",
-                                mapped_x,
-                                mapped_y,
-                                touch_irq_low
-                            );
-                        }
                         cyd_sim.touch_down(mapped_x, mapped_y);
                         if cyd_sim.take_calibration_request() {
                             cyd_sim.touch_up();
@@ -342,29 +337,20 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                 }
                 RawTouchEvent::Move { raw_x, raw_y } => {
                     if let Some(config) = touch_calibration_config {
-                        let (mapped_x, mapped_y) =
-                            map_raw_to_screen(raw_x, raw_y, config, width as f32, height as f32);
+                        let (mapped_x, mapped_y) = map_raw_to_screen(
+                            raw_x,
+                            raw_y,
+                            config,
+                            CydSim::WIDTH_U16 as f32,
+                            CydSim::HEIGHT_U16 as f32,
+                        );
                         touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        if TOUCH_LOGGING {
-                            touch_move_log_counter = touch_move_log_counter.wrapping_add(1);
-                        }
-                        if TOUCH_LOGGING && touch_move_log_counter % 25 == 0 {
-                            esp_println::println!(
-                                "touch: move x={:.1} y={:.1} irq_low={}",
-                                mapped_x,
-                                mapped_y,
-                                touch_irq_low
-                            );
-                        }
                         cyd_sim.touch_move(mapped_x, mapped_y);
                         should_flush = true;
                     }
                 }
                 RawTouchEvent::Up => {
                     if touch_calibration_config.is_some() {
-                        if TOUCH_LOGGING {
-                            esp_println::println!("touch: up irq_low={}", touch_irq_low);
-                        }
                         cyd_sim.touch_up();
                     }
                     touch_cursor = None;
@@ -372,9 +358,9 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             }
         }
 
-        if calibration_just_completed {
+        if calibration_completion == CalibrationCompletion::JustCompleted {
             should_flush = true;
-            calibration_just_completed = false;
+            calibration_completion = CalibrationCompletion::NotCompleted;
         }
 
         if should_flush {
@@ -382,12 +368,16 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             previous_frame_flush = now;
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
-            let render_start = Instant::now();
             let render_calibration_active = touch_calibration_config.is_none();
             if render_calibration_active {
                 frame_buffer.clear(Rgb565::BLACK);
                 if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
-                    draw_calibration_cross(frame_buffer, calibration_corner, width, height);
+                    draw_calibration_cross(
+                        frame_buffer,
+                        calibration_corner,
+                        CydSim::WIDTH_U16,
+                        CydSim::HEIGHT_U16,
+                    );
                 }
                 calibration_screen_dirty = false;
             } else {
@@ -396,27 +386,12 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                     draw_touch_cursor(frame_buffer, cursor);
                 }
             }
-            let flush_start = Instant::now();
-            flush_full_frame(&mut display, frame_buffer, width, height);
-            let flush_end = Instant::now();
-
-            rendered_frame_count = rendered_frame_count.wrapping_add(1);
-            if FRAME_PROFILE_LOGGING && !render_calibration_active && rendered_frame_count % 60 == 0
-            {
-                let render_ms = (flush_start - render_start).as_micros() as f32 / 1000.0;
-                let flush_ms = (flush_end - flush_start).as_micros() as f32 / 1000.0;
-                esp_println::println!(
-                    "frame: period_ms={:.1} render_ms={:.1} flush_ms={:.1}",
-                    frame_dt_seconds * 1000.0,
-                    render_ms,
-                    flush_ms
-                );
-            }
-        }
-
-        alive_tick_count = alive_tick_count.wrapping_add(1);
-        if TOUCH_LOGGING && !calibration_active && alive_tick_count % 60 == 0 {
-            esp_println::println!("boot: alive");
+            flush_full_frame(
+                &mut display,
+                frame_buffer,
+                CydSim::WIDTH_U16,
+                CydSim::HEIGHT_U16,
+            );
         }
 
         if !should_flush {
