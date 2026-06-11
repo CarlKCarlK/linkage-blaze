@@ -111,7 +111,6 @@ const LINKAGE: Linkage<6, 24> = Linkage::start()
     .forward(1.0);
 
 pub struct CydSim {
-    buffer: FrameBuffer,
     params: [f32; 6],
     xy_mix: f32,
     z_mix: f32,
@@ -124,8 +123,7 @@ pub struct CydSim {
 impl CydSim {
     #[must_use]
     pub fn new() -> Self {
-        let mut sim = Self {
-            buffer: FrameBuffer::new(),
+        Self {
             params: [0.5, 0.5, 0.0, 0.5, 0.5, 0.5],
             xy_mix: 0.5 + 30.0 / 360.0,
             z_mix: 0.3,
@@ -133,9 +131,7 @@ impl CydSim {
             target_seed: 0,
             active_control: None,
             reverse_kinematics_run: None,
-        };
-        sim.render();
-        sim
+        }
     }
 
     #[must_use]
@@ -148,9 +144,13 @@ impl CydSim {
         SCREEN_HEIGHT
     }
 
-    #[must_use]
-    pub fn pixels(&self) -> &[Rgb565; SCREEN_PIXELS] {
-        self.buffer.pixels()
+    pub fn render_to(&self, buffer: &mut FrameBuffer) {
+        buffer.clear(Rgb565::BLACK);
+        self.draw_grid(buffer);
+        self.draw_target(buffer);
+        self.draw_sliders(buffer);
+        self.draw_arm(buffer);
+        self.draw_report(buffer);
     }
 
     pub fn touch_down(&mut self, x: f32, y: f32) {
@@ -159,14 +159,12 @@ impl CydSim {
             self.reverse_kinematics_run = None;
             self.target_seed = self.target_seed.wrapping_sub(1);
             self.active_control = None;
-            self.render();
             return;
         }
         if matches!(self.active_control, Some(ActiveControl::NextTarget)) {
             self.reverse_kinematics_run = None;
             self.target_seed = self.target_seed.wrapping_add(1);
             self.active_control = None;
-            self.render();
             return;
         }
         if matches!(
@@ -175,7 +173,6 @@ impl CydSim {
         ) {
             self.start_reverse_kinematics();
             self.active_control = None;
-            self.render();
             return;
         }
         if matches!(
@@ -184,7 +181,6 @@ impl CydSim {
         ) {
             self.stop_reverse_kinematics();
             self.active_control = None;
-            self.render();
             return;
         }
         self.update_touch(x, y);
@@ -229,7 +225,6 @@ impl CydSim {
         if running {
             self.reverse_kinematics_run = Some(run);
         }
-        self.render();
         running
     }
 
@@ -239,9 +234,7 @@ impl CydSim {
     /// shrinks the step when stuck.
     pub fn reverse_kinematics(&mut self) -> f32 {
         let target = target_from_seed(self.target_seed);
-        let distance = reverse_kinematics(&mut self.params, target);
-        self.render();
-        distance
+        reverse_kinematics(&mut self.params, target)
     }
 
     fn update_touch(&mut self, x: f32, y: f32) {
@@ -275,19 +268,9 @@ impl CydSim {
             ActiveControl::StartReverseKinematics => {}
             ActiveControl::StopReverseKinematics => {}
         }
-        self.render();
     }
 
-    fn render(&mut self) {
-        self.buffer.clear(Rgb565::BLACK);
-        self.draw_grid();
-        self.draw_target();
-        self.draw_sliders();
-        self.draw_arm();
-        self.draw_report();
-    }
-
-    fn draw_grid(&mut self) {
+    fn draw_grid(&self, buffer: &mut FrameBuffer) {
         let style = grid_stroke_style(self.zoom);
         for grid in -4..=4 {
             let grid = grid as f32;
@@ -296,19 +279,19 @@ impl CydSim {
                 self.world_to_screen(grid, 4.0, 0.0),
             )
             .into_styled(style)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
             Line::new(
                 self.world_to_screen(-4.0, grid, 0.0),
                 self.world_to_screen(4.0, grid, 0.0),
             )
             .into_styled(style)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
         }
     }
 
-    fn draw_arm(&mut self) {
+    fn draw_arm(&self, buffer: &mut FrameBuffer) {
         let rod_width = zoomed_pixels(3, self.zoom);
         let joint_diameter = zoomed_pixels(7, self.zoom);
         let mut previous: Option<Point> = None;
@@ -317,62 +300,62 @@ impl CydSim {
             if let Some(previous_point) = previous {
                 Line::new(previous_point, point)
                     .into_styled(arm_stroke_style(rod_width))
-                    .draw(&mut self.buffer)
+                    .draw(buffer)
                     .ok();
             }
             Circle::with_center(point, joint_diameter)
                 .into_styled(ARM_FILL_STYLE)
-                .draw(&mut self.buffer)
+                .draw(buffer)
                 .ok();
             previous = Some(point);
         }
     }
 
-    fn draw_target(&mut self) {
+    fn draw_target(&self, buffer: &mut FrameBuffer) {
         let target = target_from_seed(self.target_seed);
         let Vec3([x, y, z]) = target.center;
         let diameter = world_diameter_to_screen(target.diameter, self.zoom);
 
         Circle::with_center(self.world_to_screen(x, y, z), diameter)
             .into_styled(TARGET_FILL_STYLE)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
     }
 
-    fn draw_sliders(&mut self) {
+    fn draw_sliders(&self, buffer: &mut FrameBuffer) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
         Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
         Line::new(
             Point::new(TILT_X, TILT_TOP),
             Point::new(TILT_X, TILT_BOTTOM),
         )
         .into_styled(SLIDER_TRACK_STYLE)
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         let tilt_knob_y =
             TILT_TOP + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.z_mix));
         Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
             .into_styled(YELLOW_FILL_STYLE)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
 
         Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
         Line::new(
             Point::new(ZOOM_X, ZOOM_TOP),
             Point::new(ZOOM_X, ZOOM_BOTTOM),
         )
         .into_styled(SLIDER_TRACK_STYLE)
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         let zoom_knob_y =
             ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * (1.0 - self.zoom));
         Circle::with_center(Point::new(ZOOM_X, zoom_knob_y), 9)
             .into_styled(YELLOW_FILL_STYLE)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
 
         Triangle::new(
@@ -384,7 +367,7 @@ impl CydSim {
             ),
         )
         .into_styled(PLAY_FILL_STYLE)
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         Text::with_baseline(
             "RK",
@@ -392,14 +375,14 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         Rectangle::new(
             Point::new(RK_STOP_LEFT + 4, RK_CONTROL_TOP + 4),
             Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
         )
         .into_styled(STOP_FILL_STYLE)
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
 
         Rectangle::new(
@@ -407,7 +390,7 @@ impl CydSim {
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
         .into_styled(BUTTON_STROKE_STYLE)
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         Text::with_baseline(
             "prev",
@@ -418,7 +401,7 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         Text::with_baseline(
             "target",
@@ -426,14 +409,14 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         Rectangle::new(
             Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
         .into_styled(BUTTON_STROKE_STYLE)
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         Text::with_baseline(
             "next",
@@ -444,7 +427,7 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
 
         for slider_index in 0..SLIDER_COUNT {
@@ -457,7 +440,7 @@ impl CydSim {
                 text_style,
                 Baseline::Top,
             )
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
 
             Line::new(
@@ -465,14 +448,14 @@ impl CydSim {
                 Point::new(SLIDER_RIGHT, y + 8),
             )
             .into_styled(SLIDER_TRACK_STYLE)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
 
             let knob_x =
                 SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
             Circle::with_center(Point::new(knob_x, y + 8), 9)
                 .into_styled(YELLOW_FILL_STYLE)
-                .draw(&mut self.buffer)
+                .draw(buffer)
                 .ok();
         }
 
@@ -482,24 +465,24 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         Line::new(
             Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
             Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
         )
         .into_styled(SLIDER_TRACK_STYLE)
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
         let view_knob_x = VIEW_SLIDER_LEFT
             + round_to_i32((VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.xy_mix);
         Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
             .into_styled(YELLOW_FILL_STYLE)
-            .draw(&mut self.buffer)
+            .draw(buffer)
             .ok();
     }
 
-    fn draw_report(&mut self) {
+    fn draw_report(&self, buffer: &mut FrameBuffer) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
         let mut report = DistanceReport::new();
         Text::with_baseline(
@@ -508,7 +491,7 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(&mut self.buffer)
+        .draw(buffer)
         .ok();
     }
 
@@ -1024,14 +1007,19 @@ pub struct FrameBuffer {
 }
 
 impl FrameBuffer {
-    fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             pixels: [Rgb565::BLACK; SCREEN_PIXELS],
         }
     }
 
-    fn clear(&mut self, color: Rgb565) {
+    pub fn clear(&mut self, color: Rgb565) {
         self.pixels.fill(color);
+    }
+
+    pub fn pixels_mut(&mut self) -> &mut [Rgb565; SCREEN_PIXELS] {
+        &mut self.pixels
     }
 
     #[must_use]

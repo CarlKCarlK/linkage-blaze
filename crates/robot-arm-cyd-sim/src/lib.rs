@@ -1,21 +1,24 @@
 #![forbid(unsafe_code)]
 
 use embedded_graphics::pixelcolor::RgbColor;
-use robot_arm_core::cyd::CydSim as CoreCydSim;
+use robot_arm_core::cyd::{CydSim as CoreCydSim, FrameBuffer};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
 pub struct CydSim {
     sim: CoreCydSim,
+    frame_buffer: FrameBuffer,
 }
 
 #[wasm_bindgen]
 impl CydSim {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        Self {
-            sim: CoreCydSim::new(),
-        }
+        let sim = CoreCydSim::new();
+        let mut frame_buffer = FrameBuffer::new();
+        sim.render_to(&mut frame_buffer);
+
+        Self { sim, frame_buffer }
     }
 
     pub fn width(&self) -> usize {
@@ -27,8 +30,8 @@ impl CydSim {
     }
 
     pub fn rgba(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(self.sim.pixels().len() * 4);
-        for pixel in self.sim.pixels() {
+        let mut bytes = Vec::with_capacity(self.frame_buffer.pixels().len() * 4);
+        for pixel in self.frame_buffer.pixels() {
             bytes.push(scale_rgb565_channel(pixel.r(), 31));
             bytes.push(scale_rgb565_channel(pixel.g(), 63));
             bytes.push(scale_rgb565_channel(pixel.b(), 31));
@@ -39,26 +42,33 @@ impl CydSim {
 
     pub fn touch_down(&mut self, x: f32, y: f32) {
         self.sim.touch_down(x, y);
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn touch_move(&mut self, x: f32, y: f32) {
         self.sim.touch_move(x, y);
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn touch_up(&mut self) {
         self.sim.touch_up();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn reverse_kinematics(&mut self) -> f32 {
-        self.sim.reverse_kinematics()
+        let distance = self.sim.reverse_kinematics();
+        self.sim.render_to(&mut self.frame_buffer);
+        distance
     }
 
     pub fn start_reverse_kinematics(&mut self) {
         self.sim.start_reverse_kinematics();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn stop_reverse_kinematics(&mut self) {
         self.sim.stop_reverse_kinematics();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn is_reverse_kinematics_running(&self) -> bool {
@@ -66,7 +76,9 @@ impl CydSim {
     }
 
     pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
-        self.sim.tick_reverse_kinematics(dt_seconds)
+        let running = self.sim.tick_reverse_kinematics(dt_seconds);
+        self.sim.render_to(&mut self.frame_buffer);
+        running
     }
 }
 
