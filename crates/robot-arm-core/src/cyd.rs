@@ -42,17 +42,17 @@ const VIEW_SLIDER_LEFT: i32 = 40;
 const VIEW_SLIDER_RIGHT: i32 = 280;
 const VIEW_SLIDER_Y: i32 = 226;
 const TEXT_CHAR_WIDTH: i32 = 6;
-const DISTANCE_REPORT_WIDTH: i32 = 10 * TEXT_CHAR_WIDTH;
-const DISTANCE_REPORT_LEFT: i32 = (SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2;
+const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
+const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
 const TARGET_CONTROL_TOP: i32 = 17;
 const TARGET_BUTTON_WIDTH: u32 = 42;
 const TARGET_BUTTON_HEIGHT: u32 = 14;
 const TARGET_BUTTON_LABEL_WIDTH: i32 = 4 * TEXT_CHAR_WIDTH;
-const TARGET_LABEL_WIDTH: i32 = 6 * TEXT_CHAR_WIDTH;
+const TARGET_LABEL_WIDTH: i32 = 11 * TEXT_CHAR_WIDTH;
 const TARGET_CONTROL_GAP: i32 = 4;
 const TARGET_CONTROL_WIDTH: i32 =
     TARGET_BUTTON_WIDTH as i32 * 2 + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP * 2;
-const PREV_BUTTON_LEFT: i32 = (SCREEN_WIDTH as i32 - TARGET_CONTROL_WIDTH) / 2;
+const PREV_BUTTON_LEFT: i32 = ((SCREEN_WIDTH as i32 - TARGET_CONTROL_WIDTH) / 2) - 16;
 const TARGET_LABEL_LEFT: i32 = PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32 + TARGET_CONTROL_GAP;
 const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP;
 const TARGET_MIN_DIAMETER: f32 = 0.1;
@@ -115,7 +115,7 @@ pub struct CydSim {
     xy_mix: f32,
     z_mix: f32,
     zoom: f32,
-    target_seed: u32,
+    target_seed: u8,
     active_control: Option<ActiveControl>,
     reverse_kinematics_run: Option<ReverseKinematicsRun>,
 }
@@ -324,6 +324,7 @@ impl CydSim {
 
     fn draw_sliders(&self, buffer: &mut FrameBuffer) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        let mut target_label = TargetLabel::new();
         Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
             .draw(buffer)
             .ok();
@@ -404,7 +405,7 @@ impl CydSim {
         .draw(buffer)
         .ok();
         Text::with_baseline(
-            "target",
+            target_label.as_str(self.target_seed),
             Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2),
             text_style,
             Baseline::Top,
@@ -859,7 +860,7 @@ fn display_world_position(pose: Pose) -> Vec3 {
     Vec3([x, y, -z])
 }
 
-fn target_from_seed(seed: u32) -> Target {
+fn target_from_seed(seed: u8) -> Target {
     let mut rng = WyRand::new_seed(u64::from(seed));
     let mut target_params = [0.0; 6];
     for (param_index, param) in target_params.iter_mut().enumerate() {
@@ -876,6 +877,42 @@ fn target_from_seed(seed: u32) -> Target {
     Target {
         center: hand_measurement(&target_params).center,
         diameter,
+    }
+}
+
+struct TargetLabel {
+    bytes: [u8; 11],
+    len: usize,
+}
+
+impl TargetLabel {
+    fn new() -> Self {
+        Self {
+            bytes: *b"target #000",
+            len: 11,
+        }
+    }
+
+    fn as_str(&mut self, value: u8) -> &str {
+        let hundreds = value / 100;
+        let tens = (value / 10) % 10;
+        let ones = value % 10;
+
+        if hundreds > 0 {
+            self.bytes[8] = b'0' + hundreds;
+            self.bytes[9] = b'0' + tens;
+            self.bytes[10] = b'0' + ones;
+            self.len = 11;
+        } else if tens > 0 {
+            self.bytes[8] = b'0' + tens;
+            self.bytes[9] = b'0' + ones;
+            self.len = 10;
+        } else {
+            self.bytes[8] = b'0' + ones;
+            self.len = 9;
+        }
+
+        core::str::from_utf8(&self.bytes[..self.len]).expect("target label is ASCII")
     }
 }
 
@@ -976,15 +1013,15 @@ fn round_to_u32(value: f32) -> u32 {
 }
 
 struct DistanceReport {
-    bytes: [u8; 10],
+    bytes: [u8; 14],
     len: usize,
 }
 
 impl DistanceReport {
     fn new() -> Self {
         Self {
-            bytes: *b"dist 00.00",
-            len: 10,
+            bytes: *b"distance 00.00",
+            len: 14,
         }
     }
 
@@ -993,10 +1030,10 @@ impl DistanceReport {
         let whole = hundredths / 100;
         let fraction = hundredths % 100;
 
-        self.bytes[5] = b'0' + (whole / 10) as u8;
-        self.bytes[6] = b'0' + (whole % 10) as u8;
-        self.bytes[8] = b'0' + (fraction / 10) as u8;
-        self.bytes[9] = b'0' + (fraction % 10) as u8;
+        self.bytes[9] = b'0' + (whole / 10) as u8;
+        self.bytes[10] = b'0' + (whole % 10) as u8;
+        self.bytes[12] = b'0' + (fraction / 10) as u8;
+        self.bytes[13] = b'0' + (fraction % 10) as u8;
 
         core::str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
     }

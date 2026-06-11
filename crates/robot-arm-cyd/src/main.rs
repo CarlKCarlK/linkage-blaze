@@ -351,7 +351,11 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     }
 }
 
-fn solve_affine_axis(points: [RawPoint; 3], screen: [Point; 3], map_x_axis: bool) -> (f32, f32, f32) {
+fn solve_affine_axis(
+    points: [RawPoint; 3],
+    screen: [Point; 3],
+    map_x_axis: bool,
+) -> (f32, f32, f32) {
     let raw0_x = points[0].x as f32;
     let raw0_y = points[0].y as f32;
     let raw1_x = points[1].x as f32;
@@ -375,19 +379,17 @@ fn solve_affine_axis(points: [RawPoint; 3], screen: [Point; 3], map_x_axis: bool
         screen[2].y as f32
     };
 
-    let denominator = raw0_x * (raw1_y - raw2_y)
-        + raw1_x * (raw2_y - raw0_y)
-        + raw2_x * (raw0_y - raw1_y);
+    let denominator =
+        raw0_x * (raw1_y - raw2_y) + raw1_x * (raw2_y - raw0_y) + raw2_x * (raw0_y - raw1_y);
 
-    assert!(denominator.abs() >= 0.001, "cal: invalid touch calibration geometry");
+    assert!(
+        denominator.abs() >= 0.001,
+        "cal: invalid touch calibration geometry"
+    );
 
-    let axis_a = (out0 * (raw1_y - raw2_y)
-        + out1 * (raw2_y - raw0_y)
-        + out2 * (raw0_y - raw1_y))
+    let axis_a = (out0 * (raw1_y - raw2_y) + out1 * (raw2_y - raw0_y) + out2 * (raw0_y - raw1_y))
         / denominator;
-    let axis_b = (out0 * (raw2_x - raw1_x)
-        + out1 * (raw0_x - raw2_x)
-        + out2 * (raw1_x - raw0_x))
+    let axis_b = (out0 * (raw2_x - raw1_x) + out1 * (raw0_x - raw2_x) + out2 * (raw1_x - raw0_x))
         / denominator;
     let axis_c = (out0 * (raw1_x * raw2_y - raw2_x * raw1_y)
         + out1 * (raw2_x * raw0_y - raw0_x * raw2_y)
@@ -397,7 +399,11 @@ fn solve_affine_axis(points: [RawPoint; 3], screen: [Point; 3], map_x_axis: bool
     (axis_a, axis_b, axis_c)
 }
 
-fn compute_calibration_three_point(points: [RawPoint; 3], width: u16, height: u16) -> TouchCalibrationConfig {
+fn compute_calibration_three_point(
+    points: [RawPoint; 3],
+    width: u16,
+    height: u16,
+) -> TouchCalibrationConfig {
     let ul = calibration_corner_center(CalibrationCorner::UpperLeft, width, height);
     let ur = calibration_corner_center(CalibrationCorner::UpperRight, width, height);
     let ll = calibration_corner_center(CalibrationCorner::LowerLeft, width, height);
