@@ -28,10 +28,11 @@ const TILT_BOTTOM: i32 = 224;
 const ZOOM_TOP: i32 = 24;
 const ZOOM_BOTTOM: i32 = 74;
 const RK_CONTROL_TOP: i32 = 86;
-const RK_PLAY_LEFT: i32 = 27;
-const RK_STOP_LEFT: i32 = 55;
+const RK_RUN_LEFT: i32 = 27;
+const RK_STEP_LEFT: i32 = 55;
 const RK_BUTTON_SIZE: i32 = 18;
-const RK_LABEL_LEFT: i32 = RK_PLAY_LEFT + (RK_BUTTON_SIZE - 2 * TEXT_CHAR_WIDTH) / 2;
+const RK_LABEL_LEFT: i32 = RK_RUN_LEFT + (RK_BUTTON_SIZE - 2 * TEXT_CHAR_WIDTH) / 2;
+const RK_LABEL_TOP: i32 = RK_CONTROL_TOP - 12;
 const SLIDER_LEFT: i32 = 230;
 const SLIDER_RIGHT: i32 = 312;
 const SLIDER_TRACK_LEFT: i32 = 230;
@@ -64,6 +65,7 @@ const RK_INITIAL_STEP: f32 = 0.125;
 const RK_MIN_STEP: f32 = 0.001;
 const RK_PARAM_FULL_TRAVEL_SECONDS: f32 = 0.5;
 const RK_MAX_TICK_SECONDS: f32 = 0.1;
+const RK_SINGLE_STEP_VISIBLE_PARAM_STEP: f32 = 1.0;
 const RK_PAIRED_CANDIDATES: [(f32, f32); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)];
 const RK_CANDIDATE_COUNT: usize = SLIDER_COUNT + RK_PAIRED_CANDIDATES.len();
 const ARM_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_CYAN);
@@ -118,6 +120,7 @@ pub struct CydSim {
     target_seed: u8,
     active_control: Option<ActiveControl>,
     reverse_kinematics_run: Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: bool,
 }
 
 impl CydSim {
@@ -131,6 +134,7 @@ impl CydSim {
             target_seed: 0,
             active_control: None,
             reverse_kinematics_run: None,
+            reverse_kinematics_playing: false,
         }
     }
 
@@ -156,30 +160,30 @@ impl CydSim {
     pub fn touch_down(&mut self, x: f32, y: f32) {
         self.active_control = control_at(x, y);
         if matches!(self.active_control, Some(ActiveControl::PreviousTarget)) {
-            self.reverse_kinematics_run = None;
+            self.clear_reverse_kinematics();
             self.target_seed = self.target_seed.wrapping_sub(1);
             self.active_control = None;
             return;
         }
         if matches!(self.active_control, Some(ActiveControl::NextTarget)) {
-            self.reverse_kinematics_run = None;
+            self.clear_reverse_kinematics();
             self.target_seed = self.target_seed.wrapping_add(1);
             self.active_control = None;
             return;
         }
         if matches!(
             self.active_control,
-            Some(ActiveControl::StartReverseKinematics)
+            Some(ActiveControl::ToggleReverseKinematics)
         ) {
-            self.start_reverse_kinematics();
+            self.toggle_reverse_kinematics();
             self.active_control = None;
             return;
         }
         if matches!(
             self.active_control,
-            Some(ActiveControl::StopReverseKinematics)
+            Some(ActiveControl::StepReverseKinematics)
         ) {
-            self.stop_reverse_kinematics();
+            self.step_reverse_kinematics();
             self.active_control = None;
             return;
         }
@@ -195,23 +199,48 @@ impl CydSim {
     }
 
     pub fn start_reverse_kinematics(&mut self) {
-        self.reverse_kinematics_run = Some(ReverseKinematicsRun::new(
-            &self.params,
-            target_from_seed(self.target_seed),
-        ));
+        self.ensure_reverse_kinematics_run();
+        self.reverse_kinematics_playing = true;
     }
 
     pub fn stop_reverse_kinematics(&mut self) {
+        self.reverse_kinematics_playing = false;
+    }
+
+    fn clear_reverse_kinematics(&mut self) {
         self.reverse_kinematics_run = None;
+        self.reverse_kinematics_playing = false;
+    }
+
+    fn ensure_reverse_kinematics_run(&mut self) {
+        if self.reverse_kinematics_run.is_none() {
+            self.reverse_kinematics_run = Some(ReverseKinematicsRun::new(
+                &self.params,
+                target_from_seed(self.target_seed),
+            ));
+        }
+    }
+
+    pub fn toggle_reverse_kinematics(&mut self) {
+        if self.is_reverse_kinematics_running() {
+            self.stop_reverse_kinematics();
+        } else {
+            self.start_reverse_kinematics();
+        }
     }
 
     #[must_use]
     pub const fn is_reverse_kinematics_running(&self) -> bool {
-        self.reverse_kinematics_run.is_some()
+        self.reverse_kinematics_playing
     }
 
     pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
+        if !self.reverse_kinematics_playing {
+            return false;
+        }
+
         let Some(mut run) = self.reverse_kinematics_run.take() else {
+            self.reverse_kinematics_playing = false;
             return false;
         };
 
@@ -220,6 +249,29 @@ impl CydSim {
             &mut self.params,
             &run.search_params,
             reverse_kinematics_visible_param_step(dt_seconds),
+        );
+        let running = search_running || visible_moving;
+        if running {
+            self.reverse_kinematics_run = Some(run);
+        } else {
+            self.reverse_kinematics_playing = false;
+        }
+        running
+    }
+
+    pub fn step_reverse_kinematics(&mut self) -> bool {
+        self.ensure_reverse_kinematics_run();
+        self.reverse_kinematics_playing = false;
+
+        let Some(mut run) = self.reverse_kinematics_run.take() else {
+            return false;
+        };
+
+        let search_running = run.tick_search();
+        let visible_moving = move_params_toward(
+            &mut self.params,
+            &run.search_params,
+            RK_SINGLE_STEP_VISIBLE_PARAM_STEP,
         );
         let running = search_running || visible_moving;
         if running {
@@ -244,7 +296,7 @@ impl CydSim {
 
         match active_control {
             ActiveControl::RightSlider(slider_index) => {
-                self.reverse_kinematics_run = None;
+                self.clear_reverse_kinematics();
                 let value = ((x - SLIDER_TRACK_LEFT as f32)
                     / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
                     .clamp(0.0, 1.0);
@@ -265,8 +317,8 @@ impl CydSim {
             }
             ActiveControl::PreviousTarget => {}
             ActiveControl::NextTarget => {}
-            ActiveControl::StartReverseKinematics => {}
-            ActiveControl::StopReverseKinematics => {}
+            ActiveControl::ToggleReverseKinematics => {}
+            ActiveControl::StepReverseKinematics => {}
         }
     }
 
@@ -359,32 +411,16 @@ impl CydSim {
             .draw(buffer)
             .ok();
 
-        Triangle::new(
-            Point::new(RK_PLAY_LEFT, RK_CONTROL_TOP),
-            Point::new(RK_PLAY_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
-            Point::new(
-                RK_PLAY_LEFT + RK_BUTTON_SIZE,
-                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
-            ),
-        )
-        .into_styled(PLAY_FILL_STYLE)
-        .draw(buffer)
-        .ok();
+        self.draw_reverse_kinematics_run_button(buffer);
         Text::with_baseline(
             "RK",
-            Point::new(RK_LABEL_LEFT, RK_CONTROL_TOP + 4),
+            Point::new(RK_LABEL_LEFT, RK_LABEL_TOP),
             text_style,
             Baseline::Top,
         )
         .draw(buffer)
         .ok();
-        Rectangle::new(
-            Point::new(RK_STOP_LEFT + 4, RK_CONTROL_TOP + 4),
-            Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
-        )
-        .into_styled(STOP_FILL_STYLE)
-        .draw(buffer)
-        .ok();
+        self.draw_reverse_kinematics_step_button(buffer);
 
         Rectangle::new(
             Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
@@ -483,6 +519,61 @@ impl CydSim {
             .ok();
     }
 
+    fn draw_reverse_kinematics_run_button(&self, buffer: &mut FrameBuffer) {
+        if self.is_reverse_kinematics_running() {
+            Rectangle::new(
+                Point::new(RK_RUN_LEFT + 4, RK_CONTROL_TOP + 4),
+                Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
+            )
+            .into_styled(STOP_FILL_STYLE)
+            .draw(buffer)
+            .ok();
+        } else {
+            Triangle::new(
+                Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
+                Point::new(RK_RUN_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
+                Point::new(
+                    RK_RUN_LEFT + RK_BUTTON_SIZE,
+                    RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+                ),
+            )
+            .into_styled(PLAY_FILL_STYLE)
+            .draw(buffer)
+            .ok();
+        }
+    }
+
+    fn draw_reverse_kinematics_step_button(&self, buffer: &mut FrameBuffer) {
+        Rectangle::new(
+            Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
+            Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
+        )
+        .into_styled(BUTTON_STROKE_STYLE)
+        .draw(buffer)
+        .ok();
+        Rectangle::new(
+            Point::new(
+                RK_STEP_LEFT + RK_BUTTON_SIZE - 5,
+                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2 - 5,
+            ),
+            Size::new(2, 10),
+        )
+        .into_styled(STOP_FILL_STYLE)
+        .draw(buffer)
+        .ok();
+        Triangle::new(
+            Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + 4),
+            Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + RK_BUTTON_SIZE - 4),
+            Point::new(
+                RK_STEP_LEFT + RK_BUTTON_SIZE - 7,
+                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+            ),
+        )
+        .into_styled(PLAY_FILL_STYLE)
+        .draw(buffer)
+        .ok();
+    }
+
     fn draw_report(&self, buffer: &mut FrameBuffer) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
         let mut report = DistanceReport::new();
@@ -528,8 +619,8 @@ enum ActiveControl {
     XyView,
     PreviousTarget,
     NextTarget,
-    StartReverseKinematics,
-    StopReverseKinematics,
+    ToggleReverseKinematics,
+    StepReverseKinematics,
 }
 
 #[derive(Clone, Copy)]
@@ -557,15 +648,15 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
     if (x - ZOOM_X as f32).abs() <= 14.0 && (ZOOM_TOP as f32..=ZOOM_BOTTOM as f32).contains(&y) {
         return Some(ActiveControl::Zoom);
     }
-    if (RK_PLAY_LEFT as f32..=(RK_PLAY_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
+    if (RK_RUN_LEFT as f32..=(RK_RUN_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
         && (RK_CONTROL_TOP as f32..=(RK_CONTROL_TOP + RK_BUTTON_SIZE) as f32).contains(&y)
     {
-        return Some(ActiveControl::StartReverseKinematics);
+        return Some(ActiveControl::ToggleReverseKinematics);
     }
-    if (RK_STOP_LEFT as f32..=(RK_STOP_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
+    if (RK_STEP_LEFT as f32..=(RK_STEP_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
         && (RK_CONTROL_TOP as f32..=(RK_CONTROL_TOP + RK_BUTTON_SIZE) as f32).contains(&y)
     {
-        return Some(ActiveControl::StopReverseKinematics);
+        return Some(ActiveControl::StepReverseKinematics);
     }
     if (PREV_BUTTON_LEFT as f32..=(PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
         .contains(&x)
@@ -1135,5 +1226,27 @@ mod tests {
         for (before, after) in before.iter().zip(sim.params.iter()) {
             assert!((after - before).abs() <= max_change + 1e-6);
         }
+    }
+
+    #[test]
+    fn test_reverse_kinematics_toggle_starts_and_stops() {
+        let mut sim = CydSim::new();
+
+        sim.toggle_reverse_kinematics();
+        assert!(sim.is_reverse_kinematics_running());
+
+        sim.toggle_reverse_kinematics();
+        assert!(!sim.is_reverse_kinematics_running());
+    }
+
+    #[test]
+    fn test_single_reverse_kinematics_step_starts_and_advances() {
+        let mut sim = CydSim::new();
+        let before = sim.params;
+
+        assert!(sim.step_reverse_kinematics());
+
+        assert!(!sim.is_reverse_kinematics_running());
+        assert_ne!(sim.params, before);
     }
 }

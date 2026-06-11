@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/robot_arm_cyd_sim.js?v=paired-rk-1";
+import init, { CydSim } from "./pkg/robot_arm_cyd_sim.js?v=play-step-2";
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
