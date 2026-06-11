@@ -44,8 +44,6 @@ const DISPLAY_SPI_HZ: u32 = 60_000_000;
 const DISPLAY_INTERFACE_BUFFER_BYTES: usize = 4096;
 const FRAME_PROFILE_LOGGING: bool = false;
 const TOUCH_LOGGING: bool = false;
-const TOUCH_CALIBRATION_MAGIC: u32 = 0x5241_4344;
-const TOUCH_CALIBRATION_VERSION: u16 = 2;
 
 static DISPLAY_INTERFACE_BUFFER: StaticCell<[u8; DISPLAY_INTERFACE_BUFFER_BYTES]> =
     StaticCell::new();
@@ -64,42 +62,6 @@ struct TouchCalibrationConfig {
     ay: f32,
     by: f32,
     cy: f32,
-}
-
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
-struct StoredTouchCalibrationV2 {
-    magic: u32,
-    version: u16,
-    config: TouchCalibrationConfig,
-    checksum: u32,
-}
-
-impl StoredTouchCalibrationV2 {
-    fn new(config: TouchCalibrationConfig) -> Self {
-        Self {
-            magic: TOUCH_CALIBRATION_MAGIC,
-            version: TOUCH_CALIBRATION_VERSION,
-            config,
-            checksum: touch_calibration_checksum(
-                TOUCH_CALIBRATION_MAGIC,
-                TOUCH_CALIBRATION_VERSION,
-                config,
-            ),
-        }
-    }
-
-    fn valid_config(self) -> Option<TouchCalibrationConfig> {
-        let checksum = touch_calibration_checksum(self.magic, self.version, self.config);
-        if self.magic == TOUCH_CALIBRATION_MAGIC
-            && self.version == TOUCH_CALIBRATION_VERSION
-            && self.checksum == checksum
-            && touch_calibration_config_is_finite(self.config)
-        {
-            Some(self.config)
-        } else {
-            None
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -156,15 +118,15 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     let mut touch_calibration_config = if force_calibration {
         None
     } else {
-        match touch_calibration_flash_block.load::<StoredTouchCalibrationV2>() {
-            Ok(Some(stored_touch_calibration_v2)) => {
-                let config = stored_touch_calibration_v2.valid_config();
-                if config.is_some() {
+        match touch_calibration_flash_block.load::<TouchCalibrationConfig>() {
+            Ok(Some(touch_calibration_config)) => {
+                if touch_calibration_config_is_finite(touch_calibration_config) {
                     esp_println::println!("cal: loaded valid calibration from flash");
+                    Some(touch_calibration_config)
                 } else {
                     esp_println::println!("cal: stored calibration failed app validation");
+                    None
                 }
-                config
             }
             Ok(None) => {
                 esp_println::println!("cal: no calibration in flash");
@@ -334,9 +296,8 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                         } else {
                             let config =
                                 compute_calibration_four_point(calibration_points, width, height);
-                            let stored_touch_calibration_v2 = StoredTouchCalibrationV2::new(config);
                             touch_calibration_flash_block
-                                .save(&stored_touch_calibration_v2)
+                                .save(&config)
                                 .expect("cal: failed to save calibration to flash");
                             touch_calibration_config = Some(config);
                             calibration_just_completed = true;
@@ -608,22 +569,6 @@ fn touch_calibration_config_is_finite(config: TouchCalibrationConfig) -> bool {
         && config.ay.is_finite()
         && config.by.is_finite()
         && config.cy.is_finite()
-}
-
-fn touch_calibration_checksum(magic: u32, version: u16, config: TouchCalibrationConfig) -> u32 {
-    let mut checksum = 0x811C_9DC5u32;
-    checksum = mix_checksum_word(checksum, magic);
-    checksum = mix_checksum_word(checksum, version as u32);
-    checksum = mix_checksum_word(checksum, config.ax.to_bits());
-    checksum = mix_checksum_word(checksum, config.bx.to_bits());
-    checksum = mix_checksum_word(checksum, config.cx.to_bits());
-    checksum = mix_checksum_word(checksum, config.ay.to_bits());
-    checksum = mix_checksum_word(checksum, config.by.to_bits());
-    mix_checksum_word(checksum, config.cy.to_bits())
-}
-
-fn mix_checksum_word(checksum: u32, word: u32) -> u32 {
-    checksum.rotate_left(5) ^ word.wrapping_mul(0x045D_9F3B)
 }
 
 fn calibration_corner_for_index(calibration_index: usize) -> Option<CalibrationCorner> {
