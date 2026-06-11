@@ -1460,6 +1460,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "mipidsi"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790ebd28bd67addbccf41b1c0c188c26bb9f5bdcd91d4d6da9bd558e20d97a1d"
+dependencies = [
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "heapless 0.8.0",
+]
+
+[[package]]
 name = "nanorand"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1757,12 +1768,14 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "embedded-hal 1.0.0",
+ "embedded-hal-bus",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-println",
  "esp-rtos",
  "log",
+ "mipidsi",
  "robot-arm-core",
  "static_cell",
 ]
