@@ -21,10 +21,11 @@ pub trait TouchInput {
 
 // TODO0 Calibrate XPT2046 raw-to-screen mapping on hardware with CYD display.
 // Current constants are hard-coded placeholders.
-const XPT2046_RAW_X_MIN: u16 = 470;
-const XPT2046_RAW_X_MAX: u16 = 3680;
-const XPT2046_RAW_Y_MIN: u16 = 340;
-const XPT2046_RAW_Y_MAX: u16 = 3740;
+pub(crate) const XPT2046_RAW_X_MIN: u16 = 470;
+pub(crate) const XPT2046_RAW_X_MAX: u16 = 3680;
+pub(crate) const XPT2046_RAW_Y_MIN: u16 = 340;
+pub(crate) const XPT2046_RAW_Y_MAX: u16 = 3740;
+const TOUCH_RAW_LOGGING: bool = false;
 
 /// Concrete XPT2046 touch controller input for CYD with shared SPI.
 /// Hard-coded for CYD pin: touch IRQ on GPIO36.
@@ -105,7 +106,9 @@ where
         if count > 0 {
             let avg_x = (sum_x / count) as u16;
             let avg_y = (sum_y / count) as u16;
-            esp_println::println!("touch: raw avg_x={} avg_y={}", avg_x, avg_y);
+            if TOUCH_RAW_LOGGING {
+                esp_println::println!("touch: raw avg_x={} avg_y={}", avg_x, avg_y);
+            }
             Some((avg_x, avg_y))
         } else {
             None

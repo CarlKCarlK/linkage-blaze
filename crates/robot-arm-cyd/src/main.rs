@@ -37,7 +37,7 @@ static CYD_SIM: StaticCell<CydSim> = StaticCell::new();
 static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
 static DISPLAY_INTERFACE_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
 
-const TOUCH_CALIBRATION_MODE: bool = true;
+const TOUCH_LOGGING: bool = false;
 
 #[derive(Clone, Copy)]
 struct RawPoint {
@@ -182,13 +182,9 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     // Keep RK off while validating touch behavior.
     // cyd_sim.start_reverse_kinematics();
     esp_println::println!("boot: RK off, touch test mode");
-    if TOUCH_CALIBRATION_MODE {
-        frame_buffer.clear(Rgb565::BLACK);
-        if let Some(calibration_corner) = calibration_corner_for_index(0) {
-            draw_calibration_cross(frame_buffer, calibration_corner, width, height);
-        }
-    } else {
-        cyd_sim.render_to(frame_buffer);
+    frame_buffer.clear(Rgb565::BLACK);
+    if let Some(calibration_corner) = calibration_corner_for_index(0) {
+        draw_calibration_cross(frame_buffer, calibration_corner, width, height);
     }
     flush_full_frame(&mut display, frame_buffer, width, height);
     esp_println::println!("boot: after initial frame flush");
@@ -204,10 +200,8 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
     let mut calibration_points: [RawPoint; 3] = [RawPoint { x: 0, y: 0 }; 3];
     let mut touch_cursor: Option<Point> = None;
 
-    if TOUCH_CALIBRATION_MODE {
-        esp_println::println!("cal: tap corners in order UL -> UR -> LL");
-        esp_println::println!("cal: next tap UL");
-    }
+    esp_println::println!("cal: tap corners in order UL -> UR -> LL");
+    esp_println::println!("cal: next tap UL");
     esp_println::println!("boot: entering app loop");
 
     let mut previous_frame_flush = Instant::now();
@@ -219,7 +213,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
 
         let mut should_flush = cyd_sim.tick_reverse_kinematics(dt_seconds);
         let calibration_corner = calibration_corner_for_index(calibration_index);
-        let calibration_active = TOUCH_CALIBRATION_MODE && touch_calibration_config.is_none();
+        let calibration_active = touch_calibration_config.is_none();
 
         if calibration_active {
             should_flush = true;
@@ -227,14 +221,16 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
 
         touch_poll_counter = touch_poll_counter.wrapping_add(1);
         let touch_irq_low = touch_input.irq_is_low_for_log();
-        if touch_irq_low != last_touch_irq_low {
+        if TOUCH_LOGGING && touch_irq_low != last_touch_irq_low {
             esp_println::println!("touch: irq_low={} (state change)", touch_irq_low);
             last_touch_irq_low = touch_irq_low;
-        } else if !TOUCH_CALIBRATION_MODE && touch_poll_counter % 1000 == 0 {
+        } else if TOUCH_LOGGING && !calibration_active && touch_poll_counter % 1000 == 0 {
             esp_println::println!("touch: heartbeat irq_low={}", touch_irq_low);
+        } else {
+            last_touch_irq_low = touch_irq_low;
         }
 
-        if TOUCH_CALIBRATION_MODE && calibration_index < 3 {
+        if calibration_active && calibration_index < 3 {
             calibration_prompt_counter = calibration_prompt_counter.wrapping_add(1);
             if calibration_prompt_counter % 1200 == 0 {
                 let corner_label = ["UL", "UR", "LL"][calibration_index];
@@ -245,7 +241,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         if let Some(raw_touch_event) = touch_input.read_raw_touch_event(&mut touch_spi_device) {
             match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
-                    if TOUCH_CALIBRATION_MODE && calibration_index < 3 {
+                    if calibration_active && calibration_index < 3 {
                         calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
                         calibration_index += 1;
                         esp_println::println!(
@@ -286,12 +282,14 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                         let (mapped_x, mapped_y) =
                             map_raw_to_screen(raw_x, raw_y, config, width as f32, height as f32);
                         touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        esp_println::println!(
-                            "touch: down x={:.1} y={:.1} irq_low={}",
-                            mapped_x,
-                            mapped_y,
-                            touch_irq_low
-                        );
+                        if TOUCH_LOGGING {
+                            esp_println::println!(
+                                "touch: down x={:.1} y={:.1} irq_low={}",
+                                mapped_x,
+                                mapped_y,
+                                touch_irq_low
+                            );
+                        }
                         cyd_sim.touch_down(mapped_x, mapped_y);
                         should_flush = true;
                     }
@@ -301,8 +299,10 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                         let (mapped_x, mapped_y) =
                             map_raw_to_screen(raw_x, raw_y, config, width as f32, height as f32);
                         touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        touch_move_log_counter = touch_move_log_counter.wrapping_add(1);
-                        if touch_move_log_counter % 25 == 0 {
+                        if TOUCH_LOGGING {
+                            touch_move_log_counter = touch_move_log_counter.wrapping_add(1);
+                        }
+                        if TOUCH_LOGGING && touch_move_log_counter % 25 == 0 {
                             esp_println::println!(
                                 "touch: move x={:.1} y={:.1} irq_low={}",
                                 mapped_x,
@@ -316,7 +316,9 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                 }
                 RawTouchEvent::Up => {
                     if touch_calibration_config.is_some() {
-                        esp_println::println!("touch: up irq_low={}", touch_irq_low);
+                        if TOUCH_LOGGING {
+                            esp_println::println!("touch: up irq_low={}", touch_irq_low);
+                        }
                         cyd_sim.touch_up();
                     }
                     touch_cursor = None;
@@ -349,7 +351,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         }
 
         alive_tick_count = alive_tick_count.wrapping_add(1);
-        if !TOUCH_CALIBRATION_MODE && alive_tick_count % 60 == 0 {
+        if TOUCH_LOGGING && !calibration_active && alive_tick_count % 60 == 0 {
             esp_println::println!("boot: alive");
         }
 
