@@ -22,11 +22,11 @@ run-cyd:
 
 # Build the CYD simulator WASM bundle into www/pkg
 build-cyd-sim:
-    wasm-pack build {{_cyd_sim_crate}} --target web --out-dir www/pkg
+    wasm-pack build {{_cyd_sim_crate}} --target web --out-dir www/pkg --out-name robot_arm_cyd_sim_v3
 
 # Serve the CYD simulator web app
 serve-cyd-sim port=_cyd_sim_port:
-    cd {{_cyd_sim_www}} && python3 -m http.server {{port}}
+    cd {{_cyd_sim_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
 
 # Build and serve the CYD simulator
 run-cyd-sim port=_cyd_sim_port:

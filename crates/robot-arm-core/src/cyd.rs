@@ -50,8 +50,12 @@ const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
 const FPS_REPORT_WIDTH: i32 = 7 * TEXT_CHAR_WIDTH;
-const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH - 2;
+const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH;
 const FPS_REPORT_TOP: i32 = SCREEN_HEIGHT as i32 - 11;
+const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+const VERSION_REPORT_LEFT: i32 =
+    FPS_REPORT_LEFT - (VERSION_TEXT.len() as i32 * TEXT_CHAR_WIDTH) - TEXT_CHAR_WIDTH;
+const VERSION_REPORT_TOP: i32 = FPS_REPORT_TOP;
 const TARGET_CONTROL_TOP: i32 = 17;
 const TARGET_BUTTON_WIDTH: u32 = 42;
 const TARGET_BUTTON_HEIGHT: u32 = 14;
@@ -131,6 +135,7 @@ pub struct CydSim {
     reverse_kinematics_playing: bool,
     frames_per_second: Option<u16>,
     calibration_requested: bool,
+    rk_step_hold_active: bool,
 }
 
 impl CydSim {
@@ -147,6 +152,7 @@ impl CydSim {
             reverse_kinematics_playing: false,
             frames_per_second: None,
             calibration_requested: false,
+            rk_step_hold_active: false,
         }
     }
 
@@ -167,6 +173,7 @@ impl CydSim {
         self.draw_sliders(buffer);
         self.draw_arm(buffer);
         self.draw_report(buffer);
+        self.draw_version(buffer);
         self.draw_fps(buffer);
     }
 
@@ -215,8 +222,8 @@ impl CydSim {
             self.active_control,
             Some(ActiveControl::StepReverseKinematics)
         ) {
+            self.rk_step_hold_active = true;
             self.step_reverse_kinematics();
-            self.active_control = None;
             return;
         }
         self.update_touch(x, y);
@@ -228,6 +235,7 @@ impl CydSim {
 
     pub fn touch_up(&mut self) {
         self.active_control = None;
+        self.rk_step_hold_active = false;
     }
 
     pub fn start_reverse_kinematics(&mut self) {
@@ -267,7 +275,7 @@ impl CydSim {
     }
 
     pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
-        if !self.reverse_kinematics_playing {
+        if !self.reverse_kinematics_playing && !self.rk_step_hold_active {
             return false;
         }
 
@@ -460,7 +468,6 @@ impl CydSim {
         .draw(buffer)
         .ok();
         self.draw_reverse_kinematics_step_button(buffer);
-        #[cfg(not(target_arch = "wasm32"))]
         self.draw_calibrate_button(buffer);
 
         Rectangle::new(
@@ -660,6 +667,18 @@ impl CydSim {
         .ok();
     }
 
+    fn draw_version(&self, buffer: &mut FrameBuffer) {
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
+        Text::with_baseline(
+            VERSION_TEXT,
+            Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(buffer)
+        .ok();
+    }
+
     fn pose_to_screen(&self, pose: Pose) -> Point {
         let Vec3([x, y, z]) = pose.position();
         self.world_to_screen(x, y, -z)
@@ -751,7 +770,6 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
     {
         return Some(ActiveControl::XyView);
     }
-    #[cfg(not(target_arch = "wasm32"))]
     if (CALIBRATE_BUTTON_LEFT as f32
         ..=(CALIBRATE_BUTTON_LEFT + CALIBRATE_BUTTON_WIDTH as i32) as f32)
         .contains(&x)

@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/robot_arm_cyd_sim.js?v=shared-fps-1";
+import init, { CydSim } from "./pkg/robot_arm_cyd_sim_v3.js?v=shared-fps-3";
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
@@ -9,6 +9,9 @@ const sim = new CydSim();
 const image = context.createImageData(sim.width(), sim.height());
 let animationFrame = null;
 let previousAnimationTimestamp = null;
+const FPS_LIMIT = 11;
+const FRAME_INTERVAL_MS = 1000 / FPS_LIMIT;
+let lastFrameTime = 0;
 
 render();
 
@@ -57,7 +60,7 @@ function eventToScreen(event) {
 }
 
 function scheduleReverseKinematics() {
-  if (animationFrame !== null || !sim.is_reverse_kinematics_running()) {
+  if (animationFrame !== null) {
     return;
   }
   animationFrame = requestAnimationFrame(tickReverseKinematics);
@@ -65,9 +68,17 @@ function scheduleReverseKinematics() {
 
 function tickReverseKinematics(timestamp) {
   animationFrame = null;
+
+  // Throttle to 11 fps
+  if (timestamp - lastFrameTime < FRAME_INTERVAL_MS) {
+    scheduleReverseKinematics();
+    return;
+  }
+  lastFrameTime = timestamp;
+
   const dtSeconds =
     previousAnimationTimestamp === null
-      ? 1 / 60
+      ? 1 / FPS_LIMIT
       : (timestamp - previousAnimationTimestamp) / 1000;
   previousAnimationTimestamp = timestamp;
 
