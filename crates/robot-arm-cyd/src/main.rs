@@ -278,22 +278,27 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
         previous_tick = now;
 
         let mut should_flush = cyd_sim.tick_reverse_kinematics(dt_seconds);
-        let calibration_corner = calibration_corner_for_index(calibration_index);
-        let calibration_active = touch_calibration_config.is_none();
+        let mut calibration_active = touch_calibration_config.is_none();
 
         if calibration_active && calibration_screen_dirty {
             should_flush = true;
         }
 
-        // Check if BOOT button was pressed (rising edge) to trigger calibration.
+        // Check if BOOT button was pressed (rising edge) to trigger/restart calibration.
         let boot_button_pressed = boot_button.is_pressed();
-        if boot_button_pressed && !last_boot_button_pressed && !calibration_active {
-            esp_println::println!("cal: BOOT pressed during runtime, entering calibration");
+        if boot_button_pressed && !last_boot_button_pressed {
+            if !calibration_active {
+                esp_println::println!("cal: BOOT pressed during runtime, entering calibration");
+            } else {
+                esp_println::println!("cal: BOOT pressed, restarting calibration");
+            }
             touch_calibration_config = None;
             calibration_index = 0;
             calibration_points = [RawPoint { x: 0, y: 0 }; 4];
             touch_cursor = None;
             calibration_screen_dirty = true;
+            calibration_active = true;
+            should_flush = true;
             esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
             esp_println::println!("cal: next tap UL");
         }
@@ -373,6 +378,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
                             calibration_points = [RawPoint { x: 0, y: 0 }; 4];
                             touch_cursor = None;
                             calibration_screen_dirty = true;
+                            calibration_active = true;
                             esp_println::println!("cal: requested from UI");
                             esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
                             esp_println::println!("cal: next tap UL");
@@ -426,7 +432,7 @@ fn run_after_init(p: esp_hal::peripherals::Peripherals) -> ! {
             let render_calibration_active = touch_calibration_config.is_none();
             if render_calibration_active {
                 frame_buffer.clear(Rgb565::BLACK);
-                if let Some(calibration_corner) = calibration_corner {
+                if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
                     draw_calibration_cross(frame_buffer, calibration_corner, width, height);
                 }
                 calibration_screen_dirty = false;
