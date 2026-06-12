@@ -4,8 +4,8 @@
 use core::convert::Infallible;
 
 use device_envoy_esp::{
-    button::{ButtonEsp, PressedTo},
-    flash_block::FlashBlockEsp,
+    button::{Button as _, ButtonEsp, PressedTo},
+    flash_block::{FlashBlock as _, FlashBlockEsp},
 };
 use embedded_graphics::{
     Drawable,
@@ -31,8 +31,22 @@ struct RawPoint {
     y: u16,
 }
 
+struct CydStatic {
+    frame_buffer: &'static mut FrameBuffer,
+}
+
+// todo000 can we make this buffer part of the display? (may no longer apply)
+struct Cyd<Display, TouchSpiDevice, TouchIrq> {
+    // todo000 combine with the display? (may no longer apply)
+    display: CydDisplay<Display>,
+    touch: CydTouch<TouchSpiDevice, TouchIrq>,
+    calibration_flash_block: FlashBlockEsp,
+    calibration_button: ButtonEsp<'static>,
+    frame_buffer: &'static mut FrameBuffer,
+}
+
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
-struct TouchCalibrationConfig {
+struct CalibrationConfig {
     ax: f32,
     bx: f32,
     cx: f32,
@@ -44,7 +58,7 @@ struct TouchCalibrationConfig {
 #[derive(Clone, Copy)]
 enum MainState {
     Calibrating,
-    Running(TouchCalibrationConfig),
+    Running(CalibrationConfig),
 }
 
 #[derive(Clone, Copy)]
@@ -65,19 +79,24 @@ const CALIBRATION_CENTER_DOT_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_fill(Rgb565::WHITE);
 const TOUCH_CURSOR_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CYAN);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 enum MainError {
-    CreateFlashBlock,
+    Flash,
     ConfigureDisplaySpi,
     CreateDisplaySpiDevice,
     ConfigureTouchSpi,
     CreateTouchSpiDevice,
     InitDisplay,
-    SaveCalibrationToFlash,
     DrawCalibrationCross,
     DrawCalibrationCenterDot,
     DrawTouchCursor,
     FlushFrameBuffer,
+}
+
+impl From<device_envoy_esp::Error> for MainError {
+    fn from(_error: device_envoy_esp::Error) -> Self {
+        MainError::Flash
+    }
 }
 
 impl From<CydDisplayInitError> for MainError {
@@ -99,6 +118,102 @@ impl From<CydTouchInitError> for MainError {
     }
 }
 
+impl CydStatic {
+    fn new() -> Self {
+        Self {
+            frame_buffer: FrameBuffer::static_new(),
+        }
+    }
+}
+
+impl Cyd<(), (), ()> {
+    fn new(
+        cyd_static: CydStatic,
+        display_spi: impl esp_hal::spi::master::Instance + 'static,
+        display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        display_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
+        display_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
+        touch_spi: impl esp_hal::spi::master::Instance + 'static,
+        touch_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        touch_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        touch_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
+        touch_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
+        touch_irq_pin: impl esp_hal::gpio::InputPin + 'static,
+        calibration_flash_block: FlashBlockEsp,
+        calibration_button: ButtonEsp<'static>,
+    ) -> Result<
+        Cyd<
+            impl DrawTarget<Color = Rgb565> + 'static,
+            impl embedded_hal::spi::SpiDevice<u8> + 'static,
+            esp_hal::gpio::Input<'static>,
+        >,
+        MainError,
+    > {
+        Ok(Cyd {
+            display: CydDisplay::new(
+                display_spi,
+                display_sck_pin,
+                display_mosi_pin,
+                display_miso_pin,
+                display_cs_pin,
+                display_dc_pin,
+                display_rst_pin,
+                display_backlight_pin,
+            )?,
+            touch: CydTouch::new(
+                touch_spi,
+                touch_sck_pin,
+                touch_mosi_pin,
+                touch_miso_pin,
+                touch_cs_pin,
+                touch_irq_pin,
+            )?,
+            calibration_flash_block,
+            calibration_button,
+            frame_buffer: cyd_static.frame_buffer,
+        })
+    }
+}
+
+impl<Display, TouchSpiDevice, TouchIrq> Cyd<Display, TouchSpiDevice, TouchIrq>
+where
+    Display: DrawTarget<Color = Rgb565>,
+    TouchSpiDevice: embedded_hal::spi::SpiDevice<u8>,
+    TouchIrq: embedded_hal::digital::InputPin,
+{
+    fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
+        self.touch.read_raw_touch_event()
+    }
+
+    fn calibration_button_is_pressed(&self) -> bool {
+        self.calibration_button.is_pressed()
+    }
+
+    fn load_calibration(&mut self) -> Result<Option<CalibrationConfig>, MainError> {
+        Ok(self.calibration_flash_block.load::<CalibrationConfig>()?)
+    }
+
+    fn save_calibration(
+        &mut self,
+        calibration_config: &CalibrationConfig,
+    ) -> Result<(), MainError> {
+        Ok(self.calibration_flash_block.save(calibration_config)?)
+    }
+
+    fn flush(&mut self) -> Result<(), MainError> {
+        flush_full_frame(
+            self.display.display_mut(),
+            self.frame_buffer,
+            CydSim::WIDTH_U16,
+            CydSim::HEIGHT_U16,
+        )
+    }
+}
+
 #[esp_hal::main]
 fn main() -> ! {
     let err = inner_main().unwrap_err();
@@ -109,61 +224,50 @@ fn inner_main() -> Result<Infallible, MainError> {
     let p = esp_hal::init(Config::default());
     esp_println::logger::init_logger(log::LevelFilter::Info);
 
-    let frame_buffer = FrameBuffer::static_new();
     let mut cyd_sim = CydSim::new(); // todo000 review this
 
-    let mut cyd_touch = CydTouch::new(p.SPI3, p.GPIO25, p.GPIO32, p.GPIO39, p.GPIO33, p.GPIO36)?;
-
-    let mut cyd_display = CydDisplay::new(
-        p.SPI2, p.GPIO14, p.GPIO13, p.GPIO12, p.GPIO15, p.GPIO2, p.GPIO4, p.GPIO21,
-    )?;
-
-    let [mut calibration_flash_block] =
-        FlashBlockEsp::new_array::<1>(p.FLASH).map_err(|_| MainError::CreateFlashBlock)?;
+    let [calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
-    let mut main_state = MainState::new(
-        &calibration_button,
-        &mut calibration_flash_block,
-        &mut cyd_sim,
-        frame_buffer,
+    let cyd_static = CydStatic::new();
+    let mut cyd = Cyd::new(
+        cyd_static,              // CYD static framebuffer storage
+        p.SPI2,                  // display SPI
+        p.GPIO14,                // display SCK
+        p.GPIO13,                // display MOSI
+        p.GPIO12,                // display MISO
+        p.GPIO15,                // display CS
+        p.GPIO2,                 // display DC
+        p.GPIO4,                 // display reset
+        p.GPIO21,                // display backlight
+        p.SPI3,                  // touch SPI
+        p.GPIO25,                // touch SCK
+        p.GPIO32,                // touch MOSI
+        p.GPIO39,                // touch MISO
+        p.GPIO33,                // touch CS
+        p.GPIO36,                // touch IRQ
+        calibration_flash_block, // calibration flash block
+        calibration_button,      // calibration button
     )?;
 
+    let mut main_state = MainState::new(&mut cyd)?;
     loop {
         main_state = match main_state {
-            MainState::Calibrating => run_calibration_mode(
-                &mut cyd_touch,
-                &calibration_button,
-                &mut calibration_flash_block,
-                frame_buffer,
-                cyd_display.display_mut(),
-            ),
-            MainState::Running(calibration_config) => run_running_mode(
-                calibration_config,
-                &mut cyd_sim,
-                &mut cyd_touch,
-                &calibration_button,
-                frame_buffer,
-                cyd_display.display_mut(),
-            ),
+            MainState::Running(calibration_config) => {
+                run_running_mode(calibration_config, &mut cyd_sim, &mut cyd)
+            }
+            MainState::Calibrating => run_calibration_mode(&mut cyd),
         }?;
     }
 }
 
-fn run_calibration_mode<FlashBlockType>(
-    cyd_touch: &mut CydTouch<
+fn run_calibration_mode(
+    cyd: &mut Cyd<
+        impl DrawTarget<Color = Rgb565>,
         impl embedded_hal::spi::SpiDevice<u8>,
         impl embedded_hal::digital::InputPin,
     >,
-    calibration_button: &impl device_envoy_esp::button::Button,
-    calibration_flash_block: &mut FlashBlockType,
-    frame_buffer: &mut FrameBuffer,
-    display: &mut impl DrawTarget<Color = Rgb565>,
-) -> Result<MainState, MainError>
-where
-    FlashBlockType: device_envoy_esp::flash_block::FlashBlock,
-    <FlashBlockType as device_envoy_esp::flash_block::FlashBlock>::Error: core::fmt::Debug,
-{
+) -> Result<MainState, MainError> {
     let mut calibration_index = 0;
     let mut calibration_points = [RawPoint { x: 0, y: 0 }; 4];
     let mut calibration_screen_dirty = true;
@@ -173,20 +277,20 @@ where
 
     loop {
         if calibration_screen_dirty {
-            frame_buffer.clear(Rgb565::BLACK);
+            cyd.frame_buffer.clear(Rgb565::BLACK);
             if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
                 draw_calibration_cross(
-                    frame_buffer,
+                    cyd.frame_buffer,
                     calibration_corner,
                     CydSim::WIDTH_U16,
                     CydSim::HEIGHT_U16,
                 )?;
             }
-            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16)?;
+            cyd.flush()?;
             calibration_screen_dirty = false;
         }
 
-        if calibration_button.is_pressed() {
+        if cyd.calibration_button_is_pressed() {
             calibration_index = 0;
             calibration_points = [RawPoint { x: 0, y: 0 }; 4];
             calibration_screen_dirty = true;
@@ -195,7 +299,7 @@ where
             continue;
         }
 
-        if let Some(raw_touch_event) = cyd_touch.read_raw_touch_event() {
+        if let Some(raw_touch_event) = cyd.read_raw_touch_event() {
             if let RawTouchEvent::Down { raw_x, raw_y } = raw_touch_event {
                 if calibration_index < 4 {
                     calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
@@ -218,9 +322,7 @@ where
                         CydSim::WIDTH_U16,
                         CydSim::HEIGHT_U16,
                     );
-                    calibration_flash_block
-                        .save(&calibration_config)
-                        .map_err(|_| MainError::SaveCalibrationToFlash)?;
+                    cyd.save_calibration(&calibration_config)?;
 
                     esp_println::println!(
                         "cal: done ax={:.5} bx={:.5} cx={:.1} ay={:.5} by={:.5} cy={:.1}",
@@ -243,15 +345,13 @@ where
 }
 
 fn run_running_mode(
-    calibration_config: TouchCalibrationConfig,
+    calibration_config: CalibrationConfig,
     cyd_sim: &mut CydSim,
-    cyd_touch: &mut CydTouch<
+    cyd: &mut Cyd<
+        impl DrawTarget<Color = Rgb565>,
         impl embedded_hal::spi::SpiDevice<u8>,
         impl embedded_hal::digital::InputPin,
     >,
-    calibration_button: &impl device_envoy_esp::button::Button,
-    frame_buffer: &mut FrameBuffer,
-    display: &mut impl DrawTarget<Color = Rgb565>,
 ) -> Result<MainState, MainError> {
     let now = Instant::now();
     let mut touch_cursor = None;
@@ -266,14 +366,14 @@ fn run_running_mode(
 
         should_flush |= cyd_sim.tick_reverse_kinematics(dt_seconds);
 
-        if calibration_button.is_pressed() {
+        if cyd.calibration_button_is_pressed() {
             esp_println::println!(
                 "cal: calibration button pressed during runtime, entering calibration"
             );
             return Ok(MainState::Calibrating);
         }
 
-        if let Some(raw_touch_event) = cyd_touch.read_raw_touch_event() {
+        if let Some(raw_touch_event) = cyd.read_raw_touch_event() {
             match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
                     let (mapped_x, mapped_y) = map_raw_to_screen(
@@ -316,11 +416,11 @@ fn run_running_mode(
             previous_frame_flush = now;
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
-            cyd_sim.render_to(frame_buffer);
+            cyd_sim.render_to(cyd.frame_buffer);
             if let Some(cursor) = touch_cursor {
-                draw_touch_cursor(frame_buffer, cursor)?;
+                draw_touch_cursor(cyd.frame_buffer, cursor)?;
             }
-            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16)?;
+            cyd.flush()?;
             should_flush = false;
         } else {
             Delay::new().delay_millis(1);
@@ -419,7 +519,7 @@ fn compute_calibration_four_point(
     points: [RawPoint; 4],
     width: u16,
     height: u16,
-) -> TouchCalibrationConfig {
+) -> CalibrationConfig {
     let ul = calibration_corner_center(CalibrationCorner::UpperLeft, width, height);
     let ur = calibration_corner_center(CalibrationCorner::UpperRight, width, height);
     let lr = calibration_corner_center(CalibrationCorner::LowerRight, width, height);
@@ -429,7 +529,7 @@ fn compute_calibration_four_point(
     let (ax, bx, cx) = solve_affine_axis(points, screen_targets, true);
     let (ay, by, cy) = solve_affine_axis(points, screen_targets, false);
 
-    TouchCalibrationConfig {
+    CalibrationConfig {
         ax,
         bx,
         cx,
@@ -442,7 +542,7 @@ fn compute_calibration_four_point(
 fn map_raw_to_screen(
     raw_x: u16,
     raw_y: u16,
-    calibration: TouchCalibrationConfig,
+    calibration: CalibrationConfig,
     width: f32,
     height: f32,
 ) -> (f32, f32) {
@@ -546,56 +646,20 @@ fn draw_touch_cursor(frame_buffer: &mut FrameBuffer, cursor: Point) -> Result<()
 }
 
 impl MainState {
-    fn new<FlashBlockType>(
-        calibration_button: &impl device_envoy_esp::button::Button,
-        calibration_flash_block: &mut FlashBlockType,
-        cyd_sim: &mut CydSim,
-        frame_buffer: &mut FrameBuffer,
-    ) -> Result<MainState, MainError>
-    where
-        FlashBlockType: device_envoy_esp::flash_block::FlashBlock,
-        <FlashBlockType as device_envoy_esp::flash_block::FlashBlock>::Error: core::fmt::Debug,
-    {
-        let calibration_state = if calibration_button.is_pressed() {
-            esp_println::println!(
-                "cal: calibration button pressed at startup, skipping flash load"
-            );
-            MainState::Calibrating
-        } else {
-            match calibration_flash_block.load::<TouchCalibrationConfig>() {
-                Ok(Some(calibration_config)) => {
-                    esp_println::println!("cal: loaded calibration from flash");
-                    MainState::Running(calibration_config)
-                }
-                Ok(None) => {
-                    esp_println::println!("cal: no calibration in flash");
-                    MainState::Calibrating
-                }
-                Err(error) => {
-                    esp_println::println!(
-                        "cal: failed to load calibration from flash: {:?}",
-                        error
-                    );
-                    MainState::Calibrating
-                }
-            }
-        };
-
-        if let MainState::Running(_) = calibration_state {
-            cyd_sim.render_to(frame_buffer);
-        } else {
-            frame_buffer.clear(Rgb565::BLACK);
-            if let Some(calibration_corner) = calibration_corner_for_index(0) {
-                draw_calibration_cross(
-                    frame_buffer,
-                    calibration_corner,
-                    CydSim::WIDTH_U16,
-                    CydSim::HEIGHT_U16,
-                )?;
-            }
+    fn new(
+        cyd: &mut Cyd<
+            impl DrawTarget<Color = Rgb565>,
+            impl embedded_hal::spi::SpiDevice<u8>,
+            impl embedded_hal::digital::InputPin,
+        >,
+    ) -> Result<MainState, MainError> {
+        if cyd.calibration_button_is_pressed() {
+            return Ok(MainState::Calibrating);
         }
 
-        Ok(calibration_state)
+        Ok(cyd
+            .load_calibration()?
+            .map_or(MainState::Calibrating, MainState::Running))
     }
 }
 
