@@ -269,7 +269,9 @@ impl Cyd {
         }
     }
 
-    fn ensure_calibration(&mut self) -> Result<(CalibratedCyd<'_>, bool), MainError> {
+    fn ensure_calibration(
+        &mut self,
+    ) -> Result<(CalibratedCyd<'_>, bool, Option<TouchInputEvent>), MainError> {
         let mut just_calibrated = false;
 
         if self.recalibration_requested() {
@@ -285,19 +287,22 @@ impl Cyd {
             .calibration_config
             .expect("ensure_calibration must leave Cyd calibrated");
 
-        Ok((
-            CalibratedCyd {
-                cyd: self,
-                calibration_config,
-            },
-            just_calibrated,
-        ))
+        let mut calibrated_cyd = CalibratedCyd {
+            cyd: self,
+            calibration_config,
+        };
+
+        // Consume one calibrated touch event here; sim-specific interpretation stays in main.
+        let touch_input_event = calibrated_cyd.read_touch_event();
+
+        Ok((calibrated_cyd, just_calibrated, touch_input_event))
     }
 }
 
 impl CalibratedCyd<'_> {
-    fn request_calibration(&mut self) {
+    fn recalibrate_now(&mut self) -> Result<(), MainError> {
         self.cyd.calibration_config = None;
+        self.cyd.calibrate()
     }
 
     fn read_touch_event(&mut self) -> Option<TouchInputEvent> {
@@ -420,25 +425,25 @@ fn inner_main() -> Result<Infallible, MainError> {
 
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
-        let (mut cyd, just_calibrated) = cyd.ensure_calibration()?;
+        let (mut cyd, just_calibrated, touch_input_event) = cyd.ensure_calibration()?;
+
+        // Forward calibrated touch input to the simulator; calibrate requests are sim-specific.
+        if let Some(touch_input_event) = touch_input_event {
+            if matches!(
+                cyd_sim.handle_touch_input_event(touch_input_event),
+                TouchInputOutcome::CalibrationRequested
+            ) {
+                esp_println::println!("cal: requested from UI");
+                cyd.recalibrate_now()?;
+                continue;
+            }
+        }
+
         // If calibration just ran, reset timing and then advance simulation time.
         let dt_seconds = runtime_state.tick_dt_seconds_after_calibration(just_calibrated);
 
         // Run simulation updates; CydSim tracks whether a render is needed.
         cyd_sim.tick_reverse_kinematics(dt_seconds);
-
-        // Convert calibrated touch input into simulator interactions.
-        if let Some(touch_input_event) = cyd.read_touch_event() {
-            match cyd_sim.handle_touch_input_event(touch_input_event) {
-                TouchInputOutcome::Unchanged => {}
-                TouchInputOutcome::Changed => {}
-                TouchInputOutcome::CalibrationRequested => {
-                    esp_println::println!("cal: requested from UI");
-                    cyd.request_calibration();
-                    continue;
-                }
-            }
-        }
 
         // Force an initial/post-calibration render; otherwise follow simulator dirty state.
         let should_render = runtime_state.take_first_frame_pending()
