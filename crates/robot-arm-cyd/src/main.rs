@@ -39,7 +39,7 @@ use touch::{RawTouchEvent, Xpt2046TouchInput};
 esp_bootloader_esp_idf::esp_app_desc!();
 
 const DISPLAY_SPI_HZ: u32 = 60_000_000;
-const SPI_BUFFER_LEN: usize = 512;
+const SPI_BUFFER_LEN: usize = 64;
 
 #[derive(Clone, Copy)]
 struct RawPoint {
@@ -97,14 +97,9 @@ fn main() -> ! {
     panic!("{err:?}");
 }
 
-fn allocate_buffers() -> (&'static mut FrameBuffer, &'static mut [u8; SPI_BUFFER_LEN]) {
+fn allocate_buffers() -> &'static mut FrameBuffer {
     static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
-    let frame_buffer = FRAME_BUFFER.init_with(FrameBuffer::new);
-
-    static SPI_BUFFER: StaticCell<[u8; SPI_BUFFER_LEN]> = StaticCell::new();
-    let spi_buffer = SPI_BUFFER.init([0u8; SPI_BUFFER_LEN]);
-
-    (frame_buffer, spi_buffer)
+    FRAME_BUFFER.init_with(FrameBuffer::new)
 }
 
 fn inner_main() -> Result<Infallible, MainError> {
@@ -113,25 +108,23 @@ fn inner_main() -> Result<Infallible, MainError> {
 
     let mut delay = Delay::new(); // todo00 use Embassy timers?
 
-    let (frame_buffer, spi_buffer) = allocate_buffers();
+    let frame_buffer = allocate_buffers();
     let mut cyd_sim = CydSim::new(); // todo000 review this
 
     cyd_sim.render_to(frame_buffer);
 
-    let mut calibration_completion = CalibrationCompletion::NotCompleted;
+    // todo000 calibration is a mess
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
     let [mut touch_calibration_flash_block] =
         FlashBlockEsp::new_array::<1>(p.FLASH).map_err(|_| MainError::CreateFlashBlock)?;
-    let mut touch_calibration_config =
+    let mut touch_calibration_config = if calibration_button.is_pressed() {
+        esp_println::println!("cal: calibration button pressed at startup, skipping flash load");
+        None
+    } else {
         match touch_calibration_flash_block.load::<TouchCalibrationConfig>() {
             Ok(Some(touch_calibration_config)) => {
-                if touch_calibration_config_is_finite(touch_calibration_config) {
-                    esp_println::println!("cal: loaded valid calibration from flash");
-                    Some(touch_calibration_config)
-                } else {
-                    esp_println::println!("cal: stored calibration failed app validation");
-                    None
-                }
+                esp_println::println!("cal: loaded calibration from flash");
+                Some(touch_calibration_config)
             }
             Ok(None) => {
                 esp_println::println!("cal: no calibration in flash");
@@ -141,7 +134,8 @@ fn inner_main() -> Result<Infallible, MainError> {
                 esp_println::println!("cal: failed to load calibration from flash: {:?}", error);
                 None
             }
-        };
+        }
+    };
 
     let spi_config = spi::master::Config::default()
         .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
@@ -177,7 +171,8 @@ fn inner_main() -> Result<Infallible, MainError> {
         .map_err(|_| MainError::CreateTouchSpiDevice)?;
     let mut touch_input = Xpt2046TouchInput::new(touch_irq);
 
-    let display_interface = SpiInterface::new(display_spi_device, dc, spi_buffer);
+    let mut spi_buffer = [0u8; SPI_BUFFER_LEN];
+    let display_interface = SpiInterface::new(display_spi_device, dc, &mut spi_buffer);
 
     let mut display = Builder::new(ILI9341Rgb565, display_interface)
         .reset_pin(rst)
@@ -229,6 +224,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     }
 
     let mut previous_frame_flush = Instant::now();
+    let mut calibration_completion = CalibrationCompletion::NotCompleted;
     let mut last_calibration_button_pressed = false;
 
     loop {
@@ -528,15 +524,6 @@ fn map_raw_to_screen(
     let mapped_y = mapped_y.clamp(0.0, (height - 1.0).max(0.0));
 
     (mapped_x, mapped_y)
-}
-
-fn touch_calibration_config_is_finite(config: TouchCalibrationConfig) -> bool {
-    config.ax.is_finite()
-        && config.bx.is_finite()
-        && config.cx.is_finite()
-        && config.ay.is_finite()
-        && config.by.is_finite()
-        && config.cy.is_finite()
 }
 
 fn calibration_corner_for_index(calibration_index: usize) -> Option<CalibrationCorner> {
