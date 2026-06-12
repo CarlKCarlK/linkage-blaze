@@ -14,8 +14,8 @@ use device_envoy_esp::{
 use embedded_graphics::{
     Drawable,
     pixelcolor::Rgb565,
-    prelude::{DrawTarget, Point, Primitive, RgbColor, Size},
-    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
+    prelude::{Point, Primitive, RgbColor},
+    primitives::{Circle, Line, PrimitiveStyle},
 };
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay, time::Instant};
@@ -24,7 +24,7 @@ use robot_arm_core::cyd::{CydSim, FrameBuffer, TouchInputEvent, TouchInputOutcom
 mod display;
 mod touch;
 
-use display::{CydDisplay, CydDisplayInitError};
+use display::{CydDisplay, CydDisplayFlushError, CydDisplayInitError};
 use touch::{CydTouch, CydTouchInitError, RawTouchEvent};
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -35,28 +35,6 @@ struct RawPoint {
     y: u16,
 }
 
-#[derive(Clone, Copy)]
-enum CydTouchEvent {
-    Down { x: f32, y: f32 },
-    Move { x: f32, y: f32 },
-    Up,
-}
-
-impl CydTouchEvent {
-    fn to_touch_input_event(self) -> TouchInputEvent {
-        match self {
-            CydTouchEvent::Down { x, y } => TouchInputEvent::Down { x, y },
-            CydTouchEvent::Move { x, y } => TouchInputEvent::Move { x, y },
-            CydTouchEvent::Up => TouchInputEvent::Up,
-        }
-    }
-}
-
-struct CydStatic {
-    frame_buffer: &'static mut FrameBuffer,
-}
-
-// todo000 can we make this buffer part of the display? (may no longer apply)
 struct Cyd {
     // todo000 combine with the display? (may no longer apply)
     display: CydDisplay,
@@ -64,7 +42,6 @@ struct Cyd {
     calibration_config: Option<CalibrationConfig>,
     calibration_flash_block: FlashBlockEsp,
     calibration_button: ButtonEsp<'static>,
-    frame_buffer: &'static mut FrameBuffer,
 }
 
 struct CalibratedCyd<'a> {
@@ -75,7 +52,6 @@ struct CalibratedCyd<'a> {
 struct RuntimeState {
     previous_tick: Instant,
     previous_frame_flush: Instant,
-    should_flush: bool,
 }
 
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -114,8 +90,13 @@ enum MainError {
     InitDisplay,
     DrawCalibrationCross,
     DrawCalibrationCenterDot,
-    DrawTouchCursor,
     FlushFrameBuffer,
+}
+
+impl From<CydDisplayFlushError> for MainError {
+    fn from(_: CydDisplayFlushError) -> Self {
+        MainError::FlushFrameBuffer
+    }
 }
 
 impl From<device_envoy_esp::Error> for MainError {
@@ -143,17 +124,8 @@ impl From<CydTouchInitError> for MainError {
     }
 }
 
-impl CydStatic {
-    fn new() -> Self {
-        Self {
-            frame_buffer: FrameBuffer::static_new(),
-        }
-    }
-}
-
 impl Cyd {
     fn new(
-        cyd_static: CydStatic,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
         display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
         display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -200,7 +172,6 @@ impl Cyd {
             calibration_config,
             calibration_flash_block,
             calibration_button,
-            frame_buffer: cyd_static.frame_buffer,
         })
     }
 
@@ -216,12 +187,7 @@ impl Cyd {
     }
 
     fn flush(&mut self) -> Result<(), MainError> {
-        flush_full_frame(
-            self.display.display_mut(),
-            self.frame_buffer,
-            CydSim::WIDTH_U16,
-            CydSim::HEIGHT_U16,
-        )
+        Ok(self.display.flush()?)
     }
 
     fn calibrate(&mut self) -> Result<(), MainError> {
@@ -234,10 +200,10 @@ impl Cyd {
 
         loop {
             if calibration_screen_dirty {
-                self.frame_buffer.clear(Rgb565::BLACK);
+                self.display.frame_buffer_mut().clear(Rgb565::BLACK);
                 if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
                     draw_calibration_cross(
-                        self.frame_buffer,
+                        self.display.frame_buffer_mut(),
                         calibration_corner,
                         CydSim::WIDTH_U16,
                         CydSim::HEIGHT_U16,
@@ -333,7 +299,7 @@ impl CalibratedCyd<'_> {
         self.cyd.calibration_config = None;
     }
 
-    fn read_touch_event(&mut self) -> Option<CydTouchEvent> {
+    fn read_touch_event(&mut self) -> Option<TouchInputEvent> {
         let raw_touch_event = self.cyd.touch.read_raw_touch_event()?;
 
         Some(match raw_touch_event {
@@ -345,7 +311,7 @@ impl CalibratedCyd<'_> {
                     CydSim::WIDTH_U16 as f32,
                     CydSim::HEIGHT_U16 as f32,
                 );
-                CydTouchEvent::Down { x, y }
+                TouchInputEvent::Down { x, y }
             }
             RawTouchEvent::Move { raw_x, raw_y } => {
                 let (x, y) = map_raw_to_screen(
@@ -355,14 +321,14 @@ impl CalibratedCyd<'_> {
                     CydSim::WIDTH_U16 as f32,
                     CydSim::HEIGHT_U16 as f32,
                 );
-                CydTouchEvent::Move { x, y }
+                TouchInputEvent::Move { x, y }
             }
-            RawTouchEvent::Up => CydTouchEvent::Up,
+            RawTouchEvent::Up => TouchInputEvent::Up,
         })
     }
 
     fn frame_buffer_mut(&mut self) -> &mut FrameBuffer {
-        self.cyd.frame_buffer
+        self.cyd.display.frame_buffer_mut()
     }
 
     fn flush(&mut self) -> Result<(), MainError> {
@@ -376,7 +342,6 @@ impl RuntimeState {
         Self {
             previous_tick: now,
             previous_frame_flush: now,
-            should_flush: true,
         }
     }
 
@@ -384,7 +349,6 @@ impl RuntimeState {
         let now = Instant::now();
         self.previous_tick = now;
         self.previous_frame_flush = now;
-        self.should_flush = true;
     }
 
     fn tick_dt_seconds(&mut self) -> f32 {
@@ -408,14 +372,6 @@ impl RuntimeState {
         self.previous_frame_flush = now;
         dt_seconds
     }
-
-    fn request_flush(&mut self) {
-        self.should_flush = true;
-    }
-
-    fn clear_flush_request(&mut self) {
-        self.should_flush = false;
-    }
 }
 
 #[esp_hal::main]
@@ -433,9 +389,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     let [calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
-    let cyd_static = CydStatic::new();
     let mut cyd = Cyd::new(
-        cyd_static,              // CYD static framebuffer storage
         p.SPI2,                  // display SPI
         p.GPIO14,                // display SCK
         p.GPIO13,                // display MOSI
@@ -456,25 +410,33 @@ fn inner_main() -> Result<Infallible, MainError> {
 
     let mut runtime_state = RuntimeState::new();
 
+    // Render and flush the initial frame before the main event loop.
+    {
+        let (mut cyd, _) = cyd.ensure_calibration()?;
+        cyd_sim.render_to(cyd.frame_buffer_mut());
+        cyd.flush()?;
+    }
+
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let (mut cyd, just_calibrated) = cyd.ensure_calibration()?;
         // If calibration just ran, reset timing and then advance simulation time.
         let dt_seconds = runtime_state.tick_dt_seconds_after_calibration(just_calibrated);
 
-        // A kinematics update changed sim state, so schedule a frame flush.
+        // Force a render after calibration; otherwise drive by sim state changes.
+        let mut sim_changed = just_calibrated;
+
+        // A kinematics update changed sim state, so schedule a frame render.
         if cyd_sim.tick_reverse_kinematics(dt_seconds) {
-            runtime_state.request_flush();
+            sim_changed = true;
         }
 
         // Convert calibrated touch input into simulator interactions.
-        if let Some(cyd_touch_event) = cyd.read_touch_event() {
-            let touch_input_event = cyd_touch_event.to_touch_input_event();
-
+        if let Some(touch_input_event) = cyd.read_touch_event() {
             match cyd_sim.handle_touch_input_event(touch_input_event) {
                 TouchInputOutcome::Unchanged => {}
                 TouchInputOutcome::Changed => {
-                    runtime_state.request_flush();
+                    sim_changed = true;
                 }
                 TouchInputOutcome::CalibrationRequested => {
                     esp_println::println!("cal: requested from UI");
@@ -484,14 +446,13 @@ fn inner_main() -> Result<Infallible, MainError> {
             }
         }
 
-        if runtime_state.should_flush {
+        if sim_changed {
             // Render only when state changed or animation advanced.
+            // Calling frame_buffer_mut() automatically marks the display as needing a flush.
             let frame_dt_seconds = runtime_state.frame_dt_seconds();
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
-
             cyd_sim.render_to(cyd.frame_buffer_mut());
             cyd.flush()?;
-            runtime_state.clear_flush_request();
         } else {
             Delay::new().delay_millis(1);
         }
@@ -695,23 +656,6 @@ fn draw_calibration_cross(
     .into_styled(CALIBRATION_CENTER_DOT_STYLE)
     .draw(frame_buffer)
     .map_err(|_| MainError::DrawCalibrationCenterDot)?;
-
-    Ok(())
-}
-
-fn flush_full_frame(
-    display: &mut impl DrawTarget<Color = Rgb565>,
-    frame_buffer: &FrameBuffer,
-    width: u16,
-    height: u16,
-) -> Result<(), MainError> {
-    let full_screen = Rectangle::new(Point::new(0, 0), Size::new(width as u32, height as u32));
-    if display
-        .fill_contiguous(&full_screen, frame_buffer.pixels().iter().copied())
-        .is_err()
-    {
-        return Err(MainError::FlushFrameBuffer);
-    }
 
     Ok(())
 }

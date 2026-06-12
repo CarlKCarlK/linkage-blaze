@@ -1,4 +1,7 @@
-use embedded_graphics::{pixelcolor::Rgb565, prelude::DrawTarget};
+use embedded_graphics::{
+    prelude::{DrawTarget, Point, Size},
+    primitives::Rectangle,
+};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use esp_hal::{
     delay::Delay,
@@ -14,6 +17,7 @@ use mipidsi::{
     models::ILI9341Rgb565,
     options::{ColorOrder, Orientation, Rotation},
 };
+use robot_arm_core::cyd::{FrameBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
 use static_cell::StaticCell;
 
 const DISPLAY_SPI_HZ: u32 = 60_000_000;
@@ -31,9 +35,16 @@ pub enum CydDisplayInitError {
     InitDisplay,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum CydDisplayFlushError {
+    FlushFrameBuffer,
+}
+
 //todo00 review all the code related to CydDisplay, including its name.
 pub struct CydDisplay {
     display: CydDisplayDevice,
+    frame_buffer: &'static mut FrameBuffer,
+    needs_flush: bool,
 }
 
 impl CydDisplay {
@@ -84,10 +95,37 @@ impl CydDisplay {
 
         backlight.set_high();
 
-        Ok(CydDisplay { display })
+        Ok(CydDisplay {
+            display,
+            frame_buffer: FrameBuffer::static_new(),
+            needs_flush: false,
+        })
     }
 
-    pub fn display_mut(&mut self) -> &mut impl DrawTarget<Color = Rgb565> {
-        &mut self.display
+    /// Returns a mutable reference to the frame buffer and marks it as needing a flush.
+    pub fn frame_buffer_mut(&mut self) -> &mut FrameBuffer {
+        self.needs_flush = true;
+        self.frame_buffer
+    }
+
+    /// Sends the frame buffer to the display hardware, but only if it has been modified since
+    /// the last flush. Clears the dirty flag on success.
+    pub fn flush(&mut self) -> Result<(), CydDisplayFlushError> {
+        if !self.needs_flush {
+            return Ok(());
+        }
+        let full_screen = Rectangle::new(
+            Point::new(0, 0),
+            Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
+        );
+        if self
+            .display
+            .fill_contiguous(&full_screen, self.frame_buffer.pixels().iter().copied())
+            .is_err()
+        {
+            return Err(CydDisplayFlushError::FlushFrameBuffer);
+        }
+        self.needs_flush = false;
+        Ok(())
     }
 }
