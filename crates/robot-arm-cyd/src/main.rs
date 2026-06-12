@@ -424,21 +424,14 @@ fn inner_main() -> Result<Infallible, MainError> {
         // If calibration just ran, reset timing and then advance simulation time.
         let dt_seconds = runtime_state.tick_dt_seconds_after_calibration(just_calibrated);
 
-        // Force a render after calibration; otherwise drive by sim state changes.
-        let mut sim_changed = runtime_state.take_first_frame_pending() || just_calibrated;
-
-        // A kinematics update changed sim state, so schedule a frame render.
-        if cyd_sim.tick_reverse_kinematics(dt_seconds) {
-            sim_changed = true;
-        }
+        // Run simulation updates; CydSim tracks whether a render is needed.
+        cyd_sim.tick_reverse_kinematics(dt_seconds);
 
         // Convert calibrated touch input into simulator interactions.
         if let Some(touch_input_event) = cyd.read_touch_event() {
             match cyd_sim.handle_touch_input_event(touch_input_event) {
                 TouchInputOutcome::Unchanged => {}
-                TouchInputOutcome::Changed => {
-                    sim_changed = true;
-                }
+                TouchInputOutcome::Changed => {}
                 TouchInputOutcome::CalibrationRequested => {
                     esp_println::println!("cal: requested from UI");
                     cyd.request_calibration();
@@ -447,7 +440,12 @@ fn inner_main() -> Result<Infallible, MainError> {
             }
         }
 
-        if sim_changed {
+        // Force an initial/post-calibration render; otherwise follow simulator dirty state.
+        let should_render = runtime_state.take_first_frame_pending()
+            || just_calibrated
+            || cyd_sim.take_render_dirty();
+
+        if should_render {
             // Render only when state changed or animation advanced.
             // Calling frame_buffer_mut() automatically marks the display as needing a flush.
             let frame_dt_seconds = runtime_state.frame_dt_seconds();

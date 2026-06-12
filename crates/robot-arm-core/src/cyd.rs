@@ -138,6 +138,7 @@ pub struct CydSim {
     calibration_requested: bool,
     rk_step_hold_active: bool,
     touch_cursor: Option<(f32, f32)>,
+    render_dirty: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -175,6 +176,8 @@ impl CydSim {
             calibration_requested: false,
             rk_step_hold_active: false,
             touch_cursor: None,
+            // First frame must render the initial UI.
+            render_dirty: true,
         }
     }
 
@@ -206,6 +209,13 @@ impl CydSim {
         }
 
         self.frames_per_second = Some(round_to_u32(1.0 / dt_seconds).min(999) as u16);
+        self.render_dirty = true;
+    }
+
+    pub fn take_render_dirty(&mut self) -> bool {
+        let render_dirty = self.render_dirty;
+        self.render_dirty = false;
+        render_dirty
     }
 
     pub fn take_calibration_request(&mut self) -> bool {
@@ -224,18 +234,21 @@ impl CydSim {
         if matches!(self.active_control, Some(ActiveControl::Calibrate)) {
             self.calibration_requested = true;
             self.active_control = None;
+            self.render_dirty = true;
             return;
         }
         if matches!(self.active_control, Some(ActiveControl::PreviousTarget)) {
             self.clear_reverse_kinematics();
             self.target_seed = self.target_seed.wrapping_sub(1);
             self.active_control = None;
+            self.render_dirty = true;
             return;
         }
         if matches!(self.active_control, Some(ActiveControl::NextTarget)) {
             self.clear_reverse_kinematics();
             self.target_seed = self.target_seed.wrapping_add(1);
             self.active_control = None;
+            self.render_dirty = true;
             return;
         }
         if matches!(
@@ -244,6 +257,7 @@ impl CydSim {
         ) {
             self.toggle_reverse_kinematics();
             self.active_control = None;
+            self.render_dirty = true;
             return;
         }
         if matches!(
@@ -252,13 +266,16 @@ impl CydSim {
         ) {
             self.rk_step_hold_active = true;
             self.step_reverse_kinematics();
+            self.render_dirty = true;
             return;
         }
         self.update_touch(x, y);
+        self.render_dirty = true;
     }
 
     fn touch_move(&mut self, x: f32, y: f32) {
         self.update_touch(x, y);
+        self.render_dirty = true;
     }
 
     fn touch_up(&mut self) {
@@ -273,10 +290,12 @@ impl CydSim {
         match touch_input_event {
             TouchInputEvent::Down { x, y } => {
                 self.touch_cursor = Some((x, y));
+                self.render_dirty = true;
                 self.touch_down(x, y);
                 if self.take_calibration_request() {
                     self.touch_up();
                     self.touch_cursor = None;
+                    self.render_dirty = true;
                     TouchInputOutcome::CalibrationRequested
                 } else {
                     TouchInputOutcome::Changed
@@ -284,12 +303,14 @@ impl CydSim {
             }
             TouchInputEvent::Move { x, y } => {
                 self.touch_cursor = Some((x, y));
+                self.render_dirty = true;
                 self.touch_move(x, y);
                 TouchInputOutcome::Changed
             }
             TouchInputEvent::Up => {
                 self.touch_cursor = None;
                 self.touch_up();
+                self.render_dirty = true;
                 TouchInputOutcome::Unchanged
             }
         }
@@ -298,15 +319,18 @@ impl CydSim {
     pub fn start_reverse_kinematics(&mut self) {
         self.ensure_reverse_kinematics_run();
         self.reverse_kinematics_playing = true;
+        self.render_dirty = true;
     }
 
     pub fn stop_reverse_kinematics(&mut self) {
         self.reverse_kinematics_playing = false;
+        self.render_dirty = true;
     }
 
     fn clear_reverse_kinematics(&mut self) {
         self.reverse_kinematics_run = None;
         self.reverse_kinematics_playing = false;
+        self.render_dirty = true;
     }
 
     fn ensure_reverse_kinematics_run(&mut self) {
@@ -324,6 +348,7 @@ impl CydSim {
         } else {
             self.start_reverse_kinematics();
         }
+        self.render_dirty = true;
     }
 
     #[must_use]
@@ -356,8 +381,10 @@ impl CydSim {
         let running = search_running || visible_moving;
         if running {
             self.reverse_kinematics_run = Some(run);
+            self.render_dirty = true;
         } else {
             self.reverse_kinematics_playing = false;
+            self.render_dirty = true;
         }
         running
     }
@@ -379,6 +406,7 @@ impl CydSim {
         let running = search_running || visible_moving;
         if running {
             self.reverse_kinematics_run = Some(run);
+            self.render_dirty = true;
         }
         running
     }
@@ -389,7 +417,9 @@ impl CydSim {
     /// shrinks the step when stuck.
     pub fn reverse_kinematics(&mut self) -> f32 {
         let target = target_from_seed(self.target_seed);
-        reverse_kinematics(&mut self.params, target)
+        let distance = reverse_kinematics(&mut self.params, target);
+        self.render_dirty = true;
+        distance
     }
 
     fn update_touch(&mut self, x: f32, y: f32) {
