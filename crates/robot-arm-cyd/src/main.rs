@@ -34,6 +34,13 @@ struct RawPoint {
     y: u16,
 }
 
+#[derive(Clone, Copy)]
+enum CydTouchEvent {
+    Down { x: f32, y: f32 },
+    Move { x: f32, y: f32 },
+    Up,
+}
+
 struct CydStatic {
     frame_buffer: &'static mut FrameBuffer,
 }
@@ -47,6 +54,11 @@ struct Cyd {
     calibration_flash_block: FlashBlockEsp,
     calibration_button: ButtonEsp<'static>,
     frame_buffer: &'static mut FrameBuffer,
+}
+
+struct CalibratedCyd<'a> {
+    cyd: &'a mut Cyd,
+    calibration_config: CalibrationConfig,
 }
 
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -177,11 +189,7 @@ impl Cyd {
         })
     }
 
-    fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
-        self.touch.read_raw_touch_event()
-    }
-
-    fn calibration_button_is_pressed(&self) -> bool {
+    fn recalibration_requested(&self) -> bool {
         self.calibration_button.is_pressed()
     }
 
@@ -224,7 +232,7 @@ impl Cyd {
                 calibration_screen_dirty = false;
             }
 
-            if self.calibration_button_is_pressed() {
+            if self.recalibration_requested() {
                 calibration_index = 0;
                 calibration_points = [RawPoint { x: 0, y: 0 }; 4];
                 calibration_screen_dirty = true;
@@ -233,7 +241,7 @@ impl Cyd {
                 continue;
             }
 
-            if let Some(raw_touch_event) = self.read_raw_touch_event() {
+            if let Some(raw_touch_event) = self.touch.read_raw_touch_event() {
                 if let RawTouchEvent::Down { raw_x, raw_y } = raw_touch_event {
                     if calibration_index < 4 {
                         calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
@@ -278,6 +286,77 @@ impl Cyd {
             Delay::new().delay_millis(1);
         }
     }
+
+    fn ensure_calibration(&mut self) -> Result<(CalibratedCyd<'_>, bool), MainError> {
+        let mut just_calibrated = false;
+
+        if self.recalibration_requested() {
+            self.calibration_config = None;
+        }
+
+        if self.calibration_config.is_none() {
+            self.calibrate()?;
+            just_calibrated = true;
+        }
+
+        let calibration_config = self
+            .calibration_config
+            .expect("ensure_calibration must leave Cyd calibrated");
+
+        Ok((
+            CalibratedCyd {
+                cyd: self,
+                calibration_config,
+            },
+            just_calibrated,
+        ))
+    }
+}
+
+impl CalibratedCyd<'_> {
+    fn request_calibration(&mut self) {
+        self.cyd.calibration_config = None;
+    }
+
+    fn read_touch_event(&mut self) -> Option<CydTouchEvent> {
+        let raw_touch_event = self.cyd.touch.read_raw_touch_event()?;
+
+        Some(match raw_touch_event {
+            RawTouchEvent::Down { raw_x, raw_y } => {
+                let (x, y) = map_raw_to_screen(
+                    raw_x,
+                    raw_y,
+                    self.calibration_config,
+                    CydSim::WIDTH_U16 as f32,
+                    CydSim::HEIGHT_U16 as f32,
+                );
+                CydTouchEvent::Down { x, y }
+            }
+            RawTouchEvent::Move { raw_x, raw_y } => {
+                let (x, y) = map_raw_to_screen(
+                    raw_x,
+                    raw_y,
+                    self.calibration_config,
+                    CydSim::WIDTH_U16 as f32,
+                    CydSim::HEIGHT_U16 as f32,
+                );
+                CydTouchEvent::Move { x, y }
+            }
+            RawTouchEvent::Up => CydTouchEvent::Up,
+        })
+    }
+
+    fn frame_buffer_mut(&mut self) -> &mut FrameBuffer {
+        self.cyd.frame_buffer
+    }
+
+    fn draw_touch_cursor(&mut self, cursor: Point) -> Result<(), MainError> {
+        draw_touch_cursor(self.cyd.frame_buffer, cursor)
+    }
+
+    fn flush(&mut self) -> Result<(), MainError> {
+        self.cyd.flush()
+    }
 }
 
 #[esp_hal::main]
@@ -316,87 +395,66 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
+    let now = Instant::now();
+    let mut touch_cursor = None;
+    let mut previous_tick = now;
+    let mut previous_frame_flush = now;
+    let mut should_flush = true;
+
     loop {
-        let Some(calibration_config) = cyd.calibration_config else {
-            cyd.calibrate()?;
-            continue;
-        };
+        let (mut cyd, just_calibrated) = cyd.ensure_calibration()?;
+        if just_calibrated {
+            let now = Instant::now();
+            touch_cursor = None;
+            previous_tick = now;
+            previous_frame_flush = now;
+            should_flush = true;
+        }
 
         let now = Instant::now();
-        let mut touch_cursor = None;
-        let mut previous_tick = now;
-        let mut previous_frame_flush = now;
-        let mut should_flush = true;
+        let dt_seconds = (now - previous_tick).as_micros() as f32 / 1_000_000.0;
+        previous_tick = now;
 
-        'running: loop {
-            let now = Instant::now();
-            let dt_seconds = (now - previous_tick).as_micros() as f32 / 1_000_000.0;
-            previous_tick = now;
+        should_flush |= cyd_sim.tick_reverse_kinematics(dt_seconds);
 
-            should_flush |= cyd_sim.tick_reverse_kinematics(dt_seconds);
-
-            if cyd.calibration_button_is_pressed() {
-                esp_println::println!(
-                    "cal: calibration button pressed during runtime, entering calibration"
-                );
-                cyd.calibration_config = None;
-                break 'running;
-            }
-
-            if let Some(raw_touch_event) = cyd.read_raw_touch_event() {
-                match raw_touch_event {
-                    RawTouchEvent::Down { raw_x, raw_y } => {
-                        let (mapped_x, mapped_y) = map_raw_to_screen(
-                            raw_x,
-                            raw_y,
-                            calibration_config,
-                            CydSim::WIDTH_U16 as f32,
-                            CydSim::HEIGHT_U16 as f32,
-                        );
-                        touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        cyd_sim.touch_down(mapped_x, mapped_y);
-                        if cyd_sim.take_calibration_request() {
-                            cyd_sim.touch_up();
-                            esp_println::println!("cal: requested from UI");
-                            cyd.calibration_config = None;
-                            break 'running;
-                        }
-                        should_flush = true;
-                    }
-                    RawTouchEvent::Move { raw_x, raw_y } => {
-                        let (mapped_x, mapped_y) = map_raw_to_screen(
-                            raw_x,
-                            raw_y,
-                            calibration_config,
-                            CydSim::WIDTH_U16 as f32,
-                            CydSim::HEIGHT_U16 as f32,
-                        );
-                        touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        cyd_sim.touch_move(mapped_x, mapped_y);
-                        should_flush = true;
-                    }
-                    RawTouchEvent::Up => {
+        if let Some(cyd_touch_event) = cyd.read_touch_event() {
+            match cyd_touch_event {
+                CydTouchEvent::Down { x, y } => {
+                    touch_cursor = Some(Point::new(x as i32, y as i32));
+                    cyd_sim.touch_down(x, y);
+                    if cyd_sim.take_calibration_request() {
                         cyd_sim.touch_up();
-                        touch_cursor = None;
+                        esp_println::println!("cal: requested from UI");
+                        cyd.request_calibration();
+                        continue;
                     }
+                    should_flush = true;
+                }
+                CydTouchEvent::Move { x, y } => {
+                    touch_cursor = Some(Point::new(x as i32, y as i32));
+                    cyd_sim.touch_move(x, y);
+                    should_flush = true;
+                }
+                CydTouchEvent::Up => {
+                    cyd_sim.touch_up();
+                    touch_cursor = None;
                 }
             }
+        }
 
-            if should_flush {
-                let frame_dt_seconds =
-                    (now - previous_frame_flush).as_micros() as f32 / 1_000_000.0;
-                previous_frame_flush = now;
-                cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
+        if should_flush {
+            let frame_dt_seconds = (now - previous_frame_flush).as_micros() as f32 / 1_000_000.0;
+            previous_frame_flush = now;
+            cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
-                cyd_sim.render_to(cyd.frame_buffer);
-                if let Some(cursor) = touch_cursor {
-                    draw_touch_cursor(cyd.frame_buffer, cursor)?;
-                }
-                cyd.flush()?;
-                should_flush = false;
-            } else {
-                Delay::new().delay_millis(1);
+            cyd_sim.render_to(cyd.frame_buffer_mut());
+            if let Some(cursor) = touch_cursor {
+                cyd.draw_touch_cursor(cursor)?;
             }
+            cyd.flush()?;
+            should_flush = false;
+        } else {
+            Delay::new().delay_millis(1);
         }
     }
 }
