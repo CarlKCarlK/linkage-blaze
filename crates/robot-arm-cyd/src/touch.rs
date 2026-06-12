@@ -5,6 +5,74 @@ pub enum RawTouchEvent {
     Up,
 }
 
+use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
+use esp_hal::{
+    gpio::{
+        Input, InputConfig, InputPin as EspInputPin, Output, OutputConfig, OutputPin, Pull,
+        interconnect::{PeripheralInput, PeripheralOutput},
+    },
+    spi,
+};
+
+const TOUCH_SPI_HZ: u32 = 2_500_000;
+
+#[derive(Clone, Copy, Debug)]
+pub enum CydTouchInitError {
+    ConfigureTouchSpi,
+    CreateTouchSpiDevice,
+}
+
+pub struct CydTouch<TouchSpiDevice, TouchIrq> {
+    touch_spi_device: TouchSpiDevice,
+    touch_input: Xpt2046TouchInput<TouchIrq>,
+}
+
+impl CydTouch<(), ()> {
+    pub fn new(
+        spi: impl spi::master::Instance + 'static,
+        sck_pin: impl PeripheralOutput<'static>,
+        mosi_pin: impl PeripheralOutput<'static>,
+        miso_pin: impl PeripheralInput<'static>,
+        cs_pin: impl OutputPin + 'static,
+        irq_pin: impl EspInputPin + 'static,
+    ) -> Result<
+        CydTouch<impl embedded_hal::spi::SpiDevice<u8> + 'static, Input<'static>>,
+        CydTouchInitError,
+    > {
+        let spi_config = spi::master::Config::default()
+            .with_frequency(esp_hal::time::Rate::from_hz(TOUCH_SPI_HZ))
+            .with_mode(spi::Mode::_0);
+        let spi = spi::master::Spi::new(spi, spi_config)
+            .map_err(|_| CydTouchInitError::ConfigureTouchSpi)?
+            .with_sck(sck_pin)
+            .with_mosi(mosi_pin)
+            .with_miso(miso_pin);
+
+        let cs = Output::new(cs_pin, esp_hal::gpio::Level::High, OutputConfig::default());
+        let irq = Input::new(irq_pin, InputConfig::default().with_pull(Pull::Up));
+
+        let touch_spi_device = ExclusiveDevice::<_, _, NoDelay>::new_no_delay(spi, cs)
+            .map_err(|_| CydTouchInitError::CreateTouchSpiDevice)?;
+        let touch_input = Xpt2046TouchInput::new(irq);
+
+        Ok(CydTouch {
+            touch_spi_device,
+            touch_input,
+        })
+    }
+}
+
+impl<TouchSpiDevice, TouchIrq> CydTouch<TouchSpiDevice, TouchIrq>
+where
+    TouchSpiDevice: embedded_hal::spi::SpiDevice<u8>,
+    TouchIrq: embedded_hal::digital::InputPin,
+{
+    pub fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
+        self.touch_input
+            .read_raw_touch_event(&mut self.touch_spi_device)
+    }
+}
+
 const TOUCH_RAW_LOGGING: bool = false;
 
 /// Concrete XPT2046 touch controller input for CYD with shared SPI.

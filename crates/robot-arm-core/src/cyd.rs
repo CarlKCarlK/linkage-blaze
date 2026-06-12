@@ -10,6 +10,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use nanorand::{Rng, WyRand};
+use static_cell::StaticCell;
 
 use crate::{Linkage, Pose, Vec3};
 
@@ -1321,6 +1322,11 @@ impl FrameBuffer {
         Self {
             pixels: [Rgb565::BLACK; SCREEN_PIXELS],
         }
+    }
+
+    pub fn static_new() -> &'static mut Self {
+        static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
+        FRAME_BUFFER.init_with(FrameBuffer::new)
     }
 
     pub fn clear(&mut self, color: Rgb565) {

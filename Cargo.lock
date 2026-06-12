@@ -1757,6 +1757,7 @@ dependencies = [
  "libm",
  "nanorand",
  "png",
+ "static_cell",
 ]
 
 [[package]]

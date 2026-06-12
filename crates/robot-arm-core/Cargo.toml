@@ -8,6 +8,7 @@ license.workspace = true
 embedded-graphics = { version = "0.8", default-features = false }
 libm = "0.2"
 nanorand = { version = "0.8", default-features = false, features = ["wyrand"] }
+static_cell = "2.1.1"
 
 [dev-dependencies]
 png = "0.18"
