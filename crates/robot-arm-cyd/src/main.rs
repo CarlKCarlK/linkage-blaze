@@ -4,8 +4,8 @@
 use core::convert::Infallible;
 
 use device_envoy_esp::{
-    button::{Button as _, ButtonEsp, PressedTo},
-    flash_block::{FlashBlock as _, FlashBlockEsp},
+    button::{ButtonEsp, PressedTo},
+    flash_block::FlashBlockEsp,
 };
 use embedded_graphics::{
     Drawable,
@@ -48,10 +48,6 @@ enum TouchCalibrationState {
 }
 
 impl TouchCalibrationState {
-    const fn is_needs_calibration(self) -> bool {
-        matches!(self, Self::NeedsCalibration)
-    }
-
     const fn config(self) -> Option<TouchCalibrationConfig> {
         match self {
             Self::Ready(touch_calibration_config) => Some(touch_calibration_config),
@@ -66,12 +62,6 @@ enum CalibrationCorner {
     UpperRight,
     LowerRight,
     LowerLeft,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CalibrationCompletion {
-    NotCompleted,
-    JustCompleted,
 }
 
 const CALIBRATION_CROSS_MARGIN: i32 = 28;
@@ -142,158 +132,177 @@ fn inner_main() -> Result<Infallible, MainError> {
         frame_buffer,
     );
 
-    flush_full_frame(
-        cyd_display.display_mut(),
-        frame_buffer,
-        CydSim::WIDTH_U16,
-        CydSim::HEIGHT_U16,
-    );
+    loop {
+        touch_calibration_state = match touch_calibration_state {
+            TouchCalibrationState::NeedsCalibration => run_calibration_loop(
+                &mut cyd_touch,
+                &calibration_button,
+                &mut touch_calibration_flash_block,
+                frame_buffer,
+                cyd_display.display_mut(),
+            ),
+            TouchCalibrationState::Ready(touch_calibration_config) => run_ready_loop(
+                touch_calibration_config,
+                &mut cyd_sim,
+                &mut cyd_touch,
+                &calibration_button,
+                frame_buffer,
+                cyd_display.display_mut(),
+            ),
+        };
+    }
+}
 
-    let mut previous_tick = Instant::now();
+fn run_calibration_loop<FlashBlockType>(
+    cyd_touch: &mut CydTouch<impl embedded_hal::spi::SpiDevice<u8>, impl embedded_hal::digital::InputPin>,
+    calibration_button: &impl device_envoy_esp::button::Button,
+    touch_calibration_flash_block: &mut FlashBlockType,
+    frame_buffer: &mut FrameBuffer,
+    display: &mut impl DrawTarget<Color = Rgb565>,
+) -> TouchCalibrationState
+where
+    FlashBlockType: device_envoy_esp::flash_block::FlashBlock,
+    <FlashBlockType as device_envoy_esp::flash_block::FlashBlock>::Error: core::fmt::Debug,
+{
+    esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
+    esp_println::println!("cal: next tap UL");
+
     let mut calibration_index: usize = 0;
     let mut calibration_points: [RawPoint; 4] = [RawPoint { x: 0, y: 0 }; 4];
-    let mut touch_cursor: Option<Point> = None;
-    let mut calibration_screen_dirty = false;
+    let mut calibration_screen_dirty = true;
 
-    if touch_calibration_state.is_needs_calibration() {
-        esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
-        esp_println::println!("cal: next tap UL");
+    loop {
+        if calibration_screen_dirty {
+            frame_buffer.clear(Rgb565::BLACK);
+            if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
+                draw_calibration_cross(
+                    frame_buffer,
+                    calibration_corner,
+                    CydSim::WIDTH_U16,
+                    CydSim::HEIGHT_U16,
+                );
+            }
+            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16);
+            calibration_screen_dirty = false;
+        }
+
+        if calibration_button.is_pressed() {
+            calibration_index = 0;
+            calibration_points = [RawPoint { x: 0, y: 0 }; 4];
+            calibration_screen_dirty = true;
+            esp_println::println!("cal: calibration button pressed, restarting calibration");
+            esp_println::println!("cal: next tap UL");
+            continue;
+        }
+
+        if let Some(raw_touch_event) = cyd_touch.read_raw_touch_event() {
+            if let RawTouchEvent::Down { raw_x, raw_y } = raw_touch_event {
+                if calibration_index < 4 {
+                    calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
+                    calibration_index += 1;
+                    esp_println::println!(
+                        "cal: point{} raw_x={} raw_y={}",
+                        calibration_index,
+                        raw_x,
+                        raw_y
+                    );
+                    if calibration_index < 4 {
+                        let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
+                        esp_println::println!("cal: next tap {}", corner_label);
+                        calibration_screen_dirty = true;
+                        continue;
+                    }
+
+                    let touch_calibration_config = compute_calibration_four_point(
+                        calibration_points,
+                        CydSim::WIDTH_U16,
+                        CydSim::HEIGHT_U16,
+                    );
+                    touch_calibration_flash_block
+                        .save(&touch_calibration_config)
+                        .expect("cal: failed to save calibration to flash");
+
+                    esp_println::println!(
+                        "cal: done ax={:.5} bx={:.5} cx={:.1} ay={:.5} by={:.5} cy={:.1}",
+                        touch_calibration_config.ax,
+                        touch_calibration_config.bx,
+                        touch_calibration_config.cx,
+                        touch_calibration_config.ay,
+                        touch_calibration_config.by,
+                        touch_calibration_config.cy
+                    );
+                    esp_println::println!("cal: controls enabled with computed calibration");
+
+                    return TouchCalibrationState::Ready(touch_calibration_config);
+                }
+            }
+        }
+
+        Delay::new().delay_millis(1);
     }
+}
 
+fn run_ready_loop(
+    touch_calibration_config: TouchCalibrationConfig,
+    cyd_sim: &mut CydSim,
+    cyd_touch: &mut CydTouch<impl embedded_hal::spi::SpiDevice<u8>, impl embedded_hal::digital::InputPin>,
+    calibration_button: &impl device_envoy_esp::button::Button,
+    frame_buffer: &mut FrameBuffer,
+    display: &mut impl DrawTarget<Color = Rgb565>,
+) -> TouchCalibrationState {
+    let mut touch_cursor: Option<Point> = None;
+    let mut previous_tick = Instant::now();
     let mut previous_frame_flush = Instant::now();
-    let mut calibration_completion = CalibrationCompletion::NotCompleted;
-    let mut last_calibration_button_pressed = false;
+    let mut should_flush = true;
 
     loop {
         let now = Instant::now();
         let dt_seconds = (now - previous_tick).as_micros() as f32 / 1_000_000.0;
         previous_tick = now;
 
-        let mut should_flush = cyd_sim.tick_reverse_kinematics(dt_seconds);
-        let mut calibration_active = touch_calibration_state.is_needs_calibration();
+        should_flush |= cyd_sim.tick_reverse_kinematics(dt_seconds);
 
-        if calibration_active && calibration_screen_dirty {
-            should_flush = true;
+        if calibration_button.is_pressed() {
+            esp_println::println!("cal: calibration button pressed during runtime, entering calibration");
+            return TouchCalibrationState::NeedsCalibration;
         }
-
-        // Check if calibration button was pressed (rising edge) to trigger/restart calibration.
-        let calibration_button_pressed = calibration_button.is_pressed();
-        if calibration_button_pressed && !last_calibration_button_pressed {
-            if !calibration_active {
-                esp_println::println!(
-                    "cal: calibration button pressed during runtime, entering calibration"
-                );
-            } else {
-                esp_println::println!("cal: calibration button pressed, restarting calibration");
-            }
-            touch_calibration_state = TouchCalibrationState::NeedsCalibration;
-            calibration_index = 0;
-            calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-            touch_cursor = None;
-            calibration_screen_dirty = true;
-            calibration_active = true;
-            should_flush = true;
-            esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
-            esp_println::println!("cal: next tap UL");
-        }
-        last_calibration_button_pressed = calibration_button_pressed;
 
         if let Some(raw_touch_event) = cyd_touch.read_raw_touch_event() {
             match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
-                    if calibration_active && calibration_index < 4 {
-                        calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
-                        calibration_index += 1;
-                        esp_println::println!(
-                            "cal: point{} raw_x={} raw_y={}",
-                            calibration_index,
-                            raw_x,
-                            raw_y
-                        );
-                        if calibration_index < 4 {
-                            let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
-                            esp_println::println!("cal: next tap {}", corner_label);
-                            calibration_screen_dirty = true;
-                        } else {
-                            let config = compute_calibration_four_point(
-                                calibration_points,
-                                CydSim::WIDTH_U16,
-                                CydSim::HEIGHT_U16,
-                            );
-                            touch_calibration_flash_block
-                                .save(&config)
-                                .expect("cal: failed to save calibration to flash");
-                            touch_calibration_state = TouchCalibrationState::Ready(config);
-                            calibration_completion = CalibrationCompletion::JustCompleted;
-                            if let Some(config) = touch_calibration_state.config() {
-                                esp_println::println!(
-                                    "cal: done ax={:.5} bx={:.5} cx={:.1} ay={:.5} by={:.5} cy={:.1}",
-                                    config.ax,
-                                    config.bx,
-                                    config.cx,
-                                    config.ay,
-                                    config.by,
-                                    config.cy
-                                );
-                                esp_println::println!(
-                                    "cal: controls enabled with computed calibration"
-                                );
-                            }
-                        }
-                        continue;
+                    let (mapped_x, mapped_y) = map_raw_to_screen(
+                        raw_x,
+                        raw_y,
+                        touch_calibration_config,
+                        CydSim::WIDTH_U16 as f32,
+                        CydSim::HEIGHT_U16 as f32,
+                    );
+                    touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
+                    cyd_sim.touch_down(mapped_x, mapped_y);
+                    if cyd_sim.take_calibration_request() {
+                        cyd_sim.touch_up();
+                        esp_println::println!("cal: requested from UI");
+                        return TouchCalibrationState::NeedsCalibration;
                     }
-
-                    if let Some(config) = touch_calibration_state.config() {
-                        let (mapped_x, mapped_y) = map_raw_to_screen(
-                            raw_x,
-                            raw_y,
-                            config,
-                            CydSim::WIDTH_U16 as f32,
-                            CydSim::HEIGHT_U16 as f32,
-                        );
-                        touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        cyd_sim.touch_down(mapped_x, mapped_y);
-                        if cyd_sim.take_calibration_request() {
-                            cyd_sim.touch_up();
-                            touch_calibration_state = TouchCalibrationState::NeedsCalibration;
-                            calibration_index = 0;
-                            calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-                            touch_cursor = None;
-                            calibration_screen_dirty = true;
-                            calibration_active = true;
-                            esp_println::println!("cal: requested from UI");
-                            esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
-                            esp_println::println!("cal: next tap UL");
-                        }
-                        should_flush = true;
-                    }
+                    should_flush = true;
                 }
                 RawTouchEvent::Move { raw_x, raw_y } => {
-                    if let Some(config) = touch_calibration_state.config() {
-                        let (mapped_x, mapped_y) = map_raw_to_screen(
-                            raw_x,
-                            raw_y,
-                            config,
-                            CydSim::WIDTH_U16 as f32,
-                            CydSim::HEIGHT_U16 as f32,
-                        );
-                        touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
-                        cyd_sim.touch_move(mapped_x, mapped_y);
-                        should_flush = true;
-                    }
+                    let (mapped_x, mapped_y) = map_raw_to_screen(
+                        raw_x,
+                        raw_y,
+                        touch_calibration_config,
+                        CydSim::WIDTH_U16 as f32,
+                        CydSim::HEIGHT_U16 as f32,
+                    );
+                    touch_cursor = Some(Point::new(mapped_x as i32, mapped_y as i32));
+                    cyd_sim.touch_move(mapped_x, mapped_y);
+                    should_flush = true;
                 }
                 RawTouchEvent::Up => {
-                    if touch_calibration_state.config().is_some() {
-                        cyd_sim.touch_up();
-                    }
+                    cyd_sim.touch_up();
                     touch_cursor = None;
                 }
             }
-        }
-
-        if calibration_completion == CalibrationCompletion::JustCompleted {
-            should_flush = true;
-            calibration_completion = CalibrationCompletion::NotCompleted;
         }
 
         if should_flush {
@@ -301,33 +310,13 @@ fn inner_main() -> Result<Infallible, MainError> {
             previous_frame_flush = now;
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
-            let render_calibration_active = touch_calibration_state.is_needs_calibration();
-            if render_calibration_active {
-                frame_buffer.clear(Rgb565::BLACK);
-                if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
-                    draw_calibration_cross(
-                        frame_buffer,
-                        calibration_corner,
-                        CydSim::WIDTH_U16,
-                        CydSim::HEIGHT_U16,
-                    );
-                }
-                calibration_screen_dirty = false;
-            } else {
-                cyd_sim.render_to(frame_buffer);
-                if let Some(cursor) = touch_cursor {
-                    draw_touch_cursor(frame_buffer, cursor);
-                }
+            cyd_sim.render_to(frame_buffer);
+            if let Some(cursor) = touch_cursor {
+                draw_touch_cursor(frame_buffer, cursor);
             }
-            flush_full_frame(
-                cyd_display.display_mut(),
-                frame_buffer,
-                CydSim::WIDTH_U16,
-                CydSim::HEIGHT_U16,
-            );
-        }
-
-        if !should_flush {
+            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16);
+            should_flush = false;
+        } else {
             Delay::new().delay_millis(1);
         }
     }
