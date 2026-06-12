@@ -19,6 +19,11 @@ use static_cell::StaticCell;
 const DISPLAY_SPI_HZ: u32 = 60_000_000;
 const DISPLAY_SPI_BUFFER_LEN: usize = 64;
 
+type CydDisplaySpiBus = spi::master::Spi<'static, esp_hal::Blocking>;
+type CydDisplaySpiDevice = ExclusiveDevice<CydDisplaySpiBus, Output<'static>, NoDelay>;
+type CydDisplayInterface = SpiInterface<'static, CydDisplaySpiDevice, Output<'static>>;
+type CydDisplayDevice = mipidsi::Display<CydDisplayInterface, ILI9341Rgb565, Output<'static>>;
+
 #[derive(Clone, Copy, Debug)]
 pub enum CydDisplayInitError {
     ConfigureDisplaySpi,
@@ -27,11 +32,11 @@ pub enum CydDisplayInitError {
 }
 
 //todo00 review all the code related to CydDisplay, including its name.
-pub struct CydDisplay<DISPLAY> {
-    display: DISPLAY,
+pub struct CydDisplay {
+    display: CydDisplayDevice,
 }
 
-impl CydDisplay<()> {
+impl CydDisplay {
     pub fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,
@@ -41,7 +46,7 @@ impl CydDisplay<()> {
         dc_pin: impl OutputPin + 'static,
         rst_pin: impl OutputPin + 'static,
         backlight_pin: impl OutputPin + 'static,
-    ) -> Result<CydDisplay<impl DrawTarget<Color = Rgb565> + 'static>, CydDisplayInitError> {
+    ) -> Result<CydDisplay, CydDisplayInitError> {
         let spi_config = spi::master::Config::default()
             .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
             .with_mode(spi::Mode::_0);
@@ -81,13 +86,8 @@ impl CydDisplay<()> {
 
         Ok(CydDisplay { display })
     }
-}
 
-impl<DISPLAY> CydDisplay<DISPLAY>
-where
-    DISPLAY: DrawTarget<Color = Rgb565>,
-{
-    pub fn display_mut(&mut self) -> &mut DISPLAY {
+    pub fn display_mut(&mut self) -> &mut impl DrawTarget<Color = Rgb565> {
         &mut self.display
     }
 }

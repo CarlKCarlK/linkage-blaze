@@ -16,18 +16,21 @@ use esp_hal::{
 
 const TOUCH_SPI_HZ: u32 = 2_500_000;
 
+type CydTouchSpiBus = spi::master::Spi<'static, esp_hal::Blocking>;
+type CydTouchSpiDevice = ExclusiveDevice<CydTouchSpiBus, Output<'static>, NoDelay>;
+
 #[derive(Clone, Copy, Debug)]
 pub enum CydTouchInitError {
     ConfigureTouchSpi,
     CreateTouchSpiDevice,
 }
 
-pub struct CydTouch<TouchSpiDevice, TouchIrq> {
-    touch_spi_device: TouchSpiDevice,
-    touch_input: Xpt2046TouchInput<TouchIrq>,
+pub struct CydTouch {
+    touch_spi_device: CydTouchSpiDevice,
+    touch_input: Xpt2046TouchInput<Input<'static>>,
 }
 
-impl CydTouch<(), ()> {
+impl CydTouch {
     pub fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,
@@ -35,10 +38,7 @@ impl CydTouch<(), ()> {
         miso_pin: impl PeripheralInput<'static>,
         cs_pin: impl OutputPin + 'static,
         irq_pin: impl EspInputPin + 'static,
-    ) -> Result<
-        CydTouch<impl embedded_hal::spi::SpiDevice<u8> + 'static, Input<'static>>,
-        CydTouchInitError,
-    > {
+    ) -> Result<CydTouch, CydTouchInitError> {
         let spi_config = spi::master::Config::default()
             .with_frequency(esp_hal::time::Rate::from_hz(TOUCH_SPI_HZ))
             .with_mode(spi::Mode::_0);
@@ -60,13 +60,7 @@ impl CydTouch<(), ()> {
             touch_input,
         })
     }
-}
 
-impl<TouchSpiDevice, TouchIrq> CydTouch<TouchSpiDevice, TouchIrq>
-where
-    TouchSpiDevice: embedded_hal::spi::SpiDevice<u8>,
-    TouchIrq: embedded_hal::digital::InputPin,
-{
     pub fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
         self.touch_input
             .read_raw_touch_event(&mut self.touch_spi_device)
