@@ -3,6 +3,7 @@
 
 // todo00 if flash read or write fails, do we want to panic or just require calibration each time?
 // todo00 can/should there be a mode to share spi and cs pins?
+// todo00 do we need/want any of these "Delay::new().delay_millis(1);"
 
 use core::convert::Infallible;
 
@@ -18,7 +19,7 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay, time::Instant};
-use robot_arm_core::cyd::{CydSim, FrameBuffer};
+use robot_arm_core::cyd::{CydSim, FrameBuffer, TouchInputEvent, TouchInputOutcome};
 
 mod display;
 mod touch;
@@ -41,6 +42,16 @@ enum CydTouchEvent {
     Up,
 }
 
+impl CydTouchEvent {
+    fn to_touch_input_event(self) -> TouchInputEvent {
+        match self {
+            CydTouchEvent::Down { x, y } => TouchInputEvent::Down { x, y },
+            CydTouchEvent::Move { x, y } => TouchInputEvent::Move { x, y },
+            CydTouchEvent::Up => TouchInputEvent::Up,
+        }
+    }
+}
+
 struct CydStatic {
     frame_buffer: &'static mut FrameBuffer,
 }
@@ -59,6 +70,12 @@ struct Cyd {
 struct CalibratedCyd<'a> {
     cyd: &'a mut Cyd,
     calibration_config: CalibrationConfig,
+}
+
+struct RuntimeState {
+    previous_tick: Instant,
+    previous_frame_flush: Instant,
+    should_flush: bool,
 }
 
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -359,6 +376,54 @@ impl CalibratedCyd<'_> {
     }
 }
 
+impl RuntimeState {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            previous_tick: now,
+            previous_frame_flush: now,
+            should_flush: true,
+        }
+    }
+
+    fn reset_after_calibration(&mut self) {
+        let now = Instant::now();
+        self.previous_tick = now;
+        self.previous_frame_flush = now;
+        self.should_flush = true;
+    }
+
+    fn tick_dt_seconds(&mut self) -> f32 {
+        let now = Instant::now();
+        let dt_seconds = (now - self.previous_tick).as_micros() as f32 / 1_000_000.0;
+        self.previous_tick = now;
+        dt_seconds
+    }
+
+    fn tick_dt_seconds_after_calibration(&mut self, just_calibrated: bool) -> f32 {
+        if just_calibrated {
+            // Reset timing after calibration so the next dt is measured from now.
+            self.reset_after_calibration();
+        }
+        self.tick_dt_seconds()
+    }
+
+    fn frame_dt_seconds(&mut self) -> f32 {
+        let now = Instant::now();
+        let dt_seconds = (now - self.previous_frame_flush).as_micros() as f32 / 1_000_000.0;
+        self.previous_frame_flush = now;
+        dt_seconds
+    }
+
+    fn request_flush(&mut self) {
+        self.should_flush = true;
+    }
+
+    fn clear_flush_request(&mut self) {
+        self.should_flush = false;
+    }
+}
+
 #[esp_hal::main]
 fn main() -> ! {
     let err = inner_main().unwrap_err();
@@ -395,64 +460,47 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
-    let now = Instant::now();
-    let mut touch_cursor = None;
-    let mut previous_tick = now;
-    let mut previous_frame_flush = now;
-    let mut should_flush = true;
+    let mut runtime_state = RuntimeState::new();
 
     loop {
+        // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let (mut cyd, just_calibrated) = cyd.ensure_calibration()?;
-        if just_calibrated {
-            let now = Instant::now();
-            touch_cursor = None;
-            previous_tick = now;
-            previous_frame_flush = now;
-            should_flush = true;
+        // If calibration just ran, reset timing and then advance simulation time.
+        let dt_seconds = runtime_state.tick_dt_seconds_after_calibration(just_calibrated);
+
+        // A kinematics update changed sim state, so schedule a frame flush.
+        if cyd_sim.tick_reverse_kinematics(dt_seconds) {
+            runtime_state.request_flush();
         }
 
-        let now = Instant::now();
-        let dt_seconds = (now - previous_tick).as_micros() as f32 / 1_000_000.0;
-        previous_tick = now;
-
-        should_flush |= cyd_sim.tick_reverse_kinematics(dt_seconds);
-
+        // Convert calibrated touch input into simulator interactions.
         if let Some(cyd_touch_event) = cyd.read_touch_event() {
-            match cyd_touch_event {
-                CydTouchEvent::Down { x, y } => {
-                    touch_cursor = Some(Point::new(x as i32, y as i32));
-                    cyd_sim.touch_down(x, y);
-                    if cyd_sim.take_calibration_request() {
-                        cyd_sim.touch_up();
-                        esp_println::println!("cal: requested from UI");
-                        cyd.request_calibration();
-                        continue;
-                    }
-                    should_flush = true;
+            let touch_input_event = cyd_touch_event.to_touch_input_event();
+
+            match cyd_sim.handle_touch_input_event(touch_input_event) {
+                TouchInputOutcome::Unchanged => {}
+                TouchInputOutcome::Changed => {
+                    runtime_state.request_flush();
                 }
-                CydTouchEvent::Move { x, y } => {
-                    touch_cursor = Some(Point::new(x as i32, y as i32));
-                    cyd_sim.touch_move(x, y);
-                    should_flush = true;
-                }
-                CydTouchEvent::Up => {
-                    cyd_sim.touch_up();
-                    touch_cursor = None;
+                TouchInputOutcome::CalibrationRequested => {
+                    esp_println::println!("cal: requested from UI");
+                    cyd.request_calibration();
+                    continue;
                 }
             }
         }
 
-        if should_flush {
-            let frame_dt_seconds = (now - previous_frame_flush).as_micros() as f32 / 1_000_000.0;
-            previous_frame_flush = now;
+        if runtime_state.should_flush {
+            // Render only when state changed or animation advanced.
+            let frame_dt_seconds = runtime_state.frame_dt_seconds();
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
             cyd_sim.render_to(cyd.frame_buffer_mut());
-            if let Some(cursor) = touch_cursor {
-                cyd.draw_touch_cursor(cursor)?;
+            if let Some((cursor_x, cursor_y)) = cyd_sim.touch_cursor() {
+                cyd.draw_touch_cursor(Point::new(cursor_x as i32, cursor_y as i32))?;
             }
             cyd.flush()?;
-            should_flush = false;
+            runtime_state.clear_flush_request();
         } else {
             Delay::new().delay_millis(1);
         }

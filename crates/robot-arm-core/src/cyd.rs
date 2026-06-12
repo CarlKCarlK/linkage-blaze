@@ -137,6 +137,21 @@ pub struct CydSim {
     frames_per_second: Option<u16>,
     calibration_requested: bool,
     rk_step_hold_active: bool,
+    touch_cursor: Option<(f32, f32)>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum TouchInputEvent {
+    Down { x: f32, y: f32 },
+    Move { x: f32, y: f32 },
+    Up,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TouchInputOutcome {
+    Unchanged,
+    Changed,
+    CalibrationRequested,
 }
 
 impl CydSim {
@@ -159,6 +174,7 @@ impl CydSim {
             frames_per_second: None,
             calibration_requested: false,
             rk_step_hold_active: false,
+            touch_cursor: None,
         }
     }
 
@@ -195,6 +211,11 @@ impl CydSim {
         let calibration_requested = self.calibration_requested;
         self.calibration_requested = false;
         calibration_requested
+    }
+
+    #[must_use]
+    pub fn touch_cursor(&self) -> Option<(f32, f32)> {
+        self.touch_cursor
     }
 
     pub fn touch_down(&mut self, x: f32, y: f32) {
@@ -242,6 +263,35 @@ impl CydSim {
     pub fn touch_up(&mut self) {
         self.active_control = None;
         self.rk_step_hold_active = false;
+    }
+
+    pub fn handle_touch_input_event(
+        &mut self,
+        touch_input_event: TouchInputEvent,
+    ) -> TouchInputOutcome {
+        match touch_input_event {
+            TouchInputEvent::Down { x, y } => {
+                self.touch_cursor = Some((x, y));
+                self.touch_down(x, y);
+                if self.take_calibration_request() {
+                    self.touch_up();
+                    self.touch_cursor = None;
+                    TouchInputOutcome::CalibrationRequested
+                } else {
+                    TouchInputOutcome::Changed
+                }
+            }
+            TouchInputEvent::Move { x, y } => {
+                self.touch_cursor = Some((x, y));
+                self.touch_move(x, y);
+                TouchInputOutcome::Changed
+            }
+            TouchInputEvent::Up => {
+                self.touch_cursor = None;
+                self.touch_up();
+                TouchInputOutcome::Unchanged
+            }
+        }
     }
 
     pub fn start_reverse_kinematics(&mut self) {
