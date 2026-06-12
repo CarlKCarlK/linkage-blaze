@@ -316,7 +316,7 @@ impl CydSim {
         }
     }
 
-    pub fn handle_optional_touch_input(
+    pub fn handle_optional_touch_event(
         &mut self,
         touch_input_event: Option<TouchInputEvent>,
     ) -> bool {

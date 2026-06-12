@@ -429,7 +429,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         cyd_sim.tick_reverse_kinematics(dt_seconds);
 
         // Forward calibrated touch input to the simulator; calibrate requests are sim-specific.
-        let calibration_requested = cyd_sim.handle_optional_touch_input(cyd.read_touch_input());
+        let calibration_requested = cyd_sim.handle_optional_touch_event(cyd.read_touch_input());
 
         if calibration_requested {
             cyd.request_calibration();
