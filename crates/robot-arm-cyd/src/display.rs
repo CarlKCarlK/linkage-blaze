@@ -44,7 +44,6 @@ pub enum CydDisplayFlushError {
 pub struct CydDisplay {
     display: CydDisplayDevice,
     frame_buffer: &'static mut FrameBuffer,
-    needs_flush: bool,
 }
 
 impl CydDisplay {
@@ -98,22 +97,14 @@ impl CydDisplay {
         Ok(CydDisplay {
             display,
             frame_buffer: FrameBuffer::static_new(),
-            needs_flush: false,
         })
     }
 
-    /// Returns a mutable reference to the frame buffer and marks it as needing a flush.
     pub fn frame_buffer_mut(&mut self) -> &mut FrameBuffer {
-        self.needs_flush = true;
         self.frame_buffer
     }
 
-    /// Sends the frame buffer to the display hardware, but only if it has been modified since
-    /// the last flush. Clears the dirty flag on success.
     pub fn flush(&mut self) -> Result<(), CydDisplayFlushError> {
-        if !self.needs_flush {
-            return Ok(());
-        }
         let full_screen = Rectangle::new(
             Point::new(0, 0),
             Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
@@ -125,7 +116,6 @@ impl CydDisplay {
         {
             return Err(CydDisplayFlushError::FlushFrameBuffer);
         }
-        self.needs_flush = false;
         Ok(())
     }
 }

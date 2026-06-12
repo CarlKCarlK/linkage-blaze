@@ -14,12 +14,9 @@ pub struct CydSim {
 impl CydSim {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        let mut sim = CoreCydSim::new();
+        let sim = CoreCydSim::new();
         let mut frame_buffer = FrameBuffer::new();
-        if sim.take_render_dirty() {
-            sim.render_to(&mut frame_buffer);
-        }
-
+        sim.render_to(&mut frame_buffer);
         Self { sim, frame_buffer }
     }
 
@@ -47,7 +44,7 @@ impl CydSim {
         let _ = self
             .sim
             .handle_touch_input_event(TouchInputEvent::Down { x, y });
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn touch_move(&mut self, x: f32, y: f32) {
@@ -55,29 +52,29 @@ impl CydSim {
         let _ = self
             .sim
             .handle_touch_input_event(TouchInputEvent::Move { x, y });
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn touch_up(&mut self) {
         use robot_arm_core::cyd::TouchInputEvent;
         let _ = self.sim.handle_touch_input_event(TouchInputEvent::Up);
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn reverse_kinematics(&mut self) -> f32 {
         let distance = self.sim.reverse_kinematics();
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
         distance
     }
 
     pub fn start_reverse_kinematics(&mut self) {
         self.sim.start_reverse_kinematics();
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn stop_reverse_kinematics(&mut self) {
         self.sim.stop_reverse_kinematics();
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn is_reverse_kinematics_running(&self) -> bool {
@@ -86,19 +83,13 @@ impl CydSim {
 
     pub fn set_frame_dt_seconds(&mut self, dt_seconds: f32) {
         self.sim.set_frame_dt_seconds(dt_seconds);
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
     }
 
     pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
         let running = self.sim.tick_reverse_kinematics(dt_seconds);
-        self.render_if_dirty();
+        self.sim.render_to(&mut self.frame_buffer);
         running
-    }
-
-    fn render_if_dirty(&mut self) {
-        if self.sim.take_render_dirty() {
-            self.sim.render_to(&mut self.frame_buffer);
-        }
     }
 }
 

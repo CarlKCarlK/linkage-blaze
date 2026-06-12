@@ -52,7 +52,6 @@ struct CalibratedCyd<'a> {
 struct RuntimeState {
     previous_tick: Instant,
     previous_frame_flush: Instant,
-    first_frame_pending: bool,
 }
 
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -191,35 +190,34 @@ impl Cyd {
         Ok(self.display.flush()?)
     }
 
+    fn draw_calibration_screen(&mut self, calibration_index: usize) -> Result<(), MainError> {
+        self.display.frame_buffer_mut().clear(Rgb565::BLACK);
+        if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
+            draw_calibration_cross(
+                self.display.frame_buffer_mut(),
+                calibration_corner,
+                CydSim::WIDTH_U16,
+                CydSim::HEIGHT_U16,
+            )?;
+        }
+        self.flush()
+    }
+
     fn calibrate(&mut self) -> Result<(), MainError> {
         let mut calibration_index = 0;
         let mut calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-        let mut calibration_screen_dirty = true;
 
         esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
         esp_println::println!("cal: next tap UL");
+        self.draw_calibration_screen(calibration_index)?;
 
         loop {
-            if calibration_screen_dirty {
-                self.display.frame_buffer_mut().clear(Rgb565::BLACK);
-                if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
-                    draw_calibration_cross(
-                        self.display.frame_buffer_mut(),
-                        calibration_corner,
-                        CydSim::WIDTH_U16,
-                        CydSim::HEIGHT_U16,
-                    )?;
-                }
-                self.flush()?;
-                calibration_screen_dirty = false;
-            }
-
             if self.recalibration_requested() {
                 calibration_index = 0;
                 calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-                calibration_screen_dirty = true;
                 esp_println::println!("cal: calibration button pressed, restarting calibration");
                 esp_println::println!("cal: next tap UL");
+                self.draw_calibration_screen(calibration_index)?;
                 continue;
             }
 
@@ -237,7 +235,7 @@ impl Cyd {
                         if calibration_index < 4 {
                             let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
                             esp_println::println!("cal: next tap {}", corner_label);
-                            calibration_screen_dirty = true;
+                            self.draw_calibration_screen(calibration_index)?;
                             continue;
                         }
 
@@ -343,7 +341,6 @@ impl RuntimeState {
         Self {
             previous_tick: now,
             previous_frame_flush: now,
-            first_frame_pending: true,
         }
     }
 
@@ -373,12 +370,6 @@ impl RuntimeState {
         let dt_seconds = (now - self.previous_frame_flush).as_micros() as f32 / 1_000_000.0;
         self.previous_frame_flush = now;
         dt_seconds
-    }
-
-    fn take_first_frame_pending(&mut self) -> bool {
-        let first_frame_pending = self.first_frame_pending;
-        self.first_frame_pending = false;
-        first_frame_pending
     }
 }
 
@@ -425,7 +416,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         // If calibration just ran, reset timing and then advance simulation time.
         let dt_seconds = runtime_state.tick_dt_seconds_after_calibration(just_calibrated);
 
-        // Run simulation updates; CydSim tracks whether a render is needed.
+        // Run simulation updates; every loop renders and flushes the framebuffer.
         cyd_sim.tick_reverse_kinematics(dt_seconds);
 
         // Forward calibrated touch input to the simulator; calibrate requests are sim-specific.
@@ -436,21 +427,10 @@ fn inner_main() -> Result<Infallible, MainError> {
             continue;
         }
 
-        // Force an initial/post-calibration render; otherwise follow simulator dirty state.
-        let should_render = runtime_state.take_first_frame_pending()
-            || just_calibrated
-            || cyd_sim.take_render_dirty();
-
-        if should_render {
-            // Render only when state changed or animation advanced.
-            // Calling frame_buffer_mut() automatically marks the display as needing a flush.
-            let frame_dt_seconds = runtime_state.frame_dt_seconds();
-            cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
-            cyd_sim.render_to(cyd.frame_buffer_mut());
-            cyd.flush()?;
-        } else {
-            Delay::new().delay_millis(1);
-        }
+        let frame_dt_seconds = runtime_state.frame_dt_seconds();
+        cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
+        cyd_sim.render_to(cyd.frame_buffer_mut());
+        cyd.flush()?;
     }
 }
 
