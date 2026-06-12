@@ -52,6 +52,7 @@ struct CalibratedCyd<'a> {
 struct RuntimeState {
     previous_tick: Instant,
     previous_frame_flush: Instant,
+    first_frame_pending: bool,
 }
 
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -342,6 +343,7 @@ impl RuntimeState {
         Self {
             previous_tick: now,
             previous_frame_flush: now,
+            first_frame_pending: true,
         }
     }
 
@@ -371,6 +373,12 @@ impl RuntimeState {
         let dt_seconds = (now - self.previous_frame_flush).as_micros() as f32 / 1_000_000.0;
         self.previous_frame_flush = now;
         dt_seconds
+    }
+
+    fn take_first_frame_pending(&mut self) -> bool {
+        let first_frame_pending = self.first_frame_pending;
+        self.first_frame_pending = false;
+        first_frame_pending
     }
 }
 
@@ -410,13 +418,6 @@ fn inner_main() -> Result<Infallible, MainError> {
 
     let mut runtime_state = RuntimeState::new();
 
-    // Render and flush the initial frame before the main event loop.
-    {
-        let (mut cyd, _) = cyd.ensure_calibration()?;
-        cyd_sim.render_to(cyd.frame_buffer_mut());
-        cyd.flush()?;
-    }
-
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let (mut cyd, just_calibrated) = cyd.ensure_calibration()?;
@@ -424,7 +425,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         let dt_seconds = runtime_state.tick_dt_seconds_after_calibration(just_calibrated);
 
         // Force a render after calibration; otherwise drive by sim state changes.
-        let mut sim_changed = just_calibrated;
+        let mut sim_changed = runtime_state.take_first_frame_pending() || just_calibrated;
 
         // A kinematics update changed sim state, so schedule a frame render.
         if cyd_sim.tick_reverse_kinematics(dt_seconds) {
