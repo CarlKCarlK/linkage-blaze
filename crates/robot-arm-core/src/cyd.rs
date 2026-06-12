@@ -316,6 +316,19 @@ impl CydSim {
         }
     }
 
+    pub fn handle_optional_touch_input(
+        &mut self,
+        touch_input_event: Option<TouchInputEvent>,
+    ) -> bool {
+        match touch_input_event {
+            Some(touch_input_event) => match self.handle_touch_input_event(touch_input_event) {
+                TouchInputOutcome::CalibrationRequested => true,
+                TouchInputOutcome::Changed | TouchInputOutcome::Unchanged => false,
+            },
+            None => false,
+        }
+    }
+
     pub fn start_reverse_kinematics(&mut self) {
         self.ensure_reverse_kinematics_run();
         self.reverse_kinematics_playing = true;
