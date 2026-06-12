@@ -99,12 +99,10 @@ enum CalibrationCorner {
 const CALIBRATION_CROSS_MARGIN: i32 = 28;
 const CALIBRATION_CROSS_HALF_SIZE: i32 = 18;
 const CALIBRATION_CENTER_DOT_RADIUS: i32 = 3;
-const TOUCH_CURSOR_RADIUS: i32 = 4;
 const CALIBRATION_CROSS_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_stroke(Rgb565::YELLOW, 4);
 const CALIBRATION_CENTER_DOT_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_fill(Rgb565::WHITE);
-const TOUCH_CURSOR_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CYAN);
 
 #[derive(Debug)]
 enum MainError {
@@ -367,10 +365,6 @@ impl CalibratedCyd<'_> {
         self.cyd.frame_buffer
     }
 
-    fn draw_touch_cursor(&mut self, cursor: Point) -> Result<(), MainError> {
-        draw_touch_cursor(self.cyd.frame_buffer, cursor)
-    }
-
     fn flush(&mut self) -> Result<(), MainError> {
         self.cyd.flush()
     }
@@ -496,9 +490,6 @@ fn inner_main() -> Result<Infallible, MainError> {
             cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
 
             cyd_sim.render_to(cyd.frame_buffer_mut());
-            if let Some((cursor_x, cursor_y)) = cyd_sim.touch_cursor() {
-                cyd.draw_touch_cursor(Point::new(cursor_x as i32, cursor_y as i32))?;
-            }
             cyd.flush()?;
             runtime_state.clear_flush_request();
         } else {
@@ -704,22 +695,6 @@ fn draw_calibration_cross(
     .into_styled(CALIBRATION_CENTER_DOT_STYLE)
     .draw(frame_buffer)
     .map_err(|_| MainError::DrawCalibrationCenterDot)?;
-
-    Ok(())
-}
-
-fn draw_touch_cursor(frame_buffer: &mut FrameBuffer, cursor: Point) -> Result<(), MainError> {
-    let center = Point::new(cursor.x, cursor.y);
-    Circle::new(
-        Point::new(
-            center.x - TOUCH_CURSOR_RADIUS,
-            center.y - TOUCH_CURSOR_RADIUS,
-        ),
-        (TOUCH_CURSOR_RADIUS * 2 + 1) as u32,
-    )
-    .into_styled(TOUCH_CURSOR_STYLE)
-    .draw(frame_buffer)
-    .map_err(|_| MainError::DrawTouchCursor)?;
 
     Ok(())
 }

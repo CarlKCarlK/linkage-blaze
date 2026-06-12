@@ -197,6 +197,7 @@ impl CydSim {
         self.draw_report(buffer);
         self.draw_version(buffer);
         self.draw_fps(buffer);
+        self.draw_touch_cursor(buffer);
     }
 
     pub fn set_frame_dt_seconds(&mut self, dt_seconds: f32) {
@@ -218,7 +219,7 @@ impl CydSim {
         self.touch_cursor
     }
 
-    pub fn touch_down(&mut self, x: f32, y: f32) {
+    fn touch_down(&mut self, x: f32, y: f32) {
         self.active_control = control_at(x, y);
         if matches!(self.active_control, Some(ActiveControl::Calibrate)) {
             self.calibration_requested = true;
@@ -256,11 +257,11 @@ impl CydSim {
         self.update_touch(x, y);
     }
 
-    pub fn touch_move(&mut self, x: f32, y: f32) {
+    fn touch_move(&mut self, x: f32, y: f32) {
         self.update_touch(x, y);
     }
 
-    pub fn touch_up(&mut self) {
+    fn touch_up(&mut self) {
         self.active_control = None;
         self.rk_step_hold_active = false;
     }
@@ -733,6 +734,19 @@ impl CydSim {
         )
         .draw(buffer)
         .ok();
+    }
+
+    fn draw_touch_cursor(&self, buffer: &mut FrameBuffer) {
+        if let Some((x, y)) = self.touch_cursor {
+            let x = x as i32;
+            let y = y as i32;
+            let radius = 5;
+            let cursor_style = PrimitiveStyle::with_fill(Rgb565::CYAN);
+            Circle::new(Point::new(x - radius, y - radius), (radius * 2 + 1) as u32)
+                .into_styled(cursor_style)
+                .draw(buffer)
+                .ok();
+        }
     }
 
     fn pose_to_screen(&self, pose: Pose) -> Point {
