@@ -1,5 +1,6 @@
 use core::{convert::Infallible, f32::consts::TAU};
 
+use embassy_time::Instant;
 use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point, Size},
@@ -53,6 +54,7 @@ const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH)
 const FPS_REPORT_WIDTH: i32 = 7 * TEXT_CHAR_WIDTH;
 const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH;
 const FPS_REPORT_TOP: i32 = SCREEN_HEIGHT as i32 - 11;
+const FPS_REPORT_TEXT: &str = "-- fps";
 const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 const VERSION_REPORT_LEFT: i32 =
     FPS_REPORT_LEFT - (VERSION_TEXT.len() as i32 * TEXT_CHAR_WIDTH) - TEXT_CHAR_WIDTH;
@@ -134,7 +136,7 @@ pub struct CydSim {
     active_control: Option<ActiveControl>,
     reverse_kinematics_run: Option<ReverseKinematicsRun>,
     reverse_kinematics_playing: bool,
-    frames_per_second: Option<u16>,
+    previous_tick: Option<Instant>,
     calibration_requested: bool,
     rk_step_hold_active: bool,
     touch_cursor: Option<(f32, f32)>,
@@ -171,7 +173,7 @@ impl CydSim {
             active_control: None,
             reverse_kinematics_run: None,
             reverse_kinematics_playing: false,
-            frames_per_second: None,
+            previous_tick: None,
             calibration_requested: false,
             rk_step_hold_active: false,
             touch_cursor: None,
@@ -198,14 +200,6 @@ impl CydSim {
         self.draw_version(buffer);
         self.draw_fps(buffer);
         self.draw_touch_cursor(buffer);
-    }
-
-    pub fn set_frame_dt_seconds(&mut self, dt_seconds: f32) {
-        if dt_seconds <= 0.0 {
-            return;
-        }
-
-        self.frames_per_second = Some(round_to_u32(1.0 / dt_seconds).min(999) as u16);
     }
 
     pub fn take_calibration_request(&mut self) -> bool {
@@ -311,15 +305,18 @@ impl CydSim {
     pub fn start_reverse_kinematics(&mut self) {
         self.ensure_reverse_kinematics_run();
         self.reverse_kinematics_playing = true;
+        self.previous_tick = None;
     }
 
     pub fn stop_reverse_kinematics(&mut self) {
         self.reverse_kinematics_playing = false;
+        self.previous_tick = None;
     }
 
     fn clear_reverse_kinematics(&mut self) {
         self.reverse_kinematics_run = None;
         self.reverse_kinematics_playing = false;
+        self.previous_tick = None;
     }
 
     fn ensure_reverse_kinematics_run(&mut self) {
@@ -344,7 +341,15 @@ impl CydSim {
         self.reverse_kinematics_playing
     }
 
-    pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
+    pub fn tick_reverse_kinematics_at(&mut self, now: Instant) -> bool {
+        let dt_seconds = self.previous_tick.map_or(0.0, |previous_tick| {
+            now.saturating_duration_since(previous_tick).as_micros() as f32 / 1_000_000.0
+        });
+        self.previous_tick = Some(now);
+        self.tick_reverse_kinematics(dt_seconds)
+    }
+
+    fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
         if !self.reverse_kinematics_playing && !self.rk_step_hold_active {
             return false;
         }
@@ -727,9 +732,8 @@ impl CydSim {
 
     fn draw_fps(&self, buffer: &mut FrameBuffer) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
-        let mut report = FpsReport::new();
         Text::with_baseline(
-            report.as_str(self.frames_per_second),
+            FPS_REPORT_TEXT,
             Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
             text_style,
             Baseline::Top,
@@ -1334,59 +1338,6 @@ impl DistanceReport {
         self.bytes[13] = b'0' + (fraction % 10) as u8;
 
         core::str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
-    }
-}
-
-struct FpsReport {
-    bytes: [u8; 7],
-    len: usize,
-}
-
-impl FpsReport {
-    fn new() -> Self {
-        Self {
-            bytes: *b"-- fps ",
-            len: 6,
-        }
-    }
-
-    fn as_str(&mut self, value: Option<u16>) -> &str {
-        let Some(value) = value else {
-            return core::str::from_utf8(&self.bytes[..self.len]).expect("FPS report is ASCII");
-        };
-
-        let value = value.min(999);
-        let hundreds = value / 100;
-        let tens = (value / 10) % 10;
-        let ones = value % 10;
-
-        if hundreds > 0 {
-            self.bytes[0] = b'0' + hundreds as u8;
-            self.bytes[1] = b'0' + tens as u8;
-            self.bytes[2] = b'0' + ones as u8;
-            self.bytes[3] = b' ';
-            self.bytes[4] = b'f';
-            self.bytes[5] = b'p';
-            self.bytes[6] = b's';
-            self.len = 7;
-        } else if tens > 0 {
-            self.bytes[0] = b'0' + tens as u8;
-            self.bytes[1] = b'0' + ones as u8;
-            self.bytes[2] = b' ';
-            self.bytes[3] = b'f';
-            self.bytes[4] = b'p';
-            self.bytes[5] = b's';
-            self.len = 6;
-        } else {
-            self.bytes[0] = b'0' + ones as u8;
-            self.bytes[1] = b' ';
-            self.bytes[2] = b'f';
-            self.bytes[3] = b'p';
-            self.bytes[4] = b's';
-            self.len = 5;
-        }
-
-        core::str::from_utf8(&self.bytes[..self.len]).expect("FPS report is ASCII")
     }
 }
 

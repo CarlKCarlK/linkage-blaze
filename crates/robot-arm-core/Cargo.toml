@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+embassy-time = "0.5.1"
 embedded-graphics = { version = "0.8", default-features = false }
 libm = "0.2"
 nanorand = { version = "0.8", default-features = false, features = ["wyrand"] }

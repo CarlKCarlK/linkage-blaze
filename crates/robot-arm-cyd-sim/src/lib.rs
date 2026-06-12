@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use embassy_time::Instant;
 use embedded_graphics::prelude::*;
 use robot_arm_core::cyd::{CydSim as CoreCydSim, FrameBuffer};
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -81,13 +82,10 @@ impl CydSim {
         self.sim.is_reverse_kinematics_running()
     }
 
-    pub fn set_frame_dt_seconds(&mut self, dt_seconds: f32) {
-        self.sim.set_frame_dt_seconds(dt_seconds);
-        self.sim.render_to(&mut self.frame_buffer);
-    }
-
-    pub fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
-        let running = self.sim.tick_reverse_kinematics(dt_seconds);
+    pub fn tick_reverse_kinematics_at(&mut self, now_micros: f64) -> bool {
+        let running = self
+            .sim
+            .tick_reverse_kinematics_at(Instant::from_micros(now_micros as u64));
         self.sim.render_to(&mut self.frame_buffer);
         running
     }

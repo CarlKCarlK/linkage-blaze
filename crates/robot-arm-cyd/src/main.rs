@@ -11,6 +11,7 @@ use device_envoy_esp::{
     button::{Button as _, ButtonEsp, PressedTo},
     flash_block::{FlashBlock as _, FlashBlockEsp},
 };
+use embassy_time::Instant;
 use embedded_graphics::{
     Drawable,
     pixelcolor::Rgb565,
@@ -18,7 +19,7 @@ use embedded_graphics::{
     primitives::{Circle, Line, PrimitiveStyle},
 };
 use esp_backtrace as _;
-use esp_hal::{Config, delay::Delay, time::Instant};
+use esp_hal::{Config, delay::Delay};
 use robot_arm_core::cyd::{CydSim, FrameBuffer, TouchInputEvent};
 
 mod display;
@@ -47,11 +48,6 @@ struct Cyd {
 struct CalibratedCyd<'a> {
     cyd: &'a mut Cyd,
     calibration_config: CalibrationConfig,
-}
-
-struct RuntimeState {
-    previous_tick: Instant,
-    previous_frame_flush: Instant,
 }
 
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -267,29 +263,23 @@ impl Cyd {
         }
     }
 
-    fn ensure_calibration(&mut self) -> Result<(CalibratedCyd<'_>, bool), MainError> {
-        let mut just_calibrated = false;
-
+    fn ensure_calibration(&mut self) -> Result<CalibratedCyd<'_>, MainError> {
         if self.recalibration_requested() {
             self.calibration_config = None;
         }
 
         if self.calibration_config.is_none() {
             self.calibrate()?;
-            just_calibrated = true;
         }
 
         let calibration_config = self
             .calibration_config
             .expect("ensure_calibration must leave Cyd calibrated");
 
-        Ok((
-            CalibratedCyd {
-                cyd: self,
-                calibration_config,
-            },
-            just_calibrated,
-        ))
+        Ok(CalibratedCyd {
+            cyd: self,
+            calibration_config,
+        })
     }
 }
 
@@ -335,44 +325,6 @@ impl CalibratedCyd<'_> {
     }
 }
 
-impl RuntimeState {
-    fn new() -> Self {
-        let now = Instant::now();
-        Self {
-            previous_tick: now,
-            previous_frame_flush: now,
-        }
-    }
-
-    fn reset_after_calibration(&mut self) {
-        let now = Instant::now();
-        self.previous_tick = now;
-        self.previous_frame_flush = now;
-    }
-
-    fn tick_dt_seconds(&mut self) -> f32 {
-        let now = Instant::now();
-        let dt_seconds = (now - self.previous_tick).as_micros() as f32 / 1_000_000.0;
-        self.previous_tick = now;
-        dt_seconds
-    }
-
-    fn tick_dt_seconds_after_calibration(&mut self, just_calibrated: bool) -> f32 {
-        if just_calibrated {
-            // Reset timing after calibration so the next dt is measured from now.
-            self.reset_after_calibration();
-        }
-        self.tick_dt_seconds()
-    }
-
-    fn frame_dt_seconds(&mut self) -> f32 {
-        let now = Instant::now();
-        let dt_seconds = (now - self.previous_frame_flush).as_micros() as f32 / 1_000_000.0;
-        self.previous_frame_flush = now;
-        dt_seconds
-    }
-}
-
 #[esp_hal::main]
 fn main() -> ! {
     let err = inner_main().unwrap_err();
@@ -407,17 +359,12 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
-    let mut runtime_state = RuntimeState::new();
-
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
-        let (mut cyd, just_calibrated) = cyd.ensure_calibration()?;
-
-        // If calibration just ran, reset timing and then advance simulation time.
-        let dt_seconds = runtime_state.tick_dt_seconds_after_calibration(just_calibrated);
+        let mut cyd = cyd.ensure_calibration()?;
 
         // Run simulation updates; every loop renders and flushes the framebuffer.
-        cyd_sim.tick_reverse_kinematics(dt_seconds);
+        cyd_sim.tick_reverse_kinematics_at(Instant::now());
 
         // Forward calibrated touch input to the simulator; calibrate requests are sim-specific.
         let calibration_requested = cyd_sim.handle_optional_touch_event(cyd.read_touch_input());
@@ -427,8 +374,6 @@ fn inner_main() -> Result<Infallible, MainError> {
             continue;
         }
 
-        let frame_dt_seconds = runtime_state.frame_dt_seconds();
-        cyd_sim.set_frame_dt_seconds(frame_dt_seconds);
         cyd_sim.render_to(cyd.frame_buffer_mut());
         cyd.flush()?;
     }

@@ -8,6 +8,7 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+embassy-time = "0.5.1"
 embedded-graphics = { version = "0.8", default-features = false }
 robot-arm-core.workspace = true
 wasm-bindgen = "=0.2.118"
