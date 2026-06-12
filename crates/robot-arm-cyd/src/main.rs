@@ -73,6 +73,11 @@ enum MainError {
     ConfigureTouchSpi,
     CreateTouchSpiDevice,
     InitDisplay,
+    SaveCalibrationToFlash,
+    DrawCalibrationCross,
+    DrawCalibrationCenterDot,
+    DrawTouchCursor,
+    FlushFrameBuffer,
 }
 
 impl From<CydDisplayInitError> for MainError {
@@ -122,7 +127,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         &mut calibration_flash_block,
         &mut cyd_sim,
         frame_buffer,
-    );
+    )?;
 
     loop {
         main_state = match main_state {
@@ -141,7 +146,7 @@ fn inner_main() -> Result<Infallible, MainError> {
                 frame_buffer,
                 cyd_display.display_mut(),
             ),
-        };
+        }?;
     }
 }
 
@@ -154,7 +159,7 @@ fn run_calibration_mode<FlashBlockType>(
     calibration_flash_block: &mut FlashBlockType,
     frame_buffer: &mut FrameBuffer,
     display: &mut impl DrawTarget<Color = Rgb565>,
-) -> MainState
+) -> Result<MainState, MainError>
 where
     FlashBlockType: device_envoy_esp::flash_block::FlashBlock,
     <FlashBlockType as device_envoy_esp::flash_block::FlashBlock>::Error: core::fmt::Debug,
@@ -175,9 +180,9 @@ where
                     calibration_corner,
                     CydSim::WIDTH_U16,
                     CydSim::HEIGHT_U16,
-                );
+                )?;
             }
-            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16);
+            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16)?;
             calibration_screen_dirty = false;
         }
 
@@ -215,7 +220,7 @@ where
                     );
                     calibration_flash_block
                         .save(&calibration_config)
-                        .expect("cal: failed to save calibration to flash");
+                        .map_err(|_| MainError::SaveCalibrationToFlash)?;
 
                     esp_println::println!(
                         "cal: done ax={:.5} bx={:.5} cx={:.1} ay={:.5} by={:.5} cy={:.1}",
@@ -228,7 +233,7 @@ where
                     );
                     esp_println::println!("cal: controls enabled with computed calibration");
 
-                    return MainState::Running(calibration_config);
+                    return Ok(MainState::Running(calibration_config));
                 }
             }
         }
@@ -247,7 +252,7 @@ fn run_running_mode(
     calibration_button: &impl device_envoy_esp::button::Button,
     frame_buffer: &mut FrameBuffer,
     display: &mut impl DrawTarget<Color = Rgb565>,
-) -> MainState {
+) -> Result<MainState, MainError> {
     let now = Instant::now();
     let mut touch_cursor = None;
     let mut previous_tick = now;
@@ -265,7 +270,7 @@ fn run_running_mode(
             esp_println::println!(
                 "cal: calibration button pressed during runtime, entering calibration"
             );
-            return MainState::Calibrating;
+            return Ok(MainState::Calibrating);
         }
 
         if let Some(raw_touch_event) = cyd_touch.read_raw_touch_event() {
@@ -283,7 +288,7 @@ fn run_running_mode(
                     if cyd_sim.take_calibration_request() {
                         cyd_sim.touch_up();
                         esp_println::println!("cal: requested from UI");
-                        return MainState::Calibrating;
+                        return Ok(MainState::Calibrating);
                     }
                     should_flush = true;
                 }
@@ -313,9 +318,9 @@ fn run_running_mode(
 
             cyd_sim.render_to(frame_buffer);
             if let Some(cursor) = touch_cursor {
-                draw_touch_cursor(frame_buffer, cursor);
+                draw_touch_cursor(frame_buffer, cursor)?;
             }
-            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16);
+            flush_full_frame(display, frame_buffer, CydSim::WIDTH_U16, CydSim::HEIGHT_U16)?;
             should_flush = false;
         } else {
             Delay::new().delay_millis(1);
@@ -494,7 +499,7 @@ fn draw_calibration_cross(
     calibration_corner: CalibrationCorner,
     width: u16,
     height: u16,
-) {
+) -> Result<(), MainError> {
     let center = calibration_corner_center(calibration_corner, width, height);
     let left = Point::new(center.x - CALIBRATION_CROSS_HALF_SIZE, center.y);
     let right = Point::new(center.x + CALIBRATION_CROSS_HALF_SIZE, center.y);
@@ -504,11 +509,11 @@ fn draw_calibration_cross(
     Line::new(left, right)
         .into_styled(CALIBRATION_CROSS_STYLE)
         .draw(frame_buffer)
-        .expect("boot: failed to draw calibration cross horizontal line");
+        .map_err(|_| MainError::DrawCalibrationCross)?;
     Line::new(top, bottom)
         .into_styled(CALIBRATION_CROSS_STYLE)
         .draw(frame_buffer)
-        .expect("boot: failed to draw calibration cross vertical line");
+        .map_err(|_| MainError::DrawCalibrationCross)?;
 
     Circle::new(
         Point::new(
@@ -519,10 +524,12 @@ fn draw_calibration_cross(
     )
     .into_styled(CALIBRATION_CENTER_DOT_STYLE)
     .draw(frame_buffer)
-    .expect("boot: failed to draw calibration center dot");
+    .map_err(|_| MainError::DrawCalibrationCenterDot)?;
+
+    Ok(())
 }
 
-fn draw_touch_cursor(frame_buffer: &mut FrameBuffer, cursor: Point) {
+fn draw_touch_cursor(frame_buffer: &mut FrameBuffer, cursor: Point) -> Result<(), MainError> {
     let center = Point::new(cursor.x, cursor.y);
     Circle::new(
         Point::new(
@@ -533,7 +540,9 @@ fn draw_touch_cursor(frame_buffer: &mut FrameBuffer, cursor: Point) {
     )
     .into_styled(TOUCH_CURSOR_STYLE)
     .draw(frame_buffer)
-    .expect("boot: failed to draw touch cursor");
+    .map_err(|_| MainError::DrawTouchCursor)?;
+
+    Ok(())
 }
 
 impl MainState {
@@ -542,7 +551,7 @@ impl MainState {
         calibration_flash_block: &mut FlashBlockType,
         cyd_sim: &mut CydSim,
         frame_buffer: &mut FrameBuffer,
-    ) -> MainState
+    ) -> Result<MainState, MainError>
     where
         FlashBlockType: device_envoy_esp::flash_block::FlashBlock,
         <FlashBlockType as device_envoy_esp::flash_block::FlashBlock>::Error: core::fmt::Debug,
@@ -582,11 +591,11 @@ impl MainState {
                     calibration_corner,
                     CydSim::WIDTH_U16,
                     CydSim::HEIGHT_U16,
-                );
+                )?;
             }
         }
 
-        calibration_state
+        Ok(calibration_state)
     }
 }
 
@@ -595,12 +604,14 @@ fn flush_full_frame(
     frame_buffer: &FrameBuffer,
     width: u16,
     height: u16,
-) {
+) -> Result<(), MainError> {
     let full_screen = Rectangle::new(Point::new(0, 0), Size::new(width as u32, height as u32));
     if display
         .fill_contiguous(&full_screen, frame_buffer.pixels().iter().copied())
         .is_err()
     {
-        panic!("boot: failed to flush framebuffer");
+        return Err(MainError::FlushFrameBuffer);
     }
+
+    Ok(())
 }
