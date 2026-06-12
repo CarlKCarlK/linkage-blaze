@@ -190,18 +190,6 @@ impl CydSim {
         Self::HEIGHT
     }
 
-    pub fn render_to(&self, buffer: &mut FrameBuffer) {
-        buffer.clear(Rgb565::BLACK);
-        self.draw_grid(buffer);
-        self.draw_target(buffer);
-        self.draw_sliders(buffer);
-        self.draw_arm(buffer);
-        self.draw_report(buffer);
-        self.draw_version(buffer);
-        self.draw_fps(buffer);
-        self.draw_touch_cursor(buffer);
-    }
-
     pub fn take_calibration_request(&mut self) -> bool {
         let calibration_requested = self.calibration_requested;
         self.calibration_requested = false;
@@ -445,7 +433,7 @@ impl CydSim {
         }
     }
 
-    fn draw_grid(&self, buffer: &mut FrameBuffer) {
+    fn draw_grid(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let style = grid_stroke_style(self.zoom);
         for grid in -4..=4 {
             let grid = grid as f32;
@@ -466,7 +454,7 @@ impl CydSim {
         }
     }
 
-    fn draw_arm(&self, buffer: &mut FrameBuffer) {
+    fn draw_arm(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let rod_width = zoomed_pixels(3, self.zoom);
         let joint_diameter = zoomed_pixels(7, self.zoom);
         let mut previous: Option<Point> = None;
@@ -486,7 +474,7 @@ impl CydSim {
         }
     }
 
-    fn draw_target(&self, buffer: &mut FrameBuffer) {
+    fn draw_target(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let target = target_from_seed(self.target_seed);
         let Vec3([x, y, z]) = target.center;
         let diameter = world_diameter_to_screen(target.diameter, self.zoom);
@@ -497,7 +485,7 @@ impl CydSim {
             .ok();
     }
 
-    fn draw_sliders(&self, buffer: &mut FrameBuffer) {
+    fn draw_sliders(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
         let mut target_label = TargetLabel::new();
         Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
@@ -643,7 +631,7 @@ impl CydSim {
             .ok();
     }
 
-    fn draw_calibrate_button(&self, buffer: &mut FrameBuffer) {
+    fn draw_calibrate_button(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
         Rectangle::new(
             Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
@@ -662,7 +650,7 @@ impl CydSim {
         .ok();
     }
 
-    fn draw_reverse_kinematics_run_button(&self, buffer: &mut FrameBuffer) {
+    fn draw_reverse_kinematics_run_button(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         if self.is_reverse_kinematics_running() {
             Rectangle::new(
                 Point::new(RK_RUN_LEFT + 4, RK_CONTROL_TOP + 4),
@@ -686,7 +674,7 @@ impl CydSim {
         }
     }
 
-    fn draw_reverse_kinematics_step_button(&self, buffer: &mut FrameBuffer) {
+    fn draw_reverse_kinematics_step_button(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         Rectangle::new(
             Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
             Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
@@ -717,7 +705,7 @@ impl CydSim {
         .ok();
     }
 
-    fn draw_report(&self, buffer: &mut FrameBuffer) {
+    fn draw_report(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
         let mut report = DistanceReport::new();
         Text::with_baseline(
@@ -730,7 +718,7 @@ impl CydSim {
         .ok();
     }
 
-    fn draw_fps(&self, buffer: &mut FrameBuffer) {
+    fn draw_fps(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
         Text::with_baseline(
             FPS_REPORT_TEXT,
@@ -742,7 +730,7 @@ impl CydSim {
         .ok();
     }
 
-    fn draw_version(&self, buffer: &mut FrameBuffer) {
+    fn draw_version(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
         Text::with_baseline(
             VERSION_TEXT,
@@ -754,7 +742,7 @@ impl CydSim {
         .ok();
     }
 
-    fn draw_touch_cursor(&self, buffer: &mut FrameBuffer) {
+    fn draw_touch_cursor(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
         if let Some((x, y)) = self.touch_cursor {
             let x = x as i32;
             let y = y as i32;
@@ -1338,6 +1326,27 @@ impl DistanceReport {
         self.bytes[13] = b'0' + (fraction % 10) as u8;
 
         core::str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
+    }
+}
+
+impl Drawable for CydSim {
+    type Color = Rgb565;
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        target.clear(Rgb565::BLACK)?;
+        self.draw_grid(target);
+        self.draw_target(target);
+        self.draw_sliders(target);
+        self.draw_arm(target);
+        self.draw_report(target);
+        self.draw_version(target);
+        self.draw_fps(target);
+        self.draw_touch_cursor(target);
+        Ok(())
     }
 }
 

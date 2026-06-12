@@ -1,5 +1,9 @@
+use core::convert::Infallible;
+
 use embedded_graphics::{
-    prelude::{DrawTarget, Point, Size},
+    Pixel,
+    pixelcolor::Rgb565,
+    prelude::{DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
 };
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
@@ -100,10 +104,6 @@ impl CydDisplay {
         })
     }
 
-    pub fn frame_buffer_mut(&mut self) -> &mut FrameBuffer {
-        self.frame_buffer
-    }
-
     pub fn flush(&mut self) -> Result<(), CydDisplayFlushError> {
         let full_screen = Rectangle::new(
             Point::new(0, 0),
@@ -117,5 +117,23 @@ impl CydDisplay {
             return Err(CydDisplayFlushError::FlushFrameBuffer);
         }
         Ok(())
+    }
+}
+
+impl DrawTarget for CydDisplay {
+    type Color = Rgb565;
+    type Error = Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        self.frame_buffer.draw_iter(pixels)
+    }
+}
+
+impl OriginDimensions for CydDisplay {
+    fn size(&self) -> Size {
+        self.frame_buffer.size()
     }
 }

@@ -13,14 +13,14 @@ use device_envoy_esp::{
 };
 use embassy_time::Instant;
 use embedded_graphics::{
-    Drawable,
+    Drawable, Pixel,
     pixelcolor::Rgb565,
-    prelude::{Point, Primitive, RgbColor},
+    prelude::{DrawTarget, OriginDimensions, Point, Primitive, RgbColor, Size},
     primitives::{Circle, Line, PrimitiveStyle},
 };
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
-use robot_arm_core::cyd::{CydSim, FrameBuffer, TouchInputEvent};
+use robot_arm_core::cyd::{CydSim, TouchInputEvent};
 
 mod display;
 mod touch;
@@ -187,10 +187,10 @@ impl Cyd {
     }
 
     fn draw_calibration_screen(&mut self, calibration_index: usize) -> Result<(), MainError> {
-        self.display.frame_buffer_mut().clear(Rgb565::BLACK);
+        self.display.clear(Rgb565::BLACK).ok();
         if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
             draw_calibration_cross(
-                self.display.frame_buffer_mut(),
+                &mut self.display,
                 calibration_corner,
                 CydSim::WIDTH_U16,
                 CydSim::HEIGHT_U16,
@@ -283,8 +283,26 @@ impl Cyd {
     }
 }
 
+impl DrawTarget for Cyd {
+    type Color = Rgb565;
+    type Error = Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        self.display.draw_iter(pixels)
+    }
+}
+
+impl OriginDimensions for Cyd {
+    fn size(&self) -> Size {
+        self.display.size()
+    }
+}
+
 impl CalibratedCyd<'_> {
-    fn request_calibration(&mut self) {
+    fn remove_calibration(&mut self) {
         self.cyd.calibration_config = None;
     }
 
@@ -316,12 +334,26 @@ impl CalibratedCyd<'_> {
         })
     }
 
-    fn frame_buffer_mut(&mut self) -> &mut FrameBuffer {
-        self.cyd.display.frame_buffer_mut()
-    }
-
     fn flush(&mut self) -> Result<(), MainError> {
         self.cyd.flush()
+    }
+}
+
+impl DrawTarget for CalibratedCyd<'_> {
+    type Color = Rgb565;
+    type Error = Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        self.cyd.draw_iter(pixels)
+    }
+}
+
+impl OriginDimensions for CalibratedCyd<'_> {
+    fn size(&self) -> Size {
+        self.cyd.size()
     }
 }
 
@@ -359,22 +391,22 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
+    // todo000 think about return fps
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let mut cyd = cyd.ensure_calibration()?;
 
-        // Run simulation updates; every loop renders and flushes the framebuffer.
+        // Run simulation updates. It needs time to ensure it doesn't move arm too fast.
         cyd_sim.tick_reverse_kinematics_at(Instant::now());
 
         // Forward calibrated touch input to the simulator; calibrate requests are sim-specific.
         let calibration_requested = cyd_sim.handle_optional_touch_event(cyd.read_touch_input());
-
         if calibration_requested {
-            cyd.request_calibration();
+            cyd.remove_calibration();
             continue;
         }
 
-        cyd_sim.render_to(cyd.frame_buffer_mut());
+        cyd_sim.draw(&mut cyd).ok();
         cyd.flush()?;
     }
 }
@@ -546,7 +578,7 @@ fn calibration_corner_center(
 }
 
 fn draw_calibration_cross(
-    frame_buffer: &mut FrameBuffer,
+    target: &mut impl DrawTarget<Color = Rgb565>,
     calibration_corner: CalibrationCorner,
     width: u16,
     height: u16,
@@ -559,11 +591,11 @@ fn draw_calibration_cross(
 
     Line::new(left, right)
         .into_styled(CALIBRATION_CROSS_STYLE)
-        .draw(frame_buffer)
+        .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
     Line::new(top, bottom)
         .into_styled(CALIBRATION_CROSS_STYLE)
-        .draw(frame_buffer)
+        .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
 
     Circle::new(
@@ -574,7 +606,7 @@ fn draw_calibration_cross(
         (CALIBRATION_CENTER_DOT_RADIUS * 2 + 1) as u32,
     )
     .into_styled(CALIBRATION_CENTER_DOT_STYLE)
-    .draw(frame_buffer)
+    .draw(target)
     .map_err(|_| MainError::DrawCalibrationCenterDot)?;
 
     Ok(())
