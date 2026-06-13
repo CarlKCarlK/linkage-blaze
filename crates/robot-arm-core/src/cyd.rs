@@ -1419,15 +1419,15 @@ impl Drawable for CydSim {
     where
         D: DrawTarget<Color = Self::Color>,
     {
-        target.clear(Rgb565::BLACK)?;
-        self.draw_grid(target);
-        self.draw_target(target);
-        self.draw_sliders(target);
-        self.draw_arm(target);
-        self.draw_report(target);
-        self.draw_version(target);
-        self.draw_fps(target);
-        self.draw_touch_cursor(target);
+        target.clear(Rgb565::BLACK)?; // without: 46.4 fps, 21.55 ms frame, inferred cost 20.64 ms
+        self.draw_grid(target); // without: 26.8 fps, 37.31 ms frame, inferred cost 4.88 ms
+        self.draw_target(target); // without: 24.2 fps, 41.32 ms frame, inferred cost 0.87 ms
+        self.draw_sliders(target); // without: 31.4 fps, 31.85 ms frame, inferred cost 10.35 ms
+        self.draw_arm(target); // without: 26.9 fps, 37.17 ms frame, inferred cost 5.02 ms
+        self.draw_report(target); // without: 25.1 fps, 39.84 ms frame, inferred cost 2.35 ms
+        self.draw_version(target); // without: 24.0 fps, 41.67 ms frame, inferred cost 0.53 ms
+        self.draw_fps(target); // without: 23.9 fps, 41.84 ms frame, inferred cost 0.35 ms
+        self.draw_touch_cursor(target); // without: 23.7 fps, 42.19 ms frame, inferred cost ~0 ms
         Ok(())
     }
 }

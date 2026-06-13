@@ -20,7 +20,7 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
-use robot_arm_core::cyd::{CydSim, TickOut, TouchInputEvent};
+use robot_arm_core::cyd::{CydSim, TouchInputEvent};
 
 mod display;
 mod touch;
@@ -374,8 +374,6 @@ fn inner_main() -> Result<Infallible, MainError> {
     let p = esp_hal::init(Config::default());
     esp_println::logger::init_logger(log::LevelFilter::Info);
 
-    let mut cyd_sim = CydSim::new_with_fps(); // todo000 review this
-
     let [calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
@@ -398,19 +396,46 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
-    loop {
-        // Keep runtime gated on an active calibration; this may trigger the calibration flow.
-        let mut cyd = cyd.ensure_calibration()?;
+    // Keep runtime gated on an active calibration; this may trigger the calibration flow.
+    let mut cyd = cyd.ensure_calibration()?;
+    let cyd_sim = CydSim::new_with_fps(); // todo000 review this
 
-        match cyd_sim.tick(Instant::now(), cyd.read_touch_input()) {
-            TickOut::Calibrate => cyd.remove_calibration(),
-            TickOut::Draw => {
-                cyd.draw(&cyd_sim);
-                cyd.flush()?;
-            }
-            TickOut::Nada => {}
-        }
+    if Instant::now().as_micros() == u64::MAX {
+        cyd.remove_calibration();
+        let _ = cyd.read_touch_input();
+        cyd.flush()?;
     }
+
+    const DRAW_BENCHMARK_LOOPS: u64 = 100;
+    loop {
+        let start = Instant::now();
+        for _ in 0..DRAW_BENCHMARK_LOOPS {
+            cyd.draw(&cyd_sim);
+        }
+        let elapsed_micros = Instant::now()
+            .saturating_duration_since(start)
+            .as_micros()
+            .max(1);
+        let fps = DRAW_BENCHMARK_LOOPS as f32 * 1_000_000.0 / elapsed_micros as f32;
+        esp_println::println!("draw benchmark: avg_last_100_fps={:.1}", fps);
+    }
+
+    // Normal runtime loop:
+    //
+    // let mut cyd_sim = CydSim::new_with_fps(); // todo000 review this
+    // loop {
+    //     // Keep runtime gated on an active calibration; this may trigger the calibration flow.
+    //     let mut cyd = cyd.ensure_calibration()?;
+    //
+    //     match cyd_sim.tick(Instant::now(), cyd.read_touch_input()) { // 1_886_000 fps if only command
+    //         TickOut::Calibrate => cyd.remove_calibration(),
+    //         TickOut::Draw => {
+    //             cyd.draw(&cyd_sim);
+    //             cyd.flush()?; // 13.2 fps if only command
+    //         }
+    //         TickOut::Nada => {}
+    //     }
+    // }
 }
 
 fn solve_3x3(system_matrix: [[f32; 3]; 3], rhs_vector: [f32; 3]) -> (f32, f32, f32) {
