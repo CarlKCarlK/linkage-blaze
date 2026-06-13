@@ -33,8 +33,6 @@ const RK_CONTROL_TOP: i32 = 86;
 const RK_RUN_LEFT: i32 = 27;
 const RK_STEP_LEFT: i32 = 55;
 const RK_BUTTON_SIZE: i32 = 18;
-const RK_LABEL_LEFT: i32 = RK_RUN_LEFT + (RK_BUTTON_SIZE - 2 * TEXT_CHAR_WIDTH) / 2;
-const RK_LABEL_TOP: i32 = RK_CONTROL_TOP - 12;
 const SLIDER_LEFT: i32 = 230;
 const SLIDER_RIGHT: i32 = 312;
 const SLIDER_TRACK_LEFT: i32 = 230;
@@ -54,7 +52,6 @@ const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH)
 const FPS_REPORT_WIDTH: i32 = 7 * TEXT_CHAR_WIDTH;
 const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH;
 const FPS_REPORT_TOP: i32 = SCREEN_HEIGHT as i32 - 11;
-const FPS_REPORT_TEXT: &str = "-- fps";
 const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 const VERSION_REPORT_LEFT: i32 =
     FPS_REPORT_LEFT - (VERSION_TEXT.len() as i32 * TEXT_CHAR_WIDTH) - TEXT_CHAR_WIDTH;
@@ -137,6 +134,8 @@ pub struct CydSim {
     reverse_kinematics_run: Option<ReverseKinematicsRun>,
     reverse_kinematics_playing: bool,
     previous_tick: Option<Instant>,
+    show_fps: bool,
+    fps: Option<u32>,
     calibration_requested: bool,
     rk_step_hold_active: bool,
     touch_cursor: Option<(f32, f32)>,
@@ -156,6 +155,13 @@ pub enum TouchInputOutcome {
     CalibrationRequested,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TickOut {
+    Calibrate,
+    Draw,
+    Nada,
+}
+
 impl CydSim {
     pub const WIDTH: usize = SCREEN_WIDTH;
     pub const HEIGHT: usize = SCREEN_HEIGHT;
@@ -164,6 +170,15 @@ impl CydSim {
 
     #[must_use]
     pub fn new() -> Self {
+        Self::new_inner(false)
+    }
+
+    #[must_use]
+    pub fn new_with_fps() -> Self {
+        Self::new_inner(true)
+    }
+
+    fn new_inner(show_fps: bool) -> Self {
         Self {
             params: [0.5, 0.5, 0.0, 0.5, 0.5, 0.5],
             xy_mix: 0.5 + 30.0 / 360.0,
@@ -174,6 +189,8 @@ impl CydSim {
             reverse_kinematics_run: None,
             reverse_kinematics_playing: false,
             previous_tick: None,
+            show_fps,
+            fps: None,
             calibration_requested: false,
             rk_step_hold_active: false,
             touch_cursor: None,
@@ -272,21 +289,38 @@ impl CydSim {
             TouchInputEvent::Up => {
                 self.touch_cursor = None;
                 self.touch_up();
-                TouchInputOutcome::Unchanged
+                TouchInputOutcome::Changed
             }
         }
     }
 
-    pub fn handle_optional_touch_event(
-        &mut self,
-        touch_input_event: Option<TouchInputEvent>,
-    ) -> bool {
-        match touch_input_event {
-            Some(touch_input_event) => match self.handle_touch_input_event(touch_input_event) {
-                TouchInputOutcome::CalibrationRequested => true,
-                TouchInputOutcome::Changed | TouchInputOutcome::Unchanged => false,
-            },
-            None => false,
+    pub fn tick(&mut self, now: Instant, touch_input_event: Option<TouchInputEvent>) -> TickOut {
+        let previous_tick = self.previous_tick;
+        let first_tick = previous_tick.is_none();
+        let reverse_kinematics_changed = self.tick_reverse_kinematics_at(now);
+        let fps_draw_requested = self.update_fps(previous_tick, now);
+        let touch_input_outcome = touch_input_event.map_or(TouchInputOutcome::Unchanged, |event| {
+            self.handle_touch_input_event(event)
+        });
+
+        match touch_input_outcome {
+            TouchInputOutcome::CalibrationRequested => {
+                self.previous_tick = None;
+                self.fps = None;
+                TickOut::Calibrate
+            }
+            TouchInputOutcome::Changed
+                if first_tick || reverse_kinematics_changed || fps_draw_requested =>
+            {
+                TickOut::Draw
+            }
+            TouchInputOutcome::Changed => TickOut::Draw,
+            TouchInputOutcome::Unchanged
+                if first_tick || reverse_kinematics_changed || fps_draw_requested =>
+            {
+                TickOut::Draw
+            }
+            TouchInputOutcome::Unchanged => TickOut::Nada,
         }
     }
 
@@ -335,6 +369,24 @@ impl CydSim {
         });
         self.previous_tick = Some(now);
         self.tick_reverse_kinematics(dt_seconds)
+    }
+
+    fn update_fps(&mut self, previous_tick: Option<Instant>, now: Instant) -> bool {
+        if !self.show_fps {
+            return false;
+        }
+
+        let Some(previous_tick) = previous_tick else {
+            return false;
+        };
+        let frame_micros = now.saturating_duration_since(previous_tick).as_micros();
+        if frame_micros == 0 {
+            return false;
+        }
+
+        let fps = (1_000_000 / frame_micros).min(999) as u32;
+        self.fps = Some(fps);
+        true
     }
 
     fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
@@ -523,14 +575,6 @@ impl CydSim {
             .ok();
 
         self.draw_reverse_kinematics_run_button(buffer);
-        Text::with_baseline(
-            "RK",
-            Point::new(RK_LABEL_LEFT, RK_LABEL_TOP),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)
-        .ok();
         self.draw_reverse_kinematics_step_button(buffer);
         self.draw_calibrate_button(buffer);
 
@@ -719,9 +763,14 @@ impl CydSim {
     }
 
     fn draw_fps(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+        if !self.show_fps {
+            return;
+        }
+
         let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
+        let mut report = FpsReport::new();
         Text::with_baseline(
-            FPS_REPORT_TEXT,
+            report.as_str(self.fps),
             Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
             text_style,
             Baseline::Top,
@@ -1307,6 +1356,11 @@ struct DistanceReport {
     len: usize,
 }
 
+struct FpsReport {
+    bytes: [u8; 7],
+    len: usize,
+}
+
 impl DistanceReport {
     fn new() -> Self {
         Self {
@@ -1326,6 +1380,34 @@ impl DistanceReport {
         self.bytes[13] = b'0' + (fraction % 10) as u8;
 
         core::str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
+    }
+}
+
+impl FpsReport {
+    fn new() -> Self {
+        Self {
+            bytes: *b"--- fps",
+            len: 7,
+        }
+    }
+
+    fn as_str(&mut self, fps: Option<u32>) -> &str {
+        if let Some(fps) = fps {
+            let fps = fps.min(999);
+            self.bytes[0] = if fps >= 100 {
+                b'0' + (fps / 100) as u8
+            } else {
+                b' '
+            };
+            self.bytes[1] = if fps >= 10 {
+                b'0' + ((fps / 10) % 10) as u8
+            } else {
+                b' '
+            };
+            self.bytes[2] = b'0' + (fps % 10) as u8;
+        }
+
+        core::str::from_utf8(&self.bytes[..self.len]).expect("fps report is ASCII")
     }
 }
 

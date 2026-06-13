@@ -20,7 +20,7 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
-use robot_arm_core::cyd::{CydSim, TouchInputEvent};
+use robot_arm_core::cyd::{CydSim, TickOut, TouchInputEvent};
 
 mod display;
 mod touch;
@@ -337,6 +337,13 @@ impl CalibratedCyd<'_> {
     fn flush(&mut self) -> Result<(), MainError> {
         self.cyd.flush()
     }
+
+    fn draw(&mut self, drawable: &impl Drawable<Color = Rgb565, Output = ()>) {
+        match drawable.draw(self) {
+            Ok(()) => {}
+            Err(infallible) => match infallible {},
+        }
+    }
 }
 
 impl DrawTarget for CalibratedCyd<'_> {
@@ -367,7 +374,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     let p = esp_hal::init(Config::default());
     esp_println::logger::init_logger(log::LevelFilter::Info);
 
-    let mut cyd_sim = CydSim::new(); // todo000 review this
+    let mut cyd_sim = CydSim::new_with_fps(); // todo000 review this
 
     let [calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
@@ -391,23 +398,18 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
-    // todo000 think about return fps
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let mut cyd = cyd.ensure_calibration()?;
 
-        // Run simulation updates. It needs time to ensure it doesn't move arm too fast.
-        cyd_sim.tick_reverse_kinematics_at(Instant::now());
-
-        // Forward calibrated touch input to the simulator; calibrate requests are sim-specific.
-        let calibration_requested = cyd_sim.handle_optional_touch_event(cyd.read_touch_input());
-        if calibration_requested {
-            cyd.remove_calibration();
-            continue;
+        match cyd_sim.tick(Instant::now(), cyd.read_touch_input()) {
+            TickOut::Calibrate => cyd.remove_calibration(),
+            TickOut::Draw => {
+                cyd.draw(&cyd_sim);
+                cyd.flush()?;
+            }
+            TickOut::Nada => {}
         }
-
-        cyd_sim.draw(&mut cyd).ok();
-        cyd.flush()?;
     }
 }
 

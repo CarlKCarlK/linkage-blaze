@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/robot_arm_cyd_sim_v3.js?v=static-report-1";
+import init, { CydSim } from "./pkg/robot_arm_cyd_sim_v3.js?v=static-report-3";
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
@@ -8,17 +8,15 @@ await init();
 const sim = new CydSim();
 const image = context.createImageData(sim.width(), sim.height());
 let animationFrame = null;
-const ANIMATION_INTERVAL_MS = 1000 / 11;
-let lastFrameTime = 0;
 
 render();
+scheduleFrame();
 
 canvas.addEventListener("pointerdown", (event) => {
   canvas.setPointerCapture(event.pointerId);
   const point = eventToScreen(event);
   sim.touch_down(point.x, point.y);
   render();
-  scheduleReverseKinematics();
 });
 
 canvas.addEventListener("pointermove", (event) => {
@@ -28,20 +26,17 @@ canvas.addEventListener("pointermove", (event) => {
   const point = eventToScreen(event);
   sim.touch_move(point.x, point.y);
   render();
-  scheduleReverseKinematics();
 });
 
 canvas.addEventListener("pointerup", (event) => {
   canvas.releasePointerCapture(event.pointerId);
   sim.touch_up();
   render();
-  scheduleReverseKinematics();
 });
 
 canvas.addEventListener("pointercancel", () => {
   sim.touch_up();
   render();
-  scheduleReverseKinematics();
 });
 
 function render() {
@@ -57,25 +52,18 @@ function eventToScreen(event) {
   };
 }
 
-function scheduleReverseKinematics() {
+function scheduleFrame() {
   if (animationFrame !== null) {
     return;
   }
-  animationFrame = requestAnimationFrame(tickReverseKinematics);
+  animationFrame = requestAnimationFrame(tickFrame);
 }
 
-function tickReverseKinematics(timestamp) {
+function tickFrame(timestamp) {
   animationFrame = null;
 
-  if (timestamp - lastFrameTime < ANIMATION_INTERVAL_MS) {
-    scheduleReverseKinematics();
-    return;
+  if (sim.tick_at(Math.round(timestamp * 1000))) {
+    render();
   }
-  lastFrameTime = timestamp;
-
-  const running = sim.tick_reverse_kinematics_at(Math.round(timestamp * 1000));
-  render();
-  if (running) {
-    scheduleReverseKinematics();
-  }
+  scheduleFrame();
 }

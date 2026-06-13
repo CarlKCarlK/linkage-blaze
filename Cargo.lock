@@ -1751,7 +1751,7 @@ dependencies = [
 
 [[package]]
 name = "robot-arm-core"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "embassy-time",
  "embedded-graphics",
@@ -1763,7 +1763,7 @@ dependencies = [
 
 [[package]]
 name = "robot-arm-cyd"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "device-envoy-esp",
  "embassy-executor",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "robot-arm-cyd-sim"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "embassy-time",
  "embedded-graphics",
@@ -1795,7 +1795,7 @@ dependencies = [
 
 [[package]]
 name = "robot-arm-wasm"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "robot-arm-core",
  "wasm-bindgen",

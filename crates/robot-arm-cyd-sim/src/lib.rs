@@ -8,7 +8,7 @@ use embedded_graphics::{
     pixelcolor::{Rgb565, RgbColor},
     prelude::{DrawTarget, Drawable, OriginDimensions, Size},
 };
-use robot_arm_core::cyd::{CydSim as CoreCydSim, FrameBuffer};
+use robot_arm_core::cyd::{CydSim as CoreCydSim, FrameBuffer, TickOut};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
@@ -25,10 +25,12 @@ struct WasmDisplay {
 impl CydSim {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        let sim = CoreCydSim::new();
-        let mut display = WasmDisplay::new();
-        sim.draw(&mut display).ok();
-        Self { sim, display }
+        Self::new_from_core_sim(CoreCydSim::new_with_fps()) // todo000000
+    }
+
+    #[wasm_bindgen(js_name = newWithFps)]
+    pub fn new_with_fps() -> Self {
+        Self::new_from_core_sim(CoreCydSim::new_with_fps())
     }
 
     pub fn width(&self) -> usize {
@@ -92,9 +94,25 @@ impl CydSim {
         self.draw_frame();
         running
     }
+
+    pub fn tick_at(&mut self, now_micros: f64) -> bool {
+        match self.sim.tick(Instant::from_micros(now_micros as u64), None) {
+            TickOut::Draw => {
+                self.draw_frame();
+                true
+            }
+            TickOut::Calibrate | TickOut::Nada => false,
+        }
+    }
 }
 
 impl CydSim {
+    fn new_from_core_sim(sim: CoreCydSim) -> Self {
+        let mut display = WasmDisplay::new();
+        sim.draw(&mut display).ok();
+        Self { sim, display }
+    }
+
     fn draw_frame(&mut self) {
         self.sim.draw(&mut self.display).ok();
     }
