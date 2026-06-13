@@ -404,26 +404,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
-    // Draw+flush benchmark:
-    //
-    // let mut cyd = cyd.ensure_calibration()?;
-    // let cyd_sim = CydSim::new_with_fps(); // todo000 review this
-    // const DRAW_FLUSH_BENCHMARK_LOOPS: u64 = 100;
-    // loop {
-    //     let start = Instant::now();
-    //     for _ in 0..DRAW_FLUSH_BENCHMARK_LOOPS {
-    //         cyd.draw(&cyd_sim);
-    //         cyd.flush()?;
-    //     }
-    //     let elapsed_micros = Instant::now()
-    //         .saturating_duration_since(start)
-    //         .as_micros()
-    //         .max(1);
-    //     let fps = DRAW_FLUSH_BENCHMARK_LOOPS as f32 * 1_000_000.0 / elapsed_micros as f32;
-    //     esp_println::println!("draw_flush benchmark: avg_last_100_fps={:.1}", fps);
-    // }
-
-    let mut cyd_sim = CydSim::new_with_fps(); // todo000 review this
+    let mut cyd_sim = CydSim::new(); // or CydSim::new_with_fps() for benchmarking
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let mut cyd = cyd.ensure_calibration()?;

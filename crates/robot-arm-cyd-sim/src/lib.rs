@@ -25,7 +25,7 @@ struct WasmDisplay {
 impl CydSim {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        Self::new_from_core_sim(CoreCydSim::new_with_fps()) // todo000000
+        Self::new_from_core_sim(CoreCydSim::new()) // or new_with_fps() for testing fps in wasm
     }
 
     #[wasm_bindgen(js_name = newWithFps)]
