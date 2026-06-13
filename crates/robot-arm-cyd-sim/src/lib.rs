@@ -5,7 +5,7 @@ use core::convert::Infallible;
 use embassy_time::Instant;
 use embedded_graphics::{
     Pixel,
-    pixelcolor::{Rgb565, RgbColor},
+    pixelcolor::Rgb565,
     prelude::{DrawTarget, Drawable, OriginDimensions, Size},
 };
 use robot_arm_core::cyd::{CydSim as CoreCydSim, FrameBuffer, TickOut};
@@ -126,11 +126,11 @@ impl WasmDisplay {
     }
 
     fn rgba(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(self.frame_buffer.pixels().len() * 4);
-        for pixel in self.frame_buffer.pixels() {
-            bytes.push(scale_rgb565_channel(pixel.r(), 31));
-            bytes.push(scale_rgb565_channel(pixel.g(), 63));
-            bytes.push(scale_rgb565_channel(pixel.b(), 31));
+        let mut bytes = Vec::with_capacity(self.frame_buffer.raw_pixels().len() * 4);
+        for pixel in self.frame_buffer.raw_pixels() {
+            bytes.push(scale_rgb565_channel(((pixel >> 11) & 0x1f) as u8, 31));
+            bytes.push(scale_rgb565_channel(((pixel >> 5) & 0x3f) as u8, 63));
+            bytes.push(scale_rgb565_channel((pixel & 0x1f) as u8, 31));
             bytes.push(255);
         }
         bytes
@@ -140,6 +140,11 @@ impl WasmDisplay {
 impl DrawTarget for WasmDisplay {
     type Color = Rgb565;
     type Error = Infallible;
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        self.frame_buffer.clear(color);
+        Ok(())
+    }
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where

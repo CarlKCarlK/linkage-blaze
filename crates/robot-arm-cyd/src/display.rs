@@ -2,7 +2,7 @@ use core::convert::Infallible;
 
 use embedded_graphics::{
     Pixel,
-    pixelcolor::Rgb565,
+    pixelcolor::{Rgb565, raw::RawU16},
     prelude::{DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
 };
@@ -24,6 +24,7 @@ use mipidsi::{
 use robot_arm_core::cyd::{FrameBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
 use static_cell::StaticCell;
 
+// 80 MHz measured 10.9 draw+flush fps but produced visible display corruption.
 const DISPLAY_SPI_HZ: u32 = 60_000_000;
 const DISPLAY_SPI_BUFFER_LEN: usize = 64;
 
@@ -111,7 +112,14 @@ impl CydDisplay {
         );
         if self
             .display
-            .fill_contiguous(&full_screen, self.frame_buffer.pixels().iter().copied())
+            .fill_contiguous(
+                &full_screen,
+                self.frame_buffer
+                    .raw_pixels()
+                    .iter()
+                    .copied()
+                    .map(|pixel| Rgb565::from(RawU16::new(pixel))),
+            )
             .is_err()
         {
             return Err(CydDisplayFlushError::FlushFrameBuffer);
@@ -123,6 +131,11 @@ impl CydDisplay {
 impl DrawTarget for CydDisplay {
     type Color = Rgb565;
     type Error = Infallible;
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        self.frame_buffer.clear(color);
+        Ok(())
+    }
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where

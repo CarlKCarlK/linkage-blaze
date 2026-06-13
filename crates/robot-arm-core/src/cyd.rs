@@ -5,7 +5,7 @@ use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point, Size},
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::{Rgb565, RgbColor},
+    pixelcolor::{IntoStorage, Rgb565, RgbColor},
     prelude::*,
     primitives::{Circle, Line, PrimitiveStyle, Rectangle, Triangle},
     text::{Baseline, Text},
@@ -1419,7 +1419,7 @@ impl Drawable for CydSim {
     where
         D: DrawTarget<Color = Self::Color>,
     {
-        target.clear(Rgb565::BLACK)?; // without: 46.4 fps, 21.55 ms frame, inferred cost 20.64 ms
+        target.clear(Rgb565::BLACK)?; // baseline: 32.3 fps; without: 49.4 fps, 20.24 ms frame, inferred cost 10.72 ms
         self.draw_grid(target); // without: 26.8 fps, 37.31 ms frame, inferred cost 4.88 ms
         self.draw_target(target); // without: 24.2 fps, 41.32 ms frame, inferred cost 0.87 ms
         self.draw_sliders(target); // without: 31.4 fps, 31.85 ms frame, inferred cost 10.35 ms
@@ -1433,14 +1433,14 @@ impl Drawable for CydSim {
 }
 
 pub struct FrameBuffer {
-    pixels: [Rgb565; SCREEN_PIXELS],
+    pixels: [u16; SCREEN_PIXELS],
 }
 
 impl FrameBuffer {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            pixels: [Rgb565::BLACK; SCREEN_PIXELS],
+            pixels: [0; SCREEN_PIXELS],
         }
     }
 
@@ -1450,15 +1450,15 @@ impl FrameBuffer {
     }
 
     pub fn clear(&mut self, color: Rgb565) {
-        self.pixels.fill(color);
+        self.pixels.fill(color.into_storage());
     }
 
-    pub fn pixels_mut(&mut self) -> &mut [Rgb565; SCREEN_PIXELS] {
+    pub fn raw_pixels_mut(&mut self) -> &mut [u16; SCREEN_PIXELS] {
         &mut self.pixels
     }
 
     #[must_use]
-    pub fn pixels(&self) -> &[Rgb565; SCREEN_PIXELS] {
+    pub fn raw_pixels(&self) -> &[u16; SCREEN_PIXELS] {
         &self.pixels
     }
 }
@@ -1466,6 +1466,11 @@ impl FrameBuffer {
 impl DrawTarget for FrameBuffer {
     type Color = Rgb565;
     type Error = Infallible;
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        self.clear(color);
+        Ok(())
+    }
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
@@ -1480,7 +1485,7 @@ impl DrawTarget for FrameBuffer {
             if x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT {
                 continue;
             }
-            self.pixels[y * SCREEN_WIDTH + x] = color;
+            self.pixels[y * SCREEN_WIDTH + x] = color.into_storage();
         }
         Ok(())
     }
