@@ -20,6 +20,10 @@ build-cyd:
 run-cyd:
     source ~/export-esp.sh && cargo +esp run {{_cyd_args}}
 
+# Flash and monitor robot-arm-c6 on the ESP32-C6 board
+run-c6:
+    cargo run -p robot-arm-c6 --target riscv32imac-unknown-none-elf --release --no-default-features --features esp32c6
+
 # Build the CYD simulator WASM bundle into www/pkg
 build-cyd-sim:
     wasm-pack build {{_cyd_sim_crate}} --target web --out-dir www/pkg --out-name robot_arm_cyd_sim_v3

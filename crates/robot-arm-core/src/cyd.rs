@@ -71,6 +71,7 @@ const TARGET_MIN_DIAMETER: f32 = 0.1;
 const TARGET_MAX_DIAMETER: f32 = 0.9;
 const HAND_CORNER_POSE_INDICES: [usize; 4] = [15, 17, 21, 23];
 const PARAM_BEND_ELBOW: usize = 1;
+const PARAM_LOWER_ARM: usize = 3;
 const PARAM_SPIN_WHOLE_ARM: usize = 4;
 const RK_INITIAL_STEP: f32 = 0.125;
 const RK_MIN_STEP: f32 = 0.001;
@@ -216,6 +217,23 @@ impl CydSim {
     #[must_use]
     pub fn touch_cursor(&self) -> Option<(f32, f32)> {
         self.touch_cursor
+    }
+
+    pub fn set_lower_arm_and_spin_whole(&mut self, lower_arm: f32, spin_whole: f32) -> bool {
+        let lower_arm = lower_arm.clamp(0.0, 1.0);
+        let spin_whole = spin_whole.clamp(0.0, 1.0);
+
+        let mut changed = false;
+        if self.params[PARAM_LOWER_ARM] != lower_arm {
+            self.params[PARAM_LOWER_ARM] = lower_arm;
+            changed = true;
+        }
+        if self.params[PARAM_SPIN_WHOLE_ARM] != spin_whole {
+            self.params[PARAM_SPIN_WHOLE_ARM] = spin_whole;
+            changed = true;
+        }
+
+        changed
     }
 
     fn touch_down(&mut self, x: f32, y: f32) {

@@ -2,6 +2,7 @@
 members = [
     "crates/robot-arm-core",
     "crates/robot-arm-cyd",
+    "crates/robot-arm-c6",
     "crates/robot-arm-cyd-sim",
     "crates/robot-arm-wasm",
 ]
@@ -14,3 +15,11 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 robot-arm-core = { path = "crates/robot-arm-core" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "abort"
