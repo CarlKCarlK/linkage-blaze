@@ -176,6 +176,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyd-esp32"
+version = "0.1.4"
+dependencies = [
+ "device-envoy-esp",
+ "embedded-graphics",
+ "embedded-hal 1.0.0",
+ "embedded-hal-bus",
+ "esp-hal",
+ "mipidsi",
+ "robot-arm-core",
+ "serde",
+ "static_cell",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1799,21 +1814,18 @@ dependencies = [
 name = "robot-arm-cyd"
 version = "0.1.4"
 dependencies = [
+ "cyd-esp32",
  "device-envoy-esp",
  "embassy-executor",
  "embassy-time",
  "embedded-graphics",
- "embedded-hal 1.0.0",
- "embedded-hal-bus",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-println",
  "esp-rtos",
  "log",
- "mipidsi",
  "robot-arm-core",
- "serde",
  "static_cell",
 ]
 

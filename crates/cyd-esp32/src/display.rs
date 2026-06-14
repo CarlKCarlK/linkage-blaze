@@ -1,9 +1,7 @@
-use core::convert::Infallible;
-
 use embedded_graphics::{
-    Pixel,
+    draw_target::DrawTarget,
     pixelcolor::{Rgb565, raw::RawU16},
-    prelude::{DrawTarget, OriginDimensions, Point, Size},
+    prelude::{Point, Size},
     primitives::Rectangle,
 };
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
@@ -21,11 +19,12 @@ use mipidsi::{
     models::ILI9341Rgb565,
     options::{ColorOrder, Orientation, Rotation},
 };
-use robot_arm_core::cyd::{FrameBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
 use static_cell::StaticCell;
 
+use crate::{RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+
 // 80 MHz measured 10.9 draw+flush fps but produced visible display corruption.
-const DISPLAY_SPI_HZ: u32 = 60_000_000;
+pub const DISPLAY_SPI_HZ: u32 = 60_000_000;
 const DISPLAY_SPI_BUFFER_LEN: usize = 64;
 
 type CydDisplaySpiBus = spi::master::Spi<'static, esp_hal::Blocking>;
@@ -45,13 +44,16 @@ pub enum CydDisplayFlushError {
     FlushFrameBuffer,
 }
 
-//todo00 review all the code related to CydDisplay, including its name.
 pub struct CydDisplay {
     display: CydDisplayDevice,
-    frame_buffer: &'static mut FrameBuffer,
 }
 
 impl CydDisplay {
+    #[must_use]
+    pub const fn screen_size() -> Size {
+        Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
+    }
+
     pub fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,
@@ -99,54 +101,24 @@ impl CydDisplay {
 
         backlight.set_high();
 
-        Ok(CydDisplay {
-            display,
-            frame_buffer: FrameBuffer::static_new(),
-        })
+        Ok(CydDisplay { display })
     }
 
-    pub fn flush(&mut self) -> Result<(), CydDisplayFlushError> {
-        let full_screen = Rectangle::new(
-            Point::new(0, 0),
-            Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
-        );
-        if self
-            .display
+    pub fn flush_buffer<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize>(
+        &mut self,
+        buffer: &RectBuffer<WIDTH, HEIGHT, PIXELS>,
+        top_left: Point,
+    ) -> Result<(), CydDisplayFlushError> {
+        let rectangle = Rectangle::new(top_left, Size::new(WIDTH as u32, HEIGHT as u32));
+        self.display
             .fill_contiguous(
-                &full_screen,
-                self.frame_buffer
+                &rectangle,
+                buffer
                     .raw_pixels()
                     .iter()
                     .copied()
                     .map(|pixel| Rgb565::from(RawU16::new(pixel))),
             )
-            .is_err()
-        {
-            return Err(CydDisplayFlushError::FlushFrameBuffer);
-        }
-        Ok(())
-    }
-}
-
-impl DrawTarget for CydDisplay {
-    type Color = Rgb565;
-    type Error = Infallible;
-
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.frame_buffer.clear(color);
-        Ok(())
-    }
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
-    {
-        self.frame_buffer.draw_iter(pixels)
-    }
-}
-
-impl OriginDimensions for CydDisplay {
-    fn size(&self) -> Size {
-        self.frame_buffer.size()
+            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 }

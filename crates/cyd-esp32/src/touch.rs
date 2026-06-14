@@ -1,10 +1,3 @@
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RawTouchEvent {
-    Down { raw_x: u16, raw_y: u16 },
-    Move { raw_x: u16, raw_y: u16 },
-    Up,
-}
-
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use esp_hal::{
     gpio::{
@@ -14,10 +7,17 @@ use esp_hal::{
     spi,
 };
 
-const TOUCH_SPI_HZ: u32 = 2_500_000;
+pub const TOUCH_SPI_HZ: u32 = 2_500_000;
 
 type CydTouchSpiBus = spi::master::Spi<'static, esp_hal::Blocking>;
 type CydTouchSpiDevice = ExclusiveDevice<CydTouchSpiBus, Output<'static>, NoDelay>;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RawTouchEvent {
+    Down { raw_x: u16, raw_y: u16 },
+    Move { raw_x: u16, raw_y: u16 },
+    Up,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum CydTouchInitError {
@@ -67,10 +67,6 @@ impl CydTouch {
     }
 }
 
-const TOUCH_RAW_LOGGING: bool = false;
-
-/// Concrete XPT2046 touch controller input for CYD with shared SPI.
-/// Hard-coded for CYD pin: touch IRQ on GPIO36.
 pub struct Xpt2046TouchInput<TouchIrq> {
     touch_irq: TouchIrq,
     was_pressed: bool,
@@ -88,7 +84,6 @@ where
     }
 
     fn is_pressed(&mut self) -> bool {
-        // XPT2046 IRQ is active-low; pressed when low.
         self.touch_irq.is_low().unwrap_or(false)
     }
 
@@ -96,24 +91,17 @@ where
         touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
         command: u8,
     ) -> u16 {
-        // Each axis read is its own CS transaction: assert CS, send command + 2 clock bytes, deassert CS.
-        // The XPT2046 requires CS to go high between X and Y reads.
         let tx = [command, 0x00, 0x00];
         let mut rx = [0u8; 3];
         touch_spi_device
             .transfer(&mut rx, &tx)
             .expect("touch axis SPI failed");
-        // Response: 1 null bit + 12 data bits in bytes [1] and [2], shift right by 3.
         (((rx[1] as u16) << 8) | (rx[2] as u16)) >> 3
     }
 
     fn read_single_xy(
         touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
     ) -> Option<(u16, u16)> {
-        // Command byte format: START=1, A2:A0, MODE=0 (12-bit), SER/DFR=0, PD=00.
-        // A2:A0=101 -> X+  command = 0xD0
-        // A2:A0=001 -> Y+  command = 0x90
-        // Two separate SpiDevice calls so CS pulses high between X and Y reads.
         let raw_x = Self::read_single_axis(touch_spi_device, 0xD0);
         let raw_y = Self::read_single_axis(touch_spi_device, 0x90);
 
@@ -128,7 +116,6 @@ where
         &mut self,
         touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
     ) -> Option<(u16, u16)> {
-        // Average 3 samples to reduce noise.
         const SAMPLES: u32 = 3;
         let mut sum_x: u32 = 0;
         let mut sum_y: u32 = 0;
@@ -143,9 +130,6 @@ where
         if count > 0 {
             let avg_x = (sum_x / count) as u16;
             let avg_y = (sum_y / count) as u16;
-            if TOUCH_RAW_LOGGING {
-                esp_println::println!("touch: raw avg_x={} avg_y={}", avg_x, avg_y);
-            }
             Some((avg_x, avg_y))
         } else {
             None

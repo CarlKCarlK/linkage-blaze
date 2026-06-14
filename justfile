@@ -1,5 +1,6 @@
 set shell := ["bash", "-cu"]
 
+_cyd_esp32_args := "-p cyd-esp32 --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
 _cyd_args := "-p robot-arm-cyd --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
 _cyd_clock_args := "-p robot-arm-cyd-clock --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
 _cyd_sim_crate := "crates/robot-arm-cyd-sim"
@@ -8,6 +9,10 @@ _cyd_sim_port := "8081"
 _wasm_crate := "crates/robot-arm-wasm"
 _wasm_www := "crates/robot-arm-wasm/www"
 _wasm_port := "8080"
+
+# Check shared CYD ESP32 hardware crate
+check-cyd-esp32:
+    cargo +esp check {{_cyd_esp32_args}}
 
 # Check robot-arm-cyd (ESP32)
 check-cyd:

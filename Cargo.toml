@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/cyd-esp32",
     "crates/robot-arm-core",
     "crates/robot-arm-cyd",
     "crates/robot-arm-cyd-clock",

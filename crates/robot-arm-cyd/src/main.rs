@@ -1,64 +1,33 @@
 #![no_std]
 #![no_main]
 
-// todo00 if flash read or write fails, do we want to panic or just require calibration each time?
 // todo00 can/should there be a mode to share spi and cs pins?
 // todo00 do we need/want any of these "Delay::new().delay_millis(1);"
 
 use core::convert::Infallible;
 
 use device_envoy_esp::{
-    button::{Button as _, ButtonEsp, PressedTo},
-    flash_block::{FlashBlock as _, FlashBlockEsp},
+    button::{ButtonEsp, PressedTo},
+    flash_block::FlashBlockEsp,
 };
 use embassy_time::Instant;
 use embedded_graphics::{
-    Drawable, Pixel,
+    Drawable,
     pixelcolor::Rgb565,
-    prelude::{DrawTarget, OriginDimensions, Point, Primitive, RgbColor, Size},
+    prelude::{DrawTarget, Point, Primitive, RgbColor},
     primitives::{Circle, Line, PrimitiveStyle},
 };
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
+use static_cell::StaticCell;
+
+use cyd_esp32::{
+    CalibratedCyd, CalibrationConfig, Cyd, CydError, RawPoint, RawTouchEvent, RectBuffer,
+    SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
+};
 use robot_arm_core::cyd::{CydSim, TickOut, TouchInputEvent};
 
-mod display;
-mod touch;
-
-use display::{CydDisplay, CydDisplayFlushError, CydDisplayInitError};
-use touch::{CydTouch, CydTouchInitError, RawTouchEvent};
-
 esp_bootloader_esp_idf::esp_app_desc!();
-
-#[derive(Clone, Copy)]
-struct RawPoint {
-    x: u16,
-    y: u16,
-}
-
-struct Cyd {
-    // todo000 combine with the display? (may no longer apply)
-    display: CydDisplay,
-    touch: CydTouch,
-    calibration_config: Option<CalibrationConfig>,
-    calibration_flash_block: FlashBlockEsp,
-    calibration_button: ButtonEsp<'static>,
-}
-
-struct CalibratedCyd<'a> {
-    cyd: &'a mut Cyd,
-    calibration_config: CalibrationConfig,
-}
-
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
-struct CalibrationConfig {
-    ax: f32,
-    bx: f32,
-    cx: f32,
-    ay: f32,
-    by: f32,
-    cy: f32,
-}
 
 #[derive(Clone, Copy)]
 enum CalibrationCorner {
@@ -75,6 +44,9 @@ const CALIBRATION_CROSS_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_stroke(Rgb565::YELLOW, 4);
 const CALIBRATION_CENTER_DOT_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_fill(Rgb565::WHITE);
+const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
+
+type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
 
 #[derive(Debug)]
 enum MainError {
@@ -87,12 +59,8 @@ enum MainError {
     DrawCalibrationCross,
     DrawCalibrationCenterDot,
     FlushFrameBuffer,
-}
-
-impl From<CydDisplayFlushError> for MainError {
-    fn from(_: CydDisplayFlushError) -> Self {
-        MainError::FlushFrameBuffer
-    }
+    TouchUnavailable,
+    CalibrationUnavailable,
 }
 
 impl From<device_envoy_esp::Error> for MainError {
@@ -101,274 +69,29 @@ impl From<device_envoy_esp::Error> for MainError {
     }
 }
 
-impl From<CydDisplayInitError> for MainError {
-    fn from(error: CydDisplayInitError) -> Self {
+impl From<CydError> for MainError {
+    fn from(error: CydError) -> Self {
         match error {
-            CydDisplayInitError::ConfigureDisplaySpi => MainError::ConfigureDisplaySpi,
-            CydDisplayInitError::CreateDisplaySpiDevice => MainError::CreateDisplaySpiDevice,
-            CydDisplayInitError::InitDisplay => MainError::InitDisplay,
-        }
-    }
-}
-
-impl From<CydTouchInitError> for MainError {
-    fn from(error: CydTouchInitError) -> Self {
-        match error {
-            CydTouchInitError::ConfigureTouchSpi => MainError::ConfigureTouchSpi,
-            CydTouchInitError::CreateTouchSpiDevice => MainError::CreateTouchSpiDevice,
-        }
-    }
-}
-
-impl Cyd {
-    fn new(
-        display_spi: impl esp_hal::spi::master::Instance + 'static,
-        display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
-        display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
-        display_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
-        display_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
-        touch_spi: impl esp_hal::spi::master::Instance + 'static,
-        touch_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
-        touch_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
-        touch_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
-        touch_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
-        touch_irq_pin: impl esp_hal::gpio::InputPin + 'static,
-        calibration_flash_block: FlashBlockEsp,
-        calibration_button: ButtonEsp<'static>,
-    ) -> Result<Cyd, MainError> {
-        let mut calibration_flash_block = calibration_flash_block;
-        let calibration_config = if calibration_button.is_pressed() {
-            None
-        } else {
-            calibration_flash_block.load::<CalibrationConfig>()?
-        };
-
-        Ok(Cyd {
-            display: CydDisplay::new(
-                display_spi,
-                display_sck_pin,
-                display_mosi_pin,
-                display_miso_pin,
-                display_cs_pin,
-                display_dc_pin,
-                display_rst_pin,
-                display_backlight_pin,
-            )?,
-            touch: CydTouch::new(
-                touch_spi,
-                touch_sck_pin,
-                touch_mosi_pin,
-                touch_miso_pin,
-                touch_cs_pin,
-                touch_irq_pin,
-            )?,
-            calibration_config,
-            calibration_flash_block,
-            calibration_button,
-        })
-    }
-
-    fn recalibration_requested(&self) -> bool {
-        self.calibration_button.is_pressed()
-    }
-
-    fn save_calibration(
-        &mut self,
-        calibration_config: &CalibrationConfig,
-    ) -> Result<(), MainError> {
-        Ok(self.calibration_flash_block.save(calibration_config)?)
-    }
-
-    fn flush(&mut self) -> Result<(), MainError> {
-        Ok(self.display.flush()?)
-    }
-
-    fn draw_calibration_screen(&mut self, calibration_index: usize) -> Result<(), MainError> {
-        self.display.clear(Rgb565::BLACK).ok();
-        if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
-            draw_calibration_cross(
-                &mut self.display,
-                calibration_corner,
-                CydSim::WIDTH_U16,
-                CydSim::HEIGHT_U16,
-            )?;
-        }
-        self.flush()
-    }
-
-    fn calibrate(&mut self) -> Result<(), MainError> {
-        let mut calibration_index = 0;
-        let mut calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-
-        esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
-        esp_println::println!("cal: next tap UL");
-        self.draw_calibration_screen(calibration_index)?;
-
-        loop {
-            if self.recalibration_requested() {
-                calibration_index = 0;
-                calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-                esp_println::println!("cal: calibration button pressed, restarting calibration");
-                esp_println::println!("cal: next tap UL");
-                self.draw_calibration_screen(calibration_index)?;
-                continue;
-            }
-
-            if let Some(raw_touch_event) = self.touch.read_raw_touch_event() {
-                if let RawTouchEvent::Down { raw_x, raw_y } = raw_touch_event {
-                    if calibration_index < 4 {
-                        calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
-                        calibration_index += 1;
-                        esp_println::println!(
-                            "cal: point{} raw_x={} raw_y={}",
-                            calibration_index,
-                            raw_x,
-                            raw_y
-                        );
-                        if calibration_index < 4 {
-                            let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
-                            esp_println::println!("cal: next tap {}", corner_label);
-                            self.draw_calibration_screen(calibration_index)?;
-                            continue;
-                        }
-
-                        let calibration_config = compute_calibration_four_point(
-                            calibration_points,
-                            CydSim::WIDTH_U16,
-                            CydSim::HEIGHT_U16,
-                        );
-                        self.save_calibration(&calibration_config)?;
-
-                        esp_println::println!(
-                            "cal: done ax={:.5} bx={:.5} cx={:.1} ay={:.5} by={:.5} cy={:.1}",
-                            calibration_config.ax,
-                            calibration_config.bx,
-                            calibration_config.cx,
-                            calibration_config.ay,
-                            calibration_config.by,
-                            calibration_config.cy
-                        );
-                        esp_println::println!("cal: controls enabled with computed calibration");
-
-                        self.calibration_config = Some(calibration_config);
-                        return Ok(());
-                    }
+            CydError::Flash(_) => MainError::Flash,
+            CydError::DisplayInit(error) => match error {
+                cyd_esp32::CydDisplayInitError::ConfigureDisplaySpi => {
+                    MainError::ConfigureDisplaySpi
                 }
-            }
-
-            Delay::new().delay_millis(1);
+                cyd_esp32::CydDisplayInitError::CreateDisplaySpiDevice => {
+                    MainError::CreateDisplaySpiDevice
+                }
+                cyd_esp32::CydDisplayInitError::InitDisplay => MainError::InitDisplay,
+            },
+            CydError::TouchInit(error) => match error {
+                cyd_esp32::CydTouchInitError::ConfigureTouchSpi => MainError::ConfigureTouchSpi,
+                cyd_esp32::CydTouchInitError::CreateTouchSpiDevice => {
+                    MainError::CreateTouchSpiDevice
+                }
+            },
+            CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
+            CydError::TouchUnavailable => MainError::TouchUnavailable,
+            CydError::CalibrationUnavailable => MainError::CalibrationUnavailable,
         }
-    }
-
-    fn ensure_calibration(&mut self) -> Result<CalibratedCyd<'_>, MainError> {
-        if self.recalibration_requested() {
-            self.calibration_config = None;
-        }
-
-        if self.calibration_config.is_none() {
-            self.calibrate()?;
-        }
-
-        let calibration_config = self
-            .calibration_config
-            .expect("ensure_calibration must leave Cyd calibrated");
-
-        Ok(CalibratedCyd {
-            cyd: self,
-            calibration_config,
-        })
-    }
-}
-
-impl DrawTarget for Cyd {
-    type Color = Rgb565;
-    type Error = Infallible;
-
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.display.clear(color)
-    }
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
-    {
-        self.display.draw_iter(pixels)
-    }
-}
-
-impl OriginDimensions for Cyd {
-    fn size(&self) -> Size {
-        self.display.size()
-    }
-}
-
-impl CalibratedCyd<'_> {
-    fn remove_calibration(&mut self) {
-        self.cyd.calibration_config = None;
-    }
-
-    fn read_touch_input(&mut self) -> Option<TouchInputEvent> {
-        let raw_touch_event = self.cyd.touch.read_raw_touch_event()?;
-
-        Some(match raw_touch_event {
-            RawTouchEvent::Down { raw_x, raw_y } => {
-                let (x, y) = map_raw_to_screen(
-                    raw_x,
-                    raw_y,
-                    self.calibration_config,
-                    CydSim::WIDTH_U16 as f32,
-                    CydSim::HEIGHT_U16 as f32,
-                );
-                TouchInputEvent::Down { x, y }
-            }
-            RawTouchEvent::Move { raw_x, raw_y } => {
-                let (x, y) = map_raw_to_screen(
-                    raw_x,
-                    raw_y,
-                    self.calibration_config,
-                    CydSim::WIDTH_U16 as f32,
-                    CydSim::HEIGHT_U16 as f32,
-                );
-                TouchInputEvent::Move { x, y }
-            }
-            RawTouchEvent::Up => TouchInputEvent::Up,
-        })
-    }
-
-    fn flush(&mut self) -> Result<(), MainError> {
-        self.cyd.flush()
-    }
-
-    fn draw(&mut self, drawable: &impl Drawable<Color = Rgb565, Output = ()>) {
-        match drawable.draw(self) {
-            Ok(()) => {}
-            Err(infallible) => match infallible {},
-        }
-    }
-}
-
-impl DrawTarget for CalibratedCyd<'_> {
-    type Color = Rgb565;
-    type Error = Infallible;
-
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.cyd.clear(color)
-    }
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
-    {
-        self.cyd.draw_iter(pixels)
-    }
-}
-
-impl OriginDimensions for CalibratedCyd<'_> {
-    fn size(&self) -> Size {
-        self.cyd.size()
     }
 }
 
@@ -385,7 +108,11 @@ fn inner_main() -> Result<Infallible, MainError> {
     let [calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
-    let mut cyd = Cyd::new(
+    // todo0000 make nicer
+    static SCREEN_BUFFER: StaticCell<ScreenBuffer> = StaticCell::new();
+    let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);
+
+    let mut cyd = Cyd::new_with_touch(
         p.SPI2,                  // display SPI
         p.GPIO14,                // display SCK
         p.GPIO13,                // display MOSI
@@ -407,148 +134,117 @@ fn inner_main() -> Result<Infallible, MainError> {
     let mut cyd_sim = CydSim::new(); // or CydSim::new_with_fps() for benchmarking
     loop {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
-        let mut cyd = cyd.ensure_calibration()?;
+        let mut cyd = ensure_calibration(&mut cyd, screen_buffer)?;
 
-        match cyd_sim.tick(Instant::now(), cyd.read_touch_input()) {
+        match cyd_sim.tick(Instant::now(), read_touch_input(&mut cyd)?) {
             // 1_886_000 fps if only command
             TickOut::Calibrate => cyd.remove_calibration(),
             TickOut::Draw => {
-                cyd.draw(&cyd_sim); // 32.3 fps if only command
-                cyd.flush()?; // 13.2 fps if only command
+                // todo0000 make nicer
+                draw(screen_buffer, &cyd_sim); // 32.3 fps if only command
+                cyd.flush(screen_buffer, Point::new(0, 0))?; // 13.2 fps if only command
             }
             TickOut::Nada => {}
         }
     }
 }
 
-fn solve_3x3(system_matrix: [[f32; 3]; 3], rhs_vector: [f32; 3]) -> (f32, f32, f32) {
-    let determinant = system_matrix[0][0]
-        * (system_matrix[1][1] * system_matrix[2][2] - system_matrix[1][2] * system_matrix[2][1])
-        - system_matrix[0][1]
-            * (system_matrix[1][0] * system_matrix[2][2]
-                - system_matrix[1][2] * system_matrix[2][0])
-        + system_matrix[0][2]
-            * (system_matrix[1][0] * system_matrix[2][1]
-                - system_matrix[1][1] * system_matrix[2][0]);
-
-    assert!(
-        determinant.abs() >= 0.000_001,
-        "cal: invalid touch calibration geometry"
-    );
-
-    let determinant_ax = rhs_vector[0]
-        * (system_matrix[1][1] * system_matrix[2][2] - system_matrix[1][2] * system_matrix[2][1])
-        - system_matrix[0][1]
-            * (rhs_vector[1] * system_matrix[2][2] - system_matrix[1][2] * rhs_vector[2])
-        + system_matrix[0][2]
-            * (rhs_vector[1] * system_matrix[2][1] - system_matrix[1][1] * rhs_vector[2]);
-
-    let determinant_bx = system_matrix[0][0]
-        * (rhs_vector[1] * system_matrix[2][2] - system_matrix[1][2] * rhs_vector[2])
-        - rhs_vector[0]
-            * (system_matrix[1][0] * system_matrix[2][2]
-                - system_matrix[1][2] * system_matrix[2][0])
-        + system_matrix[0][2]
-            * (system_matrix[1][0] * rhs_vector[2] - rhs_vector[1] * system_matrix[2][0]);
-
-    let determinant_cx = system_matrix[0][0]
-        * (system_matrix[1][1] * rhs_vector[2] - rhs_vector[1] * system_matrix[2][1])
-        - system_matrix[0][1]
-            * (system_matrix[1][0] * rhs_vector[2] - rhs_vector[1] * system_matrix[2][0])
-        + rhs_vector[0]
-            * (system_matrix[1][0] * system_matrix[2][1]
-                - system_matrix[1][1] * system_matrix[2][0]);
-
-    (
-        determinant_ax / determinant,
-        determinant_bx / determinant,
-        determinant_cx / determinant,
-    )
-}
-
-fn solve_affine_axis(
-    points: [RawPoint; 4],
-    screen: [Point; 4],
-    map_x_axis: bool,
-) -> (f32, f32, f32) {
-    let mut sum_xx = 0.0;
-    let mut sum_xy = 0.0;
-    let mut sum_x = 0.0;
-    let mut sum_yy = 0.0;
-    let mut sum_y = 0.0;
-    let mut sum_xo = 0.0;
-    let mut sum_yo = 0.0;
-    let mut sum_o = 0.0;
-
-    for sample_index in 0..4 {
-        let raw_x = points[sample_index].x as f32;
-        let raw_y = points[sample_index].y as f32;
-        let output = if map_x_axis {
-            screen[sample_index].x as f32
-        } else {
-            screen[sample_index].y as f32
-        };
-
-        sum_xx += raw_x * raw_x;
-        sum_xy += raw_x * raw_y;
-        sum_x += raw_x;
-        sum_yy += raw_y * raw_y;
-        sum_y += raw_y;
-        sum_xo += raw_x * output;
-        sum_yo += raw_y * output;
-        sum_o += output;
+fn ensure_calibration<'a>(
+    cyd: &'a mut Cyd,
+    screen_buffer: &mut ScreenBuffer,
+) -> Result<CalibratedCyd<'a>, MainError> {
+    if cyd.recalibration_requested() {
+        cyd.remove_calibration();
     }
 
-    let system_matrix = [
-        [sum_xx, sum_xy, sum_x],
-        [sum_xy, sum_yy, sum_y],
-        [sum_x, sum_y, 4.0],
-    ];
-    let rhs_vector = [sum_xo, sum_yo, sum_o];
-    solve_3x3(system_matrix, rhs_vector)
+    if cyd.calibration_config().is_none() {
+        calibrate(cyd, screen_buffer)?;
+    }
+
+    Ok(cyd.ensure_calibration()?)
 }
 
-fn compute_calibration_four_point(
-    points: [RawPoint; 4],
-    width: u16,
-    height: u16,
-) -> CalibrationConfig {
-    let ul = calibration_corner_center(CalibrationCorner::UpperLeft, width, height);
-    let ur = calibration_corner_center(CalibrationCorner::UpperRight, width, height);
-    let lr = calibration_corner_center(CalibrationCorner::LowerRight, width, height);
-    let ll = calibration_corner_center(CalibrationCorner::LowerLeft, width, height);
-    let screen_targets = [ul, ur, lr, ll];
+fn calibrate(cyd: &mut Cyd, screen_buffer: &mut ScreenBuffer) -> Result<(), MainError> {
+    let mut calibration_index = 0;
+    let mut calibration_points = [RawPoint { x: 0, y: 0 }; 4];
 
-    let (ax, bx, cx) = solve_affine_axis(points, screen_targets, true);
-    let (ay, by, cy) = solve_affine_axis(points, screen_targets, false);
+    esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
+    esp_println::println!("cal: next tap UL");
+    draw_calibration_screen(cyd, screen_buffer, calibration_index)?;
 
-    CalibrationConfig {
-        ax,
-        bx,
-        cx,
-        ay,
-        by,
-        cy,
+    loop {
+        if cyd.recalibration_requested() {
+            calibration_index = 0;
+            calibration_points = [RawPoint { x: 0, y: 0 }; 4];
+            esp_println::println!("cal: calibration button pressed, restarting calibration");
+            esp_println::println!("cal: next tap UL");
+            draw_calibration_screen(cyd, screen_buffer, calibration_index)?;
+            continue;
+        }
+
+        if let Some(RawTouchEvent::Down { raw_x, raw_y }) = cyd.read_raw_touch_event() {
+            if calibration_index < 4 {
+                calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
+                calibration_index += 1;
+                esp_println::println!(
+                    "cal: point{} raw_x={} raw_y={}",
+                    calibration_index,
+                    raw_x,
+                    raw_y
+                );
+                if calibration_index < 4 {
+                    let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
+                    esp_println::println!("cal: next tap {}", corner_label);
+                    draw_calibration_screen(cyd, screen_buffer, calibration_index)?;
+                    continue;
+                }
+
+                let calibration_config = CalibrationConfig::from_four_points(calibration_points);
+                cyd.save_calibration(calibration_config)?;
+                esp_println::println!("cal: controls enabled with computed calibration");
+                return Ok(());
+            }
+        }
+
+        Delay::new().delay_millis(1);
     }
 }
 
-fn map_raw_to_screen(
-    raw_x: u16,
-    raw_y: u16,
-    calibration: CalibrationConfig,
-    width: f32,
-    height: f32,
-) -> (f32, f32) {
-    let raw_x = raw_x as f32;
-    let raw_y = raw_y as f32;
+fn draw_calibration_screen(
+    cyd: &mut Cyd,
+    screen_buffer: &mut ScreenBuffer,
+    calibration_index: usize,
+) -> Result<(), MainError> {
+    screen_buffer.clear(Rgb565::BLACK);
+    if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
+        draw_calibration_cross(
+            screen_buffer,
+            calibration_corner,
+            CydSim::WIDTH_U16,
+            CydSim::HEIGHT_U16,
+        )?;
+    }
+    Ok(cyd.flush(screen_buffer, Point::new(0, 0))?)
+}
 
-    let mapped_x = calibration.ax * raw_x + calibration.bx * raw_y + calibration.cx;
-    let mapped_y = calibration.ay * raw_x + calibration.by * raw_y + calibration.cy;
+fn read_touch_input(cyd: &mut CalibratedCyd<'_>) -> Result<Option<TouchInputEvent>, MainError> {
+    Ok(cyd
+        .read_touch_input()?
+        .map(|touch_input_event| match touch_input_event {
+            CydTouchInputEvent::Down { x, y } => TouchInputEvent::Down { x, y },
+            CydTouchInputEvent::Move { x, y } => TouchInputEvent::Move { x, y },
+            CydTouchInputEvent::Up => TouchInputEvent::Up,
+        }))
+}
 
-    let mapped_x = mapped_x.clamp(0.0, (width - 1.0).max(0.0));
-    let mapped_y = mapped_y.clamp(0.0, (height - 1.0).max(0.0));
-
-    (mapped_x, mapped_y)
+fn draw(
+    screen_buffer: &mut ScreenBuffer,
+    drawable: &impl embedded_graphics::Drawable<Color = Rgb565, Output = ()>,
+) {
+    match drawable.draw(screen_buffer) {
+        Ok(()) => {}
+        Err(infallible) => match infallible {},
+    }
 }
 
 fn calibration_corner_for_index(calibration_index: usize) -> Option<CalibrationCorner> {
