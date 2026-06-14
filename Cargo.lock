@@ -879,7 +879,9 @@ dependencies = [
  "esp-metadata-generated",
  "esp-sync",
  "esp-wifi-sys-esp32",
+ "esp-wifi-sys-esp32c6",
  "esp32",
+ "esp32c6",
  "log",
 ]
 
@@ -928,6 +930,7 @@ dependencies = [
  "esp-wifi-sys-esp32s2",
  "esp-wifi-sys-esp32s3",
  "esp32",
+ "esp32c6",
  "heapless 0.9.3",
  "instability",
  "log",
@@ -1764,6 +1767,7 @@ dependencies = [
 name = "robot-arm-c6"
 version = "0.1.4"
 dependencies = [
+ "device-envoy-esp",
  "embassy-time",
  "embedded-graphics",
  "embedded-hal 1.0.0",

@@ -88,6 +88,7 @@ const SLIDER_TRACK_STYLE: PrimitiveStyle<Rgb565> =
 const BUTTON_STROKE_STYLE: PrimitiveStyle<Rgb565> =
     PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 1);
 const YELLOW_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW);
+const GREEN_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::GREEN);
 const PLAY_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::GREEN);
 const STOP_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::WHITE);
 
@@ -140,6 +141,14 @@ pub struct CydSim {
     calibration_requested: bool,
     rk_step_hold_active: bool,
     touch_cursor: Option<(f32, f32)>,
+    controlled_knobs: [ControlledKnob; 2],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ControlledKnob {
+    Param(usize),
+    ZMix,
+    XyMix,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -195,6 +204,10 @@ impl CydSim {
             calibration_requested: false,
             rk_step_hold_active: false,
             touch_cursor: None,
+            controlled_knobs: [
+                ControlledKnob::Param(PARAM_LOWER_ARM),
+                ControlledKnob::Param(PARAM_SPIN_WHOLE_ARM),
+            ],
         }
     }
 
@@ -220,20 +233,66 @@ impl CydSim {
     }
 
     pub fn set_lower_arm_and_spin_whole(&mut self, lower_arm: f32, spin_whole: f32) -> bool {
-        let lower_arm = lower_arm.clamp(0.0, 1.0);
-        let spin_whole = spin_whole.clamp(0.0, 1.0);
+        self.set_controlled_knobs(
+            ControlledKnob::Param(PARAM_LOWER_ARM),
+            ControlledKnob::Param(PARAM_SPIN_WHOLE_ARM),
+        );
+        self.set_param_pair(PARAM_LOWER_ARM, lower_arm, PARAM_SPIN_WHOLE_ARM, spin_whole)
+    }
+
+    pub fn set_controlled_knobs(&mut self, first: ControlledKnob, second: ControlledKnob) {
+        self.controlled_knobs = [first, second];
+    }
+
+    pub fn set_param_pair(
+        &mut self,
+        first_index: usize,
+        first_value: f32,
+        second_index: usize,
+        second_value: f32,
+    ) -> bool {
+        assert!(first_index < SLIDER_COUNT, "first_index out of range");
+        assert!(second_index < SLIDER_COUNT, "second_index out of range");
+
+        let first_value = first_value.clamp(0.0, 1.0);
+        let second_value = second_value.clamp(0.0, 1.0);
 
         let mut changed = false;
-        if self.params[PARAM_LOWER_ARM] != lower_arm {
-            self.params[PARAM_LOWER_ARM] = lower_arm;
+        if self.params[first_index] != first_value {
+            self.params[first_index] = first_value;
             changed = true;
         }
-        if self.params[PARAM_SPIN_WHOLE_ARM] != spin_whole {
-            self.params[PARAM_SPIN_WHOLE_ARM] = spin_whole;
+        if self.params[second_index] != second_value {
+            self.params[second_index] = second_value;
             changed = true;
         }
 
         changed
+    }
+
+    pub fn set_view_mixes(&mut self, z_mix: f32, xy_mix: f32) -> bool {
+        let z_mix = z_mix.clamp(0.0, 1.0);
+        let xy_mix = xy_mix.clamp(0.0, 1.0);
+
+        let mut changed = false;
+        if self.z_mix != z_mix {
+            self.z_mix = z_mix;
+            changed = true;
+        }
+        if self.xy_mix != xy_mix {
+            self.xy_mix = xy_mix;
+            changed = true;
+        }
+
+        changed
+    }
+
+    fn knob_fill_style(&self, knob: ControlledKnob) -> PrimitiveStyle<Rgb565> {
+        if self.controlled_knobs[0] == knob || self.controlled_knobs[1] == knob {
+            GREEN_FILL_STYLE
+        } else {
+            YELLOW_FILL_STYLE
+        }
     }
 
     fn touch_down(&mut self, x: f32, y: f32) {
@@ -571,7 +630,7 @@ impl CydSim {
         let tilt_knob_y =
             TILT_TOP + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.z_mix));
         Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
-            .into_styled(YELLOW_FILL_STYLE)
+            .into_styled(self.knob_fill_style(ControlledKnob::ZMix))
             .draw(buffer)
             .ok();
 
@@ -665,7 +724,7 @@ impl CydSim {
             let knob_x =
                 SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
             Circle::with_center(Point::new(knob_x, y + 8), 9)
-                .into_styled(YELLOW_FILL_STYLE)
+                .into_styled(self.knob_fill_style(ControlledKnob::Param(slider_index)))
                 .draw(buffer)
                 .ok();
         }
@@ -688,7 +747,7 @@ impl CydSim {
         let view_knob_x = VIEW_SLIDER_LEFT
             + round_to_i32((VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.xy_mix);
         Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
-            .into_styled(YELLOW_FILL_STYLE)
+            .into_styled(self.knob_fill_style(ControlledKnob::XyMix))
             .draw(buffer)
             .ok();
     }
