@@ -177,13 +177,17 @@ fn draw_clock_hands(
                 1 => 4,
                 _ => 2,
             };
-            primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
-                start: pose_to_point(previous_pose),
-                end: pose_to_point(pose),
-                width,
-                color: Rgb565::GREEN,
-            });
-            *primitive_count += 1;
+            let start = pose_to_point(previous_pose);
+            let end = pose_to_point(pose);
+            if start != end {
+                primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
+                    start,
+                    end,
+                    width,
+                    color: Rgb565::GREEN,
+                });
+                *primitive_count += 1;
+            }
             hand_index += 1;
         }
         previous_pose = Some(pose);

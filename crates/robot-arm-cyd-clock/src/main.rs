@@ -16,7 +16,7 @@ use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
     clock_sync::{ClockSync as _, ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
-    flash_block::{FlashBlock, FlashBlockEsp},
+    flash_block::FlashBlockEsp,
     init_and_start,
     wifi_auto::{
         WifiAuto as _, WifiAutoEsp, WifiAutoEvent,
@@ -97,9 +97,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     let display = &*DISPLAY.init(RefCell::new(CydClockDisplay::new(cyd)));
     info!("CYD display initialized");
 
-    let [mut wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
-    // TODO0 one-off WiFi reset while testing; comment this out after credentials are reset.
-    wifi_auto_flash_block.clear()?;
+    let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
     let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
