@@ -34,6 +34,14 @@ pub enum Step {
     Roll(Arg),
     /// Advance along v0 by the given distance.
     Move(Arg),
+    /// Lift the pen so later moves do not draw.
+    PenUp,
+    /// Lower the pen so later moves draw.
+    PenDown,
+    /// Set the pen color.
+    PenColor(u32),
+    /// Set the pen stroke width.
+    PenWidth(u16),
 }
 
 /// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
@@ -166,6 +174,26 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.push(Step::Start)
     }
 
+    /// Lift the pen so later move steps don't draw.
+    pub const fn pen_up(self) -> Self {
+        self.push(Step::PenUp)
+    }
+
+    /// Lower the pen so later move steps draw.
+    pub const fn pen_down(self) -> Self {
+        self.push(Step::PenDown)
+    }
+
+    /// Set the pen color for later move steps.
+    pub const fn pen_color(self, color: u32) -> Self {
+        self.push(Step::PenColor(color))
+    }
+
+    /// Set the pen width for later move steps.
+    pub const fn pen_width(self, width: u16) -> Self {
+        self.push(Step::PenWidth(width))
+    }
+
     const fn push(mut self, step: Step) -> Self {
         assert!(self.len < N, "linkage has more steps than N");
         self.steps[self.len] = step;
@@ -176,6 +204,16 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Iterate over poses produced by evaluating this linkage from 0.0 to 1.0 params.
     pub fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> Poses<'a, DOF, N> {
         Poses::new(self, params)
+    }
+
+    /// Iterate over styled poses produced by evaluating this linkage.
+    pub fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> StyledPoses<'a, DOF, N> {
+        StyledPoses::new(self, params)
+    }
+
+    /// Iterate over drawable pen-down move segments.
+    pub fn stroke_segments<'a>(&'a self, params: &'a [f32; DOF]) -> StrokeSegments<'a, DOF, N> {
+        StrokeSegments::new(self, params)
     }
 
     /// Return the pose produced after evaluating all steps from 0.0 to 1.0 params.
@@ -203,13 +241,78 @@ fn validate_params<const DOF: usize>(params: &[f32; DOF]) {
 fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
     let radians = match step {
         Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => arg.resolve(params),
-        Step::Start | Step::Move(_) => return Mat3::IDENTITY,
+        Step::Start
+        | Step::Move(_)
+        | Step::PenUp
+        | Step::PenDown
+        | Step::PenColor(_)
+        | Step::PenWidth(_) => return Mat3::IDENTITY,
     };
     match step {
         Step::Yaw(_) => Mat3::yaw(radians),
         Step::Pitch(_) => Mat3::pitch(radians),
         Step::Roll(_) => Mat3::roll(radians),
-        Step::Start | Step::Move(_) => Mat3::IDENTITY,
+        Step::Start
+        | Step::Move(_)
+        | Step::PenUp
+        | Step::PenDown
+        | Step::PenColor(_)
+        | Step::PenWidth(_) => Mat3::IDENTITY,
+    }
+}
+
+/// Logo-style pen state for linkage drawing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Pen {
+    Up,
+    Down,
+}
+
+/// Drawing state carried while evaluating a linkage.
+#[derive(Clone, Copy, Debug)]
+pub struct PenStyle {
+    pen: Pen,
+    color: u32,
+    width: u16,
+}
+
+impl PenStyle {
+    /// Return the default down pen with color 0 and width 1.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            pen: Pen::Down,
+            color: 0,
+            width: 1,
+        }
+    }
+
+    /// Return the current pen state.
+    #[must_use]
+    pub const fn pen(self) -> Pen {
+        self.pen
+    }
+
+    /// Return the current pen color.
+    #[must_use]
+    pub const fn color(self) -> u32 {
+        self.color
+    }
+
+    /// Return the current pen width.
+    #[must_use]
+    pub const fn width(self) -> u16 {
+        self.width
+    }
+
+    fn apply(&mut self, step: &Step) {
+        match step {
+            Step::PenUp => self.pen = Pen::Up,
+            Step::PenDown => self.pen = Pen::Down,
+            Step::PenColor(color) => self.color = *color,
+            Step::PenWidth(width) => self.width = *width,
+            Step::Start | Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) | Step::Move(_) => {}
+        }
     }
 }
 
@@ -266,10 +369,91 @@ impl Pose {
             Step::Move(arg) => {
                 self.position += self.orientation.forward() * arg.resolve(params);
             }
-            _ => {
+            Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) => {
                 self.orientation = self.orientation * rotation_matrix(step, params);
             }
+            Step::PenUp | Step::PenDown | Step::PenColor(_) | Step::PenWidth(_) => {}
         }
+    }
+}
+
+/// Full pose plus Logo-style pen state after evaluating a linkage step.
+#[derive(Clone, Copy, Debug)]
+pub struct StyledPose {
+    pose: Pose,
+    pen_style: PenStyle,
+}
+
+impl StyledPose {
+    /// Return this styled pose's geometry.
+    #[must_use]
+    pub const fn pose(self) -> Pose {
+        self.pose
+    }
+
+    /// Return this styled pose's orientation matrix.
+    #[must_use]
+    pub const fn orientation(self) -> Mat3 {
+        self.pose.orientation()
+    }
+
+    /// Return this styled pose's position.
+    #[must_use]
+    pub const fn position(self) -> Vec3 {
+        self.pose.position()
+    }
+
+    /// Return this styled pose's pen state.
+    #[must_use]
+    pub const fn pen(self) -> Pen {
+        self.pen_style.pen()
+    }
+
+    /// Return this styled pose's pen color.
+    #[must_use]
+    pub const fn color(self) -> u32 {
+        self.pen_style.color()
+    }
+
+    /// Return this styled pose's pen width.
+    #[must_use]
+    pub const fn width(self) -> u16 {
+        self.pen_style.width()
+    }
+}
+
+/// A drawable pen-down move segment produced by a linkage.
+#[derive(Clone, Copy, Debug)]
+pub struct StrokeSegment {
+    start: Pose,
+    end: Pose,
+    color: u32,
+    width: u16,
+}
+
+impl StrokeSegment {
+    /// Return the segment start pose.
+    #[must_use]
+    pub const fn start(self) -> Pose {
+        self.start
+    }
+
+    /// Return the segment end pose.
+    #[must_use]
+    pub const fn end(self) -> Pose {
+        self.end
+    }
+
+    /// Return the segment pen color.
+    #[must_use]
+    pub const fn color(self) -> u32 {
+        self.color
+    }
+
+    /// Return the segment pen width.
+    #[must_use]
+    pub const fn width(self) -> u16 {
+        self.width
     }
 }
 
@@ -307,6 +491,100 @@ impl<const DOF: usize, const N: usize> Iterator for Poses<'_, DOF, N> {
         self.index += 1;
         self.pose.apply(step, self.params);
         Some(self.pose)
+    }
+}
+
+/// Iterator over styled poses produced by evaluating a linkage.
+///
+/// Yields after every linkage step, including non-move steps and the implicit
+/// [`Step::Start`].
+pub struct StyledPoses<'a, const DOF: usize, const N: usize> {
+    linkage: &'a Linkage<DOF, N>,
+    params: &'a [f32; DOF],
+    index: usize,
+    pose: Pose,
+    pen_style: PenStyle,
+}
+
+impl<'a, const DOF: usize, const N: usize> StyledPoses<'a, DOF, N> {
+    fn new(linkage: &'a Linkage<DOF, N>, params: &'a [f32; DOF]) -> Self {
+        validate_params(params);
+        Self {
+            linkage,
+            params,
+            index: 0,
+            pose: Pose::start(),
+            pen_style: PenStyle::new(),
+        }
+    }
+}
+
+impl<const DOF: usize, const N: usize> Iterator for StyledPoses<'_, DOF, N> {
+    type Item = StyledPose;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.linkage.len {
+            return None;
+        }
+        let step = &self.linkage.steps[self.index];
+        self.index += 1;
+        self.pose.apply(step, self.params);
+        self.pen_style.apply(step);
+        Some(StyledPose {
+            pose: self.pose,
+            pen_style: self.pen_style,
+        })
+    }
+}
+
+/// Iterator over drawable pen-down move segments.
+///
+/// Non-move steps update pose or pen state but don't yield. Move steps yield
+/// only when the pen is down.
+pub struct StrokeSegments<'a, const DOF: usize, const N: usize> {
+    linkage: &'a Linkage<DOF, N>,
+    params: &'a [f32; DOF],
+    index: usize,
+    pose: Pose,
+    pen_style: PenStyle,
+}
+
+impl<'a, const DOF: usize, const N: usize> StrokeSegments<'a, DOF, N> {
+    fn new(linkage: &'a Linkage<DOF, N>, params: &'a [f32; DOF]) -> Self {
+        validate_params(params);
+        Self {
+            linkage,
+            params,
+            index: 0,
+            pose: Pose::start(),
+            pen_style: PenStyle::new(),
+        }
+    }
+}
+
+impl<const DOF: usize, const N: usize> Iterator for StrokeSegments<'_, DOF, N> {
+    type Item = StrokeSegment;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.index < self.linkage.len {
+            let step = &self.linkage.steps[self.index];
+            self.index += 1;
+            let start = self.pose;
+            let pen_style = self.pen_style;
+            self.pose.apply(step, self.params);
+            self.pen_style.apply(step);
+
+            if matches!(step, Step::Move(_)) && matches!(pen_style.pen(), Pen::Down) {
+                return Some(StrokeSegment {
+                    start,
+                    end: self.pose,
+                    color: pen_style.color(),
+                    width: pen_style.width(),
+                });
+            }
+        }
+
+        None
     }
 }
 

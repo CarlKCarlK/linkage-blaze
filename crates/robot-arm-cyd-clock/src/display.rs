@@ -4,7 +4,7 @@ use cyd_esp32::{Circle, Cyd, CydError, DrawPrimitive, LineSegment, RectWorkspace
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
-    pixelcolor::{Rgb565, RgbColor},
+    pixelcolor::{Rgb565, RgbColor, raw::RawU16},
     prelude::Point,
     primitives::Rectangle,
     text::{Baseline, Text},
@@ -24,6 +24,9 @@ const HAND_SCALE: f32 = 1.0;
 const HOUR_PARAM: usize = 0;
 const MINUTE_PARAM: usize = 1;
 const SECOND_PARAM: usize = 2;
+const HOUR_HAND_COLOR: u32 = 0x07E0;
+const MINUTE_HAND_COLOR: u32 = 0xFFE0;
+const SECOND_HAND_COLOR: u32 = 0xF800;
 const FACE_RADIUS: u16 = 74;
 const FACE_STROKE_WIDTH: u16 = 2;
 const FACE_PRIMITIVE_COUNT: usize = 1;
@@ -33,13 +36,19 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const CLOCK_HANDS: Linkage<3, 9> = Linkage::start()
+const CLOCK_HANDS: Linkage<3, 15> = Linkage::start()
+    .pen_color(HOUR_HAND_COLOR)
+    .pen_width(8)
     .yaw_param(HOUR_PARAM, -90.0, 270.0)
     .forward(42.0)
     .restart()
+    .pen_color(MINUTE_HAND_COLOR)
+    .pen_width(4)
     .yaw_param(MINUTE_PARAM, -90.0, 270.0)
     .forward(64.0)
     .restart()
+    .pen_color(SECOND_HAND_COLOR)
+    .pen_width(2)
     .yaw_param(SECOND_PARAM, -90.0, 270.0)
     .forward(72.0);
 
@@ -163,40 +172,19 @@ fn draw_clock_hands(
     primitive_count: &mut usize,
 ) {
     let params = clock_time.params();
-    let mut previous_pose = None;
-    let mut hand_index = 0;
-    for pose in CLOCK_HANDS.poses(&params) {
-        if is_origin_pose(pose) {
-            previous_pose = Some(pose);
-            continue;
+    for stroke_segment in CLOCK_HANDS.stroke_segments(&params) {
+        let start = pose_to_point(stroke_segment.start());
+        let end = pose_to_point(stroke_segment.end());
+        if start != end {
+            primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
+                start,
+                end,
+                width: stroke_segment.width(),
+                color: Rgb565::from(RawU16::new(stroke_segment.color() as u16)),
+            });
+            *primitive_count += 1;
         }
-
-        if let Some(previous_pose) = previous_pose {
-            let width = match hand_index {
-                0 => 8,
-                1 => 4,
-                _ => 2,
-            };
-            let start = pose_to_point(previous_pose);
-            let end = pose_to_point(pose);
-            if start != end {
-                primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
-                    start,
-                    end,
-                    width,
-                    color: Rgb565::GREEN,
-                });
-                *primitive_count += 1;
-            }
-            hand_index += 1;
-        }
-        previous_pose = Some(pose);
     }
-}
-
-fn is_origin_pose(pose: Pose) -> bool {
-    let position = pose.position();
-    position[0].abs() < 0.001 && position[1].abs() < 0.001 && position[2].abs() < 0.001
 }
 
 fn pose_to_point(pose: Pose) -> Point {
