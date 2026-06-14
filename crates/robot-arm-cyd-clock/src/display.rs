@@ -1,6 +1,6 @@
 use core::fmt;
 
-use cyd_esp32::{Circle, Cyd, CydError, DrawPrimitive, LineSegment, RectWorkspace};
+use cyd_esp32::{Circle, Cyd, CydError, DrawPrimitive, LineSegment, RectWorkspace, SCREEN_WIDTH};
 use embedded_graphics::{
     Drawable,
     mono_font::{
@@ -20,6 +20,9 @@ const SMALL_GLYPH_HEIGHT: usize = 10;
 const MAIN_GLYPH_WIDTH: usize = 10;
 const MAIN_GLYPH_HEIGHT: usize = 20;
 const MAIN_GLYPH_SCALE: usize = 2;
+const MAX_TIME_CHARS: usize = 8; // "12:59 PM"
+const MAX_TIME_DISPLAY_WIDTH: usize = MAX_TIME_CHARS * MAIN_GLYPH_WIDTH * MAIN_GLYPH_SCALE;
+const TIME_TEXT_Y: i32 = 34;
 const GLYPH_WORKSPACE_WIDTH: usize = MAIN_GLYPH_WIDTH * MAIN_GLYPH_SCALE;
 const GLYPH_WORKSPACE_HEIGHT: usize = MAIN_GLYPH_HEIGHT * MAIN_GLYPH_SCALE;
 const CLOCK_BUFFER_WIDTH: usize = 180;
@@ -105,6 +108,7 @@ pub struct CydClockDisplay {
     cyd: Cyd,
     glyph_workspace: &'static mut GlyphWorkspace,
     background_cleared: bool,
+    last_time_text: heapless::String<16>,
 }
 
 impl CydClockDisplay {
@@ -115,6 +119,7 @@ impl CydClockDisplay {
             cyd,
             glyph_workspace: GlyphWorkspace::init_static(&GLYPH_WORKSPACE),
             background_cleared: false,
+            last_time_text: heapless::String::new(),
         }
     }
 
@@ -138,7 +143,11 @@ impl CydClockDisplay {
         .ok();
         self.show_small_text_line("CYD Clock", TEXT_DIM, Point::new(14, 8), 96)?;
         self.show_small_text_line(wifi_text.as_str(), TEXT_OK, Point::new(240, 8), 70)?;
-        self.show_main_text_line(time_text, TEXT_MAIN, Point::new(70, 34))?;
+        if time_text != self.last_time_text.as_str() {
+            self.show_main_text_line(time_text, TEXT_MAIN)?;
+            self.last_time_text.clear();
+            self.last_time_text.push_str(time_text).ok();
+        }
 
         self.show_clock(clock_time)?;
 
@@ -206,13 +215,16 @@ impl CydClockDisplay {
         &mut self,
         text: &str,
         color: Rgb565,
-        top_left: Point,
     ) -> Result<(), CydClockDisplayError> {
-        let width = text.chars().count() * MAIN_GLYPH_WIDTH * MAIN_GLYPH_SCALE;
-        self.clear_text_rect(top_left, width, MAIN_GLYPH_HEIGHT * MAIN_GLYPH_SCALE)?;
+        let mut padded = heapless::String::<16>::new();
+        padded.push_str(text).ok();
+        while padded.chars().count() < MAX_TIME_CHARS {
+            padded.push(' ').ok();
+        }
+        let x = (SCREEN_WIDTH as i32 - MAX_TIME_DISPLAY_WIDTH as i32) / 2;
         self.show_text_line(
-            text,
-            top_left,
+            padded.as_str(),
+            Point::new(x, TIME_TEXT_Y),
             &FONT_10X20,
             MAIN_GLYPH_WIDTH,
             MAIN_GLYPH_HEIGHT,
