@@ -15,7 +15,10 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangl
 
 pub use buffer::{RectBuffer, RectPixels, RectView, RectWorkspace};
 pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
-pub use display::{CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ};
+pub use display::{
+    Circle, CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ, DrawPrimitive,
+    LineSegment,
+};
 pub use robot_arm_core::cyd::{SCREEN_HEIGHT, SCREEN_WIDTH};
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
 
@@ -271,6 +274,28 @@ impl Cyd {
     pub fn fill_rect_now(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
         Ok(self.display.fill_rect_now(rectangle, color)?)
     }
+
+    pub fn draw_line_segments_now(
+        &mut self,
+        bounds: Rectangle,
+        background: Rgb565,
+        segments: &[LineSegment],
+    ) -> Result<(), CydError> {
+        Ok(self
+            .display
+            .draw_line_segments_now(bounds, background, segments)?)
+    }
+
+    pub fn draw_primitives_now(
+        &mut self,
+        bounds: Rectangle,
+        background: Rgb565,
+        primitives: &[DrawPrimitive],
+    ) -> Result<(), CydError> {
+        Ok(self
+            .display
+            .draw_primitives_now(bounds, background, primitives)?)
+    }
 }
 
 impl CalibratedCyd<'_> {
@@ -311,6 +336,25 @@ impl CalibratedCyd<'_> {
 
     pub fn fill_rect_now(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
         self.cyd.fill_rect_now(rectangle, color)
+    }
+
+    pub fn draw_line_segments_now(
+        &mut self,
+        bounds: Rectangle,
+        background: Rgb565,
+        segments: &[LineSegment],
+    ) -> Result<(), CydError> {
+        self.cyd
+            .draw_line_segments_now(bounds, background, segments)
+    }
+
+    pub fn draw_primitives_now(
+        &mut self,
+        bounds: Rectangle,
+        background: Rgb565,
+        primitives: &[DrawPrimitive],
+    ) -> Result<(), CydError> {
+        self.cyd.draw_primitives_now(bounds, background, primitives)
     }
 }
 
