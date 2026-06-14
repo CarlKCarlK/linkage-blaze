@@ -11,9 +11,9 @@ use device_envoy_esp::{
     button::Button,
     flash_block::{FlashBlock, FlashBlockEsp},
 };
-use embedded_graphics::prelude::Point;
+use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
 
-pub use buffer::RectBuffer;
+pub use buffer::{RectBuffer, RectPixels, RectView, RectWorkspace};
 pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
 pub use display::{CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ};
 pub use robot_arm_core::cyd::{SCREEN_HEIGHT, SCREEN_WIDTH};
@@ -260,12 +260,16 @@ impl Cyd {
         self.touch.as_mut()?.read_raw_touch_event()
     }
 
-    pub fn flush<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize>(
-        &mut self,
-        buffer: &RectBuffer<WIDTH, HEIGHT, PIXELS>,
-        top_left: Point,
-    ) -> Result<(), CydError> {
+    pub fn flush(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(buffer, top_left)?)
+    }
+
+    pub fn clear_now(&mut self, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.display.clear_now(color)?)
+    }
+
+    pub fn fill_rect_now(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.display.fill_rect_now(rectangle, color)?)
     }
 }
 
@@ -297,12 +301,16 @@ impl CalibratedCyd<'_> {
         )
     }
 
-    pub fn flush<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize>(
-        &mut self,
-        buffer: &RectBuffer<WIDTH, HEIGHT, PIXELS>,
-        top_left: Point,
-    ) -> Result<(), CydError> {
+    pub fn flush(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
         self.cyd.flush(buffer, top_left)
+    }
+
+    pub fn clear_now(&mut self, color: Rgb565) -> Result<(), CydError> {
+        self.cyd.clear_now(color)
+    }
+
+    pub fn fill_rect_now(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        self.cyd.fill_rect_now(rectangle, color)
     }
 }
 

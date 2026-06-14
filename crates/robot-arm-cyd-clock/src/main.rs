@@ -16,7 +16,7 @@ use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
     clock_sync::{ClockSync as _, ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
-    flash_block::FlashBlockEsp,
+    flash_block::{FlashBlock, FlashBlockEsp},
     init_and_start,
     wifi_auto::{
         WifiAuto as _, WifiAutoEsp, WifiAutoEvent,
@@ -24,6 +24,7 @@ use device_envoy_esp::{
     },
 };
 use embassy_executor::Spawner;
+use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
 use esp_backtrace as _;
 use log::info;
 use static_cell::StaticCell;
@@ -88,14 +89,17 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD clock with WiFi");
 
-    let cyd = Cyd::new_display(
+    let mut cyd = Cyd::new_display(
         p.SPI2, p.GPIO14, p.GPIO13, p.GPIO12, p.GPIO15, p.GPIO2, p.GPIO4, p.GPIO21,
     )?;
+    cyd.clear_now(Rgb565::BLACK)?;
     static DISPLAY: StaticCell<RefCell<CydClockDisplay>> = StaticCell::new();
-    let display = DISPLAY.init(RefCell::new(CydClockDisplay::new(cyd)));
+    let display = &*DISPLAY.init(RefCell::new(CydClockDisplay::new(cyd)));
     info!("CYD display initialized");
 
-    let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
+    let [mut wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
+    // TODO0 one-off WiFi reset while testing; comment this out after credentials are reset.
+    wifi_auto_flash_block.clear()?;
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
     let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
@@ -117,6 +121,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 WifiAutoEvent::ConnectionFailed => "connect failed",
             };
             info!("WiFi mode: {wifi_mode}");
+            if let Err(error) = display.borrow_mut().show(wifi_mode, None) {
+                info!("WiFi mode display failed: {error:?}");
+            }
             Ok(())
         })
         .await?;

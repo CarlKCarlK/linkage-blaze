@@ -1,6 +1,6 @@
 use core::fmt;
 
-use cyd_esp32::{Cyd, CydError, RectBuffer};
+use cyd_esp32::{Cyd, CydError, RectView, RectWorkspace};
 use embedded_graphics::{
     Drawable, Pixel,
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
@@ -14,7 +14,6 @@ use static_cell::StaticCell;
 
 const TEXT_LINE_WIDTH: usize = 240;
 const TEXT_LINE_HEIGHT: usize = 20;
-const TEXT_LINE_PIXELS: usize = TEXT_LINE_WIDTH * TEXT_LINE_HEIGHT;
 const CLOCK_BUFFER_WIDTH: usize = 112;
 const CLOCK_BUFFER_HEIGHT: usize = 112;
 const CLOCK_BUFFER_PIXELS: usize = CLOCK_BUFFER_WIDTH * CLOCK_BUFFER_HEIGHT;
@@ -36,8 +35,7 @@ const CLOCK_HANDS: Linkage<3, 9> = Linkage::start()
     .yaw_param(SECOND_PARAM, -90.0, 270.0)
     .forward(48.0);
 
-type TextLineBuffer = RectBuffer<TEXT_LINE_WIDTH, TEXT_LINE_HEIGHT, TEXT_LINE_PIXELS>;
-type ClockBuffer = RectBuffer<CLOCK_BUFFER_WIDTH, CLOCK_BUFFER_HEIGHT, CLOCK_BUFFER_PIXELS>;
+type ClockWorkspace = RectWorkspace<CLOCK_BUFFER_PIXELS>;
 
 pub enum CydClockDisplayError {
     Cyd(CydError),
@@ -59,19 +57,16 @@ impl From<CydError> for CydClockDisplayError {
 
 pub struct CydClockDisplay {
     cyd: Cyd,
-    text_line_buffer: &'static mut TextLineBuffer,
-    clock_buffer: &'static mut ClockBuffer,
+    clock_workspace: &'static mut ClockWorkspace,
 }
 
 impl CydClockDisplay {
     pub fn new(cyd: Cyd) -> Self {
-        static TEXT_LINE_BUFFER: StaticCell<TextLineBuffer> = StaticCell::new();
-        static CLOCK_BUFFER: StaticCell<ClockBuffer> = StaticCell::new();
+        static CLOCK_WORKSPACE: StaticCell<ClockWorkspace> = StaticCell::new();
 
         Self {
             cyd,
-            text_line_buffer: TextLineBuffer::init_static(&TEXT_LINE_BUFFER),
-            clock_buffer: ClockBuffer::init_static(&CLOCK_BUFFER),
+            clock_workspace: ClockWorkspace::init_static(&CLOCK_WORKSPACE),
         }
     }
 
@@ -103,31 +98,37 @@ impl CydClockDisplay {
         color: Rgb565,
         top_left: Point,
     ) -> Result<(), CydClockDisplayError> {
-        self.text_line_buffer.clear(Rgb565::BLACK);
+        let mut text_line_buffer = self
+            .clock_workspace
+            .view_mut(TEXT_LINE_WIDTH, TEXT_LINE_HEIGHT);
+        text_line_buffer.clear(Rgb565::BLACK);
         Text::with_baseline(
             text,
             Point::new(0, 0),
             MonoTextStyle::new(&FONT_10X20, color),
             Baseline::Top,
         )
-        .draw(self.text_line_buffer)
+        .draw(&mut text_line_buffer)
         .ok();
-        self.cyd.flush(self.text_line_buffer, top_left)?;
+        self.cyd.flush(&text_line_buffer, top_left)?;
         Ok(())
     }
 
     fn show_clock(&mut self, clock_time: Option<&ClockTime>) -> Result<(), CydClockDisplayError> {
-        self.clock_buffer.clear(Rgb565::BLACK);
-        draw_clock_face(self.clock_buffer);
+        let mut clock_buffer = self
+            .clock_workspace
+            .view_mut(CLOCK_BUFFER_WIDTH, CLOCK_BUFFER_HEIGHT);
+        clock_buffer.clear(Rgb565::BLACK);
+        draw_clock_face(&mut clock_buffer);
         if let Some(clock_time) = clock_time {
-            draw_clock_hands(self.clock_buffer, clock_time);
+            draw_clock_hands(&mut clock_buffer, clock_time);
         }
-        self.cyd.flush(self.clock_buffer, CLOCK_TOP_LEFT)?;
+        self.cyd.flush(&clock_buffer, CLOCK_TOP_LEFT)?;
         Ok(())
     }
 }
 
-fn draw_clock_face(target: &mut ClockBuffer) {
+fn draw_clock_face(target: &mut RectView<'_>) {
     Circle::with_center(
         Point::new(CLOCK_CENTER_X, CLOCK_CENTER_Y),
         (CLOCK_RADIUS * 2) as u32,
@@ -137,7 +138,7 @@ fn draw_clock_face(target: &mut ClockBuffer) {
     .ok();
 }
 
-fn draw_clock_hands(target: &mut ClockBuffer, clock_time: &ClockTime) {
+fn draw_clock_hands(target: &mut RectView<'_>, clock_time: &ClockTime) {
     let params = clock_time.params();
     let mut previous_pose = None;
     let mut hand_index = 0;
@@ -165,7 +166,7 @@ fn is_origin_pose(pose: Pose) -> bool {
     position[0].abs() < 0.001 && position[1].abs() < 0.001 && position[2].abs() < 0.001
 }
 
-fn draw_pose_line(target: &mut ClockBuffer, start: Pose, end: Pose, radius: i32, color: Rgb565) {
+fn draw_pose_line(target: &mut RectView<'_>, start: Pose, end: Pose, radius: i32, color: Rgb565) {
     let start = pose_to_point(start);
     let end = pose_to_point(end);
     draw_wide_line(target, start, end, radius, color);
@@ -179,7 +180,7 @@ fn pose_to_point(pose: Pose) -> Point {
     )
 }
 
-fn draw_wide_line(target: &mut ClockBuffer, start: Point, end: Point, radius: i32, color: Rgb565) {
+fn draw_wide_line(target: &mut RectView<'_>, start: Point, end: Point, radius: i32, color: Rgb565) {
     let mut position_x = start.x;
     let mut position_y = start.y;
     let end_x = end.x;
@@ -207,7 +208,7 @@ fn draw_wide_line(target: &mut ClockBuffer, start: Point, end: Point, radius: i3
     }
 }
 
-fn draw_wide_pixel(target: &mut ClockBuffer, x: i32, y: i32, radius: i32, color: Rgb565) {
+fn draw_wide_pixel(target: &mut RectView<'_>, x: i32, y: i32, radius: i32, color: Rgb565) {
     let radius_squared = radius * radius;
     for offset_y in -radius..=radius {
         for offset_x in -radius..=radius {
@@ -218,7 +219,7 @@ fn draw_wide_pixel(target: &mut ClockBuffer, x: i32, y: i32, radius: i32, color:
     }
 }
 
-fn draw_pixel(target: &mut ClockBuffer, point: Point, color: Rgb565) {
+fn draw_pixel(target: &mut RectView<'_>, point: Point, color: Rgb565) {
     match target.draw_iter(core::iter::once(Pixel(point, color))) {
         Ok(()) => {}
         Err(infallible) => match infallible {},

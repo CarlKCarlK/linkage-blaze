@@ -21,7 +21,7 @@ use mipidsi::{
 };
 use static_cell::StaticCell;
 
-use crate::{RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::{RectPixels, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 // 80 MHz measured 10.9 draw+flush fps but produced visible display corruption.
 pub const DISPLAY_SPI_HZ: u32 = 60_000_000;
@@ -104,12 +104,15 @@ impl CydDisplay {
         Ok(CydDisplay { display })
     }
 
-    pub fn flush_buffer<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize>(
+    pub fn flush_buffer(
         &mut self,
-        buffer: &RectBuffer<WIDTH, HEIGHT, PIXELS>,
+        buffer: &impl RectPixels,
         top_left: Point,
     ) -> Result<(), CydDisplayFlushError> {
-        let rectangle = Rectangle::new(top_left, Size::new(WIDTH as u32, HEIGHT as u32));
+        let rectangle = Rectangle::new(
+            top_left,
+            Size::new(buffer.width() as u32, buffer.height() as u32),
+        );
         self.display
             .fill_contiguous(
                 &rectangle,
@@ -119,6 +122,34 @@ impl CydDisplay {
                     .copied()
                     .map(|pixel| Rgb565::from(RawU16::new(pixel))),
             )
+            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+    }
+
+    pub fn clear_now(&mut self, color: Rgb565) -> Result<(), CydDisplayFlushError> {
+        self.fill_rect_now(
+            Rectangle::new(
+                Point::new(0, 0),
+                Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
+            ),
+            color,
+        )
+    }
+
+    pub fn fill_rect_now(
+        &mut self,
+        rectangle: Rectangle,
+        color: Rgb565,
+    ) -> Result<(), CydDisplayFlushError> {
+        let screen_rectangle = Rectangle::new(
+            Point::new(0, 0),
+            Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
+        );
+        let rectangle = rectangle.intersection(&screen_rectangle);
+        if rectangle.size.width == 0 || rectangle.size.height == 0 {
+            return Ok(());
+        }
+        self.display
+            .fill_solid(&rectangle, color)
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 }
