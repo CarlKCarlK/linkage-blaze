@@ -1,12 +1,17 @@
 #![no_std]
 #![no_main]
 
+// todo000 can't we algorithmly clear the screen?
+// todo000 can't we allocate the largest buffer and then use it for smaller things?
+// todo000 get wifi portal and drawing work at the same time.
+// todo different color hands
 // todo00 may be repeating display code
 // todo00 should start with calibrate to flash
 // todo00 wifi's memory needs means it can't have a full screen memory. I'm not sure what it is doing instead.
 
 use core::{cell::RefCell, convert::Infallible, fmt};
 
+use cyd_esp32::Cyd;
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -21,6 +26,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use log::info;
+use static_cell::StaticCell;
 
 mod display;
 
@@ -30,6 +36,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 enum MainError {
     DeviceEnvoy(Error),
+    Cyd(cyd_esp32::CydError),
     Display(CydClockDisplayError),
 }
 
@@ -39,6 +46,7 @@ impl fmt::Debug for MainError {
             MainError::DeviceEnvoy(error) => {
                 formatter.debug_tuple("DeviceEnvoy").field(error).finish()
             }
+            MainError::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
             MainError::Display(error) => formatter.debug_tuple("Display").field(error).finish(),
         }
     }
@@ -53,6 +61,12 @@ impl From<Error> for MainError {
 impl From<CoreError> for MainError {
     fn from(error: CoreError) -> Self {
         MainError::DeviceEnvoy(error.into())
+    }
+}
+
+impl From<cyd_esp32::CydError> for MainError {
+    fn from(error: cyd_esp32::CydError) -> Self {
+        MainError::Cyd(error)
     }
 }
 
@@ -74,10 +88,12 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD clock with WiFi");
 
-    let display = RefCell::new(CydClockDisplay::new(
+    let cyd = Cyd::new_display(
         p.SPI2, p.GPIO14, p.GPIO13, p.GPIO12, p.GPIO15, p.GPIO2, p.GPIO4, p.GPIO21,
-    )?);
-    display.borrow_mut().show("booting", None)?;
+    )?;
+    static DISPLAY: StaticCell<RefCell<CydClockDisplay>> = StaticCell::new();
+    let display = DISPLAY.init(RefCell::new(CydClockDisplay::new(cyd)));
+    info!("CYD display initialized");
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
@@ -93,22 +109,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,
     )?;
 
-    let display_ref = &display;
     let stack = wifi_auto
-        .connect(&mut force_portal_button, |wifi_auto_event| {
-            let display_ref = display_ref;
-            async move {
-                let wifi_mode = match wifi_auto_event {
-                    WifiAutoEvent::CaptivePortalReady => "setup CydClock",
-                    WifiAutoEvent::Connecting { .. } => "connecting",
-                    WifiAutoEvent::ConnectionFailed => "connect failed",
-                };
-                display_ref
-                    .borrow_mut()
-                    .show(wifi_mode, None)
-                    .map_err(|_| Error::FormatError)?;
-                Ok(())
-            }
+        .connect(&mut force_portal_button, |wifi_auto_event| async move {
+            let wifi_mode = match wifi_auto_event {
+                WifiAutoEvent::CaptivePortalReady => "setup CydClock",
+                WifiAutoEvent::Connecting { .. } => "connecting",
+                WifiAutoEvent::ConnectionFailed => "connect failed",
+            };
+            info!("WiFi mode: {wifi_mode}");
+            Ok(())
         })
         .await?;
 
@@ -135,5 +144,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             ClockTime::new(local_time.hour(), local_time.minute(), local_time.second())
                 .map_err(|_| MainError::DeviceEnvoy(Error::FormatError))?;
         display.borrow_mut().show("connected", Some(&clock_time))?;
+        info!(
+            "time {:02}:{:02}:{:02}",
+            local_time.hour(),
+            local_time.minute(),
+            local_time.second()
+        );
     }
 }

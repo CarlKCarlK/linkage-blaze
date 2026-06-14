@@ -16,12 +16,11 @@ esp32 = [
 ]
 
 [dependencies]
+cyd-esp32 = { path = "../cyd-esp32" }
 embassy-executor = "0.10.0"
 embedded-graphics = { version = "0.8", default-features = false }
-embedded-hal-bus = "0.3.0"
 heapless = "0.9.1"
 log = { version = "0.4", default-features = false }
-mipidsi = "0.10.0"
 static_cell = "2.1.1"
 device-envoy-esp = { version = "0.1.0", default-features = false }
 robot-arm-core.workspace = true
