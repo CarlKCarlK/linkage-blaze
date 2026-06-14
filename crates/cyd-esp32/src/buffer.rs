@@ -141,6 +141,10 @@ impl RectView<'_> {
     pub fn clear(&mut self, color: Rgb565) {
         self.pixels.fill(color.into_storage());
     }
+
+    pub fn raw_pixels_mut(&mut self) -> &mut [u16] {
+        self.pixels
+    }
 }
 
 impl RectPixels for RectView<'_> {
