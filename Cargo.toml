@@ -2,6 +2,7 @@
 members = [
     "crates/robot-arm-core",
     "crates/robot-arm-cyd",
+    "crates/robot-arm-cyd-clock",
     "crates/robot-arm-c6",
     "crates/robot-arm-cyd-sim",
     "crates/robot-arm-wasm",

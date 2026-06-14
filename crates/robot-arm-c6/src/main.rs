@@ -1,6 +1,13 @@
 #![no_std]
 #![no_main]
 
+// todo00 issues: touch not connected
+// todo00 need cyd mode with just one spi (and switch between 2 uses and 2 freq)
+// todo00 merge all common parts of this and esp32 classic version
+// todo00 vscode doesn't show right rust analyzer concerns
+// todo00 in general, a good cyd display device abstraction needs to have orientation (and gamma?)
+// todo00 in a perfect world, those controls on the cyd-sim (sliders, etc) would be modular.
+
 use core::convert::Infallible;
 
 use device_envoy_esp::button::{Button as _, ButtonEsp, PressedTo};

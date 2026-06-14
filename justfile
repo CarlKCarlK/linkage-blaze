@@ -1,6 +1,7 @@
 set shell := ["bash", "-cu"]
 
 _cyd_args := "-p robot-arm-cyd --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
+_cyd_clock_args := "-p robot-arm-cyd-clock --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
 _cyd_sim_crate := "crates/robot-arm-cyd-sim"
 _cyd_sim_www := "crates/robot-arm-cyd-sim/www"
 _cyd_sim_port := "8081"
@@ -19,6 +20,18 @@ build-cyd:
 # Flash and monitor robot-arm-cyd on the CYD board
 run-cyd:
     source ~/export-esp.sh && cargo +esp run {{_cyd_args}}
+
+# Check robot-arm-cyd-clock (ESP32)
+check-cyd-clock:
+    cargo +esp check {{_cyd_clock_args}}
+
+# Build robot-arm-cyd-clock (ESP32)
+build-cyd-clock:
+    source ~/export-esp.sh && cargo +esp build {{_cyd_clock_args}}
+
+# Flash and monitor robot-arm-cyd-clock on the CYD board
+run-cyd-clock:
+    source ~/export-esp.sh && cargo +esp run {{_cyd_clock_args}}
 
 # Flash and monitor robot-arm-c6 on the ESP32-C6 board
 run-c6:

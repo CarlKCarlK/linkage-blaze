@@ -1,0 +1,45 @@
+[package]
+name = "robot-arm-cyd-clock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["esp32"]
+esp32 = [
+    "device-envoy-esp/esp32",
+    "esp-hal/esp32",
+    "esp-rtos/esp32",
+    "esp-backtrace/esp32",
+    "esp-println/esp32",
+    "esp-bootloader-esp-idf/esp32",
+]
+
+[dependencies]
+embassy-executor = "0.10.0"
+embedded-graphics = { version = "0.8", default-features = false }
+embedded-hal-bus = "0.3.0"
+heapless = "0.9.1"
+log = { version = "0.4", default-features = false }
+mipidsi = "0.10.0"
+static_cell = "2.1.1"
+device-envoy-esp = { version = "0.1.0", default-features = false }
+robot-arm-core.workspace = true
+
+[target.'cfg(target_os = "none")'.dependencies]
+esp-hal = { version = "1.1.0", default-features = false, features = [
+    "unstable",
+] }
+esp-rtos = { version = "0.3.0", default-features = false, features = [
+    "embassy",
+] }
+esp-backtrace = { version = "0.19.0", default-features = false, features = [
+    "panic-handler",
+    "halt-cores",
+    "println",
+] }
+esp-println = { version = "0.17.0", default-features = false, features = [
+    "uart",
+    "log-04",
+] }
+esp-bootloader-esp-idf = { version = "0.5.0", default-features = false }

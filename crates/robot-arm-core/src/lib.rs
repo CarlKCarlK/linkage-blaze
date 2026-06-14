@@ -161,6 +161,11 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         ))))
     }
 
+    /// Restart the linkage path from the origin pose.
+    pub const fn restart(self) -> Self {
+        self.push(Step::Start)
+    }
+
     const fn push(mut self, step: Step) -> Self {
         assert!(self.len < N, "linkage has more steps than N");
         self.steps[self.len] = step;

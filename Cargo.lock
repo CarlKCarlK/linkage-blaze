@@ -1818,6 +1818,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "robot-arm-cyd-clock"
+version = "0.1.4"
+dependencies = [
+ "device-envoy-esp",
+ "embassy-executor",
+ "embedded-graphics",
+ "embedded-hal-bus",
+ "esp-backtrace",
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "esp-println",
+ "esp-rtos",
+ "heapless 0.9.3",
+ "log",
+ "mipidsi",
+ "robot-arm-core",
+ "static_cell",
+]
+
+[[package]]
 name = "robot-arm-cyd-sim"
 version = "0.1.4"
 dependencies = [
