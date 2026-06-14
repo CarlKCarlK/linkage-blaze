@@ -10,6 +10,10 @@ esp32 = [
     "device-envoy-esp/esp32",
     "esp-hal/esp32",
 ]
+esp32c6 = [
+    "device-envoy-esp/esp32c6",
+    "esp-hal/esp32c6",
+]
 
 [dependencies]
 device-envoy-esp = { version = "0.1.0", default-features = false }

@@ -10,9 +10,9 @@
 
 use core::convert::Infallible;
 
+use cyd_esp32::{Cyd, CydError, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
 use device_envoy_esp::button::{Button as _, ButtonEsp, PressedTo};
 use embassy_time::Instant;
-use embedded_graphics::Drawable;
 use esp_backtrace as _;
 use esp_hal::{
     Config,
@@ -20,10 +20,7 @@ use esp_hal::{
     delay::Delay,
 };
 use robot_arm_core::cyd::{ControlledKnob, CydSim, TickOut};
-
-mod display;
-
-use display::{CydDisplay, CydDisplayFlushError, CydDisplayInitError};
+use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -39,6 +36,9 @@ const MAX_PARAM_SPEED_PER_SECOND: f32 = 1.0 / FULL_RANGE_SECONDS_AT_MAX_SPEED;
 const INITIAL_PARAM_VALUES: [f32; 6] = [0.5, 0.5, 0.0, 0.5, 0.5, 0.5];
 const INITIAL_Z_MIX: f32 = 0.3;
 const INITIAL_XY_MIX: f32 = 0.5 + 30.0 / 360.0;
+const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
+
+type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
 
 #[derive(Clone, Copy, Debug)]
 enum JoystickControlMode {
@@ -91,18 +91,20 @@ enum MainError {
     FlushFrameBuffer,
 }
 
-impl From<CydDisplayFlushError> for MainError {
-    fn from(_: CydDisplayFlushError) -> Self {
-        MainError::FlushFrameBuffer
-    }
-}
-
-impl From<CydDisplayInitError> for MainError {
-    fn from(error: CydDisplayInitError) -> Self {
+impl From<CydError> for MainError {
+    fn from(error: CydError) -> Self {
         match error {
-            CydDisplayInitError::ConfigureDisplaySpi => MainError::ConfigureDisplaySpi,
-            CydDisplayInitError::CreateDisplaySpiDevice => MainError::CreateDisplaySpiDevice,
-            CydDisplayInitError::InitDisplay => MainError::InitDisplay,
+            CydError::DisplayInit(error) => match error {
+                cyd_esp32::CydDisplayInitError::ConfigureDisplaySpi => {
+                    MainError::ConfigureDisplaySpi
+                }
+                cyd_esp32::CydDisplayInitError::CreateDisplaySpiDevice => {
+                    MainError::CreateDisplaySpiDevice
+                }
+                cyd_esp32::CydDisplayInitError::InitDisplay => MainError::InitDisplay,
+            },
+            CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
+            _ => MainError::FlushFrameBuffer,
         }
     }
 }
@@ -125,9 +127,11 @@ fn inner_main() -> Result<Infallible, MainError> {
     esp_println::println!("c6: esp_hal init complete");
 
     esp_println::println!("c6: initializing display");
-    let mut cyd_display = CydDisplay::new(
+    let mut cyd = Cyd::new_display(
         p.SPI2, p.GPIO19, p.GPIO18, p.GPIO20, p.GPIO21, p.GPIO4, p.GPIO5, p.GPIO7,
     )?;
+    static SCREEN_BUFFER: StaticCell<ScreenBuffer> = StaticCell::new();
+    let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);
     esp_println::println!("c6: display initialized");
 
     let mut adc1_config = AdcConfig::new();
@@ -249,25 +253,32 @@ fn inner_main() -> Result<Infallible, MainError> {
 
         match cyd_sim.tick(now, None) {
             TickOut::Draw => {
-                match cyd_sim.draw(&mut cyd_display) {
-                    Ok(()) => {}
-                    Err(infallible) => match infallible {},
-                }
-                cyd_display.flush()?;
+                draw(screen_buffer, &cyd_sim);
+                cyd.flush(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
             }
             TickOut::Calibrate => {}
             TickOut::Nada => {
                 if control_mode_changed || joystick_changed {
-                    match cyd_sim.draw(&mut cyd_display) {
-                        Ok(()) => {}
-                        Err(infallible) => match infallible {},
-                    }
-                    cyd_display.flush()?;
+                    draw(screen_buffer, &cyd_sim);
+                    cyd.flush(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
                 }
             }
         }
 
         Delay::new().delay_millis(50);
+    }
+}
+
+fn draw(
+    screen_buffer: &mut ScreenBuffer,
+    drawable: &impl embedded_graphics::Drawable<
+        Color = embedded_graphics::pixelcolor::Rgb565,
+        Output = (),
+    >,
+) {
+    match drawable.draw(screen_buffer) {
+        Ok(()) => {}
+        Err(infallible) => match infallible {},
     }
 }
 

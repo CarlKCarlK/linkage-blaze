@@ -23,8 +23,8 @@ pub struct Cyd {
     display: CydDisplay,
     touch: Option<CydTouch>,
     calibration_config: Option<CalibrationConfig>,
-    calibration_flash_block: FlashBlockEsp,
-    calibration_button: device_envoy_esp::button::ButtonEsp<'static>,
+    calibration_flash_block: Option<FlashBlockEsp>,
+    calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
 }
 
 pub struct CalibratedCyd<'a> {
@@ -67,6 +67,31 @@ impl From<CydDisplayFlushError> for CydError {
 }
 
 impl Cyd {
+    pub fn new_display(
+        display_spi: impl esp_hal::spi::master::Instance + 'static,
+        display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        display_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
+        display_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
+    ) -> Result<Self, CydError> {
+        Self::new_inner(
+            display_spi,
+            display_sck_pin,
+            display_mosi_pin,
+            display_miso_pin,
+            display_cs_pin,
+            display_dc_pin,
+            display_rst_pin,
+            display_backlight_pin,
+            None,
+            None,
+            None,
+        )
+    }
+
     pub fn new(
         display_spi: impl esp_hal::spi::master::Instance + 'static,
         display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -89,8 +114,8 @@ impl Cyd {
             display_rst_pin,
             display_backlight_pin,
             None,
-            calibration_flash_block,
-            calibration_button,
+            Some(calibration_flash_block),
+            Some(calibration_button),
         )
     }
 
@@ -131,8 +156,8 @@ impl Cyd {
             display_rst_pin,
             display_backlight_pin,
             Some(touch),
-            calibration_flash_block,
-            calibration_button,
+            Some(calibration_flash_block),
+            Some(calibration_button),
         )
     }
 
@@ -146,13 +171,17 @@ impl Cyd {
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
         touch: Option<CydTouch>,
-        mut calibration_flash_block: FlashBlockEsp,
-        calibration_button: device_envoy_esp::button::ButtonEsp<'static>,
+        calibration_flash_block: Option<FlashBlockEsp>,
+        calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
     ) -> Result<Self, CydError> {
-        let calibration_config = if calibration_button.is_pressed() {
-            None
-        } else {
-            calibration_flash_block.load::<CalibrationConfig>()?
+        let mut calibration_flash_block = calibration_flash_block;
+        let calibration_config = match (&mut calibration_flash_block, &calibration_button) {
+            (Some(calibration_flash_block), Some(calibration_button))
+                if !calibration_button.is_pressed() =>
+            {
+                calibration_flash_block.load::<CalibrationConfig>()?
+            }
+            _ => None,
         };
 
         Ok(Self {
@@ -180,7 +209,9 @@ impl Cyd {
 
     #[must_use]
     pub fn recalibration_requested(&self) -> bool {
-        self.calibration_button.is_pressed()
+        self.calibration_button
+            .as_ref()
+            .is_some_and(Button::is_pressed)
     }
 
     pub fn remove_calibration(&mut self) {
@@ -191,13 +222,21 @@ impl Cyd {
         &mut self,
         calibration_config: CalibrationConfig,
     ) -> Result<(), CydError> {
-        self.calibration_flash_block.save(&calibration_config)?;
+        let calibration_flash_block = self
+            .calibration_flash_block
+            .as_mut()
+            .ok_or(CydError::CalibrationUnavailable)?;
+        calibration_flash_block.save(&calibration_config)?;
         self.calibration_config = Some(calibration_config);
         Ok(())
     }
 
     pub fn clear_saved_calibration(&mut self) -> Result<(), CydError> {
-        self.calibration_flash_block.clear()?;
+        let calibration_flash_block = self
+            .calibration_flash_block
+            .as_mut()
+            .ok_or(CydError::CalibrationUnavailable)?;
+        calibration_flash_block.clear()?;
         self.calibration_config = None;
         Ok(())
     }
