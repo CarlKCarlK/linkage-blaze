@@ -67,6 +67,32 @@ pub struct VariableArg {
     span: f32,
 }
 
+/// A named runtime linkage parameter.
+#[derive(Clone, Copy, Debug)]
+pub struct Param {
+    name: &'static str,
+    default: f32,
+}
+
+impl Param {
+    const EMPTY: Self = Self {
+        name: "",
+        default: 0.0,
+    };
+
+    /// Return the parameter's display name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        self.name
+    }
+
+    /// Return the parameter's normalized default value.
+    #[must_use]
+    pub const fn default(self) -> f32 {
+        self.default
+    }
+}
+
 impl Arg {
     fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
         match self {
@@ -99,6 +125,8 @@ impl VariableArg {
 pub struct Linkage<const DOF: usize, const N: usize> {
     steps: [Step; N],
     len: usize,
+    params: [Param; DOF],
+    param_len: usize,
 }
 
 impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
@@ -108,6 +136,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         Self {
             steps: [const { Step::Start }; N],
             len: 1,
+            params: [Param::EMPTY; DOF],
+            param_len: 0,
         }
     }
 
@@ -123,14 +153,76 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         DOF
     }
 
+    /// Return the number of named parameters defined in this linkage.
+    #[must_use]
+    pub const fn param_len(&self) -> usize {
+        self.param_len
+    }
+
+    /// Return a parameter definition by index.
+    #[must_use]
+    pub const fn param(&self, index: usize) -> Param {
+        assert!(index < self.param_len, "parameter index must be defined");
+        self.params[index]
+    }
+
+    /// Return a parameter's name by index.
+    #[must_use]
+    pub const fn param_name(&self, index: usize) -> &'static str {
+        self.param(index).name()
+    }
+
+    /// Return a parameter's default value by index.
+    #[must_use]
+    pub const fn param_default(&self, index: usize) -> f32 {
+        self.param(index).default()
+    }
+
+    /// Return the index of a named parameter.
+    #[must_use]
+    pub const fn param_index(&self, name: &str) -> Option<usize> {
+        let mut param_index = 0;
+        while param_index < self.param_len {
+            if str_eq(self.params[param_index].name, name) {
+                return Some(param_index);
+            }
+            param_index += 1;
+        }
+        None
+    }
+
+    /// Return this linkage's normalized parameter defaults.
+    #[must_use]
+    pub const fn param_defaults(&self) -> [f32; DOF] {
+        let mut params = [0.0; DOF];
+        let mut param_index = 0;
+        while param_index < self.param_len {
+            params[param_index] = self.params[param_index].default;
+            param_index += 1;
+        }
+        params
+    }
+
+    /// Define a named runtime parameter.
+    pub const fn define_param(mut self, name: &'static str, default: f32) -> Self {
+        assert!(self.param_len < DOF, "linkage has more params than DOF");
+        assert!(default >= 0.0, "parameter default must be at least 0.0");
+        assert!(default <= 1.0, "parameter default must be at most 1.0");
+        assert!(self.param_index(name).is_none(), "duplicate parameter name");
+
+        self.params[self.param_len] = Param { name, default };
+        self.param_len += 1;
+        self
+    }
+
     /// Add a yaw step from a user-facing angle in degrees.
     pub const fn yaw(self, degrees: f32) -> Self {
         self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
     }
 
     /// Add a yaw step from a runtime parameter in degrees.
-    pub const fn yaw_param(self, index: usize, low: f32, high: f32) -> Self {
-        assert!(index < DOF, "parameter index must be within DOF");
+    pub const fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
         self.push(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
             index, low, high,
         ))))
@@ -142,8 +234,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Add a pitch step from a runtime parameter in degrees.
-    pub const fn pitch_param(self, index: usize, low: f32, high: f32) -> Self {
-        assert!(index < DOF, "parameter index must be within DOF");
+    pub const fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
         self.push(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
             index, low, high,
         ))))
@@ -155,8 +247,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Add a roll step from a runtime parameter in degrees.
-    pub const fn roll_param(self, index: usize, low: f32, high: f32) -> Self {
-        assert!(index < DOF, "parameter index must be within DOF");
+    pub const fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
         self.push(Step::Roll(Arg::Variable(VariableArg::from_degrees(
             index, low, high,
         ))))
@@ -168,8 +260,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Add a move step from a runtime parameter.
-    pub const fn move_param(self, index: usize, low: f32, high: f32) -> Self {
-        assert!(index < DOF, "parameter index must be within DOF");
+    pub const fn move_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
         self.push(Step::Move(Arg::Variable(VariableArg::new(
             index, low, high,
         ))))
@@ -206,7 +298,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
-    pub const fn disk_param(self, index: usize, low: f32, high: f32) -> Self {
+    pub const fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
         self.push(Step::DiskParam(VariableArg::new(index, low, high)))
     }
 
@@ -220,6 +313,13 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.steps[self.len] = step;
         self.len += 1;
         self
+    }
+
+    const fn expect_param_index(&self, name: &str) -> usize {
+        match self.param_index(name) {
+            Some(index) => index,
+            None => panic!("unknown parameter name"),
+        }
     }
 
     /// Iterate over poses produced by evaluating this linkage from 0.0 to 1.0 params.
@@ -247,6 +347,25 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
             .last()
             .expect("linkage must yield at least the implicit start pose")
     }
+}
+
+const fn str_eq(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+
+    if left.len() != right.len() {
+        return false;
+    }
+
+    let mut byte_index = 0;
+    while byte_index < left.len() {
+        if left[byte_index] != right[byte_index] {
+            return false;
+        }
+        byte_index += 1;
+    }
+
+    true
 }
 
 fn validate_params<const DOF: usize>(params: &[f32; DOF]) {
@@ -726,44 +845,53 @@ mod tests {
 
     //todo000 *_param might not be a good suffix.
     const LINKAGE0: Linkage<6, 24> = Linkage::start()
+        .define_param("lower hand", 0.5)
+        .define_param("bend elbow", 0.5)
+        .define_param("close hand", 0.5)
+        .define_param("lower arm", 0.5)
+        .define_param("spin whole arm", 0.5)
+        .define_param("spin hand", 0.5)
         .yaw(90.0)
-        .yaw_param(4, 180.0, -180.0) // spin whole arm
+        .yaw_param("spin whole arm", 180.0, -180.0)
         .pitch(90.0)
         .forward(2.5)
         .pitch(-90.0)
-        .pitch_param(3, 30.0, 0.0) // lower arm
+        .pitch_param("lower arm", 30.0, 0.0)
         .forward(3.0)
-        .yaw_param(1, 90.0, -90.0) // bend elbow
+        .yaw_param("bend elbow", 90.0, -90.0)
         .forward(3.0)
-        .pitch_param(0, 90.0, -90.0) // lower hand
+        .pitch_param("lower hand", 90.0, -90.0)
         .forward(1.0)
-        .roll_param(5, 180.0, -180.0) // spin hand
+        .roll_param("spin hand", 180.0, -180.0)
         .forward(0.5)
         .yaw(90.0)
-        .move_param(2, 0.0, 0.5) // close hand
+        .move_param("close hand", 0.0, 0.5)
         .yaw(-90.0)
         .forward(1.0)
         .yaw(180.0)
         .forward(1.0)
         .yaw(90.0)
-        .move_param(2, 0.0, 1.0) // close hand
+        .move_param("close hand", 0.0, 1.0)
         .yaw(90.0)
         .forward(1.0);
 
     const LINKAGE1: Linkage<3, 16> = Linkage::start()
+        .define_param("spin whole arm", 0.5)
+        .define_param("bend elbow", 0.5)
+        .define_param("close hand", 0.5)
         .yaw(90.0)
-        .yaw_param(0, 180.0, -180.0) // spin whole arm
+        .yaw_param("spin whole arm", 180.0, -180.0)
         .forward(3.0)
-        .yaw_param(1, 90.0, -90.0) // bend elbow
+        .yaw_param("bend elbow", 90.0, -90.0)
         .forward(3.0)
         .yaw(90.0)
-        .move_param(2, 0.5, 0.0) // close hand
+        .move_param("close hand", 0.5, 0.0)
         .yaw(-90.0)
         .forward(1.0)
         .yaw(-180.0)
         .forward(1.0)
         .yaw(90.0)
-        .move_param(2, 1.0, 0.0) // close hand
+        .move_param("close hand", 1.0, 0.0)
         .yaw(90.0)
         .forward(1.0);
 

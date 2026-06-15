@@ -32,9 +32,9 @@ const CLOCK_TOP_LEFT: Point = Point::new(70, 82);
 const CLOCK_CENTER_X: i32 = 90;
 const CLOCK_CENTER_Y: i32 = 79;
 const HAND_SCALE: f32 = 1.0;
-const HOUR_PARAM: usize = 0;
-const MINUTE_PARAM: usize = 1;
-const SECOND_PARAM: usize = 2;
+const PARAM_HOUR: &str = "hour";
+const PARAM_MINUTE: &str = "minute";
+const PARAM_SECOND: &str = "second";
 const BG: Rgb565 = Rgb565::new(31, 59, 27);
 const FACE_FILL: u32 = rgb565_raw(2, 10, 24);
 const TICK_MAJOR_COLOR: u32 = rgb565_raw(31, 62, 30);
@@ -64,31 +64,34 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
 const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
+    .define_param(PARAM_HOUR, 0.0)
+    .define_param(PARAM_MINUTE, 0.0)
+    .define_param(PARAM_SECOND, 0.0)
     .pen_color(FACE_FILL)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
     .disk(FACE_FILL_RADIUS as f32)
     .restart()
     .pen_color(HOUR_HAND_COLOR)
     .pen_width(HOUR_WIDTH)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
-    .yaw_param(HOUR_PARAM, -90.0, 270.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
+    .yaw_param(PARAM_HOUR, -90.0, 270.0)
     .forward(HOUR_LENGTH)
     .restart()
     .pen_color(MINUTE_HAND_COLOR)
     .pen_width(MINUTE_WIDTH)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
-    .yaw_param(MINUTE_PARAM, -90.0, 270.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
+    .yaw_param(PARAM_MINUTE, -90.0, 270.0)
     .forward(MINUTE_LENGTH)
     .restart()
     .pen_color(SECOND_HAND_COLOR)
     .pen_width(SECOND_WIDTH)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
-    .yaw_param(SECOND_PARAM, -90.0, 270.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
+    .yaw_param(PARAM_SECOND, -90.0, 270.0)
     .forward(SECOND_LENGTH)
     .restart()
     .pen_color(TICK_MAJOR_COLOR)
     .pen_width(0)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
     .yaw(-90.0)
     .forward(TICK_INNER_RADIUS)
     .pen_width(TICK_WIDTH)
@@ -96,7 +99,7 @@ const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
     .restart()
     .pen_color(TICK_MAJOR_COLOR)
     .pen_width(0)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
     .yaw(0.0)
     .forward(TICK_INNER_RADIUS)
     .pen_width(TICK_WIDTH)
@@ -104,7 +107,7 @@ const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
     .restart()
     .pen_color(TICK_MAJOR_COLOR)
     .pen_width(0)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
     .yaw(90.0)
     .forward(TICK_INNER_RADIUS)
     .pen_width(TICK_WIDTH)
@@ -112,7 +115,7 @@ const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
     .restart()
     .pen_color(TICK_MAJOR_COLOR)
     .pen_width(0)
-    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .roll_param(PARAM_SECOND, 0.0, 360.0)
     .yaw(180.0)
     .forward(TICK_INNER_RADIUS)
     .pen_width(TICK_WIDTH)

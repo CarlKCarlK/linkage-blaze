@@ -6,27 +6,33 @@ use wasm_bindgen::prelude::wasm_bindgen;
 pub use robot_arm_core as core;
 
 const LINKAGE: Linkage<6, 24> = Linkage::start()
+    .define_param("lower hand", 0.5)
+    .define_param("bend elbow", 0.5)
+    .define_param("close hand", 0.5)
+    .define_param("lower arm", 0.5)
+    .define_param("spin whole arm", 0.5)
+    .define_param("spin hand", 0.5)
     .yaw(90.0)
-    .yaw_param(4, 180.0, -180.0) // spin whole arm
+    .yaw_param("spin whole arm", 180.0, -180.0)
     .pitch(90.0)
     .forward(2.5)
     .pitch(-90.0)
-    .pitch_param(3, 30.0, 0.0) // lower arm
+    .pitch_param("lower arm", 30.0, 0.0)
     .forward(3.0)
-    .yaw_param(1, 90.0, -90.0) // bend elbow
+    .yaw_param("bend elbow", 90.0, -90.0)
     .forward(3.0)
-    .pitch_param(0, 90.0, -90.0) // lower hand
+    .pitch_param("lower hand", 90.0, -90.0)
     .forward(1.0)
-    .roll_param(5, 180.0, -180.0) // spin hand
+    .roll_param("spin hand", 180.0, -180.0)
     .forward(0.5)
     .yaw(90.0)
-    .move_param(2, 0.5, 0.0) // close hand
+    .move_param("close hand", 0.5, 0.0)
     .yaw(-90.0)
     .forward(1.0)
     .yaw(180.0)
     .forward(1.0)
     .yaw(90.0)
-    .move_param(2, 1.0, 0.0) // close hand
+    .move_param("close hand", 1.0, 0.0)
     .yaw(90.0)
     .forward(1.0);
 

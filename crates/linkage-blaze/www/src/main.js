@@ -1,4 +1,4 @@
-import init, { default_program, render_program_json } from "../pkg/linkage_blaze.js?v=builder-chain-4";
+import init, { default_program, render_program_json } from "../pkg/linkage_blaze.js?v=builder-chain-6";
 
 const source = document.querySelector("#source");
 const error = document.querySelector("#error");

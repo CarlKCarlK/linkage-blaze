@@ -4,32 +4,40 @@ use core::f32::consts::PI;
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 const DEFAULT_PROGRAM: &str = r#"Linkage::start()
+.define_param("x/y view", 0.5833333)
+.define_param("z", 0.8333333)
+.define_param("lower hand", 0.5)
+.define_param("bend elbow", 0.5)
+.define_param("close hand", 0.0)
+.define_param("lower arm", 0.5)
+.define_param("spin whole", 0.5)
+.define_param("spin hand", 0.5)
 .pen_color(ARM_COLOR) // default pen is down, white, width 1
 .pen_width(ARM_WIDTH)
 .yaw(90.0)
 .pitch(-90.0)
-.yaw(-15.0)
-.pitch(-18.0)
-.yaw(0.0)
+.yaw_param("x/y view", 90.0, -90.0)
+.pitch_param("z", -45.0, 45.0)
+.yaw_param("spin whole", 360.0, -360.0)
 .pitch(90.0)
 .forward(2.5)
 .pitch(-90.0)
-.pitch(15.0)
+.pitch_param("lower arm", 30.0, 0.0)
 .forward(3.0)
-.yaw(0.0)
+.yaw_param("bend elbow", 90.0, -90.0)
 .forward(3.0)
-.pitch(0.0)
+.pitch_param("lower hand", 90.0, -90.0)
 .forward(1.0)
-.roll(0.0)
+.roll_param("spin hand", 360.0, -360.0)
 .forward(0.5)
 .yaw(90.0)
-.move(0.5)
+.move_param("close hand", 0.5, 0.0)
 .yaw(-90.0)
 .forward(1.0)
 .yaw(180.0)
 .forward(1.0)
 .yaw(90.0)
-.move(1.0)
+.move_param("close hand", 1.0, 0.0)
 .yaw(90.0)
 .forward(1.0)
 .restart()
@@ -49,6 +57,7 @@ pub fn render_program_json(source: &str) -> Result<String, JsValue> {
 
 fn render_program(source: &str) -> Result<String, String> {
     let mut turtle = Turtle::new();
+    let mut params = Vec::new();
     let mut primitives = Vec::new();
 
     for (line_index, line) in source.lines().enumerate() {
@@ -57,7 +66,13 @@ fn render_program(source: &str) -> Result<String, String> {
             continue;
         };
 
-        apply_method(line_number, &method_call, &mut turtle, &mut primitives)?;
+        apply_method(
+            line_number,
+            &method_call,
+            &mut turtle,
+            &mut params,
+            &mut primitives,
+        )?;
     }
 
     Ok(primitives_json(&primitives))
@@ -114,9 +129,29 @@ fn apply_method(
     line_number: usize,
     method_call: &MethodCall,
     turtle: &mut Turtle,
+    params: &mut Vec<EditorParam>,
     primitives: &mut Vec<Primitive>,
 ) -> Result<(), String> {
     match method_call.name.as_str() {
+        "define_param" => {
+            expect_arg_count(line_number, method_call, 2)?;
+            let name = parse_string_arg(line_number, method_call, 0)?;
+            let default = parse_number_arg(line_number, method_call, 1)?;
+            if !(0.0..=1.0).contains(&default) {
+                return Err(format!(
+                    "line {line_number}: define_param default must be between 0.0 and 1.0"
+                ));
+            }
+            if params.iter().any(|param| param.name == name) {
+                return Err(format!(
+                    "line {line_number}: parameter `{name}` is already defined"
+                ));
+            }
+            params.push(EditorParam {
+                name: name.to_owned(),
+                value: default,
+            });
+        }
         "forward" | "move" => {
             expect_arg_count(line_number, method_call, 1)?;
             let distance = parse_number_arg(line_number, method_call, 0)?;
@@ -134,7 +169,7 @@ fn apply_method(
         }
         "move_param" => {
             expect_arg_count(line_number, method_call, 3)?;
-            let distance = parse_param_arg(line_number, method_call)?;
+            let distance = parse_param_arg(line_number, method_call, params)?;
             let start = turtle.pose.position;
             turtle.pose.position =
                 turtle.pose.position + turtle.pose.orientation.forward() * distance;
@@ -180,6 +215,7 @@ fn apply_method(
                 * Mat3::yaw(degrees_to_radians(parse_param_arg(
                     line_number,
                     method_call,
+                    params,
                 )?));
         }
         "pitch_param" => {
@@ -188,6 +224,7 @@ fn apply_method(
                 * Mat3::pitch(degrees_to_radians(parse_param_arg(
                     line_number,
                     method_call,
+                    params,
                 )?));
         }
         "roll_param" => {
@@ -196,6 +233,7 @@ fn apply_method(
                 * Mat3::roll(degrees_to_radians(parse_param_arg(
                     line_number,
                     method_call,
+                    params,
                 )?));
         }
         "pen_up" => {
@@ -244,7 +282,7 @@ fn apply_method(
         }
         "disk_param" => {
             expect_arg_count(line_number, method_call, 3)?;
-            let radius = parse_param_arg(line_number, method_call)?;
+            let radius = parse_param_arg(line_number, method_call, params)?;
             if radius < 0.0 {
                 return Err(format!(
                     "line {line_number}: disk_param radius resolved below zero"
@@ -309,13 +347,36 @@ fn parse_number_arg(
     parse_number_or_constant(line_number, method_call.name.as_str(), value)
 }
 
-fn parse_param_arg(line_number: usize, method_call: &MethodCall) -> Result<f32, String> {
-    let param_name = method_call.args[0].as_str();
-    let param = param_value(param_name)
+fn parse_param_arg(
+    line_number: usize,
+    method_call: &MethodCall,
+    params: &[EditorParam],
+) -> Result<f32, String> {
+    let param_name = parse_string_arg(line_number, method_call, 0)?;
+    let param = params
+        .iter()
+        .find(|param| param.name == param_name)
         .ok_or_else(|| format!("line {line_number}: unknown param `{param_name}`"))?;
     let low = parse_number_arg(line_number, method_call, 1)?;
     let high = parse_number_arg(line_number, method_call, 2)?;
-    Ok(low + param * (high - low))
+    Ok(low + param.value * (high - low))
+}
+
+fn parse_string_arg(
+    line_number: usize,
+    method_call: &MethodCall,
+    arg_index: usize,
+) -> Result<&str, String> {
+    let value = method_call.args[arg_index].as_str();
+    value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .ok_or_else(|| {
+            format!(
+                "line {line_number}: `{}` argument `{value}` must be a string literal",
+                method_call.name
+            )
+        })
 }
 
 fn parse_number_or_constant(
@@ -382,20 +443,6 @@ fn color_constant(name: &str) -> Option<Color> {
     }
 }
 
-fn param_value(name: &str) -> Option<f32> {
-    match name {
-        "BASE_YAW_PARAM" => Some(0.5 + 30.0 / 360.0),
-        "BASE_PITCH_PARAM" => Some(0.3),
-        "PARAM_LOWER_HAND" => Some(0.5),
-        "PARAM_BEND_ELBOW" => Some(0.5),
-        "PARAM_HAND_WIDTH" => Some(0.0),
-        "PARAM_LOWER_ARM" => Some(0.5),
-        "PARAM_SPIN_WHOLE_ARM" => Some(0.5),
-        "PARAM_SPIN_HAND" => Some(0.5),
-        _ => None,
-    }
-}
-
 fn rgb565_color(red: u8, green: u8, blue: u8) -> Color {
     Color::new(red as f32 / 31.0, green as f32 / 63.0, blue as f32 / 31.0)
 }
@@ -436,6 +483,12 @@ fn degrees_to_radians(degrees: f32) -> f32 {
 struct MethodCall {
     name: String,
     args: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+struct EditorParam {
+    name: String,
+    value: f32,
 }
 
 #[derive(Clone, Copy, Debug)]

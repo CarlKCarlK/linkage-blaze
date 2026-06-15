@@ -33,9 +33,14 @@ const JOYSTICK_VRY_MAX: u16 = 4095;
 const JOYSTICK_DEADZONE: f32 = 0.03;
 const FULL_RANGE_SECONDS_AT_MAX_SPEED: f32 = 5.0;
 const MAX_PARAM_SPEED_PER_SECOND: f32 = 1.0 / FULL_RANGE_SECONDS_AT_MAX_SPEED;
-const INITIAL_PARAM_VALUES: [f32; 6] = [0.5, 0.5, 0.0, 0.5, 0.5, 0.5];
-const INITIAL_Z_MIX: f32 = (30.0 + 45.0) / 90.0;
-const INITIAL_XY_MIX: f32 = 0.5 + 30.0 / 360.0;
+const PARAM_BASE_YAW: &str = "x/y view";
+const PARAM_BASE_PITCH: &str = "z";
+const PARAM_LOWER_HAND: &str = "lower hand";
+const PARAM_BEND_ELBOW: &str = "bend elbow";
+const PARAM_HAND_WIDTH: &str = "close hand";
+const PARAM_LOWER_ARM: &str = "lower arm";
+const PARAM_SPIN_WHOLE_ARM: &str = "spin whole";
+const PARAM_SPIN_HAND: &str = "spin hand";
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
@@ -67,18 +72,12 @@ impl JoystickControlMode {
         }
     }
 
-    fn highlighted_knobs(self) -> (ControlledKnob, ControlledKnob) {
+    fn highlighted_param_names(self) -> (&'static str, &'static str) {
         match self {
-            JoystickControlMode::HandAndElbow => {
-                (ControlledKnob::Param(0), ControlledKnob::Param(1))
-            }
-            JoystickControlMode::WholeSpinAndLowerArm => {
-                (ControlledKnob::Param(4), ControlledKnob::Param(3))
-            }
-            JoystickControlMode::HandOpenAndWristSpin => {
-                (ControlledKnob::Param(2), ControlledKnob::Param(5))
-            }
-            JoystickControlMode::View => (ControlledKnob::ZMix, ControlledKnob::XyMix),
+            JoystickControlMode::HandAndElbow => (PARAM_LOWER_HAND, PARAM_BEND_ELBOW),
+            JoystickControlMode::WholeSpinAndLowerArm => (PARAM_SPIN_WHOLE_ARM, PARAM_LOWER_ARM),
+            JoystickControlMode::HandOpenAndWristSpin => (PARAM_HAND_WIDTH, PARAM_SPIN_HAND),
+            JoystickControlMode::View => (PARAM_BASE_PITCH, PARAM_BASE_YAW),
         }
     }
 }
@@ -141,11 +140,24 @@ fn inner_main() -> Result<Infallible, MainError> {
     let joystick_button = ButtonEsp::new(p.GPIO3, PressedTo::Ground);
 
     let mut cyd_sim = CydSim::new();
-    let mut param_values = INITIAL_PARAM_VALUES;
-    let mut z_mix_value = INITIAL_Z_MIX;
-    let mut xy_mix_value = INITIAL_XY_MIX;
+    let lower_hand_param = cyd_sim_param_index(PARAM_LOWER_HAND);
+    let bend_elbow_param = cyd_sim_param_index(PARAM_BEND_ELBOW);
+    let hand_width_param = cyd_sim_param_index(PARAM_HAND_WIDTH);
+    let lower_arm_param = cyd_sim_param_index(PARAM_LOWER_ARM);
+    let spin_whole_arm_param = cyd_sim_param_index(PARAM_SPIN_WHOLE_ARM);
+    let spin_hand_param = cyd_sim_param_index(PARAM_SPIN_HAND);
+    let base_pitch_param = cyd_sim_param_index(PARAM_BASE_PITCH);
+    let base_yaw_param = cyd_sim_param_index(PARAM_BASE_YAW);
+    let mut lower_hand_value = CydSim::param_default(lower_hand_param);
+    let mut bend_elbow_value = CydSim::param_default(bend_elbow_param);
+    let mut hand_width_value = CydSim::param_default(hand_width_param);
+    let mut lower_arm_value = CydSim::param_default(lower_arm_param);
+    let mut spin_whole_arm_value = CydSim::param_default(spin_whole_arm_param);
+    let mut spin_hand_value = CydSim::param_default(spin_hand_param);
+    let mut z_mix_value = CydSim::param_default(base_pitch_param);
+    let mut xy_mix_value = CydSim::param_default(base_yaw_param);
     let mut control_mode = JoystickControlMode::HandAndElbow;
-    let (first_knob, second_knob) = control_mode.highlighted_knobs();
+    let (first_knob, second_knob) = highlighted_knobs(control_mode);
     cyd_sim.set_controlled_knobs(first_knob, second_knob);
     let mut sw_was_pressed = false;
     let mut previous_loop_time = Instant::now();
@@ -177,7 +189,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         let mut control_mode_changed = false;
         if sw_pressed && !sw_was_pressed {
             control_mode = control_mode.next();
-            let (first_knob, second_knob) = control_mode.highlighted_knobs();
+            let (first_knob, second_knob) = highlighted_knobs(control_mode);
             cyd_sim.set_controlled_knobs(first_knob, second_knob);
             control_mode_changed = true;
             esp_println::println!("joy: mode -> {}", control_mode.label());
@@ -203,27 +215,42 @@ fn inner_main() -> Result<Infallible, MainError> {
         let joystick_changed = match control_mode {
             JoystickControlMode::HandAndElbow => {
                 // Up lowers the hand; left bends the elbow counter-clockwise.
-                param_values[0] =
-                    (param_values[0] - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
-                param_values[1] =
-                    (param_values[1] + joystick_x_velocity * dt_seconds).clamp(0.0, 1.0);
-                cyd_sim.set_param_pair(0, param_values[0], 1, param_values[1])
+                lower_hand_value =
+                    (lower_hand_value - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
+                bend_elbow_value =
+                    (bend_elbow_value + joystick_x_velocity * dt_seconds).clamp(0.0, 1.0);
+                cyd_sim.set_param_pair(
+                    lower_hand_param,
+                    lower_hand_value,
+                    bend_elbow_param,
+                    bend_elbow_value,
+                )
             }
             JoystickControlMode::WholeSpinAndLowerArm => {
                 // Left spins the whole arm counter-clockwise; up lowers the whole arm.
-                param_values[4] =
-                    (param_values[4] + joystick_x_velocity * dt_seconds).clamp(0.0, 1.0);
-                param_values[3] =
-                    (param_values[3] - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
-                cyd_sim.set_param_pair(4, param_values[4], 3, param_values[3])
+                spin_whole_arm_value =
+                    (spin_whole_arm_value + joystick_x_velocity * dt_seconds).clamp(0.0, 1.0);
+                lower_arm_value =
+                    (lower_arm_value - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
+                cyd_sim.set_param_pair(
+                    spin_whole_arm_param,
+                    spin_whole_arm_value,
+                    lower_arm_param,
+                    lower_arm_value,
+                )
             }
             JoystickControlMode::HandOpenAndWristSpin => {
                 // Left opens the hand; down spins the wrist counter-clockwise.
-                param_values[2] =
-                    (param_values[2] + joystick_x_velocity * dt_seconds).clamp(0.0, 1.0);
-                param_values[5] =
-                    (param_values[5] - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
-                cyd_sim.set_param_pair(2, param_values[2], 5, param_values[5])
+                hand_width_value =
+                    (hand_width_value + joystick_x_velocity * dt_seconds).clamp(0.0, 1.0);
+                spin_hand_value =
+                    (spin_hand_value - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
+                cyd_sim.set_param_pair(
+                    hand_width_param,
+                    hand_width_value,
+                    spin_hand_param,
+                    spin_hand_value,
+                )
             }
             JoystickControlMode::View => {
                 // Up moves the view up; left decreases x/y view.
@@ -234,19 +261,19 @@ fn inner_main() -> Result<Infallible, MainError> {
         };
 
         esp_println::println!(
-            "joy: mode={} vrx={} ({:.3}) vry={} ({:.3}) sw={} p0={:.3} p1={:.3} p2={:.3} p3={:.3} p4={:.3} p5={:.3} z={:.3} xy={:.3}",
+            "joy: mode={} vrx={} ({:.3}) vry={} ({:.3}) sw={} lower_hand={:.3} bend_elbow={:.3} close_hand={:.3} lower_arm={:.3} spin_whole={:.3} spin_hand={:.3} z={:.3} xy={:.3}",
             control_mode.label(),
             vrx,
             vrx01,
             vry,
             vry01,
             if sw_pressed { "pressed" } else { "released" },
-            param_values[0],
-            param_values[1],
-            param_values[2],
-            param_values[3],
-            param_values[4],
-            param_values[5],
+            lower_hand_value,
+            bend_elbow_value,
+            hand_width_value,
+            lower_arm_value,
+            spin_whole_arm_value,
+            spin_hand_value,
             z_mix_value,
             xy_mix_value
         );
@@ -280,6 +307,18 @@ fn draw(
         Ok(()) => {}
         Err(infallible) => match infallible {},
     }
+}
+
+fn cyd_sim_param_index(name: &str) -> usize {
+    CydSim::param_index(name).expect("CydSim parameter must exist")
+}
+
+fn highlighted_knobs(control_mode: JoystickControlMode) -> (ControlledKnob, ControlledKnob) {
+    let (first_name, second_name) = control_mode.highlighted_param_names();
+    (
+        ControlledKnob::Param(cyd_sim_param_index(first_name)),
+        ControlledKnob::Param(cyd_sim_param_index(second_name)),
+    )
 }
 
 fn normalize_joystick_centered(raw: u16, min: u16, center: u16, max: u16) -> f32 {
