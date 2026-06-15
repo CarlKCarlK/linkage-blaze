@@ -100,7 +100,7 @@ canvas.addEventListener("pointermove", (event) => {
     panY += dy;
   } else {
     yaw += dx * 0.01;
-    pitch = clamp(pitch + dy * 0.01, -1.4, 1.4);
+    pitch = clamp(pitch + dy * 0.01, -Math.PI / 2, Math.PI / 2);
   }
   draw();
 });
