@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-8";
 
 const source = document.querySelector("#source");
@@ -17,6 +18,12 @@ let renderTimer = null;
 // ---- Three.js setup ----
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.domElement.style.position = "absolute";
+labelRenderer.domElement.style.top = "0";
+labelRenderer.domElement.style.pointerEvents = "none";
+canvas.parentElement.appendChild(labelRenderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0d1118);
@@ -49,11 +56,14 @@ const grid = new THREE.GridHelper(12, 12, 0x27313f, 0x27313f);
 grid.rotation.x = Math.PI / 2;
 scene.add(grid);
 
-// Axes
+// Axes with labels
 const AXIS_LENGTH = 2.4;
-scene.add(axisLine([0, 0, 0], [AXIS_LENGTH, 0, 0], 0xef5454)); // X red
-scene.add(axisLine([0, 0, 0], [0, AXIS_LENGTH, 0], 0x54ef8a)); // Y green
-scene.add(axisLine([0, 0, 0], [0, 0, AXIS_LENGTH], 0x54a8ef)); // Z blue
+scene.add(axisLine([0, 0, 0], [AXIS_LENGTH, 0, 0], 0xef5454));
+scene.add(axisLabel("x", [AXIS_LENGTH + 0.25, 0, 0], "#ef5454"));
+scene.add(axisLine([0, 0, 0], [0, AXIS_LENGTH, 0], 0x54ef8a));
+scene.add(axisLabel("y", [0, AXIS_LENGTH + 0.25, 0], "#54ef8a"));
+scene.add(axisLine([0, 0, 0], [0, 0, AXIS_LENGTH], 0x54a8ef));
+scene.add(axisLabel("z", [0, 0, AXIS_LENGTH + 0.25], "#54a8ef"));
 
 // Group holding all linkage primitives; cleared on each re-render
 const linkageGroup = new THREE.Group();
@@ -68,6 +78,7 @@ function animate() {
   requestAnimationFrame(animate);
   controls.update();
   renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
 }
 animate();
 
@@ -187,6 +198,15 @@ function axisLine(from, to, color) {
   return new THREE.Line(geom, new THREE.LineBasicMaterial({ color }));
 }
 
+function axisLabel(text, position, color) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  div.style.cssText = `color:${color};font:bold 13px ui-monospace,monospace;user-select:none`;
+  const obj = new CSS2DObject(div);
+  obj.position.set(...position);
+  return obj;
+}
+
 function threeColor([r, g, b]) {
   return new THREE.Color(r, g, b);
 }
@@ -196,6 +216,7 @@ function resize() {
   const w = Math.max(1, bounds.width);
   const h = Math.max(1, bounds.height);
   renderer.setSize(w, h, false);
+  labelRenderer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
