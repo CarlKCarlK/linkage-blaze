@@ -1,6 +1,6 @@
 use core::fmt;
 
-use cyd_esp32::{Circle, Cyd, CydError, DrawPrimitive, LineSegment, RectWorkspace, SCREEN_WIDTH};
+use cyd_esp32::{Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, RectWorkspace, SCREEN_WIDTH};
 use embedded_graphics::{
     Drawable,
     mono_font::{
@@ -12,7 +12,7 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use robot_arm_core::{Linkage, Pose};
+use robot_arm_core::{DiskItem, DrawItem, Linkage, Pose, RingItem};
 use static_cell::StaticCell;
 
 const SMALL_GLYPH_WIDTH: usize = 6;
@@ -36,8 +36,11 @@ const HOUR_PARAM: usize = 0;
 const MINUTE_PARAM: usize = 1;
 const SECOND_PARAM: usize = 2;
 const BG: Rgb565 = Rgb565::new(31, 59, 27);
-const FACE_FILL: Rgb565 = Rgb565::new(2, 10, 24);
-const TICK_MAJOR: Rgb565 = Rgb565::new(31, 62, 30);
+const FACE_FILL: u32 = rgb565_raw(2, 10, 24);
+const TICK_MAJOR_COLOR: u32 = rgb565_raw(31, 62, 30);
+const TICK_WIDTH: u16 = 3;
+const TICK_INNER_RADIUS: f32 = 58.0;
+const TICK_LENGTH: f32 = 10.0;
 const TEXT_DIM: Rgb565 = Rgb565::new(1, 8, 16);
 const TEXT_MAIN: Rgb565 = Rgb565::new(1, 8, 16);
 const TEXT_OK: Rgb565 = Rgb565::new(1, 8, 16);
@@ -53,32 +56,67 @@ const MINUTE_WIDTH: u16 = 5;
 const SECOND_WIDTH: u16 = 2;
 const FACE_FILL_RADIUS: u16 = 72;
 const HUB_RADIUS: u16 = 6;
-const FACE_PRIMITIVE_COUNT: usize = 1;
-const TICK_COUNT: usize = 4;
-const HAND_SEGMENT_COUNT: usize = 3;
+const HAND_ITEM_COUNT: usize = 8; // 1 face disk + 3 clock hands + 4 tick marks
 const HUB_COUNT: usize = 1;
-const CLOCK_PRIMITIVE_COUNT: usize =
-    FACE_PRIMITIVE_COUNT + TICK_COUNT + HAND_SEGMENT_COUNT + HUB_COUNT;
+const CLOCK_PRIMITIVE_COUNT: usize = HAND_ITEM_COUNT + HUB_COUNT;
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const TICK_DIRECTIONS: [(i32, i32); TICK_COUNT] = [(0, -1000), (1000, 0), (0, 1000), (-1000, 0)];
-const CLOCK_HANDS: Linkage<3, 15> = Linkage::start()
+const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
+    .pen_color(FACE_FILL)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .disk(FACE_FILL_RADIUS as f32)
+    .restart()
     .pen_color(HOUR_HAND_COLOR)
     .pen_width(HOUR_WIDTH)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
     .yaw_param(HOUR_PARAM, -90.0, 270.0)
     .forward(HOUR_LENGTH)
     .restart()
     .pen_color(MINUTE_HAND_COLOR)
     .pen_width(MINUTE_WIDTH)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
     .yaw_param(MINUTE_PARAM, -90.0, 270.0)
     .forward(MINUTE_LENGTH)
     .restart()
     .pen_color(SECOND_HAND_COLOR)
     .pen_width(SECOND_WIDTH)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
     .yaw_param(SECOND_PARAM, -90.0, 270.0)
-    .forward(SECOND_LENGTH);
+    .forward(SECOND_LENGTH)
+    .restart()
+    .pen_color(TICK_MAJOR_COLOR)
+    .pen_width(0)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .yaw(-90.0)
+    .forward(TICK_INNER_RADIUS)
+    .pen_width(TICK_WIDTH)
+    .forward(TICK_LENGTH)
+    .restart()
+    .pen_color(TICK_MAJOR_COLOR)
+    .pen_width(0)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .yaw(0.0)
+    .forward(TICK_INNER_RADIUS)
+    .pen_width(TICK_WIDTH)
+    .forward(TICK_LENGTH)
+    .restart()
+    .pen_color(TICK_MAJOR_COLOR)
+    .pen_width(0)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .yaw(90.0)
+    .forward(TICK_INNER_RADIUS)
+    .pen_width(TICK_WIDTH)
+    .forward(TICK_LENGTH)
+    .restart()
+    .pen_color(TICK_MAJOR_COLOR)
+    .pen_width(0)
+    .roll_param(SECOND_PARAM, 0.0, 360.0)
+    .yaw(180.0)
+    .forward(TICK_INNER_RADIUS)
+    .pen_width(TICK_WIDTH)
+    .forward(TICK_LENGTH);
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 
@@ -251,11 +289,9 @@ impl CydClockDisplay {
 
     fn show_clock(&mut self, clock_time: Option<&ClockTime>) -> Result<(), CydClockDisplayError> {
         let mut primitives = [empty_primitive(); CLOCK_PRIMITIVE_COUNT];
-        let mut primitive_count = draw_clock_face(&mut primitives);
-        draw_clock_ticks(&mut primitives, &mut primitive_count);
-        if let Some(clock_time) = clock_time {
-            draw_clock_hands(clock_time, &mut primitives, &mut primitive_count);
-        }
+        let mut primitive_count = 0;
+        let params = clock_time.map_or([0.0; 3], |t| t.params());
+        draw_clock_hands(&params, &mut primitives, &mut primitive_count);
         draw_clock_hub(&mut primitives, &mut primitive_count);
         self.cyd
             .draw_primitives_now(CLOCK_BOUNDS, BG, &primitives[..primitive_count])?;
@@ -305,49 +341,37 @@ fn scale_glyph_in_place(
     }
 }
 
-fn draw_clock_face(primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT]) -> usize {
-    primitives[0] = DrawPrimitive::Circle(Circle {
-        center: clock_point(Point::new(CLOCK_CENTER_X, CLOCK_CENTER_Y)),
-        radius: FACE_FILL_RADIUS,
-        stroke_width: 0,
-        color: FACE_FILL,
-        filled: true,
-    });
-    FACE_PRIMITIVE_COUNT
-}
-
-fn draw_clock_ticks(
-    primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT],
-    primitive_count: &mut usize,
-) {
-    for tick_index in 0..TICK_COUNT {
-        primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
-            start: tick_point(tick_index, 58),
-            end: tick_point(tick_index, 68),
-            width: 3,
-            color: TICK_MAJOR,
-        });
-        *primitive_count += 1;
-    }
-}
-
 fn draw_clock_hands(
-    clock_time: &ClockTime,
+    params: &[f32; 3],
     primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT],
     primitive_count: &mut usize,
 ) {
-    let params = clock_time.params();
-    for stroke_segment in CLOCK_HANDS.stroke_segments(&params) {
-        let start = pose_to_point(stroke_segment.start());
-        let end = pose_to_point(stroke_segment.end());
-        if start != end {
-            primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
-                start,
-                end,
-                width: stroke_segment.width(),
-                color: Rgb565::from(RawU16::new(stroke_segment.color() as u16)),
-            });
-            *primitive_count += 1;
+    for draw_item in CLOCK_HANDS.draw_items(params) {
+        match draw_item {
+            DrawItem::Stroke(stroke) => {
+                if stroke.width() == 0 {
+                    continue;
+                }
+                let start = pose_to_point(stroke.start());
+                let end = pose_to_point(stroke.end());
+                if start != end {
+                    primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
+                        start,
+                        end,
+                        width: stroke.width(),
+                        color: Rgb565::from(RawU16::new(stroke.color() as u16)),
+                    });
+                    *primitive_count += 1;
+                }
+            }
+            DrawItem::Disk(disk) => {
+                primitives[*primitive_count] = DrawPrimitive::Ellipse(disk_to_ellipse(disk));
+                *primitive_count += 1;
+            }
+            DrawItem::Ring(ring) => {
+                primitives[*primitive_count] = DrawPrimitive::Ellipse(ring_to_ellipse(ring));
+                *primitive_count += 1;
+            }
         }
     }
 }
@@ -356,9 +380,12 @@ fn draw_clock_hub(
     primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT],
     primitive_count: &mut usize,
 ) {
-    primitives[*primitive_count] = DrawPrimitive::Circle(Circle {
+    let r = HUB_RADIUS as f32;
+    primitives[*primitive_count] = DrawPrimitive::Ellipse(Ellipse {
         center: clock_point(Point::new(CLOCK_CENTER_X, CLOCK_CENTER_Y)),
-        radius: HUB_RADIUS,
+        axis_a: (r, 0.0),
+        axis_b: (0.0, r),
+        radius: r,
         stroke_width: 0,
         color: HUB,
         filled: true,
@@ -366,12 +393,42 @@ fn draw_clock_hub(
     *primitive_count += 1;
 }
 
-fn tick_point(tick_index: usize, radius: i32) -> Point {
-    let (direction_x, direction_y) = TICK_DIRECTIONS[tick_index];
-    clock_point(Point::new(
-        CLOCK_CENTER_X + direction_x * radius / 1000,
-        CLOCK_CENTER_Y + direction_y * radius / 1000,
-    ))
+fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
+    let pos = disk.pose().position();
+    let center = clock_point(Point::new(
+        CLOCK_CENTER_X + pos[0] as i32,
+        CLOCK_CENTER_Y + pos[1] as i32,
+    ));
+    let orient = disk.pose().orientation();
+    let r = disk.radius();
+    Ellipse {
+        center,
+        axis_a: (orient[0][0] * r, orient[1][0] * r),
+        axis_b: (orient[0][1] * r, orient[1][1] * r),
+        radius: r,
+        stroke_width: 0,
+        color: Rgb565::from(RawU16::new(disk.color() as u16)),
+        filled: true,
+    }
+}
+
+fn ring_to_ellipse(ring: RingItem) -> Ellipse {
+    let pos = ring.pose().position();
+    let center = clock_point(Point::new(
+        CLOCK_CENTER_X + pos[0] as i32,
+        CLOCK_CENTER_Y + pos[1] as i32,
+    ));
+    let orient = ring.pose().orientation();
+    let r = ring.radius();
+    Ellipse {
+        center,
+        axis_a: (orient[0][0] * r, orient[1][0] * r),
+        axis_b: (orient[0][1] * r, orient[1][1] * r),
+        radius: r,
+        stroke_width: ring.width(),
+        color: Rgb565::from(RawU16::new(ring.color() as u16)),
+        filled: false,
+    }
 }
 
 fn pose_to_point(pose: Pose) -> Point {

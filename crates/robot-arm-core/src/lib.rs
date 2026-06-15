@@ -42,6 +42,10 @@ pub enum Step {
     PenColor(u32),
     /// Set the pen stroke width.
     PenWidth(u16),
+    /// Add a filled disk at the current pose, in the local v0-v1 plane.
+    Disk(f32),
+    /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is current pen width.
+    Ring(f32),
 }
 
 /// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
@@ -194,6 +198,16 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.push(Step::PenWidth(width))
     }
 
+    /// Add a filled disk at the current pose, in the local v0-v1 plane.
+    pub const fn disk(self, radius: f32) -> Self {
+        self.push(Step::Disk(radius))
+    }
+
+    /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is the current pen width.
+    pub const fn ring(self, radius: f32) -> Self {
+        self.push(Step::Ring(radius))
+    }
+
     const fn push(mut self, step: Step) -> Self {
         assert!(self.len < N, "linkage has more steps than N");
         self.steps[self.len] = step;
@@ -211,9 +225,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         StyledPoses::new(self, params)
     }
 
-    /// Iterate over drawable pen-down move segments.
-    pub fn stroke_segments<'a>(&'a self, params: &'a [f32; DOF]) -> StrokeSegments<'a, DOF, N> {
-        StrokeSegments::new(self, params)
+    /// Iterate over draw items (line strokes, disks, rings) produced by this linkage.
+    pub fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> DrawItems<'a, DOF, N> {
+        DrawItems::new(self, params)
     }
 
     /// Return the pose produced after evaluating all steps from 0.0 to 1.0 params.
@@ -246,7 +260,9 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenUp
         | Step::PenDown
         | Step::PenColor(_)
-        | Step::PenWidth(_) => return Mat3::IDENTITY,
+        | Step::PenWidth(_)
+        | Step::Disk(_)
+        | Step::Ring(_) => return Mat3::IDENTITY,
     };
     match step {
         Step::Yaw(_) => Mat3::yaw(radians),
@@ -257,7 +273,9 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenUp
         | Step::PenDown
         | Step::PenColor(_)
-        | Step::PenWidth(_) => Mat3::IDENTITY,
+        | Step::PenWidth(_)
+        | Step::Disk(_)
+        | Step::Ring(_) => Mat3::IDENTITY,
     }
 }
 
@@ -311,7 +329,7 @@ impl PenStyle {
             Step::PenDown => self.pen = Pen::Down,
             Step::PenColor(color) => self.color = *color,
             Step::PenWidth(width) => self.width = *width,
-            Step::Start | Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) | Step::Move(_) => {}
+            Step::Start | Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) | Step::Move(_) | Step::Disk(_) | Step::Ring(_) => {}
         }
     }
 }
@@ -372,7 +390,7 @@ impl Pose {
             Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) => {
                 self.orientation = self.orientation * rotation_matrix(step, params);
             }
-            Step::PenUp | Step::PenDown | Step::PenColor(_) | Step::PenWidth(_) => {}
+            Step::PenUp | Step::PenDown | Step::PenColor(_) | Step::PenWidth(_) | Step::Disk(_) | Step::Ring(_) => {}
         }
     }
 }
@@ -537,11 +555,56 @@ impl<const DOF: usize, const N: usize> Iterator for StyledPoses<'_, DOF, N> {
     }
 }
 
-/// Iterator over drawable pen-down move segments.
+/// A disk shape yielded by a linkage at the current pose.
+#[derive(Clone, Copy, Debug)]
+pub struct DiskItem {
+    pose: Pose,
+    radius: f32,
+    color: u32,
+}
+
+impl DiskItem {
+    #[must_use]
+    pub const fn pose(self) -> Pose { self.pose }
+    #[must_use]
+    pub const fn radius(self) -> f32 { self.radius }
+    #[must_use]
+    pub const fn color(self) -> u32 { self.color }
+}
+
+/// A ring shape yielded by a linkage at the current pose. Stroke width is the pen width at that step.
+#[derive(Clone, Copy, Debug)]
+pub struct RingItem {
+    pose: Pose,
+    radius: f32,
+    color: u32,
+    width: u16,
+}
+
+impl RingItem {
+    #[must_use]
+    pub const fn pose(self) -> Pose { self.pose }
+    #[must_use]
+    pub const fn radius(self) -> f32 { self.radius }
+    #[must_use]
+    pub const fn color(self) -> u32 { self.color }
+    #[must_use]
+    pub const fn width(self) -> u16 { self.width }
+}
+
+/// A draw item produced by a linkage: a line stroke, a filled disk, or a ring.
+#[derive(Clone, Copy, Debug)]
+pub enum DrawItem {
+    Stroke(StrokeSegment),
+    Disk(DiskItem),
+    Ring(RingItem),
+}
+
+/// Iterator over draw items (line strokes, disks, rings) produced by a linkage.
 ///
-/// Non-move steps update pose or pen state but don't yield. Move steps yield
-/// only when the pen is down.
-pub struct StrokeSegments<'a, const DOF: usize, const N: usize> {
+/// Move steps with the pen down yield [`DrawItem::Stroke`]. Disk and Ring steps
+/// always yield their respective variants. All other steps only update state.
+pub struct DrawItems<'a, const DOF: usize, const N: usize> {
     linkage: &'a Linkage<DOF, N>,
     params: &'a [f32; DOF],
     index: usize,
@@ -549,7 +612,7 @@ pub struct StrokeSegments<'a, const DOF: usize, const N: usize> {
     pen_style: PenStyle,
 }
 
-impl<'a, const DOF: usize, const N: usize> StrokeSegments<'a, DOF, N> {
+impl<'a, const DOF: usize, const N: usize> DrawItems<'a, DOF, N> {
     fn new(linkage: &'a Linkage<DOF, N>, params: &'a [f32; DOF]) -> Self {
         validate_params(params);
         Self {
@@ -562,25 +625,43 @@ impl<'a, const DOF: usize, const N: usize> StrokeSegments<'a, DOF, N> {
     }
 }
 
-impl<const DOF: usize, const N: usize> Iterator for StrokeSegments<'_, DOF, N> {
-    type Item = StrokeSegment;
+impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
+    type Item = DrawItem;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.index < self.linkage.len {
             let step = &self.linkage.steps[self.index];
             self.index += 1;
-            let start = self.pose;
+            let start_pose = self.pose;
             let pen_style = self.pen_style;
             self.pose.apply(step, self.params);
             self.pen_style.apply(step);
 
-            if matches!(step, Step::Move(_)) && matches!(pen_style.pen(), Pen::Down) {
-                return Some(StrokeSegment {
-                    start,
-                    end: self.pose,
-                    color: pen_style.color(),
-                    width: pen_style.width(),
-                });
+            match step {
+                Step::Move(_) if matches!(pen_style.pen(), Pen::Down) => {
+                    return Some(DrawItem::Stroke(StrokeSegment {
+                        start: start_pose,
+                        end: self.pose,
+                        color: pen_style.color(),
+                        width: pen_style.width(),
+                    }));
+                }
+                Step::Disk(radius) => {
+                    return Some(DrawItem::Disk(DiskItem {
+                        pose: start_pose,
+                        radius: *radius,
+                        color: pen_style.color(),
+                    }));
+                }
+                Step::Ring(radius) => {
+                    return Some(DrawItem::Ring(RingItem {
+                        pose: start_pose,
+                        radius: *radius,
+                        color: pen_style.color(),
+                        width: pen_style.width(),
+                    }));
+                }
+                _ => {}
             }
         }
 

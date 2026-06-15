@@ -53,9 +53,11 @@ pub struct LineSegment {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Circle {
+pub struct Ellipse {
     pub center: Point,
-    pub radius: u16,
+    pub axis_a: (f32, f32),  // v0_xy * radius
+    pub axis_b: (f32, f32),  // v1_xy * radius
+    pub radius: f32,
     pub stroke_width: u16,
     pub color: Rgb565,
     pub filled: bool,
@@ -64,7 +66,7 @@ pub struct Circle {
 #[derive(Clone, Copy, Debug)]
 pub enum DrawPrimitive {
     LineSegment(LineSegment),
-    Circle(Circle),
+    Ellipse(Ellipse),
 }
 
 struct LineSegmentPixels<'a> {
@@ -136,10 +138,10 @@ impl Iterator for PrimitivePixels<'_> {
                 {
                     color = line_segment.color;
                 }
-                DrawPrimitive::Circle(circle)
-                    if point_covered_by_circle(point_x, point_y, circle) =>
+                DrawPrimitive::Ellipse(ellipse)
+                    if point_covered_by_ellipse(point_x, point_y, &ellipse) =>
                 {
-                    color = circle.color;
+                    color = ellipse.color;
                 }
                 _ => {}
             }
@@ -363,31 +365,33 @@ fn point_covered_by_segment(point_x: i32, point_y: i32, segment: LineSegment) ->
     distance_x * distance_x + distance_y * distance_y <= radius_squared
 }
 
-fn point_covered_by_circle(point_x: i32, point_y: i32, circle: Circle) -> bool {
-    let center_x = i64::from(circle.center.x);
-    let center_y = i64::from(circle.center.y);
-    let point_x = i64::from(point_x);
-    let point_y = i64::from(point_y);
-    let distance_x = point_x - center_x;
-    let distance_y = point_y - center_y;
-    let distance_squared = distance_x * distance_x + distance_y * distance_y;
+fn point_covered_by_ellipse(point_x: i32, point_y: i32, ellipse: &Ellipse) -> bool {
+    let dx = (point_x - ellipse.center.x) as f32;
+    let dy = (point_y - ellipse.center.y) as f32;
+    let (ax, ay) = ellipse.axis_a;
+    let (bx, by) = ellipse.axis_b;
 
-    if circle.filled {
-        let radius = i64::from(circle.radius);
-        return distance_squared <= radius * radius;
+    // Solve ellipse membership via the 2×2 inverse: inside if ||A⁻¹(p-center)||² ≤ 1,
+    // rewritten without division as u²+v² ≤ det² for the filled case.
+    let u = by * dx - bx * dy;
+    let v = ax * dy - ay * dx;
+    let det = ax * by - bx * ay;
+    let dist_sq = u * u + v * v;
+    let det_sq = det * det;
+
+    if ellipse.filled {
+        return dist_sq <= det_sq;
     }
 
-    if circle.stroke_width == 0 {
+    if ellipse.stroke_width == 0 || ellipse.radius <= 0.0 {
         return false;
     }
 
-    // Unfilled circles use a stroke centered on `radius`, rounded up so
-    // stroke_width 1 remains visible with integer-only rasterization.
-    let radius = i64::from(circle.radius);
-    let half_stroke = (i64::from(circle.stroke_width) + 1) / 2;
-    let inner_radius = radius.saturating_sub(half_stroke);
-    let outer_radius = radius + half_stroke;
+    let r = ellipse.radius;
+    let half_w = ellipse.stroke_width as f32 * 0.5;
+    let outer_scale = (r + half_w) / r;
+    let inner_scale = if r > half_w { (r - half_w) / r } else { 0.0 };
 
-    distance_squared >= inner_radius * inner_radius
-        && distance_squared <= outer_radius * outer_radius
+    dist_sq <= det_sq * outer_scale * outer_scale
+        && dist_sq > det_sq * inner_scale * inner_scale
 }
