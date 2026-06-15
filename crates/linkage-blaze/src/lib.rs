@@ -12,7 +12,7 @@ const DEFAULT_PROGRAM: &str = r#"Linkage::start()
 .define_param("lower arm", 0.5)
 .define_param("spin whole", 0.5)
 .define_param("spin hand", 0.5)
-.pen_color(ARM_COLOR) // default pen is down, white, width 1
+.pen_color(Rgb888::CSS_DARK_GREEN)
 .pen_width(ARM_WIDTH)
 .yaw(90.0)
 .pitch(-90.0)
@@ -41,7 +41,7 @@ const DEFAULT_PROGRAM: &str = r#"Linkage::start()
 .yaw(90.0)
 .forward(1.0)
 .restart()
-.pen_color(TARGET_COLOR)
+.pen_color(Rgb888::CSS_RED)
 .disk(0.05)
 "#;
 
@@ -450,19 +450,13 @@ fn parse_radius(
 
 fn parse_color_arg(line_number: usize, method_call: &MethodCall) -> Result<Color, String> {
     let value = method_call.args[0].as_str();
-    match value {
-        "white" => Ok(Color::new(1.0, 1.0, 1.0)),
-        "black" => Ok(Color::new(0.0, 0.0, 0.0)),
-        "red" => Ok(Color::new(1.0, 0.0, 0.0)),
-        "green" => Ok(Color::new(0.0, 1.0, 0.0)),
-        "blue" => Ok(Color::new(0.0, 0.0, 1.0)),
-        "cyan" => Ok(Color::new(0.0, 1.0, 1.0)),
-        "yellow" => Ok(Color::new(1.0, 1.0, 0.0)),
-        "orange" => Ok(Color::new(1.0, 0.44, 0.25)),
-        _ if value.starts_with('#') && value.len() == 7 => parse_hex_color(line_number, value),
-        _ => color_constant(value)
-            .ok_or_else(|| format!("line {line_number}: unknown color `{value}`")),
+    // Strip optional "Rgb888::" prefix so both Rgb888::CSS_ORANGE and CSS_ORANGE work
+    let key = value.strip_prefix("Rgb888::").unwrap_or(value);
+    if key.starts_with('#') && key.len() == 7 {
+        return parse_hex_color(line_number, key);
     }
+    css_color(key)
+        .ok_or_else(|| format!("line {line_number}: unknown color `{value}`"))
 }
 
 fn number_constant(name: &str) -> Option<f32> {
@@ -473,29 +467,162 @@ fn number_constant(name: &str) -> Option<f32> {
     }
 }
 
-fn color_constant(name: &str) -> Option<Color> {
-    match name {
-        "FLOOR_COLOR" => Some(rgb565_color(5, 19, 9)),
-        "AXIS_COLOR" => Some(rgb565_color(10, 28, 14)),
-        "ARM_COLOR" => Some(rgb565_color(0, 34, 17)),
-        "TARGET_COLOR" => Some(rgb565_color(31, 0, 0)),
-        _ => None,
-    }
+fn rgb888_color(red: u8, green: u8, blue: u8) -> Color {
+    Color::new(red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0)
 }
 
-fn rgb565_color(red: u8, green: u8, blue: u8) -> Color {
-    Color::new(red as f32 / 31.0, green as f32 / 63.0, blue as f32 / 31.0)
+fn css_color(name: &str) -> Option<Color> {
+    match name {
+        "CSS_ALICE_BLUE" => Some(rgb888_color(240, 248, 255)),
+        "CSS_ANTIQUE_WHITE" => Some(rgb888_color(250, 235, 215)),
+        "CSS_AQUA" => Some(rgb888_color(0, 255, 255)),
+        "CSS_AQUAMARINE" => Some(rgb888_color(127, 255, 212)),
+        "CSS_AZURE" => Some(rgb888_color(240, 255, 255)),
+        "CSS_BEIGE" => Some(rgb888_color(245, 245, 220)),
+        "CSS_BISQUE" => Some(rgb888_color(255, 228, 196)),
+        "CSS_BLACK" => Some(rgb888_color(0, 0, 0)),
+        "CSS_BLANCHED_ALMOND" => Some(rgb888_color(255, 235, 205)),
+        "CSS_BLUE" => Some(rgb888_color(0, 0, 255)),
+        "CSS_BLUE_VIOLET" => Some(rgb888_color(138, 43, 226)),
+        "CSS_BROWN" => Some(rgb888_color(165, 42, 42)),
+        "CSS_BURLY_WOOD" => Some(rgb888_color(222, 184, 135)),
+        "CSS_CADET_BLUE" => Some(rgb888_color(95, 158, 160)),
+        "CSS_CHARTREUSE" => Some(rgb888_color(127, 255, 0)),
+        "CSS_CHOCOLATE" => Some(rgb888_color(210, 105, 30)),
+        "CSS_CORAL" => Some(rgb888_color(255, 127, 80)),
+        "CSS_CORNFLOWER_BLUE" => Some(rgb888_color(100, 149, 237)),
+        "CSS_CORNSILK" => Some(rgb888_color(255, 248, 220)),
+        "CSS_CRIMSON" => Some(rgb888_color(220, 20, 60)),
+        "CSS_CYAN" => Some(rgb888_color(0, 255, 255)),
+        "CSS_DARK_BLUE" => Some(rgb888_color(0, 0, 139)),
+        "CSS_DARK_CYAN" => Some(rgb888_color(0, 139, 139)),
+        "CSS_DARK_GOLDENROD" => Some(rgb888_color(184, 134, 11)),
+        "CSS_DARK_GRAY" => Some(rgb888_color(169, 169, 169)),
+        "CSS_DARK_GREEN" => Some(rgb888_color(0, 100, 0)),
+        "CSS_DARK_KHAKI" => Some(rgb888_color(189, 183, 107)),
+        "CSS_DARK_MAGENTA" => Some(rgb888_color(139, 0, 139)),
+        "CSS_DARK_OLIVE_GREEN" => Some(rgb888_color(85, 107, 47)),
+        "CSS_DARK_ORANGE" => Some(rgb888_color(255, 140, 0)),
+        "CSS_DARK_ORCHID" => Some(rgb888_color(153, 50, 204)),
+        "CSS_DARK_RED" => Some(rgb888_color(139, 0, 0)),
+        "CSS_DARK_SALMON" => Some(rgb888_color(233, 150, 122)),
+        "CSS_DARK_SEA_GREEN" => Some(rgb888_color(143, 188, 143)),
+        "CSS_DARK_SLATE_BLUE" => Some(rgb888_color(72, 61, 139)),
+        "CSS_DARK_SLATE_GRAY" => Some(rgb888_color(47, 79, 79)),
+        "CSS_DARK_TURQUOISE" => Some(rgb888_color(0, 206, 209)),
+        "CSS_DARK_VIOLET" => Some(rgb888_color(148, 0, 211)),
+        "CSS_DEEP_PINK" => Some(rgb888_color(255, 20, 147)),
+        "CSS_DEEP_SKY_BLUE" => Some(rgb888_color(0, 191, 255)),
+        "CSS_DIM_GRAY" => Some(rgb888_color(105, 105, 105)),
+        "CSS_DODGER_BLUE" => Some(rgb888_color(30, 144, 255)),
+        "CSS_FIRE_BRICK" => Some(rgb888_color(178, 34, 34)),
+        "CSS_FLORAL_WHITE" => Some(rgb888_color(255, 250, 240)),
+        "CSS_FOREST_GREEN" => Some(rgb888_color(34, 139, 34)),
+        "CSS_FUCHSIA" => Some(rgb888_color(255, 0, 255)),
+        "CSS_GAINSBORO" => Some(rgb888_color(220, 220, 220)),
+        "CSS_GHOST_WHITE" => Some(rgb888_color(248, 248, 255)),
+        "CSS_GOLD" => Some(rgb888_color(255, 215, 0)),
+        "CSS_GOLDENROD" => Some(rgb888_color(218, 165, 32)),
+        "CSS_GRAY" => Some(rgb888_color(128, 128, 128)),
+        "CSS_GREEN" => Some(rgb888_color(0, 128, 0)),
+        "CSS_GREEN_YELLOW" => Some(rgb888_color(173, 255, 47)),
+        "CSS_HONEYDEW" => Some(rgb888_color(240, 255, 240)),
+        "CSS_HOT_PINK" => Some(rgb888_color(255, 105, 180)),
+        "CSS_INDIAN_RED" => Some(rgb888_color(205, 92, 92)),
+        "CSS_INDIGO" => Some(rgb888_color(75, 0, 130)),
+        "CSS_IVORY" => Some(rgb888_color(255, 255, 240)),
+        "CSS_KHAKI" => Some(rgb888_color(240, 230, 140)),
+        "CSS_LAVENDER" => Some(rgb888_color(230, 230, 250)),
+        "CSS_LAVENDER_BLUSH" => Some(rgb888_color(255, 240, 245)),
+        "CSS_LAWN_GREEN" => Some(rgb888_color(124, 252, 0)),
+        "CSS_LEMON_CHIFFON" => Some(rgb888_color(255, 250, 205)),
+        "CSS_LIGHT_BLUE" => Some(rgb888_color(173, 216, 230)),
+        "CSS_LIGHT_CORAL" => Some(rgb888_color(240, 128, 128)),
+        "CSS_LIGHT_CYAN" => Some(rgb888_color(224, 255, 255)),
+        "CSS_LIGHT_GOLDENROD_YELLOW" => Some(rgb888_color(250, 250, 210)),
+        "CSS_LIGHT_GRAY" => Some(rgb888_color(211, 211, 211)),
+        "CSS_LIGHT_GREEN" => Some(rgb888_color(144, 238, 144)),
+        "CSS_LIGHT_PINK" => Some(rgb888_color(255, 182, 193)),
+        "CSS_LIGHT_SALMON" => Some(rgb888_color(255, 160, 122)),
+        "CSS_LIGHT_SEA_GREEN" => Some(rgb888_color(32, 178, 170)),
+        "CSS_LIGHT_SKY_BLUE" => Some(rgb888_color(135, 206, 250)),
+        "CSS_LIGHT_SLATE_GRAY" => Some(rgb888_color(119, 136, 153)),
+        "CSS_LIGHT_STEEL_BLUE" => Some(rgb888_color(176, 196, 222)),
+        "CSS_LIGHT_YELLOW" => Some(rgb888_color(255, 255, 224)),
+        "CSS_LIME" => Some(rgb888_color(0, 255, 0)),
+        "CSS_LIME_GREEN" => Some(rgb888_color(50, 205, 50)),
+        "CSS_LINEN" => Some(rgb888_color(250, 240, 230)),
+        "CSS_MAGENTA" => Some(rgb888_color(255, 0, 255)),
+        "CSS_MAROON" => Some(rgb888_color(128, 0, 0)),
+        "CSS_MEDIUM_AQUAMARINE" => Some(rgb888_color(102, 205, 170)),
+        "CSS_MEDIUM_BLUE" => Some(rgb888_color(0, 0, 205)),
+        "CSS_MEDIUM_ORCHID" => Some(rgb888_color(186, 85, 211)),
+        "CSS_MEDIUM_PURPLE" => Some(rgb888_color(147, 112, 219)),
+        "CSS_MEDIUM_SEA_GREEN" => Some(rgb888_color(60, 179, 113)),
+        "CSS_MEDIUM_SLATE_BLUE" => Some(rgb888_color(123, 104, 238)),
+        "CSS_MEDIUM_SPRING_GREEN" => Some(rgb888_color(0, 250, 154)),
+        "CSS_MEDIUM_TURQUOISE" => Some(rgb888_color(72, 209, 204)),
+        "CSS_MEDIUM_VIOLET_RED" => Some(rgb888_color(199, 21, 133)),
+        "CSS_MIDNIGHT_BLUE" => Some(rgb888_color(25, 25, 112)),
+        "CSS_MINT_CREAM" => Some(rgb888_color(245, 255, 250)),
+        "CSS_MISTY_ROSE" => Some(rgb888_color(255, 228, 225)),
+        "CSS_MOCCASIN" => Some(rgb888_color(255, 228, 181)),
+        "CSS_NAVAJO_WHITE" => Some(rgb888_color(255, 222, 173)),
+        "CSS_NAVY" => Some(rgb888_color(0, 0, 128)),
+        "CSS_OLD_LACE" => Some(rgb888_color(253, 245, 230)),
+        "CSS_OLIVE" => Some(rgb888_color(128, 128, 0)),
+        "CSS_OLIVE_DRAB" => Some(rgb888_color(107, 142, 35)),
+        "CSS_ORANGE" => Some(rgb888_color(255, 165, 0)),
+        "CSS_ORANGE_RED" => Some(rgb888_color(255, 69, 0)),
+        "CSS_ORCHID" => Some(rgb888_color(218, 112, 214)),
+        "CSS_PALE_GOLDENROD" => Some(rgb888_color(238, 232, 170)),
+        "CSS_PALE_GREEN" => Some(rgb888_color(152, 251, 152)),
+        "CSS_PALE_TURQUOISE" => Some(rgb888_color(175, 238, 238)),
+        "CSS_PALE_VIOLET_RED" => Some(rgb888_color(219, 112, 147)),
+        "CSS_PAPAYA_WHIP" => Some(rgb888_color(255, 239, 213)),
+        "CSS_PEACH_PUFF" => Some(rgb888_color(255, 218, 185)),
+        "CSS_PERU" => Some(rgb888_color(205, 133, 63)),
+        "CSS_PINK" => Some(rgb888_color(255, 192, 203)),
+        "CSS_PLUM" => Some(rgb888_color(221, 160, 221)),
+        "CSS_POWDER_BLUE" => Some(rgb888_color(176, 224, 230)),
+        "CSS_PURPLE" => Some(rgb888_color(128, 0, 128)),
+        "CSS_REBECCAPURPLE" => Some(rgb888_color(102, 51, 153)),
+        "CSS_RED" => Some(rgb888_color(255, 0, 0)),
+        "CSS_ROSY_BROWN" => Some(rgb888_color(188, 143, 143)),
+        "CSS_ROYAL_BLUE" => Some(rgb888_color(65, 105, 225)),
+        "CSS_SADDLE_BROWN" => Some(rgb888_color(139, 69, 19)),
+        "CSS_SALMON" => Some(rgb888_color(250, 128, 114)),
+        "CSS_SANDY_BROWN" => Some(rgb888_color(244, 164, 96)),
+        "CSS_SEA_GREEN" => Some(rgb888_color(46, 139, 87)),
+        "CSS_SEASHELL" => Some(rgb888_color(255, 245, 238)),
+        "CSS_SIENNA" => Some(rgb888_color(160, 82, 45)),
+        "CSS_SILVER" => Some(rgb888_color(192, 192, 192)),
+        "CSS_SKY_BLUE" => Some(rgb888_color(135, 206, 235)),
+        "CSS_SLATE_BLUE" => Some(rgb888_color(106, 90, 205)),
+        "CSS_SLATE_GRAY" => Some(rgb888_color(112, 128, 144)),
+        "CSS_SNOW" => Some(rgb888_color(255, 250, 250)),
+        "CSS_SPRING_GREEN" => Some(rgb888_color(0, 255, 127)),
+        "CSS_STEEL_BLUE" => Some(rgb888_color(70, 130, 180)),
+        "CSS_TAN" => Some(rgb888_color(210, 180, 140)),
+        "CSS_TEAL" => Some(rgb888_color(0, 128, 128)),
+        "CSS_THISTLE" => Some(rgb888_color(216, 191, 216)),
+        "CSS_TOMATO" => Some(rgb888_color(255, 99, 71)),
+        "CSS_TURQUOISE" => Some(rgb888_color(64, 224, 208)),
+        "CSS_VIOLET" => Some(rgb888_color(238, 130, 238)),
+        "CSS_WHEAT" => Some(rgb888_color(245, 222, 179)),
+        "CSS_WHITE" => Some(rgb888_color(255, 255, 255)),
+        "CSS_WHITE_SMOKE" => Some(rgb888_color(245, 245, 245)),
+        "CSS_YELLOW" => Some(rgb888_color(255, 255, 0)),
+        "CSS_YELLOW_GREEN" => Some(rgb888_color(154, 205, 50)),
+        _ => None,
+    }
 }
 
 fn parse_hex_color(line_number: usize, value: &str) -> Result<Color, String> {
     let red = parse_hex_byte(line_number, value, 1)?;
     let green = parse_hex_byte(line_number, value, 3)?;
     let blue = parse_hex_byte(line_number, value, 5)?;
-    Ok(Color::new(
-        red as f32 / 255.0,
-        green as f32 / 255.0,
-        blue as f32 / 255.0,
-    ))
+    Ok(rgb888_color(red, green, blue))
 }
 
 fn parse_hex_byte(line_number: usize, value: &str, start: usize) -> Result<u8, String> {

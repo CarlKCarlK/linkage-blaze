@@ -17,6 +17,7 @@ mod math;
 
 pub use math::{Mat3, Vec3};
 
+pub use embedded_graphics::pixelcolor::Rgb888;
 use math::degrees_to_radians;
 
 /// A step in the robot arm linkage description.
@@ -39,7 +40,7 @@ pub enum Step {
     /// Lower the pen so later moves draw.
     PenDown,
     /// Set the pen color.
-    PenColor(u32),
+    PenColor(Rgb888),
     /// Set the pen stroke width.
     PenWidth(u16),
     /// Add a filled disk at the current pose, in the local v0-v1 plane.
@@ -283,7 +284,7 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Set the pen color for later move steps.
-    pub const fn pen_color(self, color: u32) -> Self {
+    pub const fn pen_color(self, color: Rgb888) -> Self {
         self.push(Step::PenColor(color))
     }
 
@@ -418,7 +419,7 @@ pub enum Pen {
 #[derive(Clone, Copy, Debug)]
 pub struct PenStyle {
     pen: Pen,
-    color: u32,
+    color: Rgb888,
     width: u16,
 }
 
@@ -428,7 +429,7 @@ impl PenStyle {
     pub const fn new() -> Self {
         Self {
             pen: Pen::Down,
-            color: 0,
+            color: Rgb888::new(255, 255, 255),
             width: 1,
         }
     }
@@ -441,7 +442,7 @@ impl PenStyle {
 
     /// Return the current pen color.
     #[must_use]
-    pub const fn color(self) -> u32 {
+    pub const fn color(self) -> Rgb888 {
         self.color
     }
 
@@ -570,7 +571,7 @@ impl StyledPose {
 
     /// Return this styled pose's pen color.
     #[must_use]
-    pub const fn color(self) -> u32 {
+    pub const fn color(self) -> Rgb888 {
         self.pen_style.color()
     }
 
@@ -586,7 +587,7 @@ impl StyledPose {
 pub struct StrokeSegment {
     start: Pose,
     end: Pose,
-    color: u32,
+    color: Rgb888,
     width: u16,
 }
 
@@ -605,7 +606,7 @@ impl StrokeSegment {
 
     /// Return the segment pen color.
     #[must_use]
-    pub const fn color(self) -> u32 {
+    pub const fn color(self) -> Rgb888 {
         self.color
     }
 
@@ -701,7 +702,7 @@ impl<const DOF: usize, const N: usize> Iterator for StyledPoses<'_, DOF, N> {
 pub struct DiskItem {
     pose: Pose,
     radius: f32,
-    color: u32,
+    color: Rgb888,
 }
 
 impl DiskItem {
@@ -714,7 +715,7 @@ impl DiskItem {
         self.radius
     }
     #[must_use]
-    pub const fn color(self) -> u32 {
+    pub const fn color(self) -> Rgb888 {
         self.color
     }
 }
@@ -724,7 +725,7 @@ impl DiskItem {
 pub struct RingItem {
     pose: Pose,
     radius: f32,
-    color: u32,
+    color: Rgb888,
     width: u16,
 }
 
@@ -738,7 +739,7 @@ impl RingItem {
         self.radius
     }
     #[must_use]
-    pub const fn color(self) -> u32 {
+    pub const fn color(self) -> Rgb888 {
         self.color
     }
     #[must_use]

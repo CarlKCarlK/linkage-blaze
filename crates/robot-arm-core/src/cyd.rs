@@ -5,7 +5,7 @@ use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point, Size},
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::{IntoStorage, Rgb565, RgbColor, raw::RawU16},
+    pixelcolor::{IntoStorage, Rgb565, RgbColor, WebColors},
     prelude::*,
     primitives::{Circle, Line, PrimitiveStyle, Rectangle, Triangle},
     text::{Baseline, Text},
@@ -13,7 +13,7 @@ use embedded_graphics::{
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use crate::{DrawItem, Linkage, Pose, Vec3};
+use crate::{DrawItem, Linkage, Pose, Rgb888, Vec3};
 
 pub const SCREEN_WIDTH: usize = 320;
 pub const SCREEN_HEIGHT: usize = 240;
@@ -74,12 +74,8 @@ const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 8;
 
 
-// ---- linkage colors (rgb565 packed as u32) ----
-const fn rgb565_raw(red: u32, green: u32, blue: u32) -> u32 {
-    (red << 11) | (green << 5) | blue
-}
-
-const ARM_COLOR: u32 = rgb565_raw(0, 34, 17);
+// ---- linkage colors ----
+const ARM_COLOR: Rgb888 = Rgb888::CSS_DARK_GREEN;
 const ARM_WIDTH: u16 = 3;
 
 // ---- RK constants ----
@@ -771,7 +767,7 @@ impl CydSim {
                     let start = self.pose_to_screen(segment.start());
                     let end = self.pose_to_screen(segment.end());
                     let width = zoomed_pixels(segment.width() as u32, self.zoom).max(1);
-                    let color = rgb565_from_u32(segment.color());
+                    let color = rgb565_from_rgb888(segment.color());
                     Line::new(start, end)
                         .into_styled(PrimitiveStyle::with_stroke(color, width))
                         .draw(buffer)
@@ -802,13 +798,13 @@ impl CydSim {
         target: &mut impl DrawTarget<Color = Rgb565>,
         pose: Pose,
         radius: f32,
-        color_raw: u32,
+        color_raw: Rgb888,
     ) {
         let orient = pose.orientation();
         let Vec3([px, py, _]) = pose.position();
         let scale = self.scale();
         let r = radius * scale;
-        let color = rgb565_from_u32(color_raw);
+        let color = rgb565_from_rgb888(color_raw);
 
         let cx = round_to_i32(px * scale) + SCREEN_WIDTH as i32 / 2;
         let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(py * scale);
@@ -858,13 +854,13 @@ impl CydSim {
         pose: Pose,
         radius: f32,
         width: u16,
-        color_raw: u32,
+        color_raw: Rgb888,
     ) {
         let orient = pose.orientation();
         let Vec3([px, py, _]) = pose.position();
         let scale = self.scale();
         let r = radius * scale;
-        let color = rgb565_from_u32(color_raw);
+        let color = rgb565_from_rgb888(color_raw);
         let half_w = width as f32 * 0.5 * scale;
 
         let cx = round_to_i32(px * scale) + SCREEN_WIDTH as i32 / 2;
@@ -1590,8 +1586,8 @@ fn zoomed_pixels(base_pixels: u32, zoom: f32) -> u32 {
     round_to_u32(base_pixels as f32 * zoom_to_scale(zoom)).max(1)
 }
 
-fn rgb565_from_u32(color: u32) -> Rgb565 {
-    Rgb565::from(RawU16::new(color as u16))
+fn rgb565_from_rgb888(color: Rgb888) -> Rgb565 {
+    Rgb565::from(color)
 }
 
 fn distance(left: Vec3, right: Vec3) -> f32 {
