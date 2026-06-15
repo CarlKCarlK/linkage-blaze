@@ -18,11 +18,17 @@
       <details class="cheatsheet">
         <summary>Cheatsheet</summary>
         <div class="cheatsheet-grid">
+          <code title="Toggle comment on selected lines">Ctrl+/ — toggle comment</code>
+          <code>.define_param("name", default)</code>
           <code>.forward(d)</code>
-          <code>.move(d)</code>
           <code>.yaw(deg)</code>
           <code>.pitch(deg)</code>
           <code>.roll(deg)</code>
+          <code>.yaw_param("name", low, high)</code>
+          <code>.pitch_param("name", low, high)</code>
+          <code>.roll_param("name", low, high)</code>
+          <code>.forward_param("name", low, high)</code>
+          <code>.disk_param("name", low, high)</code>
           <code>.pen_up()</code>
           <code>.pen_down()</code>
           <code>.pen_color(red)</code>
@@ -33,12 +39,16 @@
           <code>.sphere(r)</code>
         </div>
       </details>
-      <textarea id="source" spellcheck="false" aria-label="LogoRust program"></textarea>
+      <textarea id="source" spellcheck="false" aria-label="Linkage Blaze program"></textarea>
       <pre id="error" class="error" aria-live="polite"></pre>
     </section>
     <section class="view-pane">
       <canvas id="view"></canvas>
       <pre id="camera-readout" class="camera-readout"></pre>
+    </section>
+    <section class="params-pane" id="params-pane">
+      <div class="params-header">Parameters</div>
+      <div class="params-list" id="params-list"></div>
     </section>
   </main>
   <script type="module" src="./src/main.js"></script>

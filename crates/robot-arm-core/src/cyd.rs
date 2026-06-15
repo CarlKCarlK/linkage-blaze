@@ -73,20 +73,6 @@ const ARM_PARAM_START: usize = 2;
 const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 8;
 
-const PARAM_BASE_YAW: &str = "x/y view";
-const PARAM_BASE_PITCH: &str = "z";
-const PARAM_LOWER_HAND: &str = "lower hand";
-const PARAM_BEND_ELBOW: &str = "bend elbow";
-const PARAM_HAND_WIDTH: &str = "close hand";
-const PARAM_LOWER_ARM: &str = "lower arm";
-const PARAM_SPIN_WHOLE_ARM: &str = "spin whole";
-const PARAM_SPIN_HAND: &str = "spin hand";
-const PARAM_TARGET_YAW0: &str = "target yaw 0";
-const PARAM_TARGET_PITCH1: &str = "target pitch 1";
-const PARAM_TARGET_YAW2: &str = "target yaw 2";
-const PARAM_TARGET_PITCH3: &str = "target pitch 3";
-const PARAM_TARGET_YAW4: &str = "target yaw 4";
-const PARAM_TARGET_ROLL5: &str = "target roll 5";
 
 // ---- linkage colors (rgb565 packed as u32) ----
 const fn rgb565_raw(red: u32, green: u32, blue: u32) -> u32 {
@@ -124,20 +110,20 @@ const STOP_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk.
 const LINKAGE: Linkage<DOF, 90> = Linkage::start()
-    .define_param(PARAM_BASE_YAW, 0.5 + 30.0 / 360.0)
-    .define_param(PARAM_BASE_PITCH, (30.0 + 45.0) / 90.0)
-    .define_param(PARAM_LOWER_HAND, 0.5)
-    .define_param(PARAM_BEND_ELBOW, 0.5)
-    .define_param(PARAM_HAND_WIDTH, 0.0)
-    .define_param(PARAM_LOWER_ARM, 0.5)
-    .define_param(PARAM_SPIN_WHOLE_ARM, 0.5)
-    .define_param(PARAM_SPIN_HAND, 0.5)
-    .define_param(PARAM_TARGET_YAW0, 0.5)
-    .define_param(PARAM_TARGET_PITCH1, 0.5)
-    .define_param(PARAM_TARGET_YAW2, 0.5)
-    .define_param(PARAM_TARGET_PITCH3, 0.5)
-    .define_param(PARAM_TARGET_YAW4, 0.5)
-    .define_param(PARAM_TARGET_ROLL5, 0.5)
+    .define_param("x/y view", 0.5 + 30.0 / 360.0)
+    .define_param("z", (30.0 + 45.0) / 90.0)
+    .define_param("lower hand", 0.5)
+    .define_param("bend elbow", 0.5)
+    .define_param("close hand", 0.0)
+    .define_param("lower arm", 0.5)
+    .define_param("spin whole", 0.5)
+    .define_param("spin hand", 0.5)
+    .define_param("target yaw 0", 0.5)
+    .define_param("target pitch 1", 0.5)
+    .define_param("target yaw 2", 0.5)
+    .define_param("target pitch 3", 0.5)
+    .define_param("target yaw 4", 0.5)
+    .define_param("target roll 5", 0.5)
     // ---- floor ----
     // .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
     // .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
@@ -159,28 +145,28 @@ const LINKAGE: Linkage<DOF, 90> = Linkage::start()
     .pen_width(ARM_WIDTH)
     .yaw(90.0)
     .pitch(-90.0)
-    .yaw_param(PARAM_BASE_YAW, 90.0, -90.0)
-    .pitch_param(PARAM_BASE_PITCH, -45.0, 45.0)
-    .yaw_param(PARAM_SPIN_WHOLE_ARM, 360.0, -360.0)
+    .yaw_param("x/y view", 90.0, -90.0)
+    .pitch_param("z", -45.0, 45.0)
+    .yaw_param("spin whole", 360.0, -360.0)
     .pitch(90.0)
     .forward(2.5)
     .pitch(-90.0)
-    .pitch_param(PARAM_LOWER_ARM, 30.0, 0.0)
+    .pitch_param("lower arm", 30.0, 0.0)
     .forward(3.0)
-    .yaw_param(PARAM_BEND_ELBOW, 90.0, -90.0)
+    .yaw_param("bend elbow", 90.0, -90.0)
     .forward(3.0)
-    .pitch_param(PARAM_LOWER_HAND, 90.0, -90.0)
+    .pitch_param("lower hand", 90.0, -90.0)
     .forward(1.0)
-    .roll_param(PARAM_SPIN_HAND, 360.0, -360.0)
+    .roll_param("spin hand", 360.0, -360.0)
     .forward(0.5)
     .yaw(90.0)
-    .move_param(PARAM_HAND_WIDTH, 0.5, 0.0)
+    .forward_param("close hand", 0.5, 0.0)
     .yaw(-90.0)
     .forward(1.0)
     .yaw(180.0)
     .forward(1.0)
     .yaw(90.0)
-    .move_param(PARAM_HAND_WIDTH, 1.0, 0.0)
+    .forward_param("close hand", 1.0, 0.0)
     .yaw(90.0)
     .forward(1.0)
     .restart()
@@ -190,26 +176,26 @@ const LINKAGE: Linkage<DOF, 90> = Linkage::start()
     // .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
     // .pen_color(TARGET_COLOR)
     // .yaw(90.0)
-    // .yaw_param(PARAM_SPIN_WHOLE_ARM, 360.0, -360.0)
+    // .yaw_param("spin whole", 360.0, -360.0)
     // .pitch(90.0)
     // .forward(2.5)
     // .pitch(-90.0)
-    // .pitch_param(PARAM_LOWER_ARM, 30.0, 0.0)
+    // .pitch_param("lower arm", 30.0, 0.0)
     // .forward(3.0)
-    // .yaw_param(PARAM_BEND_ELBOW, 90.0, -90.0)
+    // .yaw_param("bend elbow", 90.0, -90.0)
     // .forward(3.0)
-    // .pitch_param(PARAM_LOWER_HAND, 90.0, -90.0)
+    // .pitch_param("lower hand", 90.0, -90.0)
     // .forward(1.0)
-    // .roll_param(PARAM_SPIN_HAND, 360.0, -360.0)
+    // .roll_param("spin hand", 360.0, -360.0)
     // .forward(0.5)
     // .yaw(90.0)
-    // .move_param(PARAM_HAND_WIDTH, 0.5, 0.0)
+    // .forward_param("close hand", 0.5, 0.0)
     // .yaw(-90.0)
     // .forward(1.0)
     // .yaw(180.0)
     // .forward(1.0)
     // .yaw(90.0)
-    // .move_param(PARAM_HAND_WIDTH, 1.0, 0.0)
+    // .forward_param("close hand", 1.0, 0.0)
     // .yaw(90.0)
     // .forward(1.0)
     // // 6 random extension joints → target position
@@ -225,42 +211,42 @@ const LINKAGE: Linkage<DOF, 90> = Linkage::start()
     // .forward(2.0)
     // .roll_param(TARGET_PARAM_START + 5, -180.0, 180.0)
     // .forward(2.0)
-    // .disk_param(PARAM_HAND_WIDTH, TARGET_MIN_RADIUS, TARGET_MAX_RADIUS);
+    // .disk_param("close hand", TARGET_MIN_RADIUS, TARGET_MAX_RADIUS);
     ;
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 const ARM_LINKAGE: Linkage<8, 30> = Linkage::start()
-    .define_param(PARAM_BASE_YAW, 0.5 + 30.0 / 360.0)
-    .define_param(PARAM_BASE_PITCH, (30.0 + 45.0) / 90.0)
-    .define_param(PARAM_LOWER_HAND, 0.5)
-    .define_param(PARAM_BEND_ELBOW, 0.5)
-    .define_param(PARAM_HAND_WIDTH, 0.0)
-    .define_param(PARAM_LOWER_ARM, 0.5)
-    .define_param(PARAM_SPIN_WHOLE_ARM, 0.5)
-    .define_param(PARAM_SPIN_HAND, 0.5)
-    .pitch_param(PARAM_BASE_PITCH, -45.0, 45.0)
-    .yaw_param(PARAM_BASE_YAW, -180.0, 180.0)
+    .define_param("x/y view", 0.5 + 30.0 / 360.0)
+    .define_param("z", (30.0 + 45.0) / 90.0)
+    .define_param("lower hand", 0.5)
+    .define_param("bend elbow", 0.5)
+    .define_param("close hand", 0.0)
+    .define_param("lower arm", 0.5)
+    .define_param("spin whole", 0.5)
+    .define_param("spin hand", 0.5)
+    .pitch_param("z", -45.0, 45.0)
+    .yaw_param("x/y view", -180.0, 180.0)
     .yaw(90.0)
-    .yaw_param(PARAM_SPIN_WHOLE_ARM, 360.0, -360.0)
+    .yaw_param("spin whole", 360.0, -360.0)
     .pitch(90.0)
     .forward(2.5)
     .pitch(-90.0)
-    .pitch_param(PARAM_LOWER_ARM, 30.0, 0.0)
+    .pitch_param("lower arm", 30.0, 0.0)
     .forward(3.0)
-    .yaw_param(PARAM_BEND_ELBOW, 90.0, -90.0)
+    .yaw_param("bend elbow", 90.0, -90.0)
     .forward(3.0)
-    .pitch_param(PARAM_LOWER_HAND, 90.0, -90.0)
+    .pitch_param("lower hand", 90.0, -90.0)
     .forward(1.0)
-    .roll_param(PARAM_SPIN_HAND, 360.0, -360.0)
+    .roll_param("spin hand", 360.0, -360.0)
     .forward(0.5)
     .yaw(90.0)
-    .move_param(PARAM_HAND_WIDTH, 0.5, 0.0)
+    .forward_param("close hand", 0.5, 0.0)
     .yaw(-90.0)
     .forward(1.0)
     .yaw(180.0)
     .forward(1.0)
     .yaw(90.0)
-    .move_param(PARAM_HAND_WIDTH, 1.0, 0.0)
+    .forward_param("close hand", 1.0, 0.0)
     .yaw(90.0)
     .forward(1.0);
 
@@ -271,23 +257,23 @@ fn param_index(name: &str) -> usize {
 }
 
 fn base_yaw_param() -> usize {
-    param_index(PARAM_BASE_YAW)
+    param_index("x/y view")
 }
 
 fn base_pitch_param() -> usize {
-    param_index(PARAM_BASE_PITCH)
+    param_index("z")
 }
 
 fn bend_elbow_param() -> usize {
-    param_index(PARAM_BEND_ELBOW)
+    param_index("bend elbow")
 }
 
 fn lower_arm_param() -> usize {
-    param_index(PARAM_LOWER_ARM)
+    param_index("lower arm")
 }
 
 fn spin_whole_arm_param() -> usize {
-    param_index(PARAM_SPIN_WHOLE_ARM)
+    param_index("spin whole")
 }
 
 pub struct CydSim {
@@ -339,6 +325,11 @@ impl CydSim {
     pub const HEIGHT_U16: u16 = Self::HEIGHT as u16;
 
     #[must_use]
+    pub fn param_count() -> usize {
+        DOF
+    }
+
+    #[must_use]
     pub fn param_index(name: &str) -> Option<usize> {
         LINKAGE.param_index(name)
     }
@@ -351,6 +342,26 @@ impl CydSim {
     #[must_use]
     pub fn param_default(index: usize) -> f32 {
         LINKAGE.param_default(index)
+    }
+
+    #[must_use]
+    pub fn get_param(&self, index: usize) -> f32 {
+        assert!(index < DOF, "param index out of range");
+        self.params[index]
+    }
+
+    pub fn set_param_by_index(&mut self, index: usize, value: f32) {
+        assert!(index < DOF, "param index out of range");
+        self.params[index] = value.clamp(0.0, 1.0);
+    }
+
+    pub fn draw_view_only<D: DrawTarget<Color = Rgb565>>(
+        &self,
+        target: &mut D,
+    ) -> Result<(), D::Error> {
+        target.clear(Rgb565::BLACK)?;
+        self.draw_linkage(target);
+        Ok(())
     }
 
     #[must_use]

@@ -67,6 +67,36 @@ impl CydSim {
         self.draw_frame();
     }
 
+    #[wasm_bindgen(js_name = paramCount)]
+    pub fn param_count() -> usize {
+        CoreCydSim::param_count()
+    }
+
+    #[wasm_bindgen(js_name = paramName)]
+    pub fn param_name(index: usize) -> String {
+        CoreCydSim::param_name(index).to_string()
+    }
+
+    #[wasm_bindgen(js_name = paramDefault)]
+    pub fn param_default(index: usize) -> f32 {
+        CoreCydSim::param_default(index)
+    }
+
+    #[wasm_bindgen(js_name = getParam)]
+    pub fn get_param(&self, index: usize) -> f32 {
+        self.sim.get_param(index)
+    }
+
+    #[wasm_bindgen(js_name = setParam)]
+    pub fn set_param(&mut self, index: usize, value: f32) {
+        self.sim.set_param_by_index(index, value);
+    }
+
+    #[wasm_bindgen(js_name = drawViewOnly)]
+    pub fn draw_view_only(&mut self) {
+        self.sim.draw_view_only(&mut self.display).ok();
+    }
+
     pub fn reverse_kinematics(&mut self) -> f32 {
         let distance = self.sim.reverse_kinematics();
         self.draw_frame();

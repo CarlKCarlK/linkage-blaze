@@ -1,4 +1,4 @@
-import init, { default_program, render_program_json } from "../pkg/linkage_blaze.js?v=builder-chain-6";
+import init, { default_program, render_program_json, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-8";
 
 const source = document.querySelector("#source");
 const error = document.querySelector("#error");
@@ -11,6 +11,10 @@ await init();
 source.value = default_program();
 
 let primitives = [];
+// name → current value (0..1); preserved across source edits by name-matching
+let paramValues = new Map();
+const paramsList = document.querySelector("#params-list");
+
 const AXIS_LENGTH = 2.4;
 const AXIS_LABEL_DISTANCE = 2.65;
 
@@ -29,6 +33,49 @@ source.addEventListener("input", () => {
   window.clearTimeout(renderTimer);
   renderTimer = window.setTimeout(updatePreview, 140);
 });
+
+source.addEventListener("keydown", (event) => {
+  if (event.key === "/" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    toggleLineComments();
+  }
+});
+
+function toggleLineComments() {
+  const start = source.selectionStart;
+  const end = source.selectionEnd;
+  const text = source.value;
+
+  // Find the start of the first selected line and end of the last selected line
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  const lineEnd = text.indexOf("\n", end - 1);
+  const block = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+  const lines = block.split("\n");
+
+  // If every non-empty line starts with //, uncomment; otherwise comment
+  const allCommented = lines.every((line) => line.trim() === "" || line.trimStart().startsWith("//"));
+
+  const toggled = lines
+    .map((line) => {
+      if (allCommented) {
+        // Remove the first // (and optional single space after it)
+        return line.replace(/^(\s*)\/\/ ?/, "$1");
+      } else {
+        // Add // preserving leading whitespace
+        return line.replace(/^(\s*)/, "$1// ");
+      }
+    })
+    .join("\n");
+
+  const after = text.slice(lineEnd === -1 ? text.length : lineEnd);
+  source.value = text.slice(0, lineStart) + toggled + after;
+
+  // Restore selection covering the same lines
+  source.selectionStart = lineStart;
+  source.selectionEnd = lineStart + toggled.length;
+
+  source.dispatchEvent(new Event("input"));
+}
 
 canvas.addEventListener("pointerdown", (event) => {
   dragging = true;
@@ -85,13 +132,118 @@ updatePreview();
 
 function updatePreview() {
   try {
-    const data = JSON.parse(render_program_json(source.value));
+    const overrides = buildOverridesJson();
+    const data = JSON.parse(render_program_with_params_json(source.value, overrides));
+    // Merge returned params: keep existing slider values by name, use returned value for new params
+    const nextValues = new Map(data.params.map(({ name, value }) => [name, value]));
+    for (const [name] of nextValues) {
+      if (paramValues.has(name)) {
+        nextValues.set(name, paramValues.get(name));
+      }
+    }
+    paramValues = nextValues;
+    rebuildSliders(data.params);
     primitives = data.primitives;
     error.textContent = "";
     draw();
   } catch (caught) {
     error.textContent = String(caught);
   }
+}
+
+function buildOverridesJson() {
+  const entries = [...paramValues.entries()].map(
+    ([name, value]) => `"${name}":${value}`
+  );
+  return `{${entries.join(",")}}`;
+}
+
+function rebuildSliders(params) {
+  if (params.length === 0) {
+    paramsList.innerHTML = '<div class="params-empty">No parameters defined</div>';
+    return;
+  }
+
+  // Diff: reuse existing slider elements where name matches to avoid focus loss
+  const existing = new Map(
+    [...paramsList.querySelectorAll(".param-item")].map((el) => [
+      el.dataset.name,
+      el,
+    ])
+  );
+  const incoming = new Set(params.map((p) => p.name));
+
+  // Remove stale
+  for (const [name, el] of existing) {
+    if (!incoming.has(name)) el.remove();
+  }
+
+  // Insert/update in order
+  let insertBefore = null;
+  for (let i = params.length - 1; i >= 0; i--) {
+    const { name } = params[i];
+    if (existing.has(name)) {
+      insertBefore = existing.get(name);
+    } else {
+      const item = createSliderItem(name, paramValues.get(name) ?? 0.5);
+      paramsList.insertBefore(item, insertBefore);
+      insertBefore = item;
+    }
+  }
+
+  // Update value displays (slider positions stay as-is since we preserve paramValues)
+  for (const { name } of params) {
+    const el = paramsList.querySelector(`[data-name="${CSS.escape(name)}"]`);
+    if (el) {
+      el.querySelector(".param-value").textContent = (paramValues.get(name) ?? 0).toFixed(3);
+    }
+  }
+}
+
+function createSliderItem(name, value) {
+  const item = document.createElement("div");
+  item.className = "param-item";
+  item.dataset.name = name;
+
+  const label = document.createElement("div");
+  label.className = "param-label";
+
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "param-name";
+  nameSpan.textContent = name;
+
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "param-value";
+  valueSpan.textContent = value.toFixed(3);
+
+  label.appendChild(nameSpan);
+  label.appendChild(valueSpan);
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.className = "param-slider";
+  slider.min = 0;
+  slider.max = 1;
+  slider.step = 0.001;
+  slider.value = value;
+
+  slider.addEventListener("input", () => {
+    const v = parseFloat(slider.value);
+    paramValues.set(name, v);
+    valueSpan.textContent = v.toFixed(3);
+    try {
+      const data = JSON.parse(render_program_with_params_json(source.value, buildOverridesJson()));
+      primitives = data.primitives;
+      error.textContent = "";
+      draw();
+    } catch (caught) {
+      error.textContent = String(caught);
+    }
+  });
+
+  item.appendChild(label);
+  item.appendChild(slider);
+  return item;
 }
 
 function draw() {

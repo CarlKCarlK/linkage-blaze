@@ -260,7 +260,7 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Add a move step from a runtime parameter.
-    pub const fn move_param(self, name: &str, low: f32, high: f32) -> Self {
+    pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
         let index = self.expect_param_index(name);
         self.push(Step::Move(Arg::Variable(VariableArg::new(
             index, low, high,
@@ -865,13 +865,13 @@ mod tests {
         .roll_param("spin hand", 180.0, -180.0)
         .forward(0.5)
         .yaw(90.0)
-        .move_param("close hand", 0.0, 0.5)
+        .forward_param("close hand", 0.0, 0.5)
         .yaw(-90.0)
         .forward(1.0)
         .yaw(180.0)
         .forward(1.0)
         .yaw(90.0)
-        .move_param("close hand", 0.0, 1.0)
+        .forward_param("close hand", 0.0, 1.0)
         .yaw(90.0)
         .forward(1.0);
 
@@ -885,13 +885,13 @@ mod tests {
         .yaw_param("bend elbow", 90.0, -90.0)
         .forward(3.0)
         .yaw(90.0)
-        .move_param("close hand", 0.5, 0.0)
+        .forward_param("close hand", 0.5, 0.0)
         .yaw(-90.0)
         .forward(1.0)
         .yaw(-180.0)
         .forward(1.0)
         .yaw(90.0)
-        .move_param("close hand", 1.0, 0.0)
+        .forward_param("close hand", 1.0, 0.0)
         .yaw(90.0)
         .forward(1.0);
 

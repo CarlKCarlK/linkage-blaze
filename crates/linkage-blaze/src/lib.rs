@@ -31,13 +31,13 @@ const DEFAULT_PROGRAM: &str = r#"Linkage::start()
 .roll_param("spin hand", 360.0, -360.0)
 .forward(0.5)
 .yaw(90.0)
-.move_param("close hand", 0.5, 0.0)
+.forward_param("close hand", 0.5, 0.0)
 .yaw(-90.0)
 .forward(1.0)
 .yaw(180.0)
 .forward(1.0)
 .yaw(90.0)
-.move_param("close hand", 1.0, 0.0)
+.forward_param("close hand", 1.0, 0.0)
 .yaw(90.0)
 .forward(1.0)
 .restart()
@@ -52,10 +52,24 @@ pub fn default_program() -> String {
 
 #[wasm_bindgen]
 pub fn render_program_json(source: &str) -> Result<String, JsValue> {
-    render_program(source).map_err(|error| JsValue::from_str(&error))
+    render_program(source, &[]).map_err(|error| JsValue::from_str(&error))
 }
 
-fn render_program(source: &str) -> Result<String, String> {
+/// Re-render the program using caller-supplied param values (by name).
+///
+/// `overrides_json` is a JSON object mapping param name to value, e.g.
+/// `{"x/y view":0.583,"z":0.7}`. Unknown names are ignored; missing names
+/// fall back to the `define_param` default.
+#[wasm_bindgen]
+pub fn render_program_with_params_json(
+    source: &str,
+    overrides_json: &str,
+) -> Result<String, JsValue> {
+    let overrides = parse_overrides(overrides_json);
+    render_program(source, &overrides).map_err(|error| JsValue::from_str(&error))
+}
+
+fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, String> {
     let mut turtle = Turtle::new();
     let mut params = Vec::new();
     let mut primitives = Vec::new();
@@ -71,11 +85,32 @@ fn render_program(source: &str) -> Result<String, String> {
             &method_call,
             &mut turtle,
             &mut params,
+            overrides,
             &mut primitives,
         )?;
     }
 
-    Ok(primitives_json(&primitives))
+    Ok(result_json(&primitives, &params))
+}
+
+/// Parse `{"name":value,...}` into a vec of (name, value) pairs.
+fn parse_overrides(json: &str) -> Vec<(String, f32)> {
+    let mut result = Vec::new();
+    let json = json.trim();
+    if json.len() < 2 {
+        return result;
+    }
+    let inner = &json[1..json.len() - 1];
+    for pair in inner.split(',') {
+        let pair = pair.trim();
+        let Some(colon) = pair.find(':') else { continue };
+        let name = pair[..colon].trim().trim_matches('"');
+        let value_str = pair[colon + 1..].trim();
+        if let Ok(value) = value_str.parse::<f32>() {
+            result.push((name.to_owned(), value));
+        }
+    }
+    result
 }
 
 fn parse_method_call(line_number: usize, line: &str) -> Result<Option<MethodCall>, String> {
@@ -130,6 +165,7 @@ fn apply_method(
     method_call: &MethodCall,
     turtle: &mut Turtle,
     params: &mut Vec<EditorParam>,
+    overrides: &[(String, f32)],
     primitives: &mut Vec<Primitive>,
 ) -> Result<(), String> {
     match method_call.name.as_str() {
@@ -147,9 +183,13 @@ fn apply_method(
                     "line {line_number}: parameter `{name}` is already defined"
                 ));
             }
+            let value = overrides
+                .iter()
+                .find(|(n, _)| n == name)
+                .map_or(default, |(_, v)| v.clamp(0.0, 1.0));
             params.push(EditorParam {
                 name: name.to_owned(),
-                value: default,
+                value,
             });
         }
         "forward" | "move" => {
@@ -167,7 +207,7 @@ fn apply_method(
                 });
             }
         }
-        "move_param" => {
+        "forward_param" => {
             expect_arg_count(line_number, method_call, 3)?;
             let distance = parse_param_arg(line_number, method_call, params)?;
             let start = turtle.pose.position;
@@ -463,13 +503,24 @@ fn parse_hex_byte(line_number: usize, value: &str, start: usize) -> Result<u8, S
         .map_err(|_| format!("line {line_number}: invalid hex color `{value}`"))
 }
 
-fn primitives_json(primitives: &[Primitive]) -> String {
+fn result_json(primitives: &[Primitive], params: &[EditorParam]) -> String {
     let mut json = String::from("{\"primitives\":[");
-    for (primitive_index, primitive) in primitives.iter().enumerate() {
-        if primitive_index > 0 {
+    for (i, primitive) in primitives.iter().enumerate() {
+        if i > 0 {
             json.push(',');
         }
         primitive.push_json(&mut json);
+    }
+    json.push_str("],\"params\":[");
+    for (i, param) in params.iter().enumerate() {
+        if i > 0 {
+            json.push(',');
+        }
+        json.push_str("{\"name\":\"");
+        json.push_str(&param.name);
+        json.push_str("\",\"value\":");
+        push_float(&mut json, param.value);
+        json.push('}');
     }
     json.push_str("]}");
     json

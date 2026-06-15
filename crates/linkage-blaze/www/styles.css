@@ -18,7 +18,7 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr) minmax(180px, 260px);
   width: 100vw;
   height: 100vh;
 }
@@ -137,4 +137,108 @@ textarea:focus {
   font: 12px/1.35 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   pointer-events: none;
   white-space: pre;
+}
+
+.params-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  border-left: 1px solid #2b3542;
+  background: #151a21;
+  overflow-y: auto;
+}
+
+.params-header {
+  padding: 14px 14px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8fa1b4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #2b3542;
+}
+
+.params-list {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+}
+
+.params-empty {
+  padding: 12px 14px;
+  color: #6f8296;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.param-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 14px;
+}
+
+.param-item:hover {
+  background: #1a2030;
+}
+
+.param-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.param-name {
+  font-size: 12px;
+  color: #c8d8e8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.param-value {
+  font-size: 11px;
+  color: #6f8296;
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+input[type="range"].param-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: #2b3542;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"].param-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #7fdcff;
+  cursor: pointer;
+}
+
+input[type="range"].param-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #7fdcff;
+  border: none;
+  cursor: pointer;
+}
+
+input[type="range"].param-slider:focus {
+  outline: none;
+}
+
+input[type="range"].param-slider:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgb(127 220 255 / 30%);
 }
