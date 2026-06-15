@@ -71,6 +71,8 @@ const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span 
 const DOF: usize = 14;
 const BASE_YAW_PARAM: usize = 0;
 const BASE_PITCH_PARAM: usize = 1;
+const INITIAL_BASE_YAW_PARAM: f32 = 0.5 + 30.0 / 360.0;
+const INITIAL_BASE_PITCH_PARAM: f32 = (30.0 + 45.0) / 90.0;
 const PARAM_LOWER_HAND: usize = 2;
 const PARAM_BEND_ELBOW: usize = 3;
 const PARAM_HAND_WIDTH: usize = 4;
@@ -135,27 +137,28 @@ const STOP_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565
 // Section 3: target traversal (pen up) then target disk.
 const LINKAGE: Linkage<DOF, 90> = Linkage::start()
     // ---- floor ----
-    .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
-    .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
-    .pen_color(FLOOR_COLOR)
-    .disk(FLOOR_RADIUS)
-    .pen_color(AXIS_COLOR)
-    .pen_width(AXIS_WIDTH)
-    // x-axis half-line (forward direction)
-    .forward(AXIS_RADIUS)
-    .pen_up()
-    .yaw(180.0)
-    .forward(AXIS_RADIUS) // silently return to origin
-    .yaw(90.0)            // now facing +col1 (y axis)
-    .pen_down()
-    .forward(AXIS_RADIUS)
-    .restart()
+    // .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
+    // .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
+    // .pen_color(FLOOR_COLOR)
+    // .disk(FLOOR_RADIUS)
+    // .pen_color(AXIS_COLOR)
+    // .pen_width(AXIS_WIDTH)
+    // // x-axis half-line (forward direction)
+    // .forward(AXIS_RADIUS)
+    // .pen_up()
+    // .yaw(180.0)
+    // .forward(AXIS_RADIUS) // silently return to origin
+    // .yaw(90.0) // now facing +col1 (y axis)
+    // .pen_down()
+    // .forward(AXIS_RADIUS)
+    // .restart()
     // ---- arm ----
-    .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
-    .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
-    .pen_color(ARM_COLOR)
+    .pen_color(ARM_COLOR) // todo0000 default to color white and width 1
     .pen_width(ARM_WIDTH)
     .yaw(90.0)
+    .pitch(-90.0)
+    .yaw_param(BASE_YAW_PARAM, 90.0, -90.0)
+    .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
     .yaw_param(PARAM_SPIN_WHOLE_ARM, 360.0, -360.0)
     .pitch(90.0)
     .forward(2.5)
@@ -179,53 +182,54 @@ const LINKAGE: Linkage<DOF, 90> = Linkage::start()
     .yaw(90.0)
     .forward(1.0)
     .restart()
-    // ---- target (pen up: no arm strokes, only the disk at the end) ----
-    .pen_up()
-    .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
-    .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
-    .pen_color(TARGET_COLOR)
-    .yaw(90.0)
-    .yaw_param(PARAM_SPIN_WHOLE_ARM, 360.0, -360.0)
-    .pitch(90.0)
-    .forward(2.5)
-    .pitch(-90.0)
-    .pitch_param(PARAM_LOWER_ARM, 30.0, 0.0)
-    .forward(3.0)
-    .yaw_param(PARAM_BEND_ELBOW, 90.0, -90.0)
-    .forward(3.0)
-    .pitch_param(PARAM_LOWER_HAND, 90.0, -90.0)
-    .forward(1.0)
-    .roll_param(PARAM_SPIN_HAND, 360.0, -360.0)
-    .forward(0.5)
-    .yaw(90.0)
-    .move_param(PARAM_HAND_WIDTH, 0.5, 0.0)
-    .yaw(-90.0)
-    .forward(1.0)
-    .yaw(180.0)
-    .forward(1.0)
-    .yaw(90.0)
-    .move_param(PARAM_HAND_WIDTH, 1.0, 0.0)
-    .yaw(90.0)
-    .forward(1.0)
-    // 6 random extension joints → target position
-    .yaw_param(TARGET_PARAM_START, -180.0, 180.0)
-    .forward(2.0)
-    .pitch_param(TARGET_PARAM_START + 1, -60.0, 60.0)
-    .forward(2.0)
-    .yaw_param(TARGET_PARAM_START + 2, -180.0, 180.0)
-    .forward(2.0)
-    .pitch_param(TARGET_PARAM_START + 3, -60.0, 60.0)
-    .forward(2.0)
-    .yaw_param(TARGET_PARAM_START + 4, -180.0, 180.0)
-    .forward(2.0)
-    .roll_param(TARGET_PARAM_START + 5, -180.0, 180.0)
-    .forward(2.0)
-    .disk_param(PARAM_HAND_WIDTH, TARGET_MIN_RADIUS, TARGET_MAX_RADIUS);
+    // // ---- target (pen up: no arm strokes, only the disk at the end) ----
+    // .pen_up()
+    // .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
+    // .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
+    // .pen_color(TARGET_COLOR)
+    // .yaw(90.0)
+    // .yaw_param(PARAM_SPIN_WHOLE_ARM, 360.0, -360.0)
+    // .pitch(90.0)
+    // .forward(2.5)
+    // .pitch(-90.0)
+    // .pitch_param(PARAM_LOWER_ARM, 30.0, 0.0)
+    // .forward(3.0)
+    // .yaw_param(PARAM_BEND_ELBOW, 90.0, -90.0)
+    // .forward(3.0)
+    // .pitch_param(PARAM_LOWER_HAND, 90.0, -90.0)
+    // .forward(1.0)
+    // .roll_param(PARAM_SPIN_HAND, 360.0, -360.0)
+    // .forward(0.5)
+    // .yaw(90.0)
+    // .move_param(PARAM_HAND_WIDTH, 0.5, 0.0)
+    // .yaw(-90.0)
+    // .forward(1.0)
+    // .yaw(180.0)
+    // .forward(1.0)
+    // .yaw(90.0)
+    // .move_param(PARAM_HAND_WIDTH, 1.0, 0.0)
+    // .yaw(90.0)
+    // .forward(1.0)
+    // // 6 random extension joints → target position
+    // .yaw_param(TARGET_PARAM_START, -180.0, 180.0)
+    // .forward(2.0)
+    // .pitch_param(TARGET_PARAM_START + 1, -60.0, 60.0)
+    // .forward(2.0)
+    // .yaw_param(TARGET_PARAM_START + 2, -180.0, 180.0)
+    // .forward(2.0)
+    // .pitch_param(TARGET_PARAM_START + 3, -60.0, 60.0)
+    // .forward(2.0)
+    // .yaw_param(TARGET_PARAM_START + 4, -180.0, 180.0)
+    // .forward(2.0)
+    // .roll_param(TARGET_PARAM_START + 5, -180.0, 180.0)
+    // .forward(2.0)
+    // .disk_param(PARAM_HAND_WIDTH, TARGET_MIN_RADIUS, TARGET_MAX_RADIUS);
+    ;
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 const ARM_LINKAGE: Linkage<8, 30> = Linkage::start()
-    .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
     .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
+    .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
     .yaw(90.0)
     .yaw_param(PARAM_SPIN_WHOLE_ARM, 360.0, -360.0)
     .pitch(90.0)
@@ -310,8 +314,8 @@ impl CydSim {
 
     fn new_inner(show_fps: bool) -> Self {
         let mut params = [0.5f32; DOF];
-        params[BASE_YAW_PARAM] = 0.5 + 30.0 / 360.0;
-        params[BASE_PITCH_PARAM] = 0.3;
+        params[BASE_YAW_PARAM] = INITIAL_BASE_YAW_PARAM;
+        params[BASE_PITCH_PARAM] = INITIAL_BASE_PITCH_PARAM;
         randomize_target_params(&mut params, 0);
 
         Self {
@@ -395,7 +399,7 @@ impl CydSim {
 
     /// Set the base joint params that control the view orientation.
     ///
-    /// `z_mix` maps to base pitch (0 = flat, 1 = tilted up), `xy_mix` to base yaw rotation.
+    /// `z_mix` maps directly to base pitch (-45..45 degrees), `xy_mix` to base yaw rotation.
     pub fn set_view_mixes(&mut self, z_mix: f32, xy_mix: f32) -> bool {
         let z_mix = z_mix.clamp(0.0, 1.0);
         let xy_mix = xy_mix.clamp(0.0, 1.0);
@@ -670,8 +674,7 @@ impl CydSim {
             }
             ActiveControl::Tilt => {
                 self.params[BASE_PITCH_PARAM] =
-                    (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32)
-                        .clamp(0.0, 1.0);
+                    (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32).clamp(0.0, 1.0);
             }
             ActiveControl::Zoom => {
                 self.zoom =
@@ -707,28 +710,142 @@ impl CydSim {
                         .ok();
                 }
                 DrawItem::Disk(disk) => {
-                    let center = self.pose_to_screen(disk.pose());
-                    let diameter =
-                        (round_to_u32(disk.radius() * self.scale()) * 2).max(1);
-                    let color = rgb565_from_u32(disk.color());
-                    Circle::with_center(center, diameter)
-                        .into_styled(PrimitiveStyle::with_fill(color))
-                        .draw(buffer)
-                        .ok();
+                    self.draw_projected_disk(buffer, disk.pose(), disk.radius(), disk.color());
                 }
                 DrawItem::Ring(ring) => {
-                    let center = self.pose_to_screen(ring.pose());
-                    let diameter =
-                        (round_to_u32(ring.radius() * self.scale()) * 2).max(1);
-                    let stroke_width = zoomed_pixels(ring.width() as u32, self.zoom).max(1);
-                    let color = rgb565_from_u32(ring.color());
-                    Circle::with_center(center, diameter)
-                        .into_styled(PrimitiveStyle::with_stroke(color, stroke_width))
-                        .draw(buffer)
-                        .ok();
+                    self.draw_projected_ring(
+                        buffer,
+                        ring.pose(),
+                        ring.radius(),
+                        ring.width(),
+                        ring.color(),
+                    );
                 }
             }
         }
+    }
+
+    /// Draw a filled disk projected through the pose orientation onto the screen.
+    ///
+    /// Projects the disk's 3D axes (orientation columns 0 and 1) to 2D and rasterizes
+    /// the resulting ellipse pixel-by-pixel so that tilted disks appear as ellipses.
+    fn draw_projected_disk(
+        &self,
+        target: &mut impl DrawTarget<Color = Rgb565>,
+        pose: Pose,
+        radius: f32,
+        color_raw: u32,
+    ) {
+        let orient = pose.orientation();
+        let Vec3([px, py, _]) = pose.position();
+        let scale = self.scale();
+        let r = radius * scale;
+        let color = rgb565_from_u32(color_raw);
+
+        let cx = round_to_i32(px * scale) + SCREEN_WIDTH as i32 / 2;
+        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(py * scale);
+
+        // Project disk semi-axes (orientation columns 0 and 1) to screen space.
+        // Screen y is flipped relative to world y, hence the negation on ay/by.
+        let ax = orient[0][0] * r;
+        let ay = -orient[1][0] * r;
+        let bx = orient[0][1] * r;
+        let by = -orient[1][1] * r;
+
+        let det = ax * by - bx * ay;
+        let det_sq = det * det;
+
+        if det_sq < 0.25 {
+            return; // edge-on: disk too thin to rasterize
+        }
+
+        let hw = libm::sqrtf(ax * ax + bx * bx) as i32 + 1;
+        let hh = libm::sqrtf(ay * ay + by * by) as i32 + 1;
+
+        let x0 = (cx - hw).max(0);
+        let y0 = (cy - hh).max(0);
+        let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
+        let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
+
+        target
+            .draw_iter((y0..=y1).flat_map(move |y| {
+                (x0..=x1).filter_map(move |x| {
+                    let dx = x as f32 - cx as f32;
+                    let dy = y as f32 - cy as f32;
+                    let u = by * dx - bx * dy;
+                    let v = ax * dy - ay * dx;
+                    if u * u + v * v <= det_sq {
+                        Some(Pixel(Point::new(x, y), color))
+                    } else {
+                        None
+                    }
+                })
+            }))
+            .ok();
+    }
+
+    fn draw_projected_ring(
+        &self,
+        target: &mut impl DrawTarget<Color = Rgb565>,
+        pose: Pose,
+        radius: f32,
+        width: u16,
+        color_raw: u32,
+    ) {
+        let orient = pose.orientation();
+        let Vec3([px, py, _]) = pose.position();
+        let scale = self.scale();
+        let r = radius * scale;
+        let color = rgb565_from_u32(color_raw);
+        let half_w = width as f32 * 0.5 * scale;
+
+        let cx = round_to_i32(px * scale) + SCREEN_WIDTH as i32 / 2;
+        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(py * scale);
+
+        let ax = orient[0][0] * r;
+        let ay = -orient[1][0] * r;
+        let bx = orient[0][1] * r;
+        let by = -orient[1][1] * r;
+
+        let det = ax * by - bx * ay;
+        let det_sq = det * det;
+
+        if det_sq < 0.25 || r <= 0.0 {
+            return;
+        }
+
+        let outer_scale_sq = ((r + half_w) / r) * ((r + half_w) / r);
+        let inner_scale_sq = if r > half_w {
+            ((r - half_w) / r) * ((r - half_w) / r)
+        } else {
+            0.0
+        };
+
+        let outer_scale = (r + half_w) / r;
+        let hw = (libm::sqrtf(ax * ax + bx * bx) * outer_scale) as i32 + 2;
+        let hh = (libm::sqrtf(ay * ay + by * by) * outer_scale) as i32 + 2;
+
+        let x0 = (cx - hw).max(0);
+        let y0 = (cy - hh).max(0);
+        let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
+        let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
+
+        target
+            .draw_iter((y0..=y1).flat_map(move |y| {
+                (x0..=x1).filter_map(move |x| {
+                    let dx = x as f32 - cx as f32;
+                    let dy = y as f32 - cy as f32;
+                    let u = by * dx - bx * dy;
+                    let v = ax * dy - ay * dx;
+                    let dist_sq = u * u + v * v;
+                    if dist_sq <= det_sq * outer_scale_sq && dist_sq > det_sq * inner_scale_sq {
+                        Some(Pixel(Point::new(x, y), color))
+                    } else {
+                        None
+                    }
+                })
+            }))
+            .ok();
     }
 
     fn draw_sliders(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
@@ -739,12 +856,15 @@ impl CydSim {
         Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
             .draw(buffer)
             .ok();
-        Line::new(Point::new(TILT_X, TILT_TOP), Point::new(TILT_X, TILT_BOTTOM))
-            .into_styled(SLIDER_TRACK_STYLE)
-            .draw(buffer)
-            .ok();
-        let tilt_knob_y =
-            TILT_TOP + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[BASE_PITCH_PARAM]));
+        Line::new(
+            Point::new(TILT_X, TILT_TOP),
+            Point::new(TILT_X, TILT_BOTTOM),
+        )
+        .into_styled(SLIDER_TRACK_STYLE)
+        .draw(buffer)
+        .ok();
+        let tilt_knob_y = TILT_TOP
+            + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[BASE_PITCH_PARAM]));
         Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
             .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_PITCH_PARAM)))
             .draw(buffer)
@@ -754,10 +874,13 @@ impl CydSim {
         Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top)
             .draw(buffer)
             .ok();
-        Line::new(Point::new(ZOOM_X, ZOOM_TOP), Point::new(ZOOM_X, ZOOM_BOTTOM))
-            .into_styled(SLIDER_TRACK_STYLE)
-            .draw(buffer)
-            .ok();
+        Line::new(
+            Point::new(ZOOM_X, ZOOM_TOP),
+            Point::new(ZOOM_X, ZOOM_BOTTOM),
+        )
+        .into_styled(SLIDER_TRACK_STYLE)
+        .draw(buffer)
+        .ok();
         let zoom_knob_y =
             ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * (1.0 - self.zoom));
         Circle::with_center(Point::new(ZOOM_X, zoom_knob_y), 9)
@@ -838,8 +961,8 @@ impl CydSim {
             .draw(buffer)
             .ok();
 
-            let knob_x = SLIDER_TRACK_LEFT
-                + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
+            let knob_x =
+                SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
             Circle::with_center(Point::new(knob_x, slider_y + 8), 9)
                 .into_styled(self.knob_fill_style(ControlledKnob::Param(param_index)))
                 .draw(buffer)
@@ -847,9 +970,14 @@ impl CydSim {
         }
 
         // x/y view (base yaw) slider
-        Text::with_baseline("x/y view", Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y - 15), text_style, Baseline::Top)
-            .draw(buffer)
-            .ok();
+        Text::with_baseline(
+            "x/y view",
+            Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y - 15),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(buffer)
+        .ok();
         Line::new(
             Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
             Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
@@ -858,7 +986,9 @@ impl CydSim {
         .draw(buffer)
         .ok();
         let view_knob_x = VIEW_SLIDER_LEFT
-            + round_to_i32((VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.params[BASE_YAW_PARAM]);
+            + round_to_i32(
+                (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.params[BASE_YAW_PARAM],
+            );
         Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
             .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_YAW_PARAM)))
             .draw(buffer)
@@ -1635,7 +1765,10 @@ mod tests {
     fn test_visible_param_step_at_max_dt() {
         let step = reverse_kinematics_visible_param_step(1.0);
         let expected = RK_MAX_TICK_SECONDS * RK_VISIBLE_PARAM_POINTS_PER_SECOND;
-        assert!((step - expected).abs() < 0.001, "expected {expected}, got {step}");
+        assert!(
+            (step - expected).abs() < 0.001,
+            "expected {expected}, got {step}"
+        );
     }
 
     #[test]

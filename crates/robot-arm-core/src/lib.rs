@@ -338,7 +338,14 @@ impl PenStyle {
             Step::PenDown => self.pen = Pen::Down,
             Step::PenColor(color) => self.color = *color,
             Step::PenWidth(width) => self.width = *width,
-            Step::Start | Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) | Step::Move(_) | Step::Disk(_) | Step::DiskParam(_) | Step::Ring(_) => {}
+            Step::Start
+            | Step::Yaw(_)
+            | Step::Pitch(_)
+            | Step::Roll(_)
+            | Step::Move(_)
+            | Step::Disk(_)
+            | Step::DiskParam(_)
+            | Step::Ring(_) => {}
         }
     }
 }
@@ -399,7 +406,13 @@ impl Pose {
             Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) => {
                 self.orientation = self.orientation * rotation_matrix(step, params);
             }
-            Step::PenUp | Step::PenDown | Step::PenColor(_) | Step::PenWidth(_) | Step::Disk(_) | Step::DiskParam(_) | Step::Ring(_) => {}
+            Step::PenUp
+            | Step::PenDown
+            | Step::PenColor(_)
+            | Step::PenWidth(_)
+            | Step::Disk(_)
+            | Step::DiskParam(_)
+            | Step::Ring(_) => {}
         }
     }
 }
@@ -574,11 +587,17 @@ pub struct DiskItem {
 
 impl DiskItem {
     #[must_use]
-    pub const fn pose(self) -> Pose { self.pose }
+    pub const fn pose(self) -> Pose {
+        self.pose
+    }
     #[must_use]
-    pub const fn radius(self) -> f32 { self.radius }
+    pub const fn radius(self) -> f32 {
+        self.radius
+    }
     #[must_use]
-    pub const fn color(self) -> u32 { self.color }
+    pub const fn color(self) -> u32 {
+        self.color
+    }
 }
 
 /// A ring shape yielded by a linkage at the current pose. Stroke width is the pen width at that step.
@@ -592,13 +611,21 @@ pub struct RingItem {
 
 impl RingItem {
     #[must_use]
-    pub const fn pose(self) -> Pose { self.pose }
+    pub const fn pose(self) -> Pose {
+        self.pose
+    }
     #[must_use]
-    pub const fn radius(self) -> f32 { self.radius }
+    pub const fn radius(self) -> f32 {
+        self.radius
+    }
     #[must_use]
-    pub const fn color(self) -> u32 { self.color }
+    pub const fn color(self) -> u32 {
+        self.color
+    }
     #[must_use]
-    pub const fn width(self) -> u16 { self.width }
+    pub const fn width(self) -> u16 {
+        self.width
+    }
 }
 
 /// A draw item produced by a linkage: a line stroke, a filled disk, or a ring.

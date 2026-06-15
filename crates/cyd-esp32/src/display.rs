@@ -55,8 +55,8 @@ pub struct LineSegment {
 #[derive(Clone, Copy, Debug)]
 pub struct Ellipse {
     pub center: Point,
-    pub axis_a: (f32, f32),  // v0_xy * radius
-    pub axis_b: (f32, f32),  // v1_xy * radius
+    pub axis_a: (f32, f32), // v0_xy * radius
+    pub axis_b: (f32, f32), // v1_xy * radius
     pub radius: f32,
     pub stroke_width: u16,
     pub color: Rgb565,
@@ -392,6 +392,5 @@ fn point_covered_by_ellipse(point_x: i32, point_y: i32, ellipse: &Ellipse) -> bo
     let outer_scale = (r + half_w) / r;
     let inner_scale = if r > half_w { (r - half_w) / r } else { 0.0 };
 
-    dist_sq <= det_sq * outer_scale * outer_scale
-        && dist_sq > det_sq * inner_scale * inner_scale
+    dist_sq <= det_sq * outer_scale * outer_scale && dist_sq > det_sq * inner_scale * inner_scale
 }

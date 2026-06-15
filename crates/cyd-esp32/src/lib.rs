@@ -16,8 +16,8 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangl
 pub use buffer::{RectBuffer, RectPixels, RectView, RectWorkspace};
 pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
 pub use display::{
-    CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ, DrawPrimitive,
-    Ellipse, LineSegment,
+    CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
+    LineSegment,
 };
 pub use robot_arm_core::cyd::{SCREEN_HEIGHT, SCREEN_WIDTH};
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
