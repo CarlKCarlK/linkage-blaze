@@ -25,7 +25,7 @@ body {
 
 .editor-pane {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 12px;
   min-width: 0;
   padding: 16px;
@@ -50,6 +50,33 @@ p {
   margin: 0;
   color: #8fa1b4;
   font-size: 13px;
+}
+
+.cheatsheet {
+  border: 1px solid #344252;
+  border-radius: 8px;
+  background: #10151d;
+  color: #b9c8d8;
+  font-size: 13px;
+}
+
+.cheatsheet summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  color: #d7e6f4;
+  user-select: none;
+}
+
+.cheatsheet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px 10px;
+  padding: 0 10px 10px;
+}
+
+.cheatsheet code {
+  color: #7fdcff;
+  font: 12px/1.35 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 textarea {

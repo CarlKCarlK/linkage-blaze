@@ -1,4 +1,4 @@
-import init, { default_program, render_program_json } from "../pkg/linkage_blaze.js?v=builder-chain-2";
+import init, { default_program, render_program_json } from "../pkg/linkage_blaze.js?v=builder-chain-4";
 
 const source = document.querySelector("#source");
 const error = document.querySelector("#error");
@@ -109,8 +109,10 @@ function draw() {
       drawSegment(primitive);
     } else if (primitive.type === "disk") {
       drawDisk(primitive);
-    } else if (primitive.type === "circle") {
-      drawCircle(primitive);
+    } else if (primitive.type === "ring") {
+      drawRing(primitive);
+    } else if (primitive.type === "sphere") {
+      drawSphere(primitive);
     }
   }
 
@@ -152,6 +154,17 @@ function drawSegment(primitive) {
 }
 
 function drawDisk(primitive) {
+  context.fillStyle = cssColor(primitive.color);
+  drawProjectedCircle(primitive.center, primitive.normal, primitive.radius, true);
+}
+
+function drawRing(primitive) {
+  context.lineWidth = Math.max((primitive.width ?? 1) * 2, 1);
+  context.strokeStyle = cssColor(primitive.color);
+  drawProjectedCircle(primitive.center, primitive.normal, primitive.radius, false);
+}
+
+function drawSphere(primitive) {
   const center = project(primitive.center);
   context.fillStyle = cssColor(primitive.color);
   context.beginPath();
@@ -159,13 +172,33 @@ function drawDisk(primitive) {
   context.fill();
 }
 
-function drawCircle(primitive) {
-  const center = project(primitive.center);
-  context.lineWidth = Math.max((primitive.width ?? 1) * 2, 1);
-  context.strokeStyle = cssColor(primitive.color);
+function drawProjectedCircle(center, normal, radius, filled) {
+  const center2 = project(center);
+  const basis = planeBasis(normal);
+  const segments = 80;
   context.beginPath();
-  context.arc(center.x, center.y, primitive.radius * zoom, 0, Math.PI * 2);
-  context.stroke();
+
+  for (let pointIndex = 0; pointIndex <= segments; pointIndex += 1) {
+    const angle = (pointIndex / segments) * Math.PI * 2;
+    const point = [
+      center[0] + (basis.a[0] * Math.cos(angle) + basis.b[0] * Math.sin(angle)) * radius,
+      center[1] + (basis.a[1] * Math.cos(angle) + basis.b[1] * Math.sin(angle)) * radius,
+      center[2] + (basis.a[2] * Math.cos(angle) + basis.b[2] * Math.sin(angle)) * radius,
+    ];
+    const projected = project(point);
+    if (pointIndex === 0) {
+      context.moveTo(projected.x, projected.y);
+    } else {
+      context.lineTo(projected.x, projected.y);
+    }
+  }
+
+  context.closePath();
+  if (filled) {
+    context.fill();
+  } else {
+    context.stroke();
+  }
 }
 
 function drawLine(start, end) {
@@ -235,6 +268,27 @@ function formatVec2(vector) {
 function cssColor(color) {
   const [red, green, blue] = color.map((channel) => Math.round(clamp(channel, 0, 1) * 255));
   return `rgb(${red} ${green} ${blue})`;
+}
+
+function planeBasis(normal) {
+  const n = normalize(normal);
+  const reference = Math.abs(n[2]) > 0.8 ? [0, 1, 0] : [0, 0, 1];
+  const a = normalize(cross(reference, n));
+  const b = normalize(cross(n, a));
+  return { a, b };
+}
+
+function normalize(vector) {
+  const length = Math.hypot(vector[0], vector[1], vector[2]) || 1;
+  return [vector[0] / length, vector[1] / length, vector[2] / length];
+}
+
+function cross(left, right) {
+  return [
+    left[1] * right[2] - left[2] * right[1],
+    left[2] * right[0] - left[0] * right[2],
+    left[0] * right[1] - left[1] * right[0],
+  ];
 }
 
 function resize() {

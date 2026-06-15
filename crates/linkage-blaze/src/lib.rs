@@ -4,37 +4,37 @@ use core::f32::consts::PI;
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 const DEFAULT_PROGRAM: &str = r#"Linkage::start()
-    .pen_color(ARM_COLOR) // default pen is down, white, width 1
-    .pen_width(ARM_WIDTH)
-    .yaw(90.0)
-    .pitch(-90.0)
-    .yaw(-15.0)
-    .pitch(-18.0)
-    .yaw(0.0)
-    .pitch(90.0)
-    .forward(2.5)
-    .pitch(-90.0)
-    .pitch(15.0)
-    .forward(3.0)
-    .yaw(0.0)
-    .forward(3.0)
-    .pitch(0.0)
-    .forward(1.0)
-    .roll(0.0)
-    .forward(0.5)
-    .yaw(90.0)
-    .move(0.5)
-    .yaw(-90.0)
-    .forward(1.0)
-    .yaw(180.0)
-    .forward(1.0)
-    .yaw(90.0)
-    .move(1.0)
-    .yaw(90.0)
-    .forward(1.0)
-    .restart()
-    .pen_color(TARGET_COLOR)
-    .disk(0.05)
+.pen_color(ARM_COLOR) // default pen is down, white, width 1
+.pen_width(ARM_WIDTH)
+.yaw(90.0)
+.pitch(-90.0)
+.yaw(-15.0)
+.pitch(-18.0)
+.yaw(0.0)
+.pitch(90.0)
+.forward(2.5)
+.pitch(-90.0)
+.pitch(15.0)
+.forward(3.0)
+.yaw(0.0)
+.forward(3.0)
+.pitch(0.0)
+.forward(1.0)
+.roll(0.0)
+.forward(0.5)
+.yaw(90.0)
+.move(0.5)
+.yaw(-90.0)
+.forward(1.0)
+.yaw(180.0)
+.forward(1.0)
+.yaw(90.0)
+.move(1.0)
+.yaw(90.0)
+.forward(1.0)
+.restart()
+.pen_color(TARGET_COLOR)
+.disk(0.05)
 "#;
 
 #[wasm_bindgen]
@@ -233,6 +233,15 @@ fn apply_method(
                 color: turtle.color,
             });
         }
+        "sphere" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            let radius = parse_radius(line_number, method_call, 0)?;
+            primitives.push(Primitive::Sphere {
+                center: turtle.pose.position,
+                radius,
+                color: turtle.color,
+            });
+        }
         "disk_param" => {
             expect_arg_count(line_number, method_call, 3)?;
             let radius = parse_param_arg(line_number, method_call)?;
@@ -248,10 +257,10 @@ fn apply_method(
                 color: turtle.color,
             });
         }
-        "circle" | "ring" => {
+        "ring" => {
             expect_arg_count(line_number, method_call, 1)?;
             let radius = parse_radius(line_number, method_call, 0)?;
-            primitives.push(Primitive::Circle {
+            primitives.push(Primitive::Ring {
                 center: turtle.pose.position,
                 normal: turtle.pose.orientation.up(),
                 radius,
@@ -504,11 +513,16 @@ enum Primitive {
         radius: f32,
         color: Color,
     },
-    Circle {
+    Ring {
         center: Vec3,
         normal: Vec3,
         radius: f32,
         width: f32,
+        color: Color,
+    },
+    Sphere {
+        center: Vec3,
+        radius: f32,
         color: Color,
     },
 }
@@ -548,14 +562,14 @@ impl Primitive {
                 color.push_json(json);
                 json.push_str("]}");
             }
-            Self::Circle {
+            Self::Ring {
                 center,
                 normal,
                 radius,
                 width,
                 color,
             } => {
-                json.push_str("{\"type\":\"circle\",\"center\":");
+                json.push_str("{\"type\":\"ring\",\"center\":");
                 center.push_json(json);
                 json.push_str(",\"normal\":");
                 normal.push_json(json);
@@ -563,6 +577,19 @@ impl Primitive {
                 push_float(json, radius);
                 json.push_str(",\"width\":");
                 push_float(json, width);
+                json.push_str(",\"color\":[");
+                color.push_json(json);
+                json.push_str("]}");
+            }
+            Self::Sphere {
+                center,
+                radius,
+                color,
+            } => {
+                json.push_str("{\"type\":\"sphere\",\"center\":");
+                center.push_json(json);
+                json.push_str(",\"radius\":");
+                push_float(json, radius);
                 json.push_str(",\"color\":[");
                 color.push_json(json);
                 json.push_str("]}");
