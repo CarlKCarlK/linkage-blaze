@@ -44,6 +44,8 @@ pub enum Step {
     PenWidth(u16),
     /// Add a filled disk at the current pose, in the local v0-v1 plane.
     Disk(f32),
+    /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
+    DiskParam(VariableArg),
     /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is current pen width.
     Ring(f32),
 }
@@ -203,6 +205,11 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.push(Step::Disk(radius))
     }
 
+    /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
+    pub const fn disk_param(self, index: usize, low: f32, high: f32) -> Self {
+        self.push(Step::DiskParam(VariableArg::new(index, low, high)))
+    }
+
     /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is the current pen width.
     pub const fn ring(self, radius: f32) -> Self {
         self.push(Step::Ring(radius))
@@ -262,6 +269,7 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenColor(_)
         | Step::PenWidth(_)
         | Step::Disk(_)
+        | Step::DiskParam(_)
         | Step::Ring(_) => return Mat3::IDENTITY,
     };
     match step {
@@ -275,6 +283,7 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenColor(_)
         | Step::PenWidth(_)
         | Step::Disk(_)
+        | Step::DiskParam(_)
         | Step::Ring(_) => Mat3::IDENTITY,
     }
 }
@@ -329,7 +338,7 @@ impl PenStyle {
             Step::PenDown => self.pen = Pen::Down,
             Step::PenColor(color) => self.color = *color,
             Step::PenWidth(width) => self.width = *width,
-            Step::Start | Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) | Step::Move(_) | Step::Disk(_) | Step::Ring(_) => {}
+            Step::Start | Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) | Step::Move(_) | Step::Disk(_) | Step::DiskParam(_) | Step::Ring(_) => {}
         }
     }
 }
@@ -390,7 +399,7 @@ impl Pose {
             Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) => {
                 self.orientation = self.orientation * rotation_matrix(step, params);
             }
-            Step::PenUp | Step::PenDown | Step::PenColor(_) | Step::PenWidth(_) | Step::Disk(_) | Step::Ring(_) => {}
+            Step::PenUp | Step::PenDown | Step::PenColor(_) | Step::PenWidth(_) | Step::Disk(_) | Step::DiskParam(_) | Step::Ring(_) => {}
         }
     }
 }
@@ -650,6 +659,13 @@ impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
                     return Some(DrawItem::Disk(DiskItem {
                         pose: start_pose,
                         radius: *radius,
+                        color: pen_style.color(),
+                    }));
+                }
+                Step::DiskParam(var_arg) => {
+                    return Some(DrawItem::Disk(DiskItem {
+                        pose: start_pose,
+                        radius: var_arg.resolve(self.params),
                         color: pen_style.color(),
                     }));
                 }
