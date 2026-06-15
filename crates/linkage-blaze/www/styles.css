@@ -124,20 +124,6 @@ textarea:focus {
   height: 100%;
 }
 
-.camera-readout {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid #344252;
-  border-radius: 6px;
-  background: rgb(12 16 22 / 82%);
-  color: #b9c8d8;
-  font: 12px/1.35 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  pointer-events: none;
-  white-space: pre;
-}
 
 .params-pane {
   display: flex;
