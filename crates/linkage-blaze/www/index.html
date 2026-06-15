@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Linkage Blaze</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <main class="app">
+    <section class="editor-pane">
+      <header>
+        <h1>Linkage Blaze</h1>
+        <p>Rust builder-chain editor</p>
+      </header>
+      <textarea id="source" spellcheck="false" aria-label="LogoRust program"></textarea>
+      <pre id="error" class="error" aria-live="polite"></pre>
+    </section>
+    <section class="view-pane">
+      <canvas id="view"></canvas>
+      <pre id="camera-readout" class="camera-readout"></pre>
+    </section>
+  </main>
+  <script type="module" src="./src/main.js"></script>
+</body>
+
+</html>

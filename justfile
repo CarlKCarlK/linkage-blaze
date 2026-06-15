@@ -9,6 +9,9 @@ _cyd_sim_port := "8081"
 _wasm_crate := "crates/robot-arm-wasm"
 _wasm_www := "crates/robot-arm-wasm/www"
 _wasm_port := "8080"
+_linkage_blaze_crate := "crates/linkage-blaze"
+_linkage_blaze_www := "crates/linkage-blaze/www"
+_linkage_blaze_port := "8082"
 
 # Check shared CYD ESP32 hardware crate
 check-cyd-esp32:
@@ -67,3 +70,16 @@ serve-wasm-ui port=_wasm_port:
 run-wasm-ui port=_wasm_port:
     just build-wasm-ui
     just serve-wasm-ui {{port}}
+
+# Build the Linkage Blaze editor WASM bundle into www/pkg
+build-linkage-blaze:
+    wasm-pack build {{_linkage_blaze_crate}} --target web --out-dir www/pkg --out-name linkage_blaze
+
+# Serve the Linkage Blaze editor web app
+serve-linkage-blaze port=_linkage_blaze_port:
+    cd {{_linkage_blaze_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+# Build and serve the Linkage Blaze editor
+run-linkage-blaze port=_linkage_blaze_port:
+    just build-linkage-blaze
+    just serve-linkage-blaze {{port}}

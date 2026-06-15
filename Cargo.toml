@@ -7,6 +7,7 @@ members = [
     "crates/robot-arm-c6",
     "crates/robot-arm-cyd-sim",
     "crates/robot-arm-wasm",
+    "crates/linkage-blaze",
 ]
 resolver = "3"
 
