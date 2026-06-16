@@ -24,7 +24,7 @@ use device_envoy_esp::{
     },
 };
 use embassy_executor::Spawner;
-use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
+use embedded_graphics::pixelcolor::{Rgb565, Rgb888};
 use esp_backtrace as _;
 use log::info;
 use static_cell::StaticCell;
@@ -32,6 +32,12 @@ use static_cell::StaticCell;
 mod display;
 
 use display::{ClockTime, CydClockDisplay, CydClockDisplayError};
+
+const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
+
+fn rgb565(color: Rgb888) -> Rgb565 {
+    Rgb565::from(color)
+}
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -92,7 +98,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     let mut cyd = Cyd::new_display(
         p.SPI2, p.GPIO14, p.GPIO13, p.GPIO12, p.GPIO15, p.GPIO2, p.GPIO4, p.GPIO21,
     )?;
-    cyd.clear_now(Rgb565::BLACK)?;
+    cyd.clear_now(rgb565(BLACK))?;
     static DISPLAY: StaticCell<RefCell<CydClockDisplay>> = StaticCell::new();
     let display = &*DISPLAY.init(RefCell::new(CydClockDisplay::new(cyd)));
     info!("CYD display initialized");

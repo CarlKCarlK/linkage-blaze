@@ -13,8 +13,8 @@ use device_envoy_esp::{
 use embassy_time::Instant;
 use embedded_graphics::{
     Drawable,
-    pixelcolor::Rgb565,
-    prelude::{DrawTarget, Point, Primitive, RgbColor},
+    pixelcolor::{Rgb565, Rgb888},
+    prelude::{DrawTarget, Point, Primitive},
     primitives::{Circle, Line, PrimitiveStyle},
 };
 use esp_backtrace as _;
@@ -40,13 +40,16 @@ enum CalibrationCorner {
 const CALIBRATION_CROSS_MARGIN: i32 = 28;
 const CALIBRATION_CROSS_HALF_SIZE: i32 = 18;
 const CALIBRATION_CENTER_DOT_RADIUS: i32 = 3;
-const CALIBRATION_CROSS_STYLE: PrimitiveStyle<Rgb565> =
-    PrimitiveStyle::with_stroke(Rgb565::YELLOW, 4);
-const CALIBRATION_CENTER_DOT_STYLE: PrimitiveStyle<Rgb565> =
-    PrimitiveStyle::with_fill(Rgb565::WHITE);
+const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
+const WHITE: Rgb888 = Rgb888::new(255, 255, 255);
+const YELLOW: Rgb888 = Rgb888::new(255, 255, 0);
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
+
+fn rgb565(color: Rgb888) -> Rgb565 {
+    Rgb565::from(color)
+}
 
 #[derive(Debug)]
 enum MainError {
@@ -215,7 +218,7 @@ fn draw_calibration_screen(
     screen_buffer: &mut ScreenBuffer,
     calibration_index: usize,
 ) -> Result<(), MainError> {
-    screen_buffer.clear(Rgb565::BLACK);
+    screen_buffer.clear(rgb565(BLACK));
     if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
         draw_calibration_cross(
             screen_buffer,
@@ -296,11 +299,11 @@ fn draw_calibration_cross(
     let bottom = Point::new(center.x, center.y + CALIBRATION_CROSS_HALF_SIZE);
 
     Line::new(left, right)
-        .into_styled(CALIBRATION_CROSS_STYLE)
+        .into_styled(PrimitiveStyle::with_stroke(rgb565(YELLOW), 4))
         .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
     Line::new(top, bottom)
-        .into_styled(CALIBRATION_CROSS_STYLE)
+        .into_styled(PrimitiveStyle::with_stroke(rgb565(YELLOW), 4))
         .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
 
@@ -311,7 +314,7 @@ fn draw_calibration_cross(
         ),
         (CALIBRATION_CENTER_DOT_RADIUS * 2 + 1) as u32,
     )
-    .into_styled(CALIBRATION_CENTER_DOT_STYLE)
+    .into_styled(PrimitiveStyle::with_fill(rgb565(WHITE)))
     .draw(target)
     .map_err(|_| MainError::DrawCalibrationCenterDot)?;
 

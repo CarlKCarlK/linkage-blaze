@@ -5,7 +5,7 @@ use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point, Size},
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::{IntoStorage, Rgb565, RgbColor, WebColors},
+    pixelcolor::{IntoStorage, Rgb565, WebColors},
     prelude::*,
     primitives::{Circle, Line, PrimitiveStyle, Rectangle, Triangle},
     text::{Baseline, Text},

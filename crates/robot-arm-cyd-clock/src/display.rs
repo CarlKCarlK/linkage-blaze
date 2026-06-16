@@ -7,7 +7,7 @@ use embedded_graphics::{
         MonoFont, MonoTextStyle,
         ascii::{FONT_6X10, FONT_10X20},
     },
-    pixelcolor::{Rgb565, RgbColor},
+    pixelcolor::Rgb565,
     prelude::Point,
     primitives::Rectangle,
     text::{Baseline, Text},
