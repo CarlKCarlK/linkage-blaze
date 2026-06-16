@@ -25,7 +25,7 @@ const editorSetup = [
     indentWithTab,
   ]),
 ];
-import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-9";
+import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-10";
 
 const error = document.querySelector("#error");
 const canvas = document.querySelector("#view");
@@ -38,6 +38,7 @@ await init();
 let primitives = [];
 let paramValues = new Map();
 let renderTimer = null;
+let firstFit = true;
 
 // ---- CodeMirror editor ----
 const editor = new EditorView({
@@ -125,7 +126,7 @@ const linkageGroup = new THREE.Group();
 scene.add(linkageGroup);
 
 applyViewMode("perspective-x-forward");
-viewMode.addEventListener("change", () => applyViewMode(viewMode.value));
+viewMode.addEventListener("change", () => { applyViewMode(viewMode.value); fitView(); });
 
 function animate() {
   requestAnimationFrame(animate);
@@ -181,6 +182,7 @@ function rebuildLinkage() {
     else if (p.type === "ring") addRing(p);
     else if (p.type === "sphere") addSphere(p);
   }
+  if (firstFit) { fitView(); firstFit = false; }
 }
 
 function addSegment(p) {
@@ -292,6 +294,41 @@ function resize() {
 
 function clamp(value, low, high) {
   return Math.min(Math.max(value, low), high);
+}
+
+function fitView() {
+  // setFromObject forces world-matrix update before computing bounds
+  const box = new THREE.Box3().setFromObject(linkageGroup);
+  if (box.isEmpty()) return;
+
+  const center = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 0.5);
+
+  controls.target.copy(center);
+
+  if (camera.isPerspectiveCamera) {
+    const fovY = camera.fov * (Math.PI / 180);
+    const fovX = 2 * Math.atan(Math.tan(fovY / 2) * camera.aspect);
+    const distance = (radius / Math.sin(Math.min(fovX, fovY) / 2)) * 1.2;
+    const dir = camera.position.clone().sub(center);
+    const len = dir.length();
+    if (len < 0.01) dir.set(-1, -1, 0.6);
+    camera.position.copy(center).addScaledVector(dir.normalize(), distance);
+    camera.near = Math.max(0.001, radius * 0.01);
+    camera.far = radius * 100;
+  } else {
+    const bounds = canvas.getBoundingClientRect();
+    const aspect = bounds.width / Math.max(1, bounds.height);
+    const fitH = radius * 2 * 1.2;
+    const fitW = fitH * aspect;
+    const visH = orthographicCamera.top - orthographicCamera.bottom;
+    const visW = orthographicCamera.right - orthographicCamera.left;
+    camera.zoom = Math.min(visW / fitW, visH / fitH);
+    camera.position.set(center.x, center.y, center.z + 20);
+  }
+
+  camera.updateProjectionMatrix();
+  controls.update();
 }
 
 function applyViewMode(mode) {
