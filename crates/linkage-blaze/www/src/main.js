@@ -1,19 +1,62 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "https://esm.sh/@codemirror/view@6";
+import { history, historyKeymap, defaultKeymap, toggleLineComment, indentWithTab } from "https://esm.sh/@codemirror/commands@6";
+import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentOnInput } from "https://esm.sh/@codemirror/language@6";
+import { closeBrackets, closeBracketsKeymap } from "https://esm.sh/@codemirror/autocomplete@6";
+import { rust } from "https://esm.sh/@codemirror/lang-rust@6";
+import { oneDark } from "https://esm.sh/@codemirror/theme-one-dark@6";
+
+const editorSetup = [
+  lineNumbers(),
+  history(),
+  drawSelection(),
+  highlightActiveLine(),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  bracketMatching(),
+  closeBrackets(),
+  keymap.of([
+    ...defaultKeymap,
+    ...historyKeymap,
+    ...closeBracketsKeymap,
+    { key: "Ctrl-/", mac: "Cmd-/", run: toggleLineComment },
+    indentWithTab,
+  ]),
+];
 import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-8";
 
-const source = document.querySelector("#source");
 const error = document.querySelector("#error");
 const canvas = document.querySelector("#view");
 const paramsList = document.querySelector("#params-list");
 
 await init();
-source.value = default_program();
 
 let primitives = [];
 let paramValues = new Map();
 let renderTimer = null;
+
+// ---- CodeMirror editor ----
+const editor = new EditorView({
+  doc: default_program(),
+  extensions: [
+    editorSetup,
+    rust(),
+    oneDark,
+    keymap.of([{ key: "Ctrl-/", mac: "Cmd-/", run: toggleLineComment }]),
+    EditorView.theme({ "&": { height: "100%" } }),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        clearTimeout(renderTimer);
+        renderTimer = setTimeout(updatePreview, 140);
+      }
+    }),
+  ],
+  parent: document.querySelector("#source"),
+});
+
+const getSource = () => editor.state.doc.toString();
 
 // ---- Three.js setup ----
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -86,24 +129,12 @@ window.addEventListener("resize", resize);
 resize();
 
 // ---- Editor ----
-source.addEventListener("input", () => {
-  window.clearTimeout(renderTimer);
-  renderTimer = window.setTimeout(updatePreview, 140);
-});
-
-source.addEventListener("keydown", (event) => {
-  if (event.key === "/" && (event.ctrlKey || event.metaKey)) {
-    event.preventDefault();
-    toggleLineComments();
-  }
-});
-
 updatePreview();
 
 function updatePreview() {
   try {
     const overrides = buildOverridesJson();
-    const data = JSON.parse(render_program_with_params_json(source.value, overrides));
+    const data = JSON.parse(render_program_with_params_json(getSource(), overrides));
     const nextValues = new Map(data.params.map(({ name, value }) => [name, value]));
     for (const [name] of nextValues) {
       if (paramValues.has(name)) nextValues.set(name, paramValues.get(name));
@@ -293,7 +324,7 @@ function createSliderItem(name, value) {
     paramValues.set(name, v);
     valueSpan.textContent = v.toFixed(3);
     try {
-      const data = JSON.parse(render_program_with_params_json(source.value, buildOverridesJson()));
+      const data = JSON.parse(render_program_with_params_json(getSource(), buildOverridesJson()));
       primitives = data.primitives;
       error.textContent = "";
       rebuildLinkage();
@@ -307,34 +338,3 @@ function createSliderItem(name, value) {
   return item;
 }
 
-// ---- Comment toggle ----
-function toggleLineComments() {
-  const start = source.selectionStart;
-  const end = source.selectionEnd;
-  const text = source.value;
-
-  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-  const lineEnd = text.indexOf("\n", end - 1);
-  const block = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
-  const lines = block.split("\n");
-
-  const allCommented = lines.every((line) => line.trim() === "" || line.trimStart().startsWith("//"));
-
-  const toggled = lines
-    .map((line) => {
-      if (allCommented) {
-        return line.replace(/^(\s*)\/\/ ?/, "$1");
-      } else {
-        return line.replace(/^(\s*)/, "$1// ");
-      }
-    })
-    .join("\n");
-
-  const after = text.slice(lineEnd === -1 ? text.length : lineEnd);
-  source.value = text.slice(0, lineStart) + toggled + after;
-
-  source.selectionStart = lineStart;
-  source.selectionEnd = lineStart + toggled.length;
-
-  source.dispatchEvent(new Event("input"));
-}

@@ -79,22 +79,25 @@ p {
   font: 12px/1.35 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
-textarea {
-  width: 100%;
-  height: 100%;
-  resize: none;
+#source {
+  min-height: 0;
   border: 1px solid #344252;
   border-radius: 8px;
-  padding: 14px;
-  background: #0c1016;
-  color: #e7edf4;
-  outline: none;
-  font: 14px/1.45 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  tab-size: 2;
+  overflow: hidden;
 }
 
-textarea:focus {
+#source:focus-within {
   border-color: #7fdcff;
+}
+
+#source .cm-editor {
+  height: 100%;
+  background: #0c1016;
+}
+
+#source .cm-scroller {
+  font: 14px/1.45 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  overflow: auto;
 }
 
 .error {
