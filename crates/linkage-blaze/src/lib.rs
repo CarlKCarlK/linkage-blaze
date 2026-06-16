@@ -243,32 +243,42 @@ fn apply_method(
         "forward" | "move" => {
             expect_arg_count(line_number, method_call, 1)?;
             let distance = parse_number_arg(line_number, method_call, 0)?;
-            let start = turtle.pose.position;
-            turtle.pose.position =
-                turtle.pose.position + turtle.pose.orientation.forward() * distance;
-            if turtle.pen == Pen::Down {
-                primitives.push(Primitive::Segment {
-                    start,
-                    end: turtle.pose.position,
-                    width: turtle.width,
-                    color: turtle.color,
-                });
-            }
+            translate_turtle(
+                turtle,
+                primitives,
+                turtle.pose.orientation.forward(),
+                distance,
+            );
         }
         "forward_param" => {
             expect_arg_count(line_number, method_call, 3)?;
             let distance = parse_param_arg(line_number, method_call, params)?;
-            let start = turtle.pose.position;
-            turtle.pose.position =
-                turtle.pose.position + turtle.pose.orientation.forward() * distance;
-            if turtle.pen == Pen::Down {
-                primitives.push(Primitive::Segment {
-                    start,
-                    end: turtle.pose.position,
-                    width: turtle.width,
-                    color: turtle.color,
-                });
-            }
+            translate_turtle(
+                turtle,
+                primitives,
+                turtle.pose.orientation.forward(),
+                distance,
+            );
+        }
+        "left" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            let distance = parse_number_arg(line_number, method_call, 0)?;
+            translate_turtle(turtle, primitives, turtle.pose.orientation.left(), distance);
+        }
+        "left_param" => {
+            expect_arg_count(line_number, method_call, 3)?;
+            let distance = parse_param_arg(line_number, method_call, params)?;
+            translate_turtle(turtle, primitives, turtle.pose.orientation.left(), distance);
+        }
+        "up" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            let distance = parse_number_arg(line_number, method_call, 0)?;
+            translate_turtle(turtle, primitives, turtle.pose.orientation.up(), distance);
+        }
+        "up_param" => {
+            expect_arg_count(line_number, method_call, 3)?;
+            let distance = parse_param_arg(line_number, method_call, params)?;
+            translate_turtle(turtle, primitives, turtle.pose.orientation.up(), distance);
         }
         "yaw" => {
             expect_arg_count(line_number, method_call, 1)?;
@@ -420,6 +430,24 @@ fn apply_method(
     }
 
     Ok(())
+}
+
+fn translate_turtle(
+    turtle: &mut Turtle,
+    primitives: &mut Vec<Primitive>,
+    axis: Vec3,
+    distance: f32,
+) {
+    let start = turtle.pose.position;
+    turtle.pose.position = turtle.pose.position + axis * distance;
+    if turtle.pen == Pen::Down {
+        primitives.push(Primitive::Segment {
+            start,
+            end: turtle.pose.position,
+            width: turtle.width,
+            color: turtle.color,
+        });
+    }
 }
 
 fn strip_rust_comment(line: &str) -> &str {
@@ -894,6 +922,10 @@ impl Mat3 {
 
     fn forward(self) -> Vec3 {
         Vec3::new(self.rows[0][0], self.rows[1][0], self.rows[2][0])
+    }
+
+    fn left(self) -> Vec3 {
+        Vec3::new(self.rows[0][1], self.rows[1][1], self.rows[2][1])
     }
 
     fn up(self) -> Vec3 {

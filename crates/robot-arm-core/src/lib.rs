@@ -46,14 +46,18 @@ use math::degrees_to_radians;
 pub enum Step {
     /// Reset to the origin with the identity orientation.
     Start,
-    /// Rotate around v2 (belly → back): turn left/right.
+    /// Rotate around local +Z.
     Yaw(Arg),
-    /// Rotate around v1 (right → left): nose up/down.
+    /// Rotate around local +Y.
     Pitch(Arg),
-    /// Rotate around v0 (tail → nose): right side down.
+    /// Rotate around local +X.
     Roll(Arg),
     /// Advance along local +X by the given distance.
     Move(Arg),
+    /// Advance along local +Y by the given distance.
+    Left(Arg),
+    /// Advance along local +Z by the given distance.
+    Up(Arg),
     /// Lift the pen so later moves do not draw.
     PenUp,
     /// Lower the pen so later moves draw.
@@ -78,7 +82,7 @@ pub enum Step {
 
 /// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
 ///
-/// Rotation arguments are stored as radians. Move arguments are stored as linkage distances.
+/// Rotation arguments are stored as radians. Translation arguments are stored as linkage distances.
 #[derive(Debug)]
 pub enum Arg {
     Fixed(f32),
@@ -293,6 +297,30 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         ))))
     }
 
+    /// Add a fixed left move step.
+    pub const fn left(self, distance: f32) -> Self {
+        self.push(Step::Left(Arg::Fixed(distance)))
+    }
+
+    /// Add a left move step from a runtime parameter.
+    pub const fn left_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push(Step::Left(Arg::Variable(VariableArg::new(
+            index, low, high,
+        ))))
+    }
+
+    /// Add a fixed up move step.
+    pub const fn up(self, distance: f32) -> Self {
+        self.push(Step::Up(Arg::Fixed(distance)))
+    }
+
+    /// Add an up move step from a runtime parameter.
+    pub const fn up_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
+    }
+
     /// Restart the linkage path from the origin pose.
     pub const fn restart(self) -> Self {
         self.push(Step::Start)
@@ -427,6 +455,8 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => arg.resolve(params),
         Step::Start
         | Step::Move(_)
+        | Step::Left(_)
+        | Step::Up(_)
         | Step::PenUp
         | Step::PenDown
         | Step::PenColor(_)
@@ -444,6 +474,8 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         Step::Roll(_) => Mat3::roll(radians),
         Step::Start
         | Step::Move(_)
+        | Step::Left(_)
+        | Step::Up(_)
         | Step::PenUp
         | Step::PenDown
         | Step::PenColor(_)
@@ -516,6 +548,8 @@ impl PenStyle {
             | Step::Pitch(_)
             | Step::Roll(_)
             | Step::Move(_)
+            | Step::Left(_)
+            | Step::Up(_)
             | Step::Disk(_)
             | Step::DiskParam(_)
             | Step::Ring(_)
@@ -578,6 +612,12 @@ impl Pose {
             }
             Step::Move(arg) => {
                 self.position += self.orientation.forward() * arg.resolve(params);
+            }
+            Step::Left(arg) => {
+                self.position += self.orientation.left() * arg.resolve(params);
+            }
+            Step::Up(arg) => {
+                self.position += self.orientation.up() * arg.resolve(params);
             }
             Step::Yaw(_) | Step::Pitch(_) | Step::Roll(_) => {
                 self.orientation = self.orientation * rotation_matrix(step, params);
@@ -841,7 +881,7 @@ pub enum DrawItem {
 
 /// Iterator over draw items (line strokes, disks, rings, spheres) produced by a linkage.
 ///
-/// Move steps with the pen down yield [`DrawItem::Stroke`]. Shape steps
+/// Translation steps with the pen down yield [`DrawItem::Stroke`]. Shape steps
 /// always yield their respective variants. All other steps only update state.
 pub struct DrawItems<'a, const DOF: usize, const N: usize> {
     linkage: &'a Linkage<DOF, N>,
@@ -877,7 +917,9 @@ impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
             self.pen_style.apply(step);
 
             match step {
-                Step::Move(_) if matches!(pen_style.pen(), Pen::Down) => {
+                Step::Move(_) | Step::Left(_) | Step::Up(_)
+                    if matches!(pen_style.pen(), Pen::Down) =>
+                {
                     return Some(DrawItem::Stroke(StrokeSegment {
                         start: start_pose,
                         end: self.pose,
@@ -1061,6 +1103,42 @@ mod tests {
         let actual = LINKAGE.final_pose(&params).position();
 
         assert!(actual.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-5));
+    }
+
+    #[test]
+    fn left_moves_along_positive_y() {
+        const LINKAGE: Linkage<0, 2> = Linkage::start().left(10.0);
+
+        let params = [];
+        let actual = LINKAGE.final_pose(&params).position();
+
+        assert!(actual.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-6));
+    }
+
+    #[test]
+    fn up_moves_along_positive_z() {
+        const LINKAGE: Linkage<0, 2> = Linkage::start().up(10.0);
+
+        let params = [];
+        let actual = LINKAGE.final_pose(&params).position();
+
+        assert!(actual.is_close_to(&Vec3::from([0.0, 0.0, 10.0]), 1e-6));
+    }
+
+    #[test]
+    fn translation_params_move_along_named_axes() {
+        const LINKAGE: Linkage<3, 7> = Linkage::start()
+            .define_param("forward", 0.5)
+            .define_param("left", 0.5)
+            .define_param("up", 0.5)
+            .forward_param("forward", 0.0, 10.0)
+            .left_param("left", 0.0, 20.0)
+            .up_param("up", 0.0, 30.0);
+
+        let params = [0.2, 0.3, 0.4];
+        let actual = LINKAGE.final_pose(&params).position();
+
+        assert!(actual.is_close_to(&Vec3::from([2.0, 6.0, 12.0]), 1e-6));
     }
 
     #[test]

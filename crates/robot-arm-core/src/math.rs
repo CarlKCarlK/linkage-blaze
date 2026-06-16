@@ -138,6 +138,18 @@ impl Mat3 {
         Vec3([self[0][0], self[1][0], self[2][0]])
     }
 
+    /// Return local +Y, the left axis stored in column 1.
+    #[must_use]
+    pub fn left(&self) -> Vec3 {
+        Vec3([self[0][1], self[1][1], self[2][1]])
+    }
+
+    /// Return local +Z, the up axis stored in column 2.
+    #[must_use]
+    pub fn up(&self) -> Vec3 {
+        Vec3([self[0][2], self[1][2], self[2][2]])
+    }
+
     /// Return true when all components are within `tolerance`.
     #[must_use]
     pub fn is_close_to(&self, other: &Self, tolerance: f32) -> bool {
