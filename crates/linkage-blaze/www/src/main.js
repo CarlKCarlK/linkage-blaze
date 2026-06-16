@@ -124,7 +124,7 @@ scene.add(axisLabel("z", [0, 0, AXIS_LENGTH + 0.25], "#54a8ef"));
 const linkageGroup = new THREE.Group();
 scene.add(linkageGroup);
 
-applyViewMode("perspective");
+applyViewMode("perspective-x-forward");
 viewMode.addEventListener("change", () => applyViewMode(viewMode.value));
 
 function animate() {
@@ -298,23 +298,23 @@ function applyViewMode(mode) {
   const target = new THREE.Vector3(0, 0, 2);
   const viewDistance = 20;
 
-  if (mode === "perspective") {
+  if (mode === "perspective-x-forward" || mode === "perspective-y-forward") {
     camera = perspectiveCamera;
     camera.up.set(0, 0, 1);
-    camera.position.set(-14.2, -2.3, 6.1);
+    if (mode === "perspective-x-forward") {
+      camera.position.set(-14.2, -2.3, 6.1);
+    } else {
+      camera.position.set(-2.3, -14.2, 6.1);
+    }
     camera.zoom = 1;
   } else {
     camera = orthographicCamera;
     camera.zoom = 1;
-    if (mode === "top") {
+    camera.position.set(target.x, target.y, target.z + viewDistance);
+    if (mode === "top-x-right") {
+      camera.up.set(0, 1, 0);
+    } else {
       camera.up.set(1, 0, 0);
-      camera.position.set(target.x, target.y, target.z + viewDistance);
-    } else if (mode === "front") {
-      camera.up.set(0, 0, 1);
-      camera.position.set(target.x, target.y - viewDistance, target.z);
-    } else if (mode === "side") {
-      camera.up.set(0, 0, 1);
-      camera.position.set(target.x - viewDistance, target.y, target.z);
     }
   }
 
