@@ -41,8 +41,8 @@ pub enum Step {
     PenDown,
     /// Set the pen color.
     PenColor(Rgb888),
-    /// Set the pen stroke width.
-    PenWidth(u16),
+    /// Set the pen stroke width in linkage units.
+    PenWidth(f32),
     /// Add a filled disk at the current pose, in the local v0-v1 plane.
     Disk(f32),
     /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
@@ -294,8 +294,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.push(Step::PenColor(color))
     }
 
-    /// Set the pen width for later move steps.
-    pub const fn pen_width(self, width: u16) -> Self {
+    /// Set the pen width in linkage units for later move steps.
+    pub const fn pen_width(self, width: f32) -> Self {
+        assert!(width >= 0.0, "pen width must be non-negative");
         self.push(Step::PenWidth(width))
     }
 
@@ -449,18 +450,22 @@ pub enum Pen {
 pub struct PenStyle {
     pen: Pen,
     color: Rgb888,
-    width: u16,
+    width: f32,
 }
 
 impl PenStyle {
-    /// Return the default down pen with color 0 and width 1.
+    /// Return the default down pen with white color and width 1.0.
     #[must_use]
     pub const fn new() -> Self {
         Self {
             pen: Pen::Down,
             color: Rgb888::new(255, 255, 255),
-            width: 1,
+            width: 1.0,
         }
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
     }
 
     /// Return the current pen state.
@@ -477,18 +482,18 @@ impl PenStyle {
 
     /// Return the current pen width.
     #[must_use]
-    pub const fn width(self) -> u16 {
+    pub const fn width(self) -> f32 {
         self.width
     }
 
     fn apply(&mut self, step: &Step) {
         match step {
+            Step::Start => self.reset(),
             Step::PenUp => self.pen = Pen::Up,
             Step::PenDown => self.pen = Pen::Down,
             Step::PenColor(color) => self.color = *color,
             Step::PenWidth(width) => self.width = *width,
-            Step::Start
-            | Step::Yaw(_)
+            Step::Yaw(_)
             | Step::Pitch(_)
             | Step::Roll(_)
             | Step::Move(_)
@@ -612,7 +617,7 @@ impl StyledPose {
 
     /// Return this styled pose's pen width.
     #[must_use]
-    pub const fn width(self) -> u16 {
+    pub const fn width(self) -> f32 {
         self.pen_style.width()
     }
 }
@@ -623,7 +628,7 @@ pub struct StrokeSegment {
     start: Pose,
     end: Pose,
     color: Rgb888,
-    width: u16,
+    width: f32,
 }
 
 impl StrokeSegment {
@@ -647,7 +652,7 @@ impl StrokeSegment {
 
     /// Return the segment pen width.
     #[must_use]
-    pub const fn width(self) -> u16 {
+    pub const fn width(self) -> f32 {
         self.width
     }
 }
@@ -761,7 +766,7 @@ pub struct RingItem {
     pose: Pose,
     radius: f32,
     color: Rgb888,
-    width: u16,
+    width: f32,
 }
 
 impl RingItem {
@@ -778,7 +783,7 @@ impl RingItem {
         self.color
     }
     #[must_use]
-    pub const fn width(self) -> u16 {
+    pub const fn width(self) -> f32 {
         self.width
     }
 }
@@ -918,7 +923,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{Linkage, Pose};
+    use super::{DrawItem, Linkage, Pose, Rgb888};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
@@ -976,6 +981,48 @@ mod tests {
         .forward_param("close hand", 1.0, 0.0)
         .yaw(90.0)
         .forward(1.0);
+
+    #[test]
+    fn restart_resets_pen_style() {
+        const LINKAGE: Linkage<0, 8> = Linkage::start()
+            .pen_up()
+            .pen_color(Rgb888::new(255, 0, 0))
+            .pen_width(7.0)
+            .restart()
+            .forward(1.0);
+
+        let params = [];
+        let draw_item = LINKAGE
+            .draw_items(&params)
+            .next()
+            .expect("restart should reset pen down, so move should draw");
+
+        match draw_item {
+            DrawItem::Stroke(stroke_segment) => {
+                assert_eq!(stroke_segment.color(), Rgb888::new(255, 255, 255));
+                assert_eq!(stroke_segment.width(), 1.0);
+            }
+            _ => panic!("expected stroke after restart"),
+        }
+    }
+
+    #[test]
+    fn zero_pen_width_still_draws() {
+        const LINKAGE: Linkage<0, 4> = Linkage::start().pen_width(0.0).forward(1.0);
+
+        let params = [];
+        let draw_item = LINKAGE
+            .draw_items(&params)
+            .next()
+            .expect("zero-width pen should still produce a stroke");
+
+        match draw_item {
+            DrawItem::Stroke(stroke_segment) => {
+                assert_eq!(stroke_segment.width(), 0.0);
+            }
+            _ => panic!("expected stroke from zero-width pen"),
+        }
+    }
 
     #[test]
     fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {

@@ -181,12 +181,22 @@ function addSegment(p) {
   const dir = end.clone().sub(start);
   const length = dir.length();
   if (length < 1e-6) return;
-  const radius = Math.max((p.width ?? 1) * 0.025, 0.015);
+  const radius = modelWidthRadius(p.width);
   const geom = new THREE.CylinderGeometry(radius, radius, length, 8);
   const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color) });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.copy(start).lerp(end, 0.5);
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  linkageGroup.add(mesh);
+
+  addSegmentCap(start, radius, mat);
+  addSegmentCap(end, radius, mat);
+}
+
+function addSegmentCap(position, radius, material) {
+  const geom = new THREE.SphereGeometry(radius, 12, 8);
+  const mesh = new THREE.Mesh(geom, material.clone());
+  mesh.position.copy(position);
   linkageGroup.add(mesh);
 }
 
@@ -200,13 +210,17 @@ function addDisk(p) {
 }
 
 function addRing(p) {
-  const hw = Math.max((p.width ?? 1) * 0.025, 0.015);
+  const hw = modelWidthRadius(p.width);
   const geom = new THREE.RingGeometry(p.radius - hw, p.radius + hw, 64);
   const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color), side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(...p.center);
   orientToNormal(mesh, p.normal);
   linkageGroup.add(mesh);
+}
+
+function modelWidthRadius(width) {
+  return Math.max(width ?? 1, 0.05) / 2;
 }
 
 function addSphere(p) {

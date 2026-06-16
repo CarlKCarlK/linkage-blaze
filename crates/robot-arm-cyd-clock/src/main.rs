@@ -24,7 +24,7 @@ use device_envoy_esp::{
     },
 };
 use embassy_executor::Spawner;
-use embedded_graphics::pixelcolor::{Rgb565, Rgb888};
+use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
 use esp_backtrace as _;
 use log::info;
 use static_cell::StaticCell;
@@ -33,7 +33,7 @@ mod display;
 
 use display::{ClockTime, CydClockDisplay, CydClockDisplayError};
 
-const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
+const BLACK: Rgb888 = Rgb888::CSS_BLACK;
 
 fn rgb565(color: Rgb888) -> Rgb565 {
     Rgb565::from(color)

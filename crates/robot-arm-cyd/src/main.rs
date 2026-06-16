@@ -13,7 +13,7 @@ use device_envoy_esp::{
 use embassy_time::Instant;
 use embedded_graphics::{
     Drawable,
-    pixelcolor::{Rgb565, Rgb888},
+    pixelcolor::{Rgb565, Rgb888, WebColors},
     prelude::{DrawTarget, Point, Primitive},
     primitives::{Circle, Line, PrimitiveStyle},
 };
@@ -40,9 +40,9 @@ enum CalibrationCorner {
 const CALIBRATION_CROSS_MARGIN: i32 = 28;
 const CALIBRATION_CROSS_HALF_SIZE: i32 = 18;
 const CALIBRATION_CENTER_DOT_RADIUS: i32 = 3;
-const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
-const WHITE: Rgb888 = Rgb888::new(255, 255, 255);
-const YELLOW: Rgb888 = Rgb888::new(255, 255, 0);
+const BLACK: Rgb888 = Rgb888::CSS_BLACK;
+const WHITE: Rgb888 = Rgb888::CSS_WHITE;
+const YELLOW: Rgb888 = Rgb888::CSS_YELLOW;
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;

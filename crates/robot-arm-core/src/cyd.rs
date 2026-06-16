@@ -75,7 +75,7 @@ const TARGET_PARAM_START: usize = 8;
 
 // ---- linkage colors ----
 const ARM_COLOR: Rgb888 = Rgb888::CSS_DARK_GREEN;
-const ARM_WIDTH: u16 = 3;
+const ARM_WIDTH: f32 = 3.0;
 
 // ---- RK constants ----
 const RK_INITIAL_STEP: f32 = 0.125;
@@ -88,16 +88,16 @@ const RK_PAIRED_CANDIDATES: [(f32, f32); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1
 const RK_CANDIDATE_COUNT: usize = ARM_PARAM_COUNT + RK_PAIRED_CANDIDATES.len();
 
 // ---- colors ----
-const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
-const WHITE: Rgb888 = Rgb888::new(255, 255, 255);
-const CYAN: Rgb888 = Rgb888::new(0, 255, 255);
-const YELLOW: Rgb888 = Rgb888::new(255, 255, 0);
-const GREEN: Rgb888 = Rgb888::new(0, 255, 0);
-const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::new(119, 136, 153);
+const BLACK: Rgb888 = Rgb888::CSS_BLACK;
+const WHITE: Rgb888 = Rgb888::CSS_WHITE;
+const CYAN: Rgb888 = Rgb888::CSS_CYAN;
+const YELLOW: Rgb888 = Rgb888::CSS_YELLOW;
+const GREEN: Rgb888 = Rgb888::CSS_LIME;
+const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 
 // ---- linkages ----
 //
-// Section 1: floor disk + axis lines.  Pen starts down; restart leaves pen down for arm section.
+// Section 1: floor disk + axis lines.  Restart resets pose and pen state for the arm section.
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk.
 const LINKAGE: Linkage<DOF, 90> = Linkage::start()
@@ -756,17 +756,16 @@ impl CydSim {
         for draw_item in LINKAGE.draw_items(&self.params) {
             match draw_item {
                 DrawItem::Stroke(segment) => {
-                    if segment.width() == 0 {
-                        continue;
-                    }
                     let start = self.pose_to_screen(segment.start());
                     let end = self.pose_to_screen(segment.end());
-                    let width = zoomed_pixels(segment.width() as u32, self.zoom).max(1);
+                    let width = screen_width_pixels(segment.width(), self.scale());
                     let color = rgb565_from_rgb888(segment.color());
                     Line::new(start, end)
                         .into_styled(PrimitiveStyle::with_stroke(color, width))
                         .draw(buffer)
                         .ok();
+                    draw_round_cap(buffer, start, width, color);
+                    draw_round_cap(buffer, end, width, color);
                 }
                 DrawItem::Disk(disk) => {
                     self.draw_projected_disk(buffer, disk.pose(), disk.radius(), disk.color());
@@ -856,7 +855,7 @@ impl CydSim {
         target: &mut impl DrawTarget<Color = Rgb565>,
         pose: Pose,
         radius: f32,
-        width: u16,
+        width: f32,
         color_raw: Rgb888,
     ) {
         let orient = pose.orientation();
@@ -864,7 +863,7 @@ impl CydSim {
         let scale = self.scale();
         let r = radius * scale;
         let color = rgb565_from_rgb888(color_raw);
-        let half_w = width as f32 * 0.5 * scale;
+        let half_w = screen_width_pixels(width, scale) as f32 * 0.5;
 
         let cx = round_to_i32(px * scale) + SCREEN_WIDTH as i32 / 2;
         let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(py * scale);
@@ -1609,8 +1608,8 @@ fn zoom_to_scale(zoom: f32) -> f32 {
     0.5 + zoom
 }
 
-fn zoomed_pixels(base_pixels: u32, zoom: f32) -> u32 {
-    round_to_u32(base_pixels as f32 * zoom_to_scale(zoom)).max(1)
+fn screen_width_pixels(width: f32, scale: f32) -> u32 {
+    round_to_u32(width * scale).max(1)
 }
 
 fn rgb565_from_rgb888(color: Rgb888) -> Rgb565 {
@@ -1623,6 +1622,20 @@ fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
 
 fn stroke_style(color: Rgb888, stroke_width: u32) -> PrimitiveStyle<Rgb565> {
     PrimitiveStyle::with_stroke(rgb565_from_rgb888(color), stroke_width)
+}
+
+fn draw_round_cap(
+    target: &mut impl DrawTarget<Color = Rgb565>,
+    center: Point,
+    width: u32,
+    color: Rgb565,
+) {
+    let diameter = width.max(1);
+    let radius = diameter as i32 / 2;
+    Circle::new(Point::new(center.x - radius, center.y - radius), diameter)
+        .into_styled(PrimitiveStyle::with_fill(color))
+        .draw(target)
+        .ok();
 }
 
 fn distance(left: Vec3, right: Vec3) -> f32 {

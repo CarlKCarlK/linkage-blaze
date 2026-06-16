@@ -7,7 +7,7 @@ use embedded_graphics::{
         MonoFont, MonoTextStyle,
         ascii::{FONT_6X10, FONT_10X20},
     },
-    pixelcolor::Rgb565,
+    pixelcolor::{Rgb565, WebColors},
     prelude::Point,
     primitives::Rectangle,
     text::{Baseline, Text},
@@ -32,30 +32,12 @@ const CLOCK_TOP_LEFT: Point = Point::new(70, 82);
 const CLOCK_CENTER_X: i32 = 90;
 const CLOCK_CENTER_Y: i32 = 79;
 const HAND_SCALE: f32 = 1.0;
-const PARAM_HOUR: &str = "hour";
-const PARAM_MINUTE: &str = "minute";
-const PARAM_SECOND: &str = "second";
-const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
-const BG: Rgb888 = Rgb888::new(255, 239, 222);
-const FACE_FILL: Rgb888 = Rgb888::new(16, 40, 197);
-const TICK_MAJOR_COLOR: Rgb888 = Rgb888::new(255, 251, 247);
-const TICK_WIDTH: u16 = 3;
-const TICK_INNER_RADIUS: f32 = 58.0;
-const TICK_LENGTH: f32 = 10.0;
-const TEXT_DIM: Rgb888 = Rgb888::new(8, 32, 132);
-const TEXT_MAIN: Rgb888 = Rgb888::new(8, 32, 132);
-const TEXT_OK: Rgb888 = Rgb888::new(8, 32, 132);
-const HUB: Rgb888 = Rgb888::new(255, 251, 247);
-const HOUR_HAND_COLOR: Rgb888 = Rgb888::new(255, 251, 247);
-const MINUTE_HAND_COLOR: Rgb888 = Rgb888::new(99, 202, 255);
-const SECOND_HAND_COLOR: Rgb888 = Rgb888::new(255, 40, 49);
-const HOUR_LENGTH: f32 = 38.0;
-const MINUTE_LENGTH: f32 = 58.0;
-const SECOND_LENGTH: f32 = 66.0;
-const HOUR_WIDTH: u16 = 8;
-const MINUTE_WIDTH: u16 = 5;
-const SECOND_WIDTH: u16 = 2;
-const FACE_FILL_RADIUS: u16 = 72;
+const BLACK: Rgb888 = Rgb888::CSS_BLACK;
+const BG: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
+const TEXT_DIM: Rgb888 = Rgb888::CSS_NAVY;
+const TEXT_MAIN: Rgb888 = Rgb888::CSS_NAVY;
+const TEXT_OK: Rgb888 = Rgb888::CSS_NAVY;
+const HUB: Rgb888 = Rgb888::CSS_IVORY;
 const HUB_RADIUS: u16 = 6;
 const HAND_ITEM_COUNT: usize = 8; // 1 face disk + 3 clock hands + 4 tick marks
 const HUB_COUNT: usize = 1;
@@ -65,62 +47,66 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
 const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
-    .define_param(PARAM_HOUR, 0.0)
-    .define_param(PARAM_MINUTE, 0.0)
-    .define_param(PARAM_SECOND, 0.0)
-    .pen_color(FACE_FILL)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
-    .disk(FACE_FILL_RADIUS as f32)
+    .define_param("hour", 0.0)
+    .define_param("minute", 0.0)
+    .define_param("second", 0.0)
+    .pen_color(Rgb888::CSS_MEDIUM_BLUE)
+    .roll_param("second", 0.0, 360.0)
+    .disk(72.0)
     .restart()
-    .pen_color(HOUR_HAND_COLOR)
-    .pen_width(HOUR_WIDTH)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
-    .yaw_param(PARAM_HOUR, -90.0, 270.0)
-    .forward(HOUR_LENGTH)
+    .pen_color(Rgb888::CSS_IVORY)
+    .pen_width(8.0)
+    .roll_param("second", 0.0, 360.0)
+    .yaw_param("hour", -90.0, 270.0)
+    .forward(38.0)
     .restart()
-    .pen_color(MINUTE_HAND_COLOR)
-    .pen_width(MINUTE_WIDTH)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
-    .yaw_param(PARAM_MINUTE, -90.0, 270.0)
-    .forward(MINUTE_LENGTH)
+    .pen_color(Rgb888::CSS_LIGHT_SKY_BLUE)
+    .pen_width(5.0)
+    .roll_param("second", 0.0, 360.0)
+    .yaw_param("minute", -90.0, 270.0)
+    .forward(58.0)
     .restart()
-    .pen_color(SECOND_HAND_COLOR)
-    .pen_width(SECOND_WIDTH)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
-    .yaw_param(PARAM_SECOND, -90.0, 270.0)
-    .forward(SECOND_LENGTH)
+    .pen_color(Rgb888::CSS_TOMATO)
+    .pen_width(2.0)
+    .roll_param("second", 0.0, 360.0)
+    .yaw_param("second", -90.0, 270.0)
+    .forward(66.0)
     .restart()
-    .pen_color(TICK_MAJOR_COLOR)
-    .pen_width(0)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
+    .pen_color(Rgb888::CSS_IVORY)
+    .pen_up()
+    .roll_param("second", 0.0, 360.0)
     .yaw(-90.0)
-    .forward(TICK_INNER_RADIUS)
-    .pen_width(TICK_WIDTH)
-    .forward(TICK_LENGTH)
+    .forward(58.0)
+    .pen_down()
+    .pen_width(3.0)
+    .forward(10.0)
     .restart()
-    .pen_color(TICK_MAJOR_COLOR)
-    .pen_width(0)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
+    .pen_color(Rgb888::CSS_IVORY)
+    .pen_up()
+    .roll_param("second", 0.0, 360.0)
     .yaw(0.0)
-    .forward(TICK_INNER_RADIUS)
-    .pen_width(TICK_WIDTH)
-    .forward(TICK_LENGTH)
+    .forward(58.0)
+    .pen_down()
+    .pen_width(3.0)
+    .forward(10.0)
     .restart()
-    .pen_color(TICK_MAJOR_COLOR)
-    .pen_width(0)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
+    .pen_color(Rgb888::CSS_IVORY)
+    .pen_up()
+    .roll_param("second", 0.0, 360.0)
     .yaw(90.0)
-    .forward(TICK_INNER_RADIUS)
-    .pen_width(TICK_WIDTH)
-    .forward(TICK_LENGTH)
+    .forward(58.0)
+    .pen_down()
+    .pen_width(3.0)
+    .forward(10.0)
     .restart()
-    .pen_color(TICK_MAJOR_COLOR)
-    .pen_width(0)
-    .roll_param(PARAM_SECOND, 0.0, 360.0)
+    .pen_color(Rgb888::CSS_IVORY)
+    .pen_up()
+    .roll_param("second", 0.0, 360.0)
     .yaw(180.0)
-    .forward(TICK_INNER_RADIUS)
-    .pen_width(TICK_WIDTH)
-    .forward(TICK_LENGTH);
+    .forward(58.0)
+    .pen_down()
+    .pen_width(3.0)
+    .forward(10.0);
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 
@@ -353,16 +339,13 @@ fn draw_clock_hands(
     for draw_item in CLOCK_HANDS.draw_items(params) {
         match draw_item {
             DrawItem::Stroke(stroke) => {
-                if stroke.width() == 0 {
-                    continue;
-                }
                 let start = pose_to_point(stroke.start());
                 let end = pose_to_point(stroke.end());
                 if start != end {
                     primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
                         start,
                         end,
-                        width: stroke.width(),
+                        width: clock_width_pixels(stroke.width()),
                         color: Rgb565::from(stroke.color()),
                     });
                     *primitive_count += 1;
@@ -433,7 +416,7 @@ fn ring_to_ellipse(ring: RingItem) -> Ellipse {
         axis_a: (orient[0][0] * r, orient[1][0] * r),
         axis_b: (orient[0][1] * r, orient[1][1] * r),
         radius: r,
-        stroke_width: ring.width(),
+        stroke_width: clock_width_pixels(ring.width()),
         color: Rgb565::from(ring.color()),
         filled: false,
     }
@@ -457,12 +440,20 @@ fn sphere_to_ellipse(sphere: SphereItem) -> Ellipse {
     }
 }
 
+fn clock_width_pixels(width: f32) -> u16 {
+    round_to_u16(width * HAND_SCALE).max(1)
+}
+
 fn pose_to_point(pose: Pose) -> Point {
     let position = pose.position();
     clock_point(Point::new(
         CLOCK_CENTER_X + (position[0] * HAND_SCALE) as i32,
         CLOCK_CENTER_Y + (position[1] * HAND_SCALE) as i32,
     ))
+}
+
+fn round_to_u16(value: f32) -> u16 {
+    (value + 0.5) as u16
 }
 
 fn clock_point(point: Point) -> Point {
