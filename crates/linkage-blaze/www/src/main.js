@@ -41,8 +41,9 @@ let renderTimer = null;
 let firstFit = true;
 
 // ---- CodeMirror editor ----
+const STORAGE_KEY = "linkage-blaze-source";
 const editor = new EditorView({
-  doc: default_program(),
+  doc: localStorage.getItem(STORAGE_KEY) ?? default_program(),
   extensions: [
     editorSetup,
     rust(),
@@ -54,6 +55,7 @@ const editor = new EditorView({
     }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
+        localStorage.setItem(STORAGE_KEY, update.state.doc.toString());
         clearTimeout(renderTimer);
         renderTimer = setTimeout(updatePreview, 140);
       }
@@ -125,8 +127,15 @@ scene.add(axisLabel("z", [0, 0, AXIS_LENGTH + 0.25], "#54a8ef"));
 const linkageGroup = new THREE.Group();
 scene.add(linkageGroup);
 
-applyViewMode("perspective-x-forward");
-viewMode.addEventListener("change", () => { applyViewMode(viewMode.value); fitView(); });
+const VIEW_STORAGE_KEY = "linkage-blaze-view";
+const savedView = localStorage.getItem(VIEW_STORAGE_KEY) ?? "perspective-x-forward";
+viewMode.value = savedView;
+applyViewMode(savedView);
+viewMode.addEventListener("change", () => {
+  localStorage.setItem(VIEW_STORAGE_KEY, viewMode.value);
+  applyViewMode(viewMode.value);
+  fitView();
+});
 
 function animate() {
   requestAnimationFrame(animate);
