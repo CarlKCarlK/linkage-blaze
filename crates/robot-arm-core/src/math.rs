@@ -92,7 +92,7 @@ impl Mul<f32> for Vec3 {
 
 /// 3x3 rotation matrix, row-major: mat[row][col].
 ///
-/// Columns are body-frame axes: col 0 = v0 (forward), col 1 = v1 (left), col 2 = v2 (up/back).
+/// Columns are local-frame axes: col 0 = +X (forward), col 1 = +Y (left), col 2 = +Z (up).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Mat3(pub [[f32; 3]; 3]);
 
@@ -132,7 +132,7 @@ impl Mat3 {
         Self([[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]])
     }
 
-    /// Return v0, the forward axis stored in column 0.
+    /// Return local +X, the forward axis stored in column 0.
     #[must_use]
     pub fn forward(&self) -> Vec3 {
         Vec3([self[0][0], self[1][0], self[2][0]])
@@ -257,11 +257,30 @@ mod tests {
     }
 
     #[test]
+    fn test_rotation_local_axes() {
+        let yaw = Mat3::yaw(degrees_to_radians(90.0));
+        let pitch = Mat3::pitch(degrees_to_radians(90.0));
+        let roll = Mat3::roll(degrees_to_radians(90.0));
+
+        assert!(column(yaw, 2).is_close_to(&Vec3::from([0.0, 0.0, 1.0]), 1e-6));
+        assert!(column(pitch, 1).is_close_to(&Vec3::from([0.0, 1.0, 0.0]), 1e-6));
+        assert!(column(roll, 0).is_close_to(&Vec3::from([1.0, 0.0, 0.0]), 1e-6));
+    }
+
+    #[test]
     fn test_mat3_is_close_to() {
         let actual = Mat3::from([[1.0001, 0.0, 0.0], [0.0, 0.9999, 0.0], [0.0, 0.0, 1.0001]]);
         let expected = Mat3::IDENTITY;
 
         assert!(actual.is_close_to(&expected, 0.001));
         assert!(!actual.is_close_to(&expected, 0.00001));
+    }
+
+    fn column(mat: Mat3, column_index: usize) -> Vec3 {
+        Vec3::from([
+            mat[0][column_index],
+            mat[1][column_index],
+            mat[2][column_index],
+        ])
     }
 }

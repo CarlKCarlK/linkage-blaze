@@ -30,6 +30,7 @@ import init, { default_program, render_program_with_params_json } from "../pkg/l
 const error = document.querySelector("#error");
 const canvas = document.querySelector("#view");
 const paramsList = document.querySelector("#params-list");
+const cameraReadout = document.querySelector("#camera-readout");
 
 await init();
 
@@ -115,14 +116,16 @@ scene.add(axisLabel("z", [0, 0, AXIS_LENGTH + 0.25], "#54a8ef"));
 const linkageGroup = new THREE.Group();
 scene.add(linkageGroup);
 
-// Initial camera position (same rough angle as the old default)
-camera.position.set(6, -14, 8);
-controls.target.set(0, 0, 3);
+// Initial camera position for the model-space convention:
+// +X forward, +Y left, +Z up.
+camera.position.set(-14.2, -2.3, 6.1);
+controls.target.set(0, 0, 2);
 controls.update();
 
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
+  updateCameraReadout();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 }
@@ -271,6 +274,44 @@ function resize() {
 
 function clamp(value, low, high) {
   return Math.min(Math.max(value, low), high);
+}
+
+function updateCameraReadout() {
+  const camera_to_target = controls.target.clone().sub(camera.position);
+  const horizontal = Math.hypot(camera_to_target.x, camera_to_target.y);
+  const yaw = radiansToDegrees(Math.atan2(camera_to_target.y, camera_to_target.x));
+  const pitch = radiansToDegrees(Math.atan2(camera_to_target.z, horizontal));
+  const xScreen = screenDirection(new THREE.Vector3(1, 0, 0));
+  const yScreen = screenDirection(new THREE.Vector3(0, 1, 0));
+  const zScreen = screenDirection(new THREE.Vector3(0, 0, 1));
+
+  cameraReadout.textContent =
+    `yaw   ${formatDegrees(yaw)}\n` +
+    `pitch ${formatDegrees(pitch)}\n` +
+    `x screen ${formatScreenVector(xScreen)}\n` +
+    `y screen ${formatScreenVector(yScreen)}\n` +
+    `z screen ${formatScreenVector(zScreen)}`;
+}
+
+function screenDirection(axis) {
+  const origin = new THREE.Vector3(0, 0, 0).project(camera);
+  const endpoint = axis.clone().project(camera);
+  return {
+    x: endpoint.x - origin.x,
+    y: endpoint.y - origin.y,
+  };
+}
+
+function radiansToDegrees(radians) {
+  return radians * 180 / Math.PI;
+}
+
+function formatDegrees(degrees) {
+  return `${degrees.toFixed(1)} deg`;
+}
+
+function formatScreenVector(vector) {
+  return `(${vector.x.toFixed(2)}, ${vector.y.toFixed(2)})`;
 }
 
 // ---- Sliders ----

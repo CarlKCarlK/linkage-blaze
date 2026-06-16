@@ -26,6 +26,10 @@
       <details class="cheatsheet">
         <summary>Cheatsheet</summary>
         <div class="cheatsheet-grid">
+          <code>+X forward / link</code>
+          <code>+Y left</code>
+          <code>+Z up</code>
+          <code>yaw +Z, pitch +Y, roll +X</code>
           <code title="Toggle comment on selected lines">Ctrl+/ — comment</code>
           <code title="Undo / Redo">Ctrl+Z / Ctrl+Y</code>
           <code>.define_param("name", default)</code>
@@ -56,13 +60,14 @@
     </section>
     <section class="view-pane">
       <canvas id="view"></canvas>
+      <div id="camera-readout" class="camera-readout"></div>
     </section>
     <section class="params-pane" id="params-pane">
       <div class="params-header">Parameters</div>
       <div class="params-list" id="params-list"></div>
     </section>
   </main>
-  <script type="module" src="./src/main.js?v=capsule-strokes-1"></script>
+  <script type="module" src="./src/main.js?v=robotics-camera-2"></script>
 </body>
 
 </html>

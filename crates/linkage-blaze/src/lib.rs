@@ -661,7 +661,7 @@ impl Turtle {
             pose: Pose::start(),
             pen: Pen::Down,
             color: Color::new(1.0, 1.0, 1.0),
-            width: 1.0,
+            width: 0.1,
         }
     }
 

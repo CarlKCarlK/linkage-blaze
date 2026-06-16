@@ -1,6 +1,18 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![doc = "No-allocation robot arm simulation and math primitives."]
+//!
+//! Model-space axes:
+//!
+//! - +X = forward / along the link
+//! - +Y = left
+//! - +Z = up
+//!
+//! Rotations:
+//!
+//! - yaw = rotate about local +Z
+//! - pitch = rotate about local +Y
+//! - roll = rotate about local +X
 
 //todo000 move some of that global static stuff to be const local.
 //todo000 revisit the name Param and Args
@@ -22,7 +34,14 @@ use math::degrees_to_radians;
 
 /// A step in the robot arm linkage description.
 ///
-/// - v0 = tail → nose (forward), v1 = right → left, v2 = belly → back
+/// Model-space axes:
+///
+/// - +X = forward / along the link
+/// - +Y = left
+/// - +Z = up
+///
+/// Rotations are local-frame rotations: yaw about +Z, pitch about +Y,
+/// and roll about +X.
 #[derive(Debug)]
 pub enum Step {
     /// Reset to the origin with the identity orientation.
@@ -33,7 +52,7 @@ pub enum Step {
     Pitch(Arg),
     /// Rotate around v0 (tail → nose): right side down.
     Roll(Arg),
-    /// Advance along v0 by the given distance.
+    /// Advance along local +X by the given distance.
     Move(Arg),
     /// Lift the pen so later moves do not draw.
     PenUp,
@@ -43,11 +62,11 @@ pub enum Step {
     PenColor(Rgb888),
     /// Set the pen stroke width in linkage units.
     PenWidth(f32),
-    /// Add a filled disk at the current pose, in the local v0-v1 plane.
+    /// Add a filled disk at the current pose, in the local +X/+Y plane.
     Disk(f32),
     /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
     DiskParam(VariableArg),
-    /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is current pen width.
+    /// Add a ring at the current pose, in the local +X/+Y plane. Stroke width is current pen width.
     Ring(f32),
     /// Add a ring at the current pose; radius is driven by a degree-of-freedom parameter.
     RingParam(VariableArg),
@@ -454,13 +473,13 @@ pub struct PenStyle {
 }
 
 impl PenStyle {
-    /// Return the default down pen with white color and width 1.0.
+    /// Return the default down pen with white color and width 0.1.
     #[must_use]
     pub const fn new() -> Self {
         Self {
             pen: Pen::Down,
             color: Rgb888::new(255, 255, 255),
-            width: 1.0,
+            width: 0.1,
         }
     }
 
@@ -923,7 +942,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, Linkage, Pose, Rgb888};
+    use super::{DrawItem, Linkage, Pose, Rgb888, Vec3};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
@@ -1000,7 +1019,7 @@ mod tests {
         match draw_item {
             DrawItem::Stroke(stroke_segment) => {
                 assert_eq!(stroke_segment.color(), Rgb888::new(255, 255, 255));
-                assert_eq!(stroke_segment.width(), 1.0);
+                assert_eq!(stroke_segment.width(), 0.1);
             }
             _ => panic!("expected stroke after restart"),
         }
@@ -1022,6 +1041,40 @@ mod tests {
             }
             _ => panic!("expected stroke from zero-width pen"),
         }
+    }
+
+    #[test]
+    fn forward_moves_along_positive_x() {
+        const LINKAGE: Linkage<0, 2> = Linkage::start().forward(10.0);
+
+        let params = [];
+        let actual = LINKAGE.final_pose(&params).position();
+
+        assert!(actual.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-6));
+    }
+
+    #[test]
+    fn yaw_then_forward_moves_along_positive_y() {
+        const LINKAGE: Linkage<0, 3> = Linkage::start().yaw(90.0).forward(10.0);
+
+        let params = [];
+        let actual = LINKAGE.final_pose(&params).position();
+
+        assert!(actual.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-5));
+    }
+
+    #[test]
+    fn planar_two_link_arm_uses_yaw_then_forward() {
+        const LINKAGE: Linkage<0, 5> = Linkage::start()
+            .yaw(0.0)
+            .forward(10.0)
+            .yaw(90.0)
+            .forward(5.0);
+
+        let params = [];
+        let actual = LINKAGE.final_pose(&params).position();
+
+        assert!(actual.is_close_to(&Vec3::from([10.0, 5.0, 0.0]), 1e-5));
     }
 
     #[test]
