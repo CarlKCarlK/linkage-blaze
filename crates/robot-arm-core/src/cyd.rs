@@ -73,7 +73,6 @@ const ARM_PARAM_START: usize = 2;
 const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 8;
 
-
 // ---- linkage colors ----
 const ARM_COLOR: Rgb888 = Rgb888::CSS_DARK_GREEN;
 const ARM_WIDTH: u16 = 3;
@@ -88,17 +87,13 @@ const RK_SEARCH_CANDIDATES_PER_TICK: usize = 4;
 const RK_PAIRED_CANDIDATES: [(f32, f32); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)];
 const RK_CANDIDATE_COUNT: usize = ARM_PARAM_COUNT + RK_PAIRED_CANDIDATES.len();
 
-// ---- styles ----
-const SLIDER_TRACK_STYLE: PrimitiveStyle<Rgb565> =
-    PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 2);
-const BUTTON_STROKE_STYLE: PrimitiveStyle<Rgb565> =
-    PrimitiveStyle::with_stroke(Rgb565::CSS_LIGHT_SLATE_GRAY, 1);
-const YELLOW_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::CSS_YELLOW);
-const GREEN_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::GREEN);
-const GRAY_FILL_STYLE: PrimitiveStyle<Rgb565> =
-    PrimitiveStyle::with_fill(Rgb565::CSS_LIGHT_SLATE_GRAY);
-const PLAY_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::GREEN);
-const STOP_FILL_STYLE: PrimitiveStyle<Rgb565> = PrimitiveStyle::with_fill(Rgb565::WHITE);
+// ---- colors ----
+const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
+const WHITE: Rgb888 = Rgb888::new(255, 255, 255);
+const CYAN: Rgb888 = Rgb888::new(0, 255, 255);
+const YELLOW: Rgb888 = Rgb888::new(255, 255, 0);
+const GREEN: Rgb888 = Rgb888::new(0, 255, 0);
+const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::new(119, 136, 153);
 
 // ---- linkages ----
 //
@@ -355,7 +350,7 @@ impl CydSim {
         &self,
         target: &mut D,
     ) -> Result<(), D::Error> {
-        target.clear(Rgb565::BLACK)?;
+        target.clear(rgb565_from_rgb888(BLACK))?;
         self.draw_linkage(target);
         Ok(())
     }
@@ -483,9 +478,9 @@ impl CydSim {
 
     fn knob_fill_style(&self, knob: ControlledKnob) -> PrimitiveStyle<Rgb565> {
         if self.controlled_knobs[0] == knob || self.controlled_knobs[1] == knob {
-            GREEN_FILL_STYLE
+            fill_style(GREEN)
         } else {
-            YELLOW_FILL_STYLE
+            fill_style(YELLOW)
         }
     }
 
@@ -785,6 +780,14 @@ impl CydSim {
                         ring.color(),
                     );
                 }
+                DrawItem::Sphere(sphere) => {
+                    self.draw_projected_sphere(
+                        buffer,
+                        sphere.pose(),
+                        sphere.radius(),
+                        sphere.color(),
+                    );
+                }
             }
         }
     }
@@ -912,8 +915,32 @@ impl CydSim {
             .ok();
     }
 
+    fn draw_projected_sphere(
+        &self,
+        target: &mut impl DrawTarget<Color = Rgb565>,
+        pose: Pose,
+        radius: f32,
+        color_raw: Rgb888,
+    ) {
+        if radius <= 0.0 {
+            return;
+        }
+
+        let Vec3([position_x, position_y, _]) = pose.position();
+        let scale = self.scale();
+        let diameter = round_to_u32(radius * scale * 2.0);
+        if diameter == 0 {
+            return;
+        }
+
+        Circle::with_center(self.xy_to_screen(position_x, position_y), diameter)
+            .into_styled(PrimitiveStyle::with_fill(rgb565_from_rgb888(color_raw)))
+            .draw(target)
+            .ok();
+    }
+
     fn draw_sliders(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(WHITE));
         let mut target_label = TargetLabel::new();
 
         // z (base pitch) slider
@@ -924,7 +951,7 @@ impl CydSim {
             Point::new(TILT_X, TILT_TOP),
             Point::new(TILT_X, TILT_BOTTOM),
         )
-        .into_styled(SLIDER_TRACK_STYLE)
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
         .draw(buffer)
         .ok();
         let tilt_knob_y = TILT_TOP
@@ -944,13 +971,13 @@ impl CydSim {
             Point::new(ZOOM_X, ZOOM_TOP),
             Point::new(ZOOM_X, ZOOM_BOTTOM),
         )
-        .into_styled(SLIDER_TRACK_STYLE)
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
         .draw(buffer)
         .ok();
         let zoom_knob_y =
             ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * (1.0 - self.zoom));
         Circle::with_center(Point::new(ZOOM_X, zoom_knob_y), 9)
-            .into_styled(GRAY_FILL_STYLE)
+            .into_styled(fill_style(LIGHT_SLATE_GRAY))
             .draw(buffer)
             .ok();
 
@@ -963,7 +990,7 @@ impl CydSim {
             Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
-        .into_styled(BUTTON_STROKE_STYLE)
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
         .draw(buffer)
         .ok();
         Text::with_baseline(
@@ -989,7 +1016,7 @@ impl CydSim {
             Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
-        .into_styled(BUTTON_STROKE_STYLE)
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
         .draw(buffer)
         .ok();
         Text::with_baseline(
@@ -1023,7 +1050,7 @@ impl CydSim {
                 Point::new(SLIDER_TRACK_LEFT, slider_y + 8),
                 Point::new(SLIDER_RIGHT, slider_y + 8),
             )
-            .into_styled(SLIDER_TRACK_STYLE)
+            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
             .draw(buffer)
             .ok();
 
@@ -1048,7 +1075,7 @@ impl CydSim {
             Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
             Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
         )
-        .into_styled(SLIDER_TRACK_STYLE)
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
         .draw(buffer)
         .ok();
         let view_knob_x = VIEW_SLIDER_LEFT
@@ -1062,12 +1089,12 @@ impl CydSim {
     }
 
     fn draw_calibrate_button(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(WHITE));
         Rectangle::new(
             Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
             Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
         )
-        .into_styled(BUTTON_STROKE_STYLE)
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
         .draw(buffer)
         .ok();
         Text::with_baseline(
@@ -1086,7 +1113,7 @@ impl CydSim {
                 Point::new(RK_RUN_LEFT + 4, RK_CONTROL_TOP + 4),
                 Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
             )
-            .into_styled(STOP_FILL_STYLE)
+            .into_styled(fill_style(WHITE))
             .draw(buffer)
             .ok();
         } else {
@@ -1098,7 +1125,7 @@ impl CydSim {
                     RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
                 ),
             )
-            .into_styled(PLAY_FILL_STYLE)
+            .into_styled(fill_style(GREEN))
             .draw(buffer)
             .ok();
         }
@@ -1109,7 +1136,7 @@ impl CydSim {
             Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
             Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
         )
-        .into_styled(BUTTON_STROKE_STYLE)
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
         .draw(buffer)
         .ok();
         Rectangle::new(
@@ -1119,7 +1146,7 @@ impl CydSim {
             ),
             Size::new(2, 10),
         )
-        .into_styled(STOP_FILL_STYLE)
+        .into_styled(fill_style(WHITE))
         .draw(buffer)
         .ok();
         Triangle::new(
@@ -1130,13 +1157,13 @@ impl CydSim {
                 RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
             ),
         )
-        .into_styled(PLAY_FILL_STYLE)
+        .into_styled(fill_style(GREEN))
         .draw(buffer)
         .ok();
     }
 
     fn draw_report(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(WHITE));
         let mut report = DistanceReport::new();
         Text::with_baseline(
             report.as_str(self.target_distance()),
@@ -1153,7 +1180,7 @@ impl CydSim {
             return;
         }
 
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
+        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
         let mut report = FpsReport::new();
         Text::with_baseline(
             report.as_str(self.fps),
@@ -1166,7 +1193,7 @@ impl CydSim {
     }
 
     fn draw_version(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
+        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
         Text::with_baseline(
             VERSION_TEXT,
             Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
@@ -1182,7 +1209,7 @@ impl CydSim {
             let x = x as i32;
             let y = y as i32;
             let radius = 5;
-            let cursor_style = PrimitiveStyle::with_fill(Rgb565::CYAN);
+            let cursor_style = PrimitiveStyle::with_fill(rgb565_from_rgb888(CYAN));
             Circle::new(Point::new(x - radius, y - radius), (radius * 2 + 1) as u32)
                 .into_styled(cursor_style)
                 .draw(buffer)
@@ -1590,6 +1617,14 @@ fn rgb565_from_rgb888(color: Rgb888) -> Rgb565 {
     Rgb565::from(color)
 }
 
+fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
+    PrimitiveStyle::with_fill(rgb565_from_rgb888(color))
+}
+
+fn stroke_style(color: Rgb888, stroke_width: u32) -> PrimitiveStyle<Rgb565> {
+    PrimitiveStyle::with_stroke(rgb565_from_rgb888(color), stroke_width)
+}
+
 fn distance(left: Vec3, right: Vec3) -> f32 {
     let Vec3([left_x, left_y, left_z]) = left;
     let Vec3([right_x, right_y, right_z]) = right;
@@ -1716,7 +1751,7 @@ impl Drawable for CydSim {
     where
         D: DrawTarget<Color = Self::Color>,
     {
-        target.clear(Rgb565::BLACK)?;
+        target.clear(rgb565_from_rgb888(BLACK))?;
         self.draw_linkage(target);
         self.draw_sliders(target);
         self.draw_report(target);

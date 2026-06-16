@@ -103,7 +103,9 @@ fn parse_overrides(json: &str) -> Vec<(String, f32)> {
     let inner = &json[1..json.len() - 1];
     for pair in inner.split(',') {
         let pair = pair.trim();
-        let Some(colon) = pair.find(':') else { continue };
+        let Some(colon) = pair.find(':') else {
+            continue;
+        };
         let name = pair[..colon].trim().trim_matches('"');
         let value_str = pair[colon + 1..].trim();
         if let Ok(value) = value_str.parse::<f32>() {
@@ -322,12 +324,7 @@ fn apply_method(
         }
         "disk_param" => {
             expect_arg_count(line_number, method_call, 3)?;
-            let radius = parse_param_arg(line_number, method_call, params)?;
-            if radius < 0.0 {
-                return Err(format!(
-                    "line {line_number}: disk_param radius resolved below zero"
-                ));
-            }
+            let radius = parse_param_radius(line_number, method_call, params)?;
             primitives.push(Primitive::Disk {
                 center: turtle.pose.position,
                 normal: turtle.pose.orientation.up(),
@@ -343,6 +340,26 @@ fn apply_method(
                 normal: turtle.pose.orientation.up(),
                 radius,
                 width: turtle.width,
+                color: turtle.color,
+            });
+        }
+        "ring_param" => {
+            expect_arg_count(line_number, method_call, 3)?;
+            let radius = parse_param_radius(line_number, method_call, params)?;
+            primitives.push(Primitive::Ring {
+                center: turtle.pose.position,
+                normal: turtle.pose.orientation.up(),
+                radius,
+                width: turtle.width,
+                color: turtle.color,
+            });
+        }
+        "sphere_param" => {
+            expect_arg_count(line_number, method_call, 3)?;
+            let radius = parse_param_radius(line_number, method_call, params)?;
+            primitives.push(Primitive::Sphere {
+                center: turtle.pose.position,
+                radius,
                 color: turtle.color,
             });
         }
@@ -402,6 +419,22 @@ fn parse_param_arg(
     Ok(low + param.value * (high - low))
 }
 
+fn parse_param_radius(
+    line_number: usize,
+    method_call: &MethodCall,
+    params: &[EditorParam],
+) -> Result<f32, String> {
+    let radius = parse_param_arg(line_number, method_call, params)?;
+    if radius < 0.0 {
+        Err(format!(
+            "line {line_number}: `{}` radius resolved below zero",
+            method_call.name
+        ))
+    } else {
+        Ok(radius)
+    }
+}
+
 fn parse_string_arg(
     line_number: usize,
     method_call: &MethodCall,
@@ -455,8 +488,7 @@ fn parse_color_arg(line_number: usize, method_call: &MethodCall) -> Result<Color
     if key.starts_with('#') && key.len() == 7 {
         return parse_hex_color(line_number, key);
     }
-    css_color(key)
-        .ok_or_else(|| format!("line {line_number}: unknown color `{value}`"))
+    css_color(key).ok_or_else(|| format!("line {line_number}: unknown color `{value}`"))
 }
 
 fn number_constant(name: &str) -> Option<f32> {
@@ -468,7 +500,11 @@ fn number_constant(name: &str) -> Option<f32> {
 }
 
 fn rgb888_color(red: u8, green: u8, blue: u8) -> Color {
-    Color::new(red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0)
+    Color::new(
+        red as f32 / 255.0,
+        green as f32 / 255.0,
+        blue as f32 / 255.0,
+    )
 }
 
 fn css_color(name: &str) -> Option<Color> {

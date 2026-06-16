@@ -25,7 +25,7 @@ const editorSetup = [
     indentWithTab,
   ]),
 ];
-import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-8";
+import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-9";
 
 const error = document.querySelector("#error");
 const canvas = document.querySelector("#view");
@@ -45,7 +45,10 @@ const editor = new EditorView({
     rust(),
     oneDark,
     keymap.of([{ key: "Ctrl-/", mac: "Cmd-/", run: toggleLineComment }]),
-    EditorView.theme({ "&": { height: "100%" } }),
+    EditorView.theme({
+      "&": { height: "100%", minHeight: "0" },
+      ".cm-scroller": { overflow: "auto" },
+    }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         clearTimeout(renderTimer);
@@ -337,4 +340,3 @@ function createSliderItem(name, value) {
   item.appendChild(slider);
   return item;
 }
-

@@ -21,6 +21,7 @@ body {
   grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr) minmax(180px, 260px);
   width: 100vw;
   height: 100vh;
+  min-height: 0;
 }
 
 .editor-pane {
@@ -28,6 +29,8 @@ body {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 16px;
   border-right: 1px solid #2b3542;
   background: #151a21;
@@ -80,10 +83,11 @@ p {
 }
 
 #source {
+  display: flex;
   min-height: 0;
+  overflow: hidden;
   border: 1px solid #344252;
   border-radius: 8px;
-  overflow: hidden;
 }
 
 #source:focus-within {
@@ -91,13 +95,20 @@ p {
 }
 
 #source .cm-editor {
+  flex: 1;
   height: 100%;
+  min-height: 0;
   background: #0c1016;
 }
 
 #source .cm-scroller {
   font: 14px/1.45 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  overflow: auto;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+}
+
+#source .cm-content {
+  min-height: 100%;
 }
 
 .error {

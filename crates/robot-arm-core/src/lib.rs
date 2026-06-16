@@ -49,6 +49,12 @@ pub enum Step {
     DiskParam(VariableArg),
     /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is current pen width.
     Ring(f32),
+    /// Add a ring at the current pose; radius is driven by a degree-of-freedom parameter.
+    RingParam(VariableArg),
+    /// Add a sphere centered at the current pose.
+    Sphere(f32),
+    /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
+    SphereParam(VariableArg),
 }
 
 /// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
@@ -309,6 +315,23 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.push(Step::Ring(radius))
     }
 
+    /// Add a ring at the current pose; radius is driven by a degree-of-freedom parameter.
+    pub const fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push(Step::RingParam(VariableArg::new(index, low, high)))
+    }
+
+    /// Add a sphere centered at the current pose.
+    pub const fn sphere(self, radius: f32) -> Self {
+        self.push(Step::Sphere(radius))
+    }
+
+    /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
+    pub const fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push(Step::SphereParam(VariableArg::new(index, low, high)))
+    }
+
     const fn push(mut self, step: Step) -> Self {
         assert!(self.len < N, "linkage has more steps than N");
         self.steps[self.len] = step;
@@ -390,7 +413,10 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenWidth(_)
         | Step::Disk(_)
         | Step::DiskParam(_)
-        | Step::Ring(_) => return Mat3::IDENTITY,
+        | Step::Ring(_)
+        | Step::RingParam(_)
+        | Step::Sphere(_)
+        | Step::SphereParam(_) => return Mat3::IDENTITY,
     };
     match step {
         Step::Yaw(_) => Mat3::yaw(radians),
@@ -404,7 +430,10 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenWidth(_)
         | Step::Disk(_)
         | Step::DiskParam(_)
-        | Step::Ring(_) => Mat3::IDENTITY,
+        | Step::Ring(_)
+        | Step::RingParam(_)
+        | Step::Sphere(_)
+        | Step::SphereParam(_) => Mat3::IDENTITY,
     }
 }
 
@@ -465,7 +494,10 @@ impl PenStyle {
             | Step::Move(_)
             | Step::Disk(_)
             | Step::DiskParam(_)
-            | Step::Ring(_) => {}
+            | Step::Ring(_)
+            | Step::RingParam(_)
+            | Step::Sphere(_)
+            | Step::SphereParam(_) => {}
         }
     }
 }
@@ -532,7 +564,10 @@ impl Pose {
             | Step::PenWidth(_)
             | Step::Disk(_)
             | Step::DiskParam(_)
-            | Step::Ring(_) => {}
+            | Step::Ring(_)
+            | Step::RingParam(_)
+            | Step::Sphere(_)
+            | Step::SphereParam(_) => {}
         }
     }
 }
@@ -748,17 +783,41 @@ impl RingItem {
     }
 }
 
-/// A draw item produced by a linkage: a line stroke, a filled disk, or a ring.
+/// A sphere shape yielded by a linkage at the current pose.
+#[derive(Clone, Copy, Debug)]
+pub struct SphereItem {
+    pose: Pose,
+    radius: f32,
+    color: Rgb888,
+}
+
+impl SphereItem {
+    #[must_use]
+    pub const fn pose(self) -> Pose {
+        self.pose
+    }
+    #[must_use]
+    pub const fn radius(self) -> f32 {
+        self.radius
+    }
+    #[must_use]
+    pub const fn color(self) -> Rgb888 {
+        self.color
+    }
+}
+
+/// A draw item produced by a linkage: a line stroke, a filled disk, a ring, or a sphere.
 #[derive(Clone, Copy, Debug)]
 pub enum DrawItem {
     Stroke(StrokeSegment),
     Disk(DiskItem),
     Ring(RingItem),
+    Sphere(SphereItem),
 }
 
-/// Iterator over draw items (line strokes, disks, rings) produced by a linkage.
+/// Iterator over draw items (line strokes, disks, rings, spheres) produced by a linkage.
 ///
-/// Move steps with the pen down yield [`DrawItem::Stroke`]. Disk and Ring steps
+/// Move steps with the pen down yield [`DrawItem::Stroke`]. Shape steps
 /// always yield their respective variants. All other steps only update state.
 pub struct DrawItems<'a, const DOF: usize, const N: usize> {
     linkage: &'a Linkage<DOF, N>,
@@ -822,6 +881,28 @@ impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
                         radius: *radius,
                         color: pen_style.color(),
                         width: pen_style.width(),
+                    }));
+                }
+                Step::RingParam(var_arg) => {
+                    return Some(DrawItem::Ring(RingItem {
+                        pose: start_pose,
+                        radius: var_arg.resolve(self.params),
+                        color: pen_style.color(),
+                        width: pen_style.width(),
+                    }));
+                }
+                Step::Sphere(radius) => {
+                    return Some(DrawItem::Sphere(SphereItem {
+                        pose: start_pose,
+                        radius: *radius,
+                        color: pen_style.color(),
+                    }));
+                }
+                Step::SphereParam(var_arg) => {
+                    return Some(DrawItem::Sphere(SphereItem {
+                        pose: start_pose,
+                        radius: var_arg.resolve(self.params),
+                        color: pen_style.color(),
                     }));
                 }
                 _ => {}

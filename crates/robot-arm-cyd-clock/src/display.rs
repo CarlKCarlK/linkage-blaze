@@ -7,12 +7,12 @@ use embedded_graphics::{
         MonoFont, MonoTextStyle,
         ascii::{FONT_6X10, FONT_10X20},
     },
-    pixelcolor::{Rgb565, RgbColor, raw::RawU16},
+    pixelcolor::{Rgb565, RgbColor},
     prelude::Point,
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use robot_arm_core::{DiskItem, DrawItem, Linkage, Pose, RingItem};
+use robot_arm_core::{DiskItem, DrawItem, Linkage, Pose, Rgb888, RingItem, SphereItem};
 use static_cell::StaticCell;
 
 const SMALL_GLYPH_WIDTH: usize = 6;
@@ -35,19 +35,20 @@ const HAND_SCALE: f32 = 1.0;
 const PARAM_HOUR: &str = "hour";
 const PARAM_MINUTE: &str = "minute";
 const PARAM_SECOND: &str = "second";
-const BG: Rgb565 = Rgb565::new(31, 59, 27);
-const FACE_FILL: u32 = rgb565_raw(2, 10, 24);
-const TICK_MAJOR_COLOR: u32 = rgb565_raw(31, 62, 30);
+const BLACK: Rgb888 = Rgb888::new(0, 0, 0);
+const BG: Rgb888 = Rgb888::new(255, 239, 222);
+const FACE_FILL: Rgb888 = Rgb888::new(16, 40, 197);
+const TICK_MAJOR_COLOR: Rgb888 = Rgb888::new(255, 251, 247);
 const TICK_WIDTH: u16 = 3;
 const TICK_INNER_RADIUS: f32 = 58.0;
 const TICK_LENGTH: f32 = 10.0;
-const TEXT_DIM: Rgb565 = Rgb565::new(1, 8, 16);
-const TEXT_MAIN: Rgb565 = Rgb565::new(1, 8, 16);
-const TEXT_OK: Rgb565 = Rgb565::new(1, 8, 16);
-const HUB: Rgb565 = Rgb565::new(31, 62, 30);
-const HOUR_HAND_COLOR: u32 = rgb565_raw(31, 62, 30);
-const MINUTE_HAND_COLOR: u32 = rgb565_raw(12, 50, 31);
-const SECOND_HAND_COLOR: u32 = rgb565_raw(31, 10, 6);
+const TEXT_DIM: Rgb888 = Rgb888::new(8, 32, 132);
+const TEXT_MAIN: Rgb888 = Rgb888::new(8, 32, 132);
+const TEXT_OK: Rgb888 = Rgb888::new(8, 32, 132);
+const HUB: Rgb888 = Rgb888::new(255, 251, 247);
+const HOUR_HAND_COLOR: Rgb888 = Rgb888::new(255, 251, 247);
+const MINUTE_HAND_COLOR: Rgb888 = Rgb888::new(99, 202, 255);
+const SECOND_HAND_COLOR: Rgb888 = Rgb888::new(255, 40, 49);
 const HOUR_LENGTH: f32 = 38.0;
 const MINUTE_LENGTH: f32 = 58.0;
 const SECOND_LENGTH: f32 = 66.0;
@@ -123,8 +124,8 @@ const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 
-const fn rgb565_raw(red: u32, green: u32, blue: u32) -> u32 {
-    (red << 11) | (green << 5) | blue
+fn rgb565(color: Rgb888) -> Rgb565 {
+    Rgb565::from(color)
 }
 
 pub enum CydClockDisplayError {
@@ -170,7 +171,7 @@ impl CydClockDisplay {
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         if !self.background_cleared {
-            self.cyd.clear_now(BG)?;
+            self.cyd.clear_now(rgb565(BG))?;
             self.background_cleared = true;
         }
 
@@ -203,7 +204,7 @@ impl CydClockDisplay {
         glyph_width: usize,
         glyph_height: usize,
         scale: usize,
-        color: Rgb565,
+        color: Rgb888,
     ) -> Result<(), CydClockDisplayError> {
         let flush_width = glyph_width * scale;
         let flush_height = glyph_height * scale;
@@ -213,11 +214,11 @@ impl CydClockDisplay {
             let mut character_text = heapless::String::<4>::new();
             fmt::Write::write_char(&mut character_text, character).ok();
             let mut glyph_buffer = self.glyph_workspace.view_mut(flush_width, flush_height);
-            glyph_buffer.clear(BG);
+            glyph_buffer.clear(rgb565(BG));
             Text::with_baseline(
                 character_text.as_str(),
                 Point::new(0, 0),
-                MonoTextStyle::new(font, color),
+                MonoTextStyle::new(font, rgb565(color)),
                 Baseline::Top,
             )
             .draw(&mut glyph_buffer)
@@ -236,7 +237,7 @@ impl CydClockDisplay {
     fn show_small_text_line(
         &mut self,
         text: &str,
-        color: Rgb565,
+        color: Rgb888,
         top_left: Point,
         width: usize,
     ) -> Result<(), CydClockDisplayError> {
@@ -255,7 +256,7 @@ impl CydClockDisplay {
     fn show_main_text_line(
         &mut self,
         text: &str,
-        color: Rgb565,
+        color: Rgb888,
     ) -> Result<(), CydClockDisplayError> {
         let mut padded = heapless::String::<16>::new();
         padded.push_str(text).ok();
@@ -285,7 +286,7 @@ impl CydClockDisplay {
                 top_left,
                 embedded_graphics::prelude::Size::new(width as u32, height as u32),
             ),
-            BG,
+            rgb565(BG),
         )?;
         Ok(())
     }
@@ -297,7 +298,7 @@ impl CydClockDisplay {
         draw_clock_hands(&params, &mut primitives, &mut primitive_count);
         draw_clock_hub(&mut primitives, &mut primitive_count);
         self.cyd
-            .draw_primitives_now(CLOCK_BOUNDS, BG, &primitives[..primitive_count])?;
+            .draw_primitives_now(CLOCK_BOUNDS, rgb565(BG), &primitives[..primitive_count])?;
         Ok(())
     }
 }
@@ -307,7 +308,7 @@ fn empty_primitive() -> DrawPrimitive {
         start: Point::new(0, 0),
         end: Point::new(0, 0),
         width: 0,
-        color: Rgb565::BLACK,
+        color: rgb565(BLACK),
     })
 }
 
@@ -362,7 +363,7 @@ fn draw_clock_hands(
                         start,
                         end,
                         width: stroke.width(),
-                        color: Rgb565::from(RawU16::new(stroke.color() as u16)),
+                        color: Rgb565::from(stroke.color()),
                     });
                     *primitive_count += 1;
                 }
@@ -373,6 +374,10 @@ fn draw_clock_hands(
             }
             DrawItem::Ring(ring) => {
                 primitives[*primitive_count] = DrawPrimitive::Ellipse(ring_to_ellipse(ring));
+                *primitive_count += 1;
+            }
+            DrawItem::Sphere(sphere) => {
+                primitives[*primitive_count] = DrawPrimitive::Ellipse(sphere_to_ellipse(sphere));
                 *primitive_count += 1;
             }
         }
@@ -390,7 +395,7 @@ fn draw_clock_hub(
         axis_b: (0.0, r),
         radius: r,
         stroke_width: 0,
-        color: HUB,
+        color: rgb565(HUB),
         filled: true,
     });
     *primitive_count += 1;
@@ -410,7 +415,7 @@ fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
         axis_b: (orient[0][1] * r, orient[1][1] * r),
         radius: r,
         stroke_width: 0,
-        color: Rgb565::from(RawU16::new(disk.color() as u16)),
+        color: Rgb565::from(disk.color()),
         filled: true,
     }
 }
@@ -429,8 +434,26 @@ fn ring_to_ellipse(ring: RingItem) -> Ellipse {
         axis_b: (orient[0][1] * r, orient[1][1] * r),
         radius: r,
         stroke_width: ring.width(),
-        color: Rgb565::from(RawU16::new(ring.color() as u16)),
+        color: Rgb565::from(ring.color()),
         filled: false,
+    }
+}
+
+fn sphere_to_ellipse(sphere: SphereItem) -> Ellipse {
+    let pos = sphere.pose().position();
+    let center = clock_point(Point::new(
+        CLOCK_CENTER_X + pos[0] as i32,
+        CLOCK_CENTER_Y + pos[1] as i32,
+    ));
+    let r = sphere.radius();
+    Ellipse {
+        center,
+        axis_a: (r, 0.0),
+        axis_b: (0.0, r),
+        radius: r,
+        stroke_width: 0,
+        color: Rgb565::from(sphere.color()),
+        filled: true,
     }
 }
 
