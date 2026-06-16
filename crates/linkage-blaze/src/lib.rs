@@ -356,6 +356,7 @@ fn apply_method(
                 center: turtle.pose.position,
                 normal: turtle.pose.orientation.up(),
                 radius,
+                width: turtle.width,
                 color: turtle.color,
             });
         }
@@ -375,6 +376,7 @@ fn apply_method(
                 center: turtle.pose.position,
                 normal: turtle.pose.orientation.up(),
                 radius,
+                width: turtle.width,
                 color: turtle.color,
             });
         }
@@ -724,6 +726,7 @@ enum Primitive {
         center: Vec3,
         normal: Vec3,
         radius: f32,
+        width: f32,
         color: Color,
     },
     Ring {
@@ -763,6 +766,7 @@ impl Primitive {
                 center,
                 normal,
                 radius,
+                width,
                 color,
             } => {
                 json.push_str("{\"type\":\"disk\",\"center\":");
@@ -771,6 +775,8 @@ impl Primitive {
                 normal.push_json(json);
                 json.push_str(",\"radius\":");
                 push_float(json, radius);
+                json.push_str(",\"width\":");
+                push_float(json, width);
                 json.push_str(",\"color\":[");
                 color.push_json(json);
                 json.push_str("]}");

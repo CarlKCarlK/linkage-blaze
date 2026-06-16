@@ -31,6 +31,7 @@ const error = document.querySelector("#error");
 const canvas = document.querySelector("#view");
 const paramsList = document.querySelector("#params-list");
 const cameraReadout = document.querySelector("#camera-readout");
+const viewMode = document.querySelector("#view-mode");
 
 await init();
 
@@ -75,7 +76,9 @@ canvas.parentElement.appendChild(labelRenderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0d1118);
 
-const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+const perspectiveCamera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+const orthographicCamera = new THREE.OrthographicCamera(-8, 8, 8, -8, 0.01, 1000);
+let camera = perspectiveCamera;
 camera.up.set(0, 0, 1); // Z is up
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -93,8 +96,13 @@ canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
   const factor = Math.exp(clamp(event.deltaY, -80, 80) * 0.0015);
-  const dir = camera.position.clone().sub(controls.target);
-  camera.position.copy(controls.target).addScaledVector(dir, factor);
+  if (camera.isOrthographicCamera) {
+    camera.zoom = clamp(camera.zoom / factor, 0.1, 20);
+    camera.updateProjectionMatrix();
+  } else {
+    const dir = camera.position.clone().sub(controls.target);
+    camera.position.copy(controls.target).addScaledVector(dir, factor);
+  }
   controls.update();
 }, { capture: true, passive: false });
 
@@ -116,11 +124,8 @@ scene.add(axisLabel("z", [0, 0, AXIS_LENGTH + 0.25], "#54a8ef"));
 const linkageGroup = new THREE.Group();
 scene.add(linkageGroup);
 
-// Initial camera position for the model-space convention:
-// +X forward, +Y left, +Z up.
-camera.position.set(-14.2, -2.3, 6.1);
-controls.target.set(0, 0, 2);
-controls.update();
+applyViewMode("perspective");
+viewMode.addEventListener("change", () => applyViewMode(viewMode.value));
 
 function animate() {
   requestAnimationFrame(animate);
@@ -204,7 +209,8 @@ function addSegmentCap(position, radius, material) {
 }
 
 function addDisk(p) {
-  const geom = new THREE.CircleGeometry(p.radius, 64);
+  const geom = new THREE.CylinderGeometry(p.radius, p.radius, modelVisibleWidth(p.width), 64, 1);
+  geom.rotateX(Math.PI / 2);
   const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color), side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(...p.center);
@@ -214,7 +220,7 @@ function addDisk(p) {
 
 function addRing(p) {
   const hw = modelWidthRadius(p.width);
-  const geom = new THREE.RingGeometry(p.radius - hw, p.radius + hw, 64);
+  const geom = new THREE.TorusGeometry(p.radius, hw, 8, 64);
   const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color), side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(...p.center);
@@ -223,7 +229,11 @@ function addRing(p) {
 }
 
 function modelWidthRadius(width) {
-  return Math.max(width ?? 1, 0.05) / 2;
+  return modelVisibleWidth(width) / 2;
+}
+
+function modelVisibleWidth(width) {
+  return Math.max(width ?? 0.1, 0.05);
 }
 
 function addSphere(p) {
@@ -268,12 +278,51 @@ function resize() {
   const h = Math.max(1, bounds.height);
   renderer.setSize(w, h, false);
   labelRenderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  perspectiveCamera.aspect = w / h;
+  perspectiveCamera.updateProjectionMatrix();
+
+  const aspect = w / h;
+  const orthoHeight = 14;
+  orthographicCamera.left = -orthoHeight * aspect / 2;
+  orthographicCamera.right = orthoHeight * aspect / 2;
+  orthographicCamera.top = orthoHeight / 2;
+  orthographicCamera.bottom = -orthoHeight / 2;
+  orthographicCamera.updateProjectionMatrix();
 }
 
 function clamp(value, low, high) {
   return Math.min(Math.max(value, low), high);
+}
+
+function applyViewMode(mode) {
+  const target = new THREE.Vector3(0, 0, 2);
+  const viewDistance = 20;
+
+  if (mode === "perspective") {
+    camera = perspectiveCamera;
+    camera.up.set(0, 0, 1);
+    camera.position.set(-14.2, -2.3, 6.1);
+    camera.zoom = 1;
+  } else {
+    camera = orthographicCamera;
+    camera.zoom = 1;
+    if (mode === "top") {
+      camera.up.set(1, 0, 0);
+      camera.position.set(target.x, target.y, target.z + viewDistance);
+    } else if (mode === "front") {
+      camera.up.set(0, 0, 1);
+      camera.position.set(target.x, target.y - viewDistance, target.z);
+    } else if (mode === "side") {
+      camera.up.set(0, 0, 1);
+      camera.position.set(target.x - viewDistance, target.y, target.z);
+    }
+  }
+
+  controls.object = camera;
+  controls.target.copy(target);
+  camera.lookAt(controls.target);
+  camera.updateProjectionMatrix();
+  controls.update();
 }
 
 function updateCameraReadout() {

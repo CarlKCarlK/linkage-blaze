@@ -60,6 +60,15 @@
     </section>
     <section class="view-pane">
       <canvas id="view"></canvas>
+      <div class="view-controls">
+        <label for="view-mode">View</label>
+        <select id="view-mode">
+          <option value="perspective">Perspective</option>
+          <option value="top">Top XY</option>
+          <option value="front">Front XZ</option>
+          <option value="side">Side YZ</option>
+        </select>
+      </div>
       <div id="camera-readout" class="camera-readout"></div>
     </section>
     <section class="params-pane" id="params-pane">
@@ -67,7 +76,7 @@
       <div class="params-list" id="params-list"></div>
     </section>
   </main>
-  <script type="module" src="./src/main.js?v=robotics-camera-2"></script>
+  <script type="module" src="./src/main.js?v=primitive-thickness-1"></script>
 </body>
 
 </html>

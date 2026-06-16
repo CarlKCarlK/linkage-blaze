@@ -138,6 +138,29 @@ p {
   height: 100%;
 }
 
+.view-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #344252;
+  border-radius: 6px;
+  background: rgb(13 17 24 / 82%);
+  color: #c8d8e8;
+  font: 12px/1.4 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.view-controls select {
+  border: 1px solid #344252;
+  border-radius: 4px;
+  background: #10151d;
+  color: #e7edf4;
+  font: inherit;
+}
+
 .camera-readout {
   position: absolute;
   left: 12px;
