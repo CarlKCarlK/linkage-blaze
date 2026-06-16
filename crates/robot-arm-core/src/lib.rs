@@ -846,7 +846,7 @@ mod tests {
 
     //todo000 *_param might not be a good suffix.
     const LINKAGE0: Linkage<6, 24> = Linkage::start()
-        .define_param("lower hand", 0.5)
+        .define_param("raise hand", 0.5)
         .define_param("bend elbow", 0.5)
         .define_param("close hand", 0.5)
         .define_param("lower arm", 0.5)
@@ -861,9 +861,9 @@ mod tests {
         .forward(3.0)
         .yaw_param("bend elbow", 90.0, -90.0)
         .forward(3.0)
-        .pitch_param("lower hand", 90.0, -90.0)
+        .pitch_param("raise hand", 90.0, -90.0)
         .forward(1.0)
-        .roll_param("spin hand", 180.0, -180.0)
+        .roll_param("spin hand", -180.0, 180.0)
         .forward(0.5)
         .yaw(90.0)
         .forward_param("close hand", 0.0, 0.5)
@@ -898,7 +898,7 @@ mod tests {
 
     #[test]
     fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {
-        // Fractions for [lower hand, bend elbow, close hand,
+        // Fractions for [raise hand, bend elbow, close hand,
         //  lower arm, spin whole arm, spin hand].
         let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
         assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.poses(&params))
@@ -915,7 +915,7 @@ mod tests {
     fn test_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
         //todo00 might be nice to have the names available somehow.
         let params = [
-            0.7514501463, // lower hand
+            0.7514501463, // raise hand
             0.49,         // bend elbow
             0.50011957,   // close hand
             1.0,          // lower arm
@@ -962,7 +962,7 @@ mod tests {
     #[test]
     fn test_mid_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
         let params = [
-            0.5, // lower hand
+            0.5, // raise hand
             0.3, // bend elbow
             1.0, // close hand
             0.5, // lower arm
@@ -988,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_linkage0_png_matches_expected() -> Result<(), Box<dyn Error>> {
-        // Fractions for [lower hand, bend elbow, close hand,
+        // Fractions for [raise hand, bend elbow, close hand,
         //  lower arm, spin whole arm, spin hand].
         let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
 
@@ -1009,7 +1009,7 @@ mod tests {
     #[should_panic(expected = "parameter is out of range")]
     fn test_params_are_range_checked() {
         let params = [
-            0.0, // lower hand
+            0.0, // raise hand
             0.5, // bend elbow
             1.1, // close hand, invalid param
             1.0, // lower arm

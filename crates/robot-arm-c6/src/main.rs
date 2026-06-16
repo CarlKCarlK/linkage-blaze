@@ -35,7 +35,7 @@ const FULL_RANGE_SECONDS_AT_MAX_SPEED: f32 = 5.0;
 const MAX_PARAM_SPEED_PER_SECOND: f32 = 1.0 / FULL_RANGE_SECONDS_AT_MAX_SPEED;
 const PARAM_BASE_YAW: &str = "x/y view";
 const PARAM_BASE_PITCH: &str = "z";
-const PARAM_LOWER_HAND: &str = "lower hand";
+const PARAM_RAISE_HAND: &str = "raise hand";
 const PARAM_BEND_ELBOW: &str = "bend elbow";
 const PARAM_HAND_WIDTH: &str = "close hand";
 const PARAM_LOWER_ARM: &str = "lower arm";
@@ -74,7 +74,7 @@ impl JoystickControlMode {
 
     fn highlighted_param_names(self) -> (&'static str, &'static str) {
         match self {
-            JoystickControlMode::HandAndElbow => (PARAM_LOWER_HAND, PARAM_BEND_ELBOW),
+            JoystickControlMode::HandAndElbow => (PARAM_RAISE_HAND, PARAM_BEND_ELBOW),
             JoystickControlMode::WholeSpinAndLowerArm => (PARAM_SPIN_WHOLE_ARM, PARAM_LOWER_ARM),
             JoystickControlMode::HandOpenAndWristSpin => (PARAM_HAND_WIDTH, PARAM_SPIN_HAND),
             JoystickControlMode::View => (PARAM_BASE_PITCH, PARAM_BASE_YAW),
@@ -140,7 +140,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     let joystick_button = ButtonEsp::new(p.GPIO3, PressedTo::Ground);
 
     let mut cyd_sim = CydSim::new();
-    let lower_hand_param = cyd_sim_param_index(PARAM_LOWER_HAND);
+    let raise_hand_param = cyd_sim_param_index(PARAM_RAISE_HAND);
     let bend_elbow_param = cyd_sim_param_index(PARAM_BEND_ELBOW);
     let hand_width_param = cyd_sim_param_index(PARAM_HAND_WIDTH);
     let lower_arm_param = cyd_sim_param_index(PARAM_LOWER_ARM);
@@ -148,7 +148,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     let spin_hand_param = cyd_sim_param_index(PARAM_SPIN_HAND);
     let base_pitch_param = cyd_sim_param_index(PARAM_BASE_PITCH);
     let base_yaw_param = cyd_sim_param_index(PARAM_BASE_YAW);
-    let mut lower_hand_value = CydSim::param_default(lower_hand_param);
+    let mut raise_hand_value = CydSim::param_default(raise_hand_param);
     let mut bend_elbow_value = CydSim::param_default(bend_elbow_param);
     let mut hand_width_value = CydSim::param_default(hand_width_param);
     let mut lower_arm_value = CydSim::param_default(lower_arm_param);
@@ -215,13 +215,13 @@ fn inner_main() -> Result<Infallible, MainError> {
         let joystick_changed = match control_mode {
             JoystickControlMode::HandAndElbow => {
                 // Up lowers the hand; left bends the elbow counter-clockwise.
-                lower_hand_value =
-                    (lower_hand_value - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
+                raise_hand_value =
+                    (raise_hand_value - joystick_y_velocity * dt_seconds).clamp(0.0, 1.0);
                 bend_elbow_value =
                     (bend_elbow_value + joystick_x_velocity * dt_seconds).clamp(0.0, 1.0);
                 cyd_sim.set_param_pair(
-                    lower_hand_param,
-                    lower_hand_value,
+                    raise_hand_param,
+                    raise_hand_value,
                     bend_elbow_param,
                     bend_elbow_value,
                 )
@@ -261,14 +261,14 @@ fn inner_main() -> Result<Infallible, MainError> {
         };
 
         esp_println::println!(
-            "joy: mode={} vrx={} ({:.3}) vry={} ({:.3}) sw={} lower_hand={:.3} bend_elbow={:.3} close_hand={:.3} lower_arm={:.3} spin_whole={:.3} spin_hand={:.3} z={:.3} xy={:.3}",
+            "joy: mode={} vrx={} ({:.3}) vry={} ({:.3}) sw={} raise_hand={:.3} bend_elbow={:.3} close_hand={:.3} lower_arm={:.3} spin_whole={:.3} spin_hand={:.3} z={:.3} xy={:.3}",
             control_mode.label(),
             vrx,
             vrx01,
             vry,
             vry01,
             if sw_pressed { "pressed" } else { "released" },
-            lower_hand_value,
+            raise_hand_value,
             bend_elbow_value,
             hand_width_value,
             lower_arm_value,

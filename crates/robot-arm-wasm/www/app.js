@@ -3,7 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import init, { linkage_points } from "./pkg/robot_arm_wasm.js";
 
 const PARAMS = [
-  { name: "lower hand", value: 0.5 },
+  { name: "raise hand", value: 0.5 },
   { name: "bend elbow", value: 0.5 },
   { name: "close hand", value: 0.0 },
   { name: "lower arm", value: 0.5 },
