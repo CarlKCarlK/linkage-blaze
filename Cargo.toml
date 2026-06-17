@@ -1,13 +1,13 @@
 [workspace]
 members = [
-    "crates/cyd-esp32",
-    "crates/robot-arm-core",
-    "crates/robot-arm-cyd",
-    "crates/robot-arm-cyd-clock",
-    "crates/robot-arm-c6",
-    "crates/robot-arm-cyd-sim",
-    "crates/robot-arm-wasm",
-    "crates/linkage-blaze",
+    "crates/linkage-blaze-core",
+    "crates/linkage-blaze-cyd",
+    "crates/linkage-blaze-editor",
+    "crates/linkage-blaze-armatron-core",
+    "crates/linkage-blaze-armatron-wasm",
+    "crates/linkage-blaze-armatron-classic",
+    "crates/linkage-blaze-armatron-c6",
+    "crates/linkage-blaze-clock-classic",
 ]
 resolver = "3"
 
@@ -17,7 +17,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-robot-arm-core = { path = "crates/robot-arm-core" }
+linkage-blaze-core = { path = "crates/linkage-blaze-core" }
 
 [profile.dev]
 panic = "abort"

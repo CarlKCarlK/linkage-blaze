@@ -6,7 +6,18 @@
       "Bash(pkill -f \"python3 -m http.server\")",
       "Bash(python3 -m http.server 8000)",
       "Bash(grep -r \"const N\\\\|const CAP\\\\|associated.*const\\\\|pub const\" ~/.cargo/registry/src/index.crates.io-*/heapless-*/src/vec.rs 2>/dev/null | head -20)",
-      "Read(//home/carlk/.cargo/registry/src/**)"
+      "Read(//home/carlk/.cargo/registry/src/**)",
+      "Bash(sed -i 's/^name = \"robot-arm-core\"/name = \"linkage-blaze-core\"/' /home/carlk/programs/robot-arm-no-alloc/crates/linkage-blaze-core/Cargo.toml)",
+      "Bash(sed -i 's/^name = \"cyd-esp32\"/name = \"linkage-blaze-cyd\"/' /home/carlk/programs/robot-arm-no-alloc/crates/linkage-blaze-cyd/Cargo.toml)",
+      "Bash(sed -i 's/^name = \"linkage-blaze\"/name = \"linkage-blaze-editor\"/' /home/carlk/programs/robot-arm-no-alloc/crates/linkage-blaze-editor/Cargo.toml)",
+      "Bash(sed -i 's/^name = \"robot-arm-wasm\"/name = \"linkage-blaze-armatron-wasm\"/' /home/carlk/programs/robot-arm-no-alloc/crates/linkage-blaze-armatron-wasm/Cargo.toml)",
+      "Bash(sed -i 's/^name = \"robot-arm-cyd-sim\"/name = \"linkage-blaze-armatron-core\"/' /home/carlk/programs/robot-arm-no-alloc/crates/linkage-blaze-armatron-core/Cargo.toml)",
+      "Bash(xargs sed -i -e 's/\\\\brobot_arm_core\\\\b/linkage_blaze_core/g' -e 's/\\\\bcyd_esp32\\\\b/linkage_blaze_cyd/g')",
+      "Bash(just --list)",
+      "Bash(just check-all *)",
+      "Bash(mv linkage-blaze-armatron-esp32classic *)",
+      "Bash(mv linkage-blaze-armatron-esp32c6 *)",
+      "Bash(mv linkage-blaze-clock-esp32classic *)"
     ]
   }
 }

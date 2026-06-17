@@ -1,0 +1,31 @@
+[package]
+name = "linkage-blaze-cyd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["esp32"]
+esp32 = [
+    "device-envoy-esp/esp32",
+    "esp-hal/esp32",
+]
+esp32c6 = [
+    "device-envoy-esp/esp32c6",
+    "esp-hal/esp32c6",
+]
+
+[dependencies]
+device-envoy-esp = { version = "0.1.0", default-features = false }
+embedded-graphics = { version = "0.8", default-features = false }
+embedded-hal = "1.0"
+embedded-hal-bus = "0.3.0"
+esp-hal = { version = "1.1.0", default-features = false, features = [
+    "unstable",
+] }
+heapless = "0.8"
+micromath = "2.1"
+mipidsi = "0.10.0"
+linkage-blaze-core.workspace = true
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+static_cell = "2.1.1"
