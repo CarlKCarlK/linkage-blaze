@@ -185,6 +185,12 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.len
     }
 
+    /// Number of runtime parameters this linkage expects.
+    pub const DOF: usize = DOF;
+
+    /// Step-slot capacity of this linkage.
+    pub const N: usize = N;
+
     /// Return the number of runtime parameters this linkage expects.
     #[must_use]
     pub const fn dof(&self) -> usize {
