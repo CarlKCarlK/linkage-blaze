@@ -473,11 +473,11 @@ pub struct ClockTime {
     text: heapless::String<16>,
     hours: u8,
     minutes: u8,
-    seconds: f32,
+    seconds: u8,
 }
 
 impl ClockTime {
-    pub fn new(hours: u8, minutes: u8, seconds: f32) -> Result<Self, fmt::Error> {
+    pub fn new(hours: u8, minutes: u8, seconds: u8) -> Result<Self, fmt::Error> {
         let mut text = heapless::String::<16>::new();
         let meridiem = if hours < 12 { "AM" } else { "PM" };
         let hours12 = match hours % 12 {
@@ -488,7 +488,6 @@ impl ClockTime {
             &mut text,
             format_args!("{}:{:02} {}", hours12, minutes, meridiem),
         )?;
-        let seconds = seconds.clamp(0.0, 60.0);
         Ok(Self {
             text,
             hours,
@@ -502,7 +501,7 @@ impl ClockTime {
     }
 
     fn params(&self) -> [f32; 1] {
-        let second = self.seconds / 60.0;
+        let second = self.seconds as f32 / 60.0;
         let minute = (self.minutes as f32 + second) / 60.0;
         let hour = ((self.hours % 12) as f32 + minute) / 12.0;
         [hour]
