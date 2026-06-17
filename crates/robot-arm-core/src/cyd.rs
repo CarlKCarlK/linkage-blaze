@@ -99,6 +99,7 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 1: floor disk + axis lines (commented out).
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
+// todo00000 robot arm linkage 4
 const LINKAGE: Linkage<14, 90> = Linkage::start()
     .define_param("x/y view", 0.5 + 30.0 / 360.0)
     .define_param("z", (30.0 + 45.0) / 90.0)
@@ -204,6 +205,7 @@ const LINKAGE: Linkage<14, 90> = Linkage::start()
     ;
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
+// todo00000 robot arm linkage 5
 const ARM_LINKAGE: Linkage<8, 30> = Linkage::start()
     .define_param("x/y view", 0.5 + 30.0 / 360.0)
     .define_param("z", (30.0 + 45.0) / 90.0)
