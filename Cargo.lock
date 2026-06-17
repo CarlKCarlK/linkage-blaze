@@ -1444,14 +1444,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "linkage-blaze-armatron-wasm"
-version = "0.1.4"
-dependencies = [
- "linkage-blaze-core",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "linkage-blaze-clock-classic"
 version = "0.1.4"
 dependencies = [

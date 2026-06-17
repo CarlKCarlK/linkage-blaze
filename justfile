@@ -12,8 +12,8 @@ test-core:
 # Build all embedded crates and run tests (build is required for real checking on microcontrollers)
 check-all:
     just test-core
-    source ~/export-esp.sh && just build-armatron-classic
-    just build-armatron-c6
+    source ~/export-esp.sh && just build-arm-classic
+    just build-arm-c6
     source ~/export-esp.sh && just build-clock-classic
 
 # ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
@@ -23,24 +23,24 @@ check-cyd:
 
 # ── linkage-blaze-armatron-classic ───────────────────────────────────────
 
-check-armatron-classic:
+check-arm-classic:
     cargo +esp check -p linkage-blaze-armatron-classic {{_classic_args}}
 
-build-armatron-classic:
+build-arm-classic:
     source ~/export-esp.sh && cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
 
-run-armatron-classic:
+run-arm-classic:
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-armatron-classic {{_classic_args}}
 
 # ── linkage-blaze-armatron-c6 ───────────────────────────────────────────
 
-check-armatron-c6:
+check-arm-c6:
     cargo check -p linkage-blaze-armatron-c6 {{_c6_args}}
 
-build-armatron-c6:
+build-arm-c6:
     cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
 
-run-armatron-c6:
+run-arm-c6:
     cargo run -p linkage-blaze-armatron-c6 {{_c6_args}}
 
 # ── linkage-blaze-clock-classic ─────────────────────────────────────────
@@ -54,37 +54,32 @@ build-clock-classic:
 run-clock-classic:
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-clock-classic {{_classic_args}}
 
-# ── linkage-blaze-armatron-sim (web simulator) ───────────────────────────────
+# ── linkage-blaze-armatron-core (web simulator + 3D viewer) ─────────────────
 
-_armatron_core_crate := "crates/linkage-blaze-armatron-core"
-_armatron_core_www   := "crates/linkage-blaze-armatron-core/www"
-_armatron_sim_port  := "8081"
+_arm_core_crate      := "crates/linkage-blaze-armatron-core"
+_arm_core_www        := "crates/linkage-blaze-armatron-core/www"
+_arm_core_viewer_www := "crates/linkage-blaze-armatron-core/www/viewer"
+_arm_sim_port        := "8081"
+_arm_viewer_port     := "8080"
 
-build-armatron-sim:
-    wasm-pack build {{_armatron_core_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_core
+build-arm-core:
+    wasm-pack build {{_arm_core_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_core
 
-serve-armatron-sim port=_armatron_sim_port:
-    cd {{_armatron_core_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+serve-arm-wasm port=_arm_sim_port:
+    -lsof -ti:{{port}} | xargs -r kill
+    cd {{_arm_core_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
 
-run-armatron-sim port=_armatron_sim_port:
-    just build-armatron-sim
-    just serve-armatron-sim {{port}}
+run-arm-wasm port=_arm_sim_port:
+    just build-arm-core
+    just serve-arm-wasm {{port}}
 
-# ── linkage-blaze-armatron-wasm (3D viewer) ───────────────────────────────────
+serve-arm-viewer-wasm port=_arm_viewer_port:
+    -lsof -ti:{{port}} | xargs -r kill
+    cd {{_arm_core_viewer_www}} && python3 ../../../../.tools/no_cache_http_server.py {{port}}
 
-_armatron_wasm_crate := "crates/linkage-blaze-armatron-wasm"
-_armatron_wasm_www   := "crates/linkage-blaze-armatron-wasm/www"
-_armatron_wasm_port  := "8080"
-
-build-armatron-wasm:
-    wasm-pack build {{_armatron_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
-
-serve-armatron-wasm port=_armatron_wasm_port:
-    cd {{_armatron_wasm_www}} && python3 -m http.server {{port}}
-
-run-armatron-wasm port=_armatron_wasm_port:
-    just build-armatron-wasm
-    just serve-armatron-wasm {{port}}
+run-arm-viewer-wasm port=_arm_viewer_port:
+    just build-arm-core
+    just serve-arm-viewer-wasm {{port}}
 
 # ── linkage-blaze-editor ──────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import init, { linkage_points } from "./pkg/robot_arm_wasm.js";
+import init, { linkage_points } from "../pkg/linkage_blaze_armatron_core.js";
 
 // todo00000 robot arm linkage 3
 // todo0000 why is this here????
