@@ -25,7 +25,7 @@ const editorSetup = [
     indentWithTab,
   ]),
 ];
-import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-10";
+import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-11";
 
 const error = document.querySelector("#error");
 const canvas = document.querySelector("#view");
@@ -39,6 +39,7 @@ let primitives = [];
 let paramValues = new Map();
 let renderTimer = null;
 let firstFit = true;
+let fitOnNextRebuild = false;
 
 // ---- CodeMirror editor ----
 const STORAGE_KEY = "linkage-blaze-source";
@@ -164,6 +165,7 @@ function updatePreview() {
     rebuildSliders(data.params);
     primitives = data.primitives;
     error.textContent = "";
+    fitOnNextRebuild = true;
     rebuildLinkage();
   } catch (caught) {
     error.textContent = String(caught);
@@ -191,7 +193,7 @@ function rebuildLinkage() {
     else if (p.type === "ring") addRing(p);
     else if (p.type === "sphere") addSphere(p);
   }
-  if (firstFit) { fitView(); firstFit = false; }
+  if (firstFit || fitOnNextRebuild) { fitView(); firstFit = false; fitOnNextRebuild = false; }
 }
 
 function addSegment(p) {
@@ -220,7 +222,7 @@ function addSegmentCap(position, radius, material) {
 }
 
 function addDisk(p) {
-  const geom = new THREE.CylinderGeometry(p.radius, p.radius, modelVisibleWidth(p.width), 64, 1);
+  const geom = new THREE.CylinderGeometry(p.radius, p.radius, 0.001, 64, 1);
   geom.rotateX(Math.PI / 2);
   const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color), side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
@@ -323,17 +325,38 @@ function fitView() {
     const len = dir.length();
     if (len < 0.01) dir.set(-1, -1, 0.6);
     camera.position.copy(center).addScaledVector(dir.normalize(), distance);
-    camera.near = Math.max(0.001, radius * 0.01);
-    camera.far = radius * 100;
+    camera.near = 0.001;
+    camera.far = Math.max(1000, radius * 100);
   } else {
-    const bounds = canvas.getBoundingClientRect();
-    const aspect = bounds.width / Math.max(1, bounds.height);
-    const fitH = radius * 2 * 1.2;
-    const fitW = fitH * aspect;
     const visH = orthographicCamera.top - orthographicCamera.bottom;
     const visW = orthographicCamera.right - orthographicCamera.left;
-    camera.zoom = Math.min(visW / fitW, visH / fitH);
-    camera.position.set(center.x, center.y, center.z + 20);
+    // Project bounding box corners onto camera up/right to get actual screen extents
+    const camUp = camera.up.clone().normalize();
+    const camFwd = new THREE.Vector3();
+    camera.getWorldDirection(camFwd);
+    const camRight = new THREE.Vector3().crossVectors(camFwd, camUp).normalize();
+    const corners = [
+      [box.min.x, box.min.y, box.min.z], [box.max.x, box.min.y, box.min.z],
+      [box.min.x, box.max.y, box.min.z], [box.max.x, box.max.y, box.min.z],
+      [box.min.x, box.min.y, box.max.z], [box.max.x, box.min.y, box.max.z],
+      [box.min.x, box.max.y, box.max.z], [box.max.x, box.max.y, box.max.z],
+    ].map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    let minU = Infinity, maxU = -Infinity, minR = Infinity, maxR = -Infinity;
+    let minF = Infinity, maxF = -Infinity;
+    for (const c of corners) {
+      const u = c.dot(camUp); const r = c.dot(camRight); const f = c.dot(camFwd);
+      if (u < minU) minU = u; if (u > maxU) maxU = u;
+      if (r < minR) minR = r; if (r > maxR) maxR = r;
+      if (f < minF) minF = f; if (f > maxF) maxF = f;
+    }
+    const fitH = (maxU - minU) * 1.5;
+    const fitW = (maxR - minR) * 1.5;
+    camera.zoom = Math.min(visW / Math.max(fitW, 0.001), visH / Math.max(fitH, 0.001));
+    // Place camera outside the bounding sphere so tilting geometry never clips
+    const safeDistance = radius + 1;
+    camera.position.copy(center).addScaledVector(camFwd, -safeDistance);
+    camera.near = 0.001;
+    camera.far = safeDistance * 2 + (maxF - minF) + 1;
   }
 
   camera.updateProjectionMatrix();
