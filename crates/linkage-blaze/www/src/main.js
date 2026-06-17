@@ -513,3 +513,133 @@ function createSliderItem(name, value) {
   item.appendChild(slider);
   return item;
 }
+
+// ---- File handling ----
+const FILE_TYPES = [{ description: "Linkage Blaze", accept: { "text/plain": [".lb.rs", ".rs"] } }];
+const hasFilePicker = typeof window.showOpenFilePicker === "function";
+let currentFileHandle = null;
+
+async function dbGet(key) {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open("linkage-blaze-files", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore("files");
+    req.onsuccess = e => {
+      const tx = e.target.result.transaction("files", "readonly");
+      const r = tx.objectStore("files").get(key);
+      r.onsuccess = () => res(r.result ?? []);
+      r.onerror = () => rej(r.error);
+    };
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbPut(key, value) {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open("linkage-blaze-files", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore("files");
+    req.onsuccess = e => {
+      const tx = e.target.result.transaction("files", "readwrite");
+      tx.objectStore("files").put(value, key);
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    };
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function getRecent() {
+  try { return await dbGet("recent"); } catch { return []; }
+}
+
+async function pushRecent(handle) {
+  let list = await getRecent();
+  list = list.filter(f => f.name !== handle.name);
+  list.unshift({ name: handle.name, handle });
+  list = list.slice(0, 5);
+  try { await dbPut("recent", list); } catch { /* ignore */ }
+  populateRecentSelect(list);
+}
+
+function populateRecentSelect(list) {
+  const sel = document.querySelector("#recent-select");
+  while (sel.options.length > 1) sel.remove(1);
+  for (const { name } of list) sel.add(new Option(name, name));
+}
+
+async function loadHandle(handle) {
+  const text = await (await handle.getFile()).text();
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
+  currentFileHandle = handle;
+  document.title = `${handle.name} — Linkage Blaze`;
+  await pushRecent(handle);
+}
+
+async function openFile() {
+  if (hasFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({ types: FILE_TYPES });
+      await loadHandle(handle);
+    } catch (e) { if (e.name !== "AbortError") console.error(e); }
+  } else {
+    document.querySelector("#file-input").click();
+  }
+}
+
+async function saveFile() {
+  if (currentFileHandle) {
+    const w = await currentFileHandle.createWritable();
+    await w.write(getSource()); await w.close();
+  } else {
+    await saveFileAs();
+  }
+}
+
+async function saveFileAs() {
+  if (hasFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({ suggestedName: "untitled.lb.rs", types: FILE_TYPES });
+      const w = await handle.createWritable();
+      await w.write(getSource()); await w.close();
+      currentFileHandle = handle;
+      document.title = `${handle.name} — Linkage Blaze`;
+      await pushRecent(handle);
+    } catch (e) { if (e.name !== "AbortError") console.error(e); }
+  } else {
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(new Blob([getSource()], { type: "text/plain" })),
+      download: "untitled.lb.rs",
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+  }
+}
+
+document.querySelector("#btn-open").addEventListener("click", openFile);
+document.querySelector("#btn-save").addEventListener("click", saveFile);
+document.querySelector("#btn-save-as").addEventListener("click", saveFileAs);
+
+document.querySelector("#file-input").addEventListener("change", async function () {
+  const file = this.files[0]; if (!file) return;
+  const text = await file.text();
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
+  this.value = "";
+});
+
+document.querySelector("#recent-select").addEventListener("change", async function () {
+  const name = this.value; this.value = "";
+  if (!name) return;
+  const item = (await getRecent()).find(f => f.name === name);
+  if (!item) return;
+  try {
+    if ((await item.handle.queryPermission({ mode: "read" })) !== "granted")
+      if ((await item.handle.requestPermission({ mode: "read" })) !== "granted") return;
+    await loadHandle(item.handle);
+  } catch (e) { console.error(e); }
+});
+
+window.addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key === "s") { e.preventDefault(); saveFile(); }
+  if (e.key === "o") { e.preventDefault(); openFile(); }
+});
+
+getRecent().then(populateRecentSelect);
