@@ -1,3 +1,4 @@
+// todo00000 robot arm linkage 1
  Linkage::start()
         .define_param("raise hand", 0.5)
         .define_param("bend elbow", 0.5)

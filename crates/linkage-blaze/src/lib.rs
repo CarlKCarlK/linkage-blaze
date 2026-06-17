@@ -3,6 +3,7 @@
 use core::f32::consts::PI;
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
+// todo00000 robot arm linkage 6
 const DEFAULT_PROGRAM: &str = r#"Linkage::start()
 .define_param("x/y view", 0.5833333)
 .define_param("z", 0.8333333)

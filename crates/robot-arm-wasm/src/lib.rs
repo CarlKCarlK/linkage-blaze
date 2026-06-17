@@ -5,6 +5,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 pub use robot_arm_core as core;
 
+// todo00000 robot arm linkage 2
 const LINKAGE: Linkage<6, 24> = Linkage::start()
     .define_param("raise hand", 0.5)
     .define_param("bend elbow", 0.5)
