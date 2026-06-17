@@ -152,7 +152,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let tick = clock_sync.wait_for_tick().await;
         let local_time = tick.local_time;
         let clock_time =
-            ClockTime::new(local_time.hour(), local_time.minute(), local_time.second())
+            ClockTime::new(
+                local_time.hour(),
+                local_time.minute(),
+                local_time.second() as f32 + local_time.nanosecond() as f32 / 1_000_000_000.0,
+            )
                 .map_err(|_| MainError::DeviceEnvoy(Error::FormatError))?;
         display.borrow_mut().show("connected", Some(&clock_time))?;
         info!(

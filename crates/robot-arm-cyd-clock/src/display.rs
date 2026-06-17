@@ -12,7 +12,8 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use robot_arm_core::{DiskItem, DrawItem, Linkage, Pose, Rgb888, RingItem, SphereItem};
+use esp_hal::time::Instant;
+use robot_arm_core::{DiskItem, DrawItem, Linkage, Pose, Rgb888, RingItem, SphereItem, Vec3};
 use static_cell::StaticCell;
 
 const SMALL_GLYPH_WIDTH: usize = 6;
@@ -25,88 +26,86 @@ const MAX_TIME_DISPLAY_WIDTH: usize = MAX_TIME_CHARS * MAIN_GLYPH_WIDTH * MAIN_G
 const TIME_TEXT_Y: i32 = 34;
 const GLYPH_WORKSPACE_WIDTH: usize = MAIN_GLYPH_WIDTH * MAIN_GLYPH_SCALE;
 const GLYPH_WORKSPACE_HEIGHT: usize = MAIN_GLYPH_HEIGHT * MAIN_GLYPH_SCALE;
-const CLOCK_BUFFER_WIDTH: usize = 180;
-const CLOCK_BUFFER_HEIGHT: usize = 158;
+const CLOCK_BUFFER_WIDTH: usize = 140;
+const CLOCK_BUFFER_HEIGHT: usize = 140;
 const GLYPH_WORKSPACE_PIXELS: usize = GLYPH_WORKSPACE_WIDTH * GLYPH_WORKSPACE_HEIGHT;
-const CLOCK_TOP_LEFT: Point = Point::new(70, 82);
-const CLOCK_CENTER_X: i32 = 90;
-const CLOCK_CENTER_Y: i32 = 79;
+const CLOCK_TOP_LEFT: Point = Point::new(90, 85);
+const CLOCK_CENTER_X: i32 = 70;
+const CLOCK_CENTER_Y: i32 = 70;
 const HAND_SCALE: f32 = 1.0;
 const BLACK: Rgb888 = Rgb888::CSS_BLACK;
 const BG: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 const TEXT_DIM: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_MAIN: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_OK: Rgb888 = Rgb888::CSS_NAVY;
-const HUB: Rgb888 = Rgb888::CSS_IVORY;
-const HUB_RADIUS: u16 = 6;
-const HAND_ITEM_COUNT: usize = 8; // 1 face disk + 3 clock hands + 4 tick marks
-const HUB_COUNT: usize = 1;
-const CLOCK_PRIMITIVE_COUNT: usize = HAND_ITEM_COUNT + HUB_COUNT;
+const CLOCK_PRIMITIVE_COUNT: usize = 9; // 2 disks + 7 strokes
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const CLOCK_HANDS: Linkage<3, 60> = Linkage::start()
+const CLOCK_HANDS: Linkage<1, 60> = Linkage::start()
     .define_param("hour", 0.0)
-    .define_param("minute", 0.0)
-    .define_param("second", 0.0)
-    .pen_color(Rgb888::CSS_MEDIUM_BLUE)
-    .roll_param("second", 0.0, 360.0)
-    .disk(72.0)
+    // Face disk
+    .pen_color(Rgb888::new(33, 79, 155))
+    .disk(66.0)
+    // 12 o'clock tick (+X is already up, no yaw needed)
     .restart()
-    .pen_color(Rgb888::CSS_IVORY)
-    .pen_width(8.0)
-    .roll_param("second", 0.0, 360.0)
-    .yaw_param("hour", -90.0, 270.0)
-    .forward(38.0)
-    .restart()
-    .pen_color(Rgb888::CSS_LIGHT_SKY_BLUE)
-    .pen_width(5.0)
-    .roll_param("second", 0.0, 360.0)
-    .yaw_param("minute", -90.0, 270.0)
-    .forward(58.0)
-    .restart()
-    .pen_color(Rgb888::CSS_TOMATO)
-    .pen_width(2.0)
-    .roll_param("second", 0.0, 360.0)
-    .yaw_param("second", -90.0, 270.0)
-    .forward(66.0)
-    .restart()
-    .pen_color(Rgb888::CSS_IVORY)
+    .pen_color(Rgb888::new(255, 245, 216))
+    .pen_width(4.5)
     .pen_up()
-    .roll_param("second", 0.0, 360.0)
+    .forward(48.0)
+    .pen_down()
+    .forward(14.0)
+    // 3 o'clock tick
+    .restart()
+    .pen_color(Rgb888::new(255, 245, 216))
+    .pen_width(4.5)
     .yaw(-90.0)
-    .forward(58.0)
-    .pen_down()
-    .pen_width(3.0)
-    .forward(10.0)
-    .restart()
-    .pen_color(Rgb888::CSS_IVORY)
     .pen_up()
-    .roll_param("second", 0.0, 360.0)
-    .yaw(0.0)
-    .forward(58.0)
+    .forward(51.0)
     .pen_down()
-    .pen_width(3.0)
-    .forward(10.0)
+    .forward(11.0)
+    // 6 o'clock tick
     .restart()
-    .pen_color(Rgb888::CSS_IVORY)
-    .pen_up()
-    .roll_param("second", 0.0, 360.0)
-    .yaw(90.0)
-    .forward(58.0)
-    .pen_down()
-    .pen_width(3.0)
-    .forward(10.0)
-    .restart()
-    .pen_color(Rgb888::CSS_IVORY)
-    .pen_up()
-    .roll_param("second", 0.0, 360.0)
+    .pen_color(Rgb888::new(255, 245, 216))
+    .pen_width(4.5)
     .yaw(180.0)
-    .forward(58.0)
+    .pen_up()
+    .forward(51.0)
     .pen_down()
-    .pen_width(3.0)
-    .forward(10.0);
+    .forward(11.0)
+    // 9 o'clock tick
+    .restart()
+    .pen_color(Rgb888::new(255, 245, 216))
+    .pen_width(4.5)
+    .yaw(90.0)
+    .pen_up()
+    .forward(51.0)
+    .pen_down()
+    .forward(11.0)
+    // Hour hand
+    .restart()
+    .pen_color(Rgb888::CSS_ANTIQUE_WHITE)
+    .pen_width(16.0)
+    .yaw_param("hour", 360.0, 0.0)
+    .forward(40.0)
+    // Minute hand
+    .restart()
+    .pen_color(Rgb888::new(69, 215, 255))
+    .pen_width(7.5)
+    .yaw_param("hour", 4320.0, 0.0)
+    .forward(52.0)
+    // Second hand
+    .restart()
+    .pen_color(Rgb888::new(255, 89, 72))
+    .pen_width(2.0)
+    .yaw_param("hour", 259_200.0, 0.0)
+    .forward(60.0)
+    // Hub
+    .restart()
+    .up(8.0)
+    .pen_color(Rgb888::CSS_RED)
+    .disk(8.0);
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 
@@ -136,7 +135,9 @@ pub struct CydClockDisplay {
     cyd: Cyd,
     glyph_workspace: &'static mut GlyphWorkspace,
     background_cleared: bool,
+    title_drawn: bool,
     last_time_text: heapless::String<16>,
+    last_wifi_text: heapless::String<32>,
 }
 
 impl CydClockDisplay {
@@ -147,7 +148,9 @@ impl CydClockDisplay {
             cyd,
             glyph_workspace: GlyphWorkspace::init_static(&GLYPH_WORKSPACE),
             background_cleared: false,
+            title_drawn: false,
             last_time_text: heapless::String::new(),
+            last_wifi_text: heapless::String::new(),
         }
     }
 
@@ -163,14 +166,23 @@ impl CydClockDisplay {
 
         let time_text = clock_time.map_or("--:--", ClockTime::as_str);
 
+        if !self.title_drawn {
+            self.show_small_text_line("CYD Clock", TEXT_DIM, Point::new(14, 8), 96)?;
+            self.title_drawn = true;
+        }
+
         let mut wifi_text = heapless::String::<32>::new();
         fmt::Write::write_fmt(
             &mut wifi_text,
             format_args!("WiFi {}", wifi_label(wifi_mode)),
         )
         .ok();
-        self.show_small_text_line("CYD Clock", TEXT_DIM, Point::new(14, 8), 96)?;
-        self.show_small_text_line(wifi_text.as_str(), TEXT_OK, Point::new(240, 8), 70)?;
+        if wifi_text.as_str() != self.last_wifi_text.as_str() {
+            self.show_small_text_line(wifi_text.as_str(), TEXT_OK, Point::new(240, 8), 70)?;
+            self.last_wifi_text.clear();
+            self.last_wifi_text.push_str(wifi_text.as_str()).ok();
+        }
+
         if time_text != self.last_time_text.as_str() {
             self.show_main_text_line(time_text, TEXT_MAIN)?;
             self.last_time_text.clear();
@@ -280,11 +292,13 @@ impl CydClockDisplay {
     fn show_clock(&mut self, clock_time: Option<&ClockTime>) -> Result<(), CydClockDisplayError> {
         let mut primitives = [empty_primitive(); CLOCK_PRIMITIVE_COUNT];
         let mut primitive_count = 0;
-        let params = clock_time.map_or([0.0; 3], |t| t.params());
+        let params = clock_time.map_or([0.0; 1], |t| t.params());
         draw_clock_hands(&params, &mut primitives, &mut primitive_count);
-        draw_clock_hub(&mut primitives, &mut primitive_count);
+        let t0 = Instant::now();
         self.cyd
             .draw_primitives_now(CLOCK_BOUNDS, rgb565(BG), &primitives[..primitive_count])?;
+        let elapsed_ms = (Instant::now() - t0).as_millis();
+        esp_println::println!("draw_primitives_now ms = {}", elapsed_ms);
         Ok(())
     }
 }
@@ -332,7 +346,7 @@ fn scale_glyph_in_place(
 }
 
 fn draw_clock_hands(
-    params: &[f32; 3],
+    params: &[f32; 1],
     primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT],
     primitive_count: &mut usize,
 ) {
@@ -367,35 +381,30 @@ fn draw_clock_hands(
     }
 }
 
-fn draw_clock_hub(
-    primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT],
-    primitive_count: &mut usize,
-) {
-    let r = HUB_RADIUS as f32;
-    primitives[*primitive_count] = DrawPrimitive::Ellipse(Ellipse {
-        center: clock_point(Point::new(CLOCK_CENTER_X, CLOCK_CENTER_Y)),
-        axis_a: (r, 0.0),
-        axis_b: (0.0, r),
-        radius: r,
-        stroke_width: 0,
-        color: rgb565(HUB),
-        filled: true,
-    });
-    *primitive_count += 1;
+// Project model coordinates onto the clock face screen plane.
+// Convention: model +X=up, model +Y=left.
+// screen_x = -model_y  (left → negative screen X)
+// screen_y = -model_x  (up   → negative screen Y, since embedded-graphics Y goes down)
+fn project_x(pos: Vec3, scale: f32) -> i32 {
+    -(pos[1] * scale) as i32
+}
+fn project_y(pos: Vec3, scale: f32) -> i32 {
+    -(pos[0] * scale) as i32
 }
 
 fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
     let pos = disk.pose().position();
     let center = clock_point(Point::new(
-        CLOCK_CENTER_X + pos[0] as i32,
-        CLOCK_CENTER_Y + pos[1] as i32,
+        CLOCK_CENTER_X + project_x(pos, 1.0),
+        CLOCK_CENTER_Y + project_y(pos, 1.0),
     ));
     let orient = disk.pose().orientation();
     let r = disk.radius();
     Ellipse {
         center,
-        axis_a: (orient[0][0] * r, orient[1][0] * r),
-        axis_b: (orient[0][1] * r, orient[1][1] * r),
+        // project orientation axes: screen_x=-model_y, screen_y=-model_x
+        axis_a: (-orient[1][0] * r, -orient[0][0] * r),
+        axis_b: (-orient[1][1] * r, -orient[0][1] * r),
         radius: r,
         stroke_width: 0,
         color: Rgb565::from(disk.color()),
@@ -406,15 +415,15 @@ fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
 fn ring_to_ellipse(ring: RingItem) -> Ellipse {
     let pos = ring.pose().position();
     let center = clock_point(Point::new(
-        CLOCK_CENTER_X + pos[0] as i32,
-        CLOCK_CENTER_Y + pos[1] as i32,
+        CLOCK_CENTER_X + project_x(pos, 1.0),
+        CLOCK_CENTER_Y + project_y(pos, 1.0),
     ));
     let orient = ring.pose().orientation();
     let r = ring.radius();
     Ellipse {
         center,
-        axis_a: (orient[0][0] * r, orient[1][0] * r),
-        axis_b: (orient[0][1] * r, orient[1][1] * r),
+        axis_a: (-orient[1][0] * r, -orient[0][0] * r),
+        axis_b: (-orient[1][1] * r, -orient[0][1] * r),
         radius: r,
         stroke_width: clock_width_pixels(ring.width()),
         color: Rgb565::from(ring.color()),
@@ -425,8 +434,8 @@ fn ring_to_ellipse(ring: RingItem) -> Ellipse {
 fn sphere_to_ellipse(sphere: SphereItem) -> Ellipse {
     let pos = sphere.pose().position();
     let center = clock_point(Point::new(
-        CLOCK_CENTER_X + pos[0] as i32,
-        CLOCK_CENTER_Y + pos[1] as i32,
+        CLOCK_CENTER_X + project_x(pos, 1.0),
+        CLOCK_CENTER_Y + project_y(pos, 1.0),
     ));
     let r = sphere.radius();
     Ellipse {
@@ -447,8 +456,8 @@ fn clock_width_pixels(width: f32) -> u16 {
 fn pose_to_point(pose: Pose) -> Point {
     let position = pose.position();
     clock_point(Point::new(
-        CLOCK_CENTER_X + (position[0] * HAND_SCALE) as i32,
-        CLOCK_CENTER_Y + (position[1] * HAND_SCALE) as i32,
+        CLOCK_CENTER_X + project_x(position, HAND_SCALE),
+        CLOCK_CENTER_Y + project_y(position, HAND_SCALE),
     ))
 }
 
@@ -464,11 +473,11 @@ pub struct ClockTime {
     text: heapless::String<16>,
     hours: u8,
     minutes: u8,
-    seconds: u8,
+    seconds: f32,
 }
 
 impl ClockTime {
-    pub fn new(hours: u8, minutes: u8, seconds: u8) -> Result<Self, fmt::Error> {
+    pub fn new(hours: u8, minutes: u8, seconds: f32) -> Result<Self, fmt::Error> {
         let mut text = heapless::String::<16>::new();
         let meridiem = if hours < 12 { "AM" } else { "PM" };
         let hours12 = match hours % 12 {
@@ -479,6 +488,7 @@ impl ClockTime {
             &mut text,
             format_args!("{}:{:02} {}", hours12, minutes, meridiem),
         )?;
+        let seconds = seconds.clamp(0.0, 60.0);
         Ok(Self {
             text,
             hours,
@@ -491,10 +501,10 @@ impl ClockTime {
         self.text.as_str()
     }
 
-    fn params(&self) -> [f32; 3] {
-        let second = self.seconds as f32 / 60.0;
+    fn params(&self) -> [f32; 1] {
+        let second = self.seconds / 60.0;
         let minute = (self.minutes as f32 + second) / 60.0;
         let hour = ((self.hours % 12) as f32 + minute) / 12.0;
-        [hour, minute, second]
+        [hour]
     }
 }
