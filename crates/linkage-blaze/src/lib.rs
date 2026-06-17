@@ -40,9 +40,6 @@ const DEFAULT_PROGRAM: &str = r#"Linkage::start()
 .forward_param("close hand", 1.0, 0.0)
 .yaw(90.0)
 .forward(1.0)
-.restart()
-.pen_color(Rgb888::CSS_RED)
-.disk(0.05)
 "#;
 
 #[wasm_bindgen]
@@ -355,9 +352,15 @@ fn apply_method(
                 ));
             }
         }
-        "restart" => {
-            expect_arg_count(line_number, method_call, 0)?;
-            turtle.restart();
+        "remember" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            let name = parse_identifier(line_number, method_call, 0)?;
+            turtle.remember(name);
+        }
+        "recall" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            let name = parse_identifier(line_number, method_call, 0)?;
+            turtle.recall(name);
         }
         "disk" => {
             expect_arg_count(line_number, method_call, 1)?;
@@ -528,6 +531,15 @@ fn parse_string_arg(
         })
 }
 
+fn parse_identifier(
+    line_number: usize,
+    method_call: &MethodCall,
+    arg_index: usize,
+) -> Result<&'static str, String> {
+    let value = parse_string_arg(line_number, method_call, arg_index)?;
+    Ok(Box::leak(value.to_string().into_boxed_str()))
+}
+
 fn parse_number_or_constant(
     line_number: usize,
     method_name: &str,
@@ -678,11 +690,20 @@ struct EditorParam {
 }
 
 #[derive(Clone, Copy, Debug)]
+struct TurtleState {
+    pose: Pose,
+    pen: Pen,
+    color: Color,
+    width: f32,
+}
+
 struct Turtle {
     pose: Pose,
     pen: Pen,
     color: Color,
     width: f32,
+    remembered: [(Option<&'static str>, TurtleState); 16],
+    remembered_len: usize,
 }
 
 impl Turtle {
@@ -692,11 +713,42 @@ impl Turtle {
             pen: Pen::Down,
             color: Color::new(1.0, 1.0, 1.0),
             width: 0.1,
+            remembered: [(None, TurtleState {
+                pose: Pose::start(),
+                pen: Pen::Down,
+                color: Color::new(1.0, 1.0, 1.0),
+                width: 0.1,
+            }); 16],
+            remembered_len: 0,
         }
     }
 
-    fn restart(&mut self) {
-        *self = Self::new();
+    fn remember(&mut self, name: &'static str) {
+        if self.remembered_len < 16 {
+            self.remembered[self.remembered_len] = (Some(name), TurtleState {
+                pose: self.pose,
+                pen: self.pen,
+                color: self.color,
+                width: self.width,
+            });
+            self.remembered_len += 1;
+        }
+    }
+
+    fn recall(&mut self, name: &'static str) {
+        let mut i = 0;
+        while i < self.remembered_len {
+            if let (Some(n), state) = self.remembered[i] {
+                if n == name {
+                    self.pose = state.pose;
+                    self.pen = state.pen;
+                    self.color = state.color;
+                    self.width = state.width;
+                    return;
+                }
+            }
+            i += 1;
+        }
     }
 }
 
