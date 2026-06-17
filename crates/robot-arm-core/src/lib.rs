@@ -425,8 +425,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Iterate over poses produced by evaluating this linkage from 0.0 to 1.0 params.
-    pub fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> Poses<'a, DOF, N> {
-        Poses::new(self, params)
+    pub fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a {
+        self.styled_poses(params).map(|sp| sp.pose)
     }
 
     /// Iterate over styled poses produced by evaluating this linkage.
@@ -757,72 +757,6 @@ impl StrokeSegment {
 /// Iterator over poses produced by evaluating a linkage.
 ///
 /// Yields one [`Pose`] after every linkage step, including the implicit [`Step::Start`].
-pub struct Poses<'a, const DOF: usize, const N: usize> {
-    linkage: &'a Linkage<DOF, N>,
-    params: &'a [f32; DOF],
-    index: usize,
-    pose: Pose,
-    remembered: [(&'static str, Pose); N],
-    remembered_len: usize,
-}
-
-impl<'a, const DOF: usize, const N: usize> Poses<'a, DOF, N> {
-    /// Create a new pose iterator for the given linkage.
-    fn new(linkage: &'a Linkage<DOF, N>, params: &'a [f32; DOF]) -> Self {
-        validate_params(params);
-        Self {
-            linkage,
-            params,
-            index: 0,
-            pose: Pose::start(),
-            remembered: [("", Pose::start()); N],
-            remembered_len: 0,
-        }
-    }
-
-    fn remember_index(&self, name: &str) -> Option<usize> {
-        let mut i = 0;
-        while i < self.remembered_len {
-            if str_eq(self.remembered[i].0, name) {
-                return Some(i);
-            }
-            i += 1;
-        }
-        None
-    }
-}
-
-impl<const DOF: usize, const N: usize> Iterator for Poses<'_, DOF, N> {
-    type Item = Pose;
-
-    fn next(&mut self) -> Option<Pose> {
-        loop {
-            if self.index >= self.linkage.len {
-                return None;
-            }
-            let step = &self.linkage.steps[self.index];
-            self.index += 1;
-
-            match step {
-                Step::Remember { name } => {
-                    assert!(self.remembered_len < N, "too many remembered states");
-                    self.remembered[self.remembered_len] = (*name, self.pose);
-                    self.remembered_len += 1;
-                    continue;
-                }
-                Step::Recall { name } => {
-                    let index = self.remember_index(name).expect("recall of unknown remembered state");
-                    self.pose = self.remembered[index].1;
-                    continue;
-                }
-                _ => {}
-            }
-
-            self.pose.apply(step, self.params);
-            return Some(self.pose);
-        }
-    }
-}
 
 /// Iterator over styled poses produced by evaluating a linkage.
 ///
