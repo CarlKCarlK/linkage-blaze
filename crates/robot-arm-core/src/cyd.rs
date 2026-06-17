@@ -97,9 +97,9 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 
 // ---- linkages ----
 //
-// Section 1: floor disk + axis lines.  Restart resets pose and pen state for the arm section.
+// Section 1: floor disk + axis lines (commented out).
 // Section 2: arm.  Pen down for strokes.
-// Section 3: target traversal (pen up) then target disk.
+// Section 3: target traversal (pen up) then target disk (commented out).
 const LINKAGE: Linkage<DOF, 90> = Linkage::start()
     .define_param("x/y view", 0.5 + 30.0 / 360.0)
     .define_param("z", (30.0 + 45.0) / 90.0)
@@ -160,7 +160,6 @@ const LINKAGE: Linkage<DOF, 90> = Linkage::start()
     .forward_param("close hand", 1.0, 0.0)
     .yaw(90.0)
     .forward(1.0)
-    .restart()
     // // ---- target (pen up: no arm strokes, only the disk at the end) ----
     // .pen_up()
     // .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
