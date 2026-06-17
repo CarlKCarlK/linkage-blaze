@@ -4,7 +4,6 @@ members = [
     "crates/linkage-blaze-cyd",
     "crates/linkage-blaze-editor",
     "crates/linkage-blaze-armatron-core",
-    "crates/linkage-blaze-armatron-wasm",
     "crates/linkage-blaze-armatron-classic",
     "crates/linkage-blaze-armatron-c6",
     "crates/linkage-blaze-clock-classic",

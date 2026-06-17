@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/robot_arm_cyd_sim_v3.js?v=view-rotation-1";
+import init, { CydSim } from "./pkg/linkage_blaze_armatron_core.js";
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
