@@ -1,85 +1,103 @@
 set shell := ["bash", "-cu"]
 
-_cyd_esp32_args := "-p cyd-esp32 --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
-_cyd_args := "-p robot-arm-cyd --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
-_cyd_clock_args := "-p robot-arm-cyd-clock --target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
-_cyd_sim_crate := "crates/robot-arm-cyd-sim"
-_cyd_sim_www := "crates/robot-arm-cyd-sim/www"
-_cyd_sim_port := "8081"
-_wasm_crate := "crates/robot-arm-wasm"
-_wasm_www := "crates/robot-arm-wasm/www"
-_wasm_port := "8080"
-_linkage_blaze_crate := "crates/linkage-blaze"
-_linkage_blaze_www := "crates/linkage-blaze/www"
-_linkage_blaze_port := "8082"
+_classic_args := "--target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
+_c6_args      := "--target riscv32imac-unknown-none-elf --release --no-default-features --features esp32c6"
 
-# Check shared CYD ESP32 hardware crate
-check-cyd-esp32:
-    cargo +esp check {{_cyd_esp32_args}}
+# ── Tests / checks ───────────────────────────────────────────────────────────
 
-# Check robot-arm-cyd (ESP32)
+# Run linkage-blaze-core tests
+test-core:
+    cargo test -p linkage-blaze-core
+
+# Build all embedded crates and run tests (build is required for real checking on microcontrollers)
+check-all:
+    just test-core
+    source ~/export-esp.sh && just build-armatron-classic
+    just build-armatron-c6
+    source ~/export-esp.sh && just build-clock-classic
+
+# ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
+
 check-cyd:
-    cargo +esp check {{_cyd_args}}
+    cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
 
-# Build robot-arm-cyd (ESP32)
-build-cyd:
-    source ~/export-esp.sh && cargo +esp build {{_cyd_args}}
+# ── linkage-blaze-armatron-classic ───────────────────────────────────────
 
-# Flash and monitor robot-arm-cyd on the CYD board
-run-cyd:
-    source ~/export-esp.sh && cargo +esp run {{_cyd_args}}
+check-armatron-classic:
+    cargo +esp check -p linkage-blaze-armatron-classic {{_classic_args}}
 
-# Check robot-arm-cyd-clock (ESP32)
-check-cyd-clock:
-    cargo +esp check {{_cyd_clock_args}}
+build-armatron-classic:
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
 
-# Build robot-arm-cyd-clock (ESP32)
-build-cyd-clock:
-    source ~/export-esp.sh && cargo +esp build {{_cyd_clock_args}}
+run-armatron-classic:
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-armatron-classic {{_classic_args}}
 
-# Flash and monitor robot-arm-cyd-clock on the CYD board
-run-cyd-clock:
-    source ~/export-esp.sh && cargo +esp run {{_cyd_clock_args}}
+# ── linkage-blaze-armatron-c6 ───────────────────────────────────────────
 
-# Flash and monitor robot-arm-c6 on the ESP32-C6 board
-run-c6:
-    cargo run -p robot-arm-c6 --target riscv32imac-unknown-none-elf --release --no-default-features --features esp32c6
+check-armatron-c6:
+    cargo check -p linkage-blaze-armatron-c6 {{_c6_args}}
 
-# Build the CYD simulator WASM bundle into www/pkg
-build-cyd-sim:
-    wasm-pack build {{_cyd_sim_crate}} --target web --out-dir www/pkg --out-name robot_arm_cyd_sim_v3
+build-armatron-c6:
+    cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
 
-# Serve the CYD simulator web app
-serve-cyd-sim port=_cyd_sim_port:
-    cd {{_cyd_sim_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+run-armatron-c6:
+    cargo run -p linkage-blaze-armatron-c6 {{_c6_args}}
 
-# Build and serve the CYD simulator
-run-cyd-sim port=_cyd_sim_port:
-    just build-cyd-sim
-    just serve-cyd-sim {{port}}
+# ── linkage-blaze-clock-classic ─────────────────────────────────────────
 
-# Build the robot-arm-wasm bundle into www/pkg
-build-wasm-ui:
-    wasm-pack build {{_wasm_crate}} --target web --out-dir www/pkg
+check-clock-classic:
+    cargo +esp check -p linkage-blaze-clock-classic {{_classic_args}}
 
-# Serve the robot-arm-wasm web app
-serve-wasm-ui port=_wasm_port:
-    cd {{_wasm_www}} && python3 -m http.server {{port}}
+build-clock-classic:
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
 
-# Build and serve the robot-arm-wasm web app
-run-wasm-ui port=_wasm_port:
-    just build-wasm-ui
-    just serve-wasm-ui {{port}}
+run-clock-classic:
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-clock-classic {{_classic_args}}
 
-# Build the Linkage Blaze editor WASM bundle into www/pkg
-build-linkage-blaze:
-    wasm-pack build {{_linkage_blaze_crate}} --target web --out-dir www/pkg --out-name linkage_blaze
+# ── linkage-blaze-armatron-sim (web simulator) ───────────────────────────────
 
-# Serve the Linkage Blaze editor web app
-serve-linkage-blaze port=_linkage_blaze_port:
-    cd {{_linkage_blaze_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+_armatron_core_crate := "crates/linkage-blaze-armatron-core"
+_armatron_core_www   := "crates/linkage-blaze-armatron-core/www"
+_armatron_sim_port  := "8081"
 
-# Build and serve the Linkage Blaze editor
-run-linkage-blaze port=_linkage_blaze_port:
-    just build-linkage-blaze
-    just serve-linkage-blaze {{port}}
+build-armatron-sim:
+    wasm-pack build {{_armatron_core_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_core
+
+serve-armatron-sim port=_armatron_sim_port:
+    cd {{_armatron_core_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-armatron-sim port=_armatron_sim_port:
+    just build-armatron-sim
+    just serve-armatron-sim {{port}}
+
+# ── linkage-blaze-armatron-wasm (3D viewer) ───────────────────────────────────
+
+_armatron_wasm_crate := "crates/linkage-blaze-armatron-wasm"
+_armatron_wasm_www   := "crates/linkage-blaze-armatron-wasm/www"
+_armatron_wasm_port  := "8080"
+
+build-armatron-wasm:
+    wasm-pack build {{_armatron_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
+
+serve-armatron-wasm port=_armatron_wasm_port:
+    cd {{_armatron_wasm_www}} && python3 -m http.server {{port}}
+
+run-armatron-wasm port=_armatron_wasm_port:
+    just build-armatron-wasm
+    just serve-armatron-wasm {{port}}
+
+# ── linkage-blaze-editor ──────────────────────────────────────────────────────
+
+_editor_crate := "crates/linkage-blaze-editor"
+_editor_www   := "crates/linkage-blaze-editor/www"
+_editor_port  := "8082"
+
+build-editor:
+    wasm-pack build {{_editor_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_editor
+
+serve-editor port=_editor_port:
+    cd {{_editor_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-editor port=_editor_port:
+    just build-editor
+    just serve-editor {{port}}
