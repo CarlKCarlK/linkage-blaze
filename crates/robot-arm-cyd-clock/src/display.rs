@@ -38,18 +38,21 @@ const BG: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 const TEXT_DIM: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_MAIN: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_OK: Rgb888 = Rgb888::CSS_NAVY;
-const CLOCK_PRIMITIVE_COUNT: usize = 9; // 2 disks + 7 strokes
+const CLOCK_PRIMITIVE_COUNT: usize = 10; // 2 disks + 8 strokes
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const CLOCK_HANDS: Linkage<1, 60> = Linkage::start()
+const CLOCK_HANDS: Linkage<2, 100> = Linkage::start()
     .define_param("hour", 0.0)
+    .define_param("face spin", 0.5)
     // Face disk
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::new(33, 79, 155))
     .disk(66.0)
-    // 12 o'clock tick (+X is already up, no yaw needed)
+    // 12 o'clock tick
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::new(255, 245, 216))
     .pen_width(4.5)
     .pen_up()
@@ -58,6 +61,7 @@ const CLOCK_HANDS: Linkage<1, 60> = Linkage::start()
     .forward(14.0)
     // 3 o'clock tick
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::new(255, 245, 216))
     .pen_width(4.5)
     .yaw(-90.0)
@@ -67,6 +71,7 @@ const CLOCK_HANDS: Linkage<1, 60> = Linkage::start()
     .forward(11.0)
     // 6 o'clock tick
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::new(255, 245, 216))
     .pen_width(4.5)
     .yaw(180.0)
@@ -76,6 +81,7 @@ const CLOCK_HANDS: Linkage<1, 60> = Linkage::start()
     .forward(11.0)
     // 9 o'clock tick
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::new(255, 245, 216))
     .pen_width(4.5)
     .yaw(90.0)
@@ -85,24 +91,28 @@ const CLOCK_HANDS: Linkage<1, 60> = Linkage::start()
     .forward(11.0)
     // Hour hand
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::CSS_ANTIQUE_WHITE)
     .pen_width(16.0)
     .yaw_param("hour", 360.0, 0.0)
     .forward(40.0)
     // Minute hand
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::new(69, 215, 255))
     .pen_width(7.5)
     .yaw_param("hour", 4320.0, 0.0)
     .forward(52.0)
     // Second hand
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .pen_color(Rgb888::new(255, 89, 72))
     .pen_width(2.0)
     .yaw_param("hour", 259_200.0, 0.0)
     .forward(60.0)
     // Hub
     .restart()
+    .roll_param("face spin", -90.0, 90.0)
     .up(8.0)
     .pen_color(Rgb888::CSS_RED)
     .disk(8.0);
@@ -292,7 +302,7 @@ impl CydClockDisplay {
     fn show_clock(&mut self, clock_time: Option<&ClockTime>) -> Result<(), CydClockDisplayError> {
         let mut primitives = [empty_primitive(); CLOCK_PRIMITIVE_COUNT];
         let mut primitive_count = 0;
-        let params = clock_time.map_or([0.0; 1], |t| t.params());
+        let params = clock_time.map_or([0.0; 2], |t| t.params());
         draw_clock_hands(&params, &mut primitives, &mut primitive_count);
         let t0 = Instant::now();
         self.cyd
@@ -346,7 +356,7 @@ fn scale_glyph_in_place(
 }
 
 fn draw_clock_hands(
-    params: &[f32; 1],
+    params: &[f32; 2],
     primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT],
     primitive_count: &mut usize,
 ) {
@@ -500,10 +510,11 @@ impl ClockTime {
         self.text.as_str()
     }
 
-    fn params(&self) -> [f32; 1] {
+    fn params(&self) -> [f32; 2] {
         let second = self.seconds as f32 / 60.0;
         let minute = (self.minutes as f32 + second) / 60.0;
         let hour = ((self.hours % 12) as f32 + minute) / 12.0;
-        [hour]
+        let face_spin = (((self.seconds % 20) as f32) / 20.0 + 0.5) % 1.0;
+        [hour, face_spin]
     }
 }
