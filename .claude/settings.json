@@ -4,7 +4,9 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(pkill -f \"python3 -m http.server\")",
-      "Bash(python3 -m http.server 8000)"
+      "Bash(python3 -m http.server 8000)",
+      "Bash(grep -r \"const N\\\\|const CAP\\\\|associated.*const\\\\|pub const\" ~/.cargo/registry/src/index.crates.io-*/heapless-*/src/vec.rs 2>/dev/null | head -20)",
+      "Read(//home/carlk/.cargo/registry/src/**)"
     ]
   }
 }

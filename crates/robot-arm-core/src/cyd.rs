@@ -67,8 +67,7 @@ const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CO
 // ---- world / display constants ----
 const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span the screen width
 
-// ---- DOF and parameter indices ----
-const DOF: usize = 14;
+// ---- parameter indices ----
 const ARM_PARAM_START: usize = 2;
 const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 8;
@@ -100,7 +99,7 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 1: floor disk + axis lines (commented out).
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
-const LINKAGE: Linkage<DOF, 90> = Linkage::start()
+const LINKAGE: Linkage<14, 90> = Linkage::start()
     .define_param("x/y view", 0.5 + 30.0 / 360.0)
     .define_param("z", (30.0 + 45.0) / 90.0)
     .define_param("raise hand", 0.5)
@@ -239,6 +238,8 @@ const ARM_LINKAGE: Linkage<8, 30> = Linkage::start()
     .forward_param("close hand", 1.0, 0.0)
     .yaw(90.0)
     .forward(1.0);
+
+const DOF: usize = Linkage::<14, 90>::DOF;
 
 fn param_index(name: &str) -> usize {
     LINKAGE
