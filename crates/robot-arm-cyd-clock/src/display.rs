@@ -38,7 +38,6 @@ const BG: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 const TEXT_DIM: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_MAIN: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_OK: Rgb888 = Rgb888::CSS_NAVY;
-const CLOCK_PRIMITIVE_COUNT: usize = 10; // 2 disks + 8 strokes
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
@@ -113,7 +112,7 @@ const CLOCK_HANDS: Linkage<2, 100> = Linkage::start()
     // Hub
     .restart()
     .roll_param("face spin", -90.0, 90.0)
-    .up(8.0)
+    // .up(8.0)
     .pen_color(Rgb888::CSS_RED)
     .disk(8.0);
 
@@ -300,26 +299,39 @@ impl CydClockDisplay {
     }
 
     fn show_clock(&mut self, clock_time: Option<&ClockTime>) -> Result<(), CydClockDisplayError> {
-        let mut primitives = [empty_primitive(); CLOCK_PRIMITIVE_COUNT];
-        let mut primitive_count = 0;
         let params = clock_time.map_or([0.0; 2], |t| t.params());
-        draw_clock_hands(&params, &mut primitives, &mut primitive_count);
+        let mut primitives = heapless::Vec::<DrawPrimitive, 16>::new();
+
+        for draw_item in CLOCK_HANDS.draw_items(&params) {
+            let prim = match draw_item {
+                DrawItem::Stroke(stroke) => {
+                    let start = pose_to_point(stroke.start());
+                    let end = pose_to_point(stroke.end());
+                    if start != end {
+                        DrawPrimitive::LineSegment(LineSegment {
+                            start,
+                            end,
+                            width: clock_width_pixels(stroke.width()),
+                            color: Rgb565::from(stroke.color()),
+                        })
+                    } else {
+                        continue;
+                    }
+                }
+                DrawItem::Disk(disk) => DrawPrimitive::Ellipse(disk_to_ellipse(disk)),
+                DrawItem::Ring(ring) => DrawPrimitive::Ellipse(ring_to_ellipse(ring)),
+                DrawItem::Sphere(sphere) => DrawPrimitive::Ellipse(sphere_to_ellipse(sphere)),
+            };
+            primitives.push(prim).ok();
+        }
+
         let t0 = Instant::now();
         self.cyd
-            .draw_primitives_now(CLOCK_BOUNDS, rgb565(BG), &primitives[..primitive_count])?;
+            .draw_primitives_now(CLOCK_BOUNDS, rgb565(BG), &primitives)?;
         let elapsed_ms = (Instant::now() - t0).as_millis();
         esp_println::println!("draw_primitives_now ms = {}", elapsed_ms);
         Ok(())
     }
-}
-
-fn empty_primitive() -> DrawPrimitive {
-    DrawPrimitive::LineSegment(LineSegment {
-        start: Point::new(0, 0),
-        end: Point::new(0, 0),
-        width: 0,
-        color: rgb565(BLACK),
-    })
 }
 
 fn wifi_label(wifi_mode: &str) -> &str {
@@ -350,42 +362,6 @@ fn scale_glyph_in_place(
                 for offset_x in 0..scale {
                     pixels[(scaled_y + offset_y) * scaled_width + scaled_x + offset_x] = color;
                 }
-            }
-        }
-    }
-}
-
-fn draw_clock_hands(
-    params: &[f32; 2],
-    primitives: &mut [DrawPrimitive; CLOCK_PRIMITIVE_COUNT],
-    primitive_count: &mut usize,
-) {
-    for draw_item in CLOCK_HANDS.draw_items(params) {
-        match draw_item {
-            DrawItem::Stroke(stroke) => {
-                let start = pose_to_point(stroke.start());
-                let end = pose_to_point(stroke.end());
-                if start != end {
-                    primitives[*primitive_count] = DrawPrimitive::LineSegment(LineSegment {
-                        start,
-                        end,
-                        width: clock_width_pixels(stroke.width()),
-                        color: Rgb565::from(stroke.color()),
-                    });
-                    *primitive_count += 1;
-                }
-            }
-            DrawItem::Disk(disk) => {
-                primitives[*primitive_count] = DrawPrimitive::Ellipse(disk_to_ellipse(disk));
-                *primitive_count += 1;
-            }
-            DrawItem::Ring(ring) => {
-                primitives[*primitive_count] = DrawPrimitive::Ellipse(ring_to_ellipse(ring));
-                *primitive_count += 1;
-            }
-            DrawItem::Sphere(sphere) => {
-                primitives[*primitive_count] = DrawPrimitive::Ellipse(sphere_to_ellipse(sphere));
-                *primitive_count += 1;
             }
         }
     }
