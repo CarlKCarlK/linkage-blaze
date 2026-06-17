@@ -33,7 +33,6 @@ const CLOCK_TOP_LEFT: Point = Point::new(80, 80);
 const CLOCK_CENTER_X: i32 = 80;
 const CLOCK_CENTER_Y: i32 = 80;
 const HAND_SCALE: f32 = 1.0;
-const BLACK: Rgb888 = Rgb888::CSS_BLACK;
 const BG: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 const TEXT_DIM: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_MAIN: Rgb888 = Rgb888::CSS_NAVY;
@@ -53,36 +52,28 @@ const CLOCK_HANDS: Linkage<2, 100> = Linkage::start()
     .disk(66.0)
     // 12 o'clock tick
     .recall("face")
-    .pen_color(Rgb888::new(255, 245, 216))
     .pen_width(4.5)
+    .pen_color(Rgb888::new(255, 245, 216))
     .pen_up()
-    .forward(48.0)
+    .remember("ticks")
+    .forward(45.0)
     .pen_down()
-    .forward(14.0)
+    .forward(18.0)
     // 3 o'clock tick
-    .recall("face")
-    .pen_color(Rgb888::new(255, 245, 216))
-    .pen_width(4.5)
+    .recall("ticks")
     .yaw(-90.0)
-    .pen_up()
     .forward(51.0)
     .pen_down()
     .forward(11.0)
     // 6 o'clock tick
-    .recall("face")
-    .pen_color(Rgb888::new(255, 245, 216))
-    .pen_width(4.5)
+    .recall("ticks")
     .yaw(180.0)
-    .pen_up()
     .forward(51.0)
     .pen_down()
     .forward(11.0)
     // 9 o'clock tick
-    .recall("face")
-    .pen_color(Rgb888::new(255, 245, 216))
-    .pen_width(4.5)
+    .recall("ticks")
     .yaw(90.0)
-    .pen_up()
     .forward(51.0)
     .pen_down()
     .forward(11.0)
