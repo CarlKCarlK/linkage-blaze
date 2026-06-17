@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import init, { linkage_points } from "./pkg/robot_arm_wasm.js";
 
+// todo0000 why is this here????
 const PARAMS = [
   { name: "raise hand", value: 0.5 },
   { name: "bend elbow", value: 0.5 },

@@ -23,6 +23,13 @@
         <h1>Linkage Blaze</h1>
         <p>Rust builder-chain editor</p>
       </header>
+      <div class="file-toolbar">
+        <button id="btn-open" title="Open (Ctrl+O)">Open</button>
+        <button id="btn-save" title="Save (Ctrl+S)">Save</button>
+        <button id="btn-save-as">Save As</button>
+        <select id="recent-select"><option value="">Recent…</option></select>
+        <input type="file" id="file-input" accept=".lb.rs,.rs,text/plain" style="display:none">
+      </div>
       <details class="cheatsheet">
         <summary>Cheatsheet</summary>
         <div class="cheatsheet-grid">
@@ -81,7 +88,7 @@
       <div class="params-list" id="params-list"></div>
     </section>
   </main>
-  <script type="module" src="./src/main.js?v=persist-13"></script>
+  <script type="module" src="./src/main.js?v=persist-15"></script>
 </body>
 
 </html>

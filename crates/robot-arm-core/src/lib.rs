@@ -332,7 +332,10 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Restart the linkage path from the origin pose.
     /// Save the current pose and pen state under a name for later recall.
     pub const fn remember(mut self, name: &'static str) -> Self {
-        assert!(self.remember_index(name).is_none(), "duplicate remember name");
+        assert!(
+            self.remember_index(name).is_none(),
+            "duplicate remember name"
+        );
         assert!(self.remember_len < N, "linkage has more remembers than N");
         self.remember_names[self.remember_len] = name;
         self.remember_len += 1;
@@ -341,7 +344,10 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
 
     /// Restore a previously remembered pose and pen state.
     pub const fn recall(self, name: &'static str) -> Self {
-        assert!(self.remember_index(name).is_some(), "recall of unknown remembered state");
+        assert!(
+            self.remember_index(name).is_some(),
+            "recall of unknown remembered state"
+        );
         self.push(Step::Recall { name })
     }
 
@@ -832,7 +838,9 @@ impl<const DOF: usize, const N: usize> Iterator for StyledPoses<'_, DOF, N> {
                     continue;
                 }
                 Step::Recall { name } => {
-                    let index = self.remember_index(name).expect("recall of unknown remembered state");
+                    let index = self
+                        .remember_index(name)
+                        .expect("recall of unknown remembered state");
                     self.pose = self.remembered[index].pose;
                     self.pen_style = self.remembered[index].pen_style;
                     continue;
@@ -997,7 +1005,9 @@ impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
                     continue;
                 }
                 Step::Recall { name } => {
-                    let index = self.remember_index(name).expect("recall of unknown remembered state");
+                    let index = self
+                        .remember_index(name)
+                        .expect("recall of unknown remembered state");
                     self.pose = self.remembered[index].pose;
                     self.pen_style = self.remembered[index].pen_style;
                     continue;
@@ -1117,6 +1127,7 @@ mod tests {
         .yaw(90.0)
         .forward(1.0);
 
+    // todo0000 kill 2nd one
     const LINKAGE1: Linkage<3, 16> = Linkage::start()
         .define_param("spin whole arm", 0.5)
         .define_param("bend elbow", 0.5)
