@@ -13,6 +13,8 @@ use esp_hal::{
     },
     spi,
 };
+use heapless;
+use micromath::F32Ext;
 use mipidsi::{
     Builder,
     interface::SpiInterface,
@@ -69,6 +71,124 @@ pub enum DrawPrimitive {
     Ellipse(Ellipse),
 }
 
+#[derive(Clone, Copy, Debug)]
+enum PreparedPrimitive {
+    Line {
+        bounds: Rectangle,
+        start_x: i32,
+        start_y: i32,
+        segment_x: i32,
+        segment_y: i32,
+        segment_len_squared: i64,
+        radius_squared: i64,
+        color: Rgb565,
+    },
+    Ellipse {
+        bounds: Rectangle,
+        center_x: i32,
+        center_y: i32,
+        ax: f32,
+        ay: f32,
+        bx: f32,
+        by: f32,
+        outer_limit: f32,
+        inner_limit: f32,
+        filled: bool,
+        color: Rgb565,
+    },
+}
+
+impl PreparedPrimitive {
+    fn from_draw_primitive(primitive: &DrawPrimitive) -> Option<Self> {
+        match *primitive {
+            DrawPrimitive::LineSegment(seg) => {
+                if seg.width == 0 {
+                    return None;
+                }
+                let start_x = seg.start.x as i32;
+                let start_y = seg.start.y as i32;
+                let end_x = seg.end.x as i32;
+                let end_y = seg.end.y as i32;
+                let segment_x = end_x - start_x;
+                let segment_y = end_y - start_y;
+                let segment_len_squared =
+                    (segment_x as i64) * (segment_x as i64) + (segment_y as i64) * (segment_y as i64);
+                let radius = ((seg.width as i64) + 1) / 2;
+                let radius_squared = radius * radius;
+
+                let min_x = start_x.min(end_x) - radius as i32;
+                let max_x = start_x.max(end_x) + radius as i32;
+                let min_y = start_y.min(end_y) - radius as i32;
+                let max_y = start_y.max(end_y) + radius as i32;
+                let bounds = Rectangle::new(
+                    Point::new(min_x, min_y),
+                    embedded_graphics::prelude::Size::new(
+                        (max_x - min_x + 1) as u32,
+                        (max_y - min_y + 1) as u32,
+                    ),
+                );
+
+                Some(PreparedPrimitive::Line {
+                    bounds,
+                    start_x,
+                    start_y,
+                    segment_x,
+                    segment_y,
+                    segment_len_squared,
+                    radius_squared,
+                    color: seg.color,
+                })
+            }
+            DrawPrimitive::Ellipse(ell) => {
+                let det = ell.axis_a.0 * ell.axis_b.1 - ell.axis_a.1 * ell.axis_b.0;
+                let det_sq = det * det;
+
+                if det_sq == 0.0 {
+                    return None;
+                }
+
+                let r = ell.radius;
+                let (ax, ay) = ell.axis_a;
+                let (bx, by) = ell.axis_b;
+
+                let (outer_limit, inner_limit) = if ell.filled {
+                    (det_sq, 0.0)
+                } else {
+                    let half_w = ell.stroke_width as f32 * 0.5;
+                    let outer_scale = (r + half_w) / r;
+                    let inner_scale = if r > half_w { (r - half_w) / r } else { 0.0 };
+                    (det_sq * outer_scale * outer_scale, det_sq * inner_scale * inner_scale)
+                };
+
+                let bounds = Rectangle::new(
+                    Point::new(
+                        ell.center.x - r.ceil() as i32 - 1,
+                        ell.center.y - r.ceil() as i32 - 1,
+                    ),
+                    embedded_graphics::prelude::Size::new(
+                        (2.0 * r).ceil() as u32 + 2,
+                        (2.0 * r).ceil() as u32 + 2,
+                    ),
+                );
+
+                Some(PreparedPrimitive::Ellipse {
+                    bounds,
+                    center_x: ell.center.x,
+                    center_y: ell.center.y,
+                    ax,
+                    ay,
+                    bx,
+                    by,
+                    outer_limit,
+                    inner_limit,
+                    filled: ell.filled,
+                    color: ell.color,
+                })
+            }
+        }
+    }
+}
+
 struct LineSegmentPixels<'a> {
     x0: i32,
     y0: i32,
@@ -112,7 +232,7 @@ struct PrimitivePixels<'a> {
     index: usize,
     pixel_count: usize,
     background: Rgb565,
-    primitives: &'a [DrawPrimitive],
+    primitives: &'a [PreparedPrimitive],
 }
 
 impl Iterator for PrimitivePixels<'_> {
@@ -130,24 +250,70 @@ impl Iterator for PrimitivePixels<'_> {
         let point_x = self.x0 + offset_x as i32;
         let point_y = self.y0 + offset_y as i32;
         let mut color = self.background;
+        let point = Point::new(point_x, point_y);
 
         for primitive in self.primitives {
+            if !primitive.bounds().contains(point) {
+                continue;
+            }
+
             match *primitive {
-                DrawPrimitive::LineSegment(line_segment)
-                    if point_covered_by_segment(point_x, point_y, line_segment) =>
-                {
-                    color = line_segment.color;
+                PreparedPrimitive::Line {
+                    start_x,
+                    start_y,
+                    segment_x,
+                    segment_y,
+                    segment_len_squared,
+                    radius_squared,
+                    color: prim_color,
+                    ..
+                } => {
+                    if point_covered_by_prepared_segment(
+                        point_x,
+                        point_y,
+                        start_x,
+                        start_y,
+                        segment_x,
+                        segment_y,
+                        segment_len_squared,
+                        radius_squared,
+                    ) {
+                        color = prim_color;
+                    }
                 }
-                DrawPrimitive::Ellipse(ellipse)
-                    if point_covered_by_ellipse(point_x, point_y, &ellipse) =>
-                {
-                    color = ellipse.color;
+                PreparedPrimitive::Ellipse {
+                    center_x,
+                    center_y,
+                    ax,
+                    ay,
+                    bx,
+                    by,
+                    outer_limit,
+                    inner_limit,
+                    filled,
+                    color: prim_color,
+                    ..
+                } => {
+                    if point_covered_by_prepared_ellipse(
+                        point_x, point_y, center_x, center_y, ax, ay, bx, by,
+                        outer_limit, inner_limit, filled,
+                    ) {
+                        color = prim_color;
+                    }
                 }
-                _ => {}
             }
         }
 
         Some(color)
+    }
+}
+
+impl PreparedPrimitive {
+    fn bounds(&self) -> Rectangle {
+        match *self {
+            PreparedPrimitive::Line { bounds, .. } => bounds,
+            PreparedPrimitive::Ellipse { bounds, .. } => bounds,
+        }
     }
 }
 
@@ -295,7 +461,7 @@ impl CydDisplay {
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
-        primitives: &[DrawPrimitive],
+        draw_primitives: &[DrawPrimitive],
     ) -> Result<(), CydDisplayFlushError> {
         let screen_rectangle = Rectangle::new(
             Point::new(0, 0),
@@ -306,6 +472,14 @@ impl CydDisplay {
             return Ok(());
         }
 
+        // Prepare primitives (precompute expensive constants, bounds-check)
+        let mut prepared = heapless::Vec::<PreparedPrimitive, 16>::new();
+        for prim in draw_primitives {
+            if let Some(prep) = PreparedPrimitive::from_draw_primitive(prim) {
+                prepared.push(prep).ok();
+            }
+        }
+
         let pixel_count = bounds.size.width as usize * bounds.size.height as usize;
         let pixels = PrimitivePixels {
             x0: bounds.top_left.x,
@@ -314,12 +488,71 @@ impl CydDisplay {
             index: 0,
             pixel_count,
             background,
-            primitives,
+            primitives: &prepared,
         };
 
         self.display
             .fill_contiguous(&bounds, pixels)
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+    }
+}
+
+fn point_covered_by_prepared_segment(
+    point_x: i32,
+    point_y: i32,
+    start_x: i32,
+    start_y: i32,
+    segment_x: i32,
+    segment_y: i32,
+    segment_len_squared: i64,
+    radius_squared: i64,
+) -> bool {
+    if segment_len_squared == 0 {
+        let distance_x = (point_x - start_x) as i64;
+        let distance_y = (point_y - start_y) as i64;
+        return distance_x * distance_x + distance_y * distance_y <= radius_squared;
+    }
+
+    const PROJECTION_SCALE: i64 = 1024;
+    let point_from_start_x = (point_x - start_x) as i64;
+    let point_from_start_y = (point_y - start_y) as i64;
+    let projection = (point_from_start_x * (segment_x as i64) + point_from_start_y * (segment_y as i64))
+        * PROJECTION_SCALE
+        / segment_len_squared;
+    let projection = projection.clamp(0, PROJECTION_SCALE);
+
+    let closest_x = start_x as i64 + ((segment_x as i64) * projection) / PROJECTION_SCALE;
+    let closest_y = start_y as i64 + ((segment_y as i64) * projection) / PROJECTION_SCALE;
+    let distance_x = (point_x as i64) - closest_x;
+    let distance_y = (point_y as i64) - closest_y;
+
+    distance_x * distance_x + distance_y * distance_y <= radius_squared
+}
+
+fn point_covered_by_prepared_ellipse(
+    point_x: i32,
+    point_y: i32,
+    center_x: i32,
+    center_y: i32,
+    ax: f32,
+    ay: f32,
+    bx: f32,
+    by: f32,
+    outer_limit: f32,
+    inner_limit: f32,
+    filled: bool,
+) -> bool {
+    let dx = (point_x - center_x) as f32;
+    let dy = (point_y - center_y) as f32;
+
+    let u = by * dx - bx * dy;
+    let v = ax * dy - ay * dx;
+    let dist_sq = u * u + v * v;
+
+    if filled {
+        dist_sq <= outer_limit
+    } else {
+        dist_sq <= outer_limit && dist_sq > inner_limit
     }
 }
 
@@ -365,32 +598,3 @@ fn point_covered_by_segment(point_x: i32, point_y: i32, segment: LineSegment) ->
     distance_x * distance_x + distance_y * distance_y <= radius_squared
 }
 
-fn point_covered_by_ellipse(point_x: i32, point_y: i32, ellipse: &Ellipse) -> bool {
-    let dx = (point_x - ellipse.center.x) as f32;
-    let dy = (point_y - ellipse.center.y) as f32;
-    let (ax, ay) = ellipse.axis_a;
-    let (bx, by) = ellipse.axis_b;
-
-    // Solve ellipse membership via the 2×2 inverse: inside if ||A⁻¹(p-center)||² ≤ 1,
-    // rewritten without division as u²+v² ≤ det² for the filled case.
-    let u = by * dx - bx * dy;
-    let v = ax * dy - ay * dx;
-    let det = ax * by - bx * ay;
-    let dist_sq = u * u + v * v;
-    let det_sq = det * det;
-
-    if ellipse.filled {
-        return dist_sq <= det_sq;
-    }
-
-    if ellipse.stroke_width == 0 || ellipse.radius <= 0.0 {
-        return false;
-    }
-
-    let r = ellipse.radius;
-    let half_w = ellipse.stroke_width as f32 * 0.5;
-    let outer_scale = (r + half_w) / r;
-    let inner_scale = if r > half_w { (r - half_w) / r } else { 0.0 };
-
-    dist_sq <= det_sq * outer_scale * outer_scale && dist_sq > det_sq * inner_scale * inner_scale
-}
