@@ -118,7 +118,13 @@ const LINKAGE: Linkage<15, 151> = LINKAGE0
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
-const ARM_LINKAGE: Linkage<9, 30> = VIEW_CONTROL.combine(ARMATRON1).recall("wrist").forward(0.25);
+const ARM_LINKAGE: Linkage<9, 30> = VIEW_CONTROL
+    .combine(ARMATRON1)
+    .recall("wrist")
+    .forward(0.25);
+// todo000000 run linkage, but not until end
+// todo000000 in main model have an invisible point at the target center.
+// todo000000 audit actual memory use
 
 const DOF: usize = LINKAGE.dof();
 
