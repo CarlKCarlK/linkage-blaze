@@ -18,7 +18,12 @@
       "Bash(mv linkage-blaze-armatron-esp32classic *)",
       "Bash(mv linkage-blaze-armatron-esp32c6 *)",
       "Bash(mv linkage-blaze-clock-esp32classic *)",
-      "Bash(just check-clock-classic *)"
+      "Bash(just check-clock-classic *)",
+      "Bash(grep -n \"recipe\\\\|^[a-z]\" /home/carlk/programs/old-robot-arm/justfile | head -30)",
+      "Read(//home/carlk/programs/old-robot-arm/**)",
+      "Bash(xargs ls)",
+      "Bash(just check-armatron-core *)",
+      "Bash(just check-arm-wasm *)"
     ]
   }
 }
