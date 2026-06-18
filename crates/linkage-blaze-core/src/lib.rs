@@ -232,17 +232,12 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.param(index).default()
     }
 
-    /// Return the index of a named parameter.
-    #[must_use]
-    pub const fn param_index(&self, name: &str) -> Option<usize> {
-        let mut param_index = 0;
-        while param_index < self.param_len {
-            if str_eq(self.params[param_index].name, name) {
-                return Some(param_index);
-            }
-            param_index += 1;
-        }
-        None
+    /// Iterate over all indices of parameters with a given name.
+    ///
+    /// Use `.last()` for shadowing semantics (most recently defined wins),
+    /// `.next()` for the first definition, or collect/iterate for all of them.
+    pub fn param_indices<'a>(&'a self, name: &'a str) -> ParamIndices<'a, DOF, N> {
+        ParamIndices { linkage: self, name, pos: 0 }
     }
 
     /// Return this linkage's normalized parameter defaults.
@@ -258,12 +253,13 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Define a named runtime parameter.
+    ///
+    /// Duplicate names are allowed; later definitions shadow earlier ones when
+    /// a builder method like `yaw_param` looks up the name.
     pub const fn define_param(mut self, name: &'static str, default: f32) -> Self {
         assert!(self.param_len < DOF, "linkage has more params than DOF");
         assert!(default >= 0.0, "parameter default must be at least 0.0");
         assert!(default <= 1.0, "parameter default must be at most 1.0");
-        assert!(self.param_index(name).is_none(), "duplicate parameter name");
-
         self.params[self.param_len] = Param { name, default };
         self.param_len += 1;
         self
@@ -439,8 +435,22 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self
     }
 
+    /// Return the index of the most recently defined parameter with the given name.
+    ///
+    /// Scans backwards so the most recently defined definition wins (shadowing).
+    const fn last_param_index(&self, name: &str) -> Option<usize> {
+        let mut i = self.param_len;
+        while i > 0 {
+            i -= 1;
+            if str_eq(self.params[i].name, name) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
     const fn expect_param_index(&self, name: &str) -> usize {
-        match self.param_index(name) {
+        match self.last_param_index(name) {
             Some(index) => index,
             None => panic!("unknown parameter name"),
         }
@@ -559,6 +569,32 @@ impl Step {
             Self::SphereParam(v) => Self::SphereParam(v.offset(offset)),
             other => other,
         }
+    }
+}
+
+/// Iterator over all parameter indices with a given name.
+///
+/// Returned by [`Linkage::param_indices`]. Scans forward through the param list,
+/// so `.next()` gives the first definition and `.last()` gives the most recent one
+/// (shadowing semantics — the one builder methods like `yaw_param` bind to).
+pub struct ParamIndices<'a, const DOF: usize, const N: usize> {
+    linkage: &'a Linkage<DOF, N>,
+    name: &'a str,
+    pos: usize,
+}
+
+impl<'a, const DOF: usize, const N: usize> Iterator for ParamIndices<'a, DOF, N> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.pos < self.linkage.param_len() {
+            let i = self.pos;
+            self.pos += 1;
+            if str_eq(self.linkage.params[i].name, self.name) {
+                return Some(i);
+            }
+        }
+        None
     }
 }
 
@@ -1198,7 +1234,7 @@ mod tests {
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
     };
-    use std::{boxed::Box, error::Error};
+    use std::{boxed::Box, error::Error, vec::Vec};
 
     //todo000 *_param might not be a good suffix.
     const LINKAGE0: Linkage<6, 24> = Linkage::start()
@@ -1463,5 +1499,116 @@ mod tests {
         ];
 
         let _ = LINKAGE0.final_pose(&params);
+    }
+
+    // ── Shadowing semantics ───────────────────────────────────────────────────
+    //
+    // A param name may appear more than once in a linkage.  Builder methods like
+    // `yaw_param` bind to the *most recently defined* param with that name —
+    // this is "shadowing".  The earlier definition is not removed; it still
+    // occupies its slot in the param array and can be reached via
+    // `param_indices(...).next()`.
+
+    #[test]
+    fn duplicate_define_param_does_not_panic() {
+        // Simply building a linkage with a duplicate name must succeed.
+        // (Previously this would panic with "duplicate parameter name".)
+        const _: Linkage<2, 2> = Linkage::start()
+            .define_param("angle", 0.25)  // index 0
+            .define_param("angle", 0.75); // index 1 — shadows index 0
+    }
+
+    #[test]
+    fn shadowing_builder_binds_to_most_recent_definition() {
+        // "angle" is defined twice.  yaw_param("angle") bakes in the index of
+        // the second definition (index 1), not the first (index 0).
+        //
+        // We verify this by setting params = [1.0, 0.0]:
+        //   - if bound to index 0 → yaw 90° → forward lands at ~(0, 10, 0)
+        //   - if bound to index 1 → yaw  0° → forward lands at (10, 0, 0)  ✓
+        const LINKAGE: Linkage<2, 5> = Linkage::start()
+            .define_param("angle", 0.0)    // index 0, default 0.0
+            .define_param("angle", 1.0)    // index 1, default 1.0 — shadows index 0
+            .yaw_param("angle", 0.0, 90.0) // binds to index 1 (most recent)
+            .forward(10.0);
+
+        let params = [1.0, 0.0]; // index 0 = full, index 1 = zero
+        let pos = LINKAGE.final_pose(&params).position();
+        // yaw driven by index 1 = 0.0 → 0° → moves along +X
+        assert!(pos.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-5));
+    }
+
+    #[test]
+    fn param_indices_returns_all_matches_in_forward_order() {
+        // Three params: "spin" at 0, "angle" at 1, "spin" again at 2.
+        // param_indices("spin") should yield indices 0 and 2 in that order.
+        const LINKAGE: Linkage<3, 2> = Linkage::start()
+            .define_param("spin", 0.2)   // index 0
+            .define_param("angle", 0.5)  // index 1
+            .define_param("spin", 0.8);  // index 2
+
+        let indices: Vec<usize> = LINKAGE.param_indices("spin").collect();
+        assert_eq!(indices, [0, 2]);
+    }
+
+    #[test]
+    fn param_indices_next_gives_first_definition() {
+        const LINKAGE: Linkage<3, 2> = Linkage::start()
+            .define_param("spin", 0.2)
+            .define_param("angle", 0.5)
+            .define_param("spin", 0.8);
+
+        // .next() iterates forward — first hit is the earliest definition
+        assert_eq!(LINKAGE.param_indices("spin").next(), Some(0));
+    }
+
+    #[test]
+    fn param_indices_last_gives_most_recent_definition() {
+        const LINKAGE: Linkage<3, 2> = Linkage::start()
+            .define_param("spin", 0.2)
+            .define_param("angle", 0.5)
+            .define_param("spin", 0.8);
+
+        // .last() exhausts the iterator forward and returns the final element,
+        // which is the most recently defined — the shadowing definition.
+        assert_eq!(LINKAGE.param_indices("spin").last(), Some(2));
+    }
+
+    #[test]
+    fn param_indices_count_shows_how_many_times_a_name_appears() {
+        const LINKAGE: Linkage<3, 2> = Linkage::start()
+            .define_param("spin", 0.2)
+            .define_param("angle", 0.5)
+            .define_param("spin", 0.8);
+
+        assert_eq!(LINKAGE.param_indices("spin").count(), 2);
+        assert_eq!(LINKAGE.param_indices("angle").count(), 1);
+    }
+
+    #[test]
+    fn param_indices_returns_empty_for_unknown_name() {
+        const LINKAGE: Linkage<1, 2> = Linkage::start().define_param("spin", 0.5);
+
+        assert_eq!(LINKAGE.param_indices("unknown").next(), None);
+        assert_eq!(LINKAGE.param_indices("unknown").count(), 0);
+    }
+
+    #[test]
+    fn combine_each_piece_can_have_its_own_names_or_shared_names() {
+        // After combine, each piece's params appear in order: A's first, then B's.
+        // If both define a name, param_indices returns both indices.
+        const A: Linkage<1, 2> = Linkage::start().define_param("angle", 0.25); // index 0
+        const B: Linkage<1, 2> = Linkage::start().define_param("angle", 0.75); // becomes index 1
+        const COMBINED: Linkage<2, 3> = A.combine::<1, 2, 2, 3>(B);
+
+        // Both definitions are visible
+        let indices: Vec<usize> = COMBINED.param_indices("angle").collect();
+        assert_eq!(indices, [0, 1]);
+
+        // The shadowing definition (most recent, from B) is at index 1
+        assert_eq!(COMBINED.param_indices("angle").last(), Some(1));
+
+        // The first definition (from A) is at index 0
+        assert_eq!(COMBINED.param_indices("angle").next(), Some(0));
     }
 }
