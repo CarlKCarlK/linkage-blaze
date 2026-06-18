@@ -101,13 +101,15 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo00000 robot arm linkage 4
 // todo0000000 can we use functions to avoid double allocation?
-const VIEW_CONTROL: Linkage<2, 10> = include!("view_control.lb.rs");
-const ARMATRON1: Linkage<6, 30> = include!("armatron1.lb.rs");
-const LINKAGE: Linkage<8, 40> = VIEW_CONTROL.combine(ARMATRON1);
+const VIEW_CONTROL: Linkage<2, 5> = include!("view_control.lb.rs");
+const GRID_9X9: Linkage<0, 81> = include!("grid_9x9.lb.rs");
+const VIEW_AND_GRID: Linkage<2, 85> = VIEW_CONTROL.combine(GRID_9X9);
+const ARMATRON1: Linkage<6, 26> = include!("armatron1.lb.rs");
+const LINKAGE: Linkage<8, 110> = VIEW_AND_GRID.combine(ARMATRON1);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
-const ARM_LINKAGE: Linkage<8, 30> = Linkage::start()
+const ARM_LINKAGE: Linkage<8, 34> = Linkage::start()
     .define_param("x/y view", 0.5 + 30.0 / 360.0)
     .define_param("z", (30.0 + 45.0) / 90.0)
     .define_param("raise hand", 0.5)
