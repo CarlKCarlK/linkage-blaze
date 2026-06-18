@@ -41,7 +41,7 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const CLOCK_HANDS: Linkage<2, 60> = include!("clock.lb.rs");
+const CLOCK_HANDS: Linkage<2, 48> = include!("clock.lb.rs");
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 
