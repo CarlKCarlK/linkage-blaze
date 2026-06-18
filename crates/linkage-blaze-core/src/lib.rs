@@ -41,7 +41,7 @@ use math::degrees_to_radians;
 ///
 /// Rotations are local-frame rotations: yaw about +Z, pitch about +Y,
 /// and roll about +X.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Step {
     /// Reset to the origin with the identity orientation.
     Start,
@@ -86,14 +86,14 @@ pub enum Step {
 /// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
 ///
 /// Rotation arguments are stored as radians. Translation arguments are stored as linkage distances.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Arg {
     Fixed(f32),
     Variable(VariableArg),
 }
 
 /// A variable argument with its degree-of-freedom index and legal range.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct VariableArg {
     index: usize,
     low: f32,
