@@ -70,9 +70,9 @@ const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CO
 const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span the screen width
 
 // ---- parameter indices ----
-const ARM_PARAM_START: usize = 2;
+const ARM_PARAM_START: usize = 3;
 const ARM_PARAM_COUNT: usize = 6;
-const TARGET_PARAM_START: usize = 8;
+const TARGET_PARAM_START: usize = 9;
 
 // ---- linkage colors ----
 
@@ -101,12 +101,12 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo00000 robot arm linkage 4
 // todo0000000 can we use functions to avoid double allocation?
-const VIEW_CONTROL: Linkage<2, 6> = include!("view_control.lb.rs");
+const VIEW_CONTROL: Linkage<3, 7> = include!("view_control.lb.rs");
 const GRID_9X9: Linkage<0, 81> = include!("grid_9x9.lb.rs");
-const VIEW_AND_GRID: Linkage<2, 86> = VIEW_CONTROL.combine(GRID_9X9);
+const VIEW_AND_GRID: Linkage<3, 87> = VIEW_CONTROL.combine(GRID_9X9);
 const ARMATRON1: Linkage<6, 21> = include!("armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres(0.15);
-const LINKAGE: Linkage<8, 124> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
+const LINKAGE: Linkage<9, 125> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
@@ -149,13 +149,13 @@ const DOF: usize = LINKAGE.dof();
 
 const BASE_YAW_PARAM: usize = LINKAGE.param_index("x/y view", 0);
 const BASE_PITCH_PARAM: usize = LINKAGE.param_index("z", 0);
+const ZOOM_PARAM: usize = LINKAGE.param_index("zoom", 0);
 const BEND_ELBOW_PARAM: usize = LINKAGE.param_index("bend elbow", 0);
 const LOWER_ARM_PARAM: usize = LINKAGE.param_index("lower arm", 0);
 const SPIN_WHOLE_ARM_PARAM: usize = LINKAGE.param_index("spin whole arm", 0);
 
 pub struct CydSim {
     params: [f32; DOF],
-    zoom: f32,
     target_seed: u8,
     active_control: Option<ActiveControl>,
     reverse_kinematics_run: Option<ReverseKinematicsRun>,
@@ -257,7 +257,6 @@ impl CydSim {
 
         Self {
             params,
-            zoom: 0.5,
             target_seed: 0,
             active_control: None,
             reverse_kinematics_run: None,
@@ -620,8 +619,8 @@ impl CydSim {
                     (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32).clamp(0.0, 1.0);
             }
             ActiveControl::Zoom => {
-                self.zoom =
-                    (1.0 - (y - ZOOM_TOP as f32) / (ZOOM_BOTTOM - ZOOM_TOP) as f32).clamp(0.0, 1.0);
+                self.params[ZOOM_PARAM] =
+                    ((y - ZOOM_TOP as f32) / (ZOOM_BOTTOM - ZOOM_TOP) as f32).clamp(0.0, 1.0);
             }
             ActiveControl::XyView => {
                 self.params[BASE_YAW_PARAM] = ((x - VIEW_SLIDER_LEFT as f32)
@@ -851,7 +850,7 @@ impl CydSim {
         .draw(buffer)
         .ok();
         let zoom_knob_y =
-            ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * (1.0 - self.zoom));
+            ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * self.params[ZOOM_PARAM]);
         Circle::with_center(Point::new(ZOOM_X, zoom_knob_y), 9)
             .into_styled(fill_style(YELLOW))
             .draw(buffer)
@@ -1102,12 +1101,12 @@ impl CydSim {
     }
 
     fn perspective_factor(&self, depth: f32) -> f32 {
-        let focal = zoom_to_focal(self.zoom);
-        focal / (focal + depth).max(focal * 0.05)
+        const FOCAL: f32 = 30.0;
+        FOCAL / (FOCAL + depth).max(FOCAL * 0.05)
     }
 
     fn scale(&self) -> f32 {
-        zoom_to_scale(self.zoom) * PIXELS_PER_UNIT
+        PIXELS_PER_UNIT
     }
 }
 
@@ -1473,14 +1472,6 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
         }
     }
     None
-}
-
-fn zoom_to_scale(zoom: f32) -> f32 {
-    0.5 + zoom
-}
-
-fn zoom_to_focal(zoom: f32) -> f32 {
-    (0.5 + zoom) * 20.0
 }
 
 fn screen_width_pixels(width: f32, scale: f32) -> u32 {

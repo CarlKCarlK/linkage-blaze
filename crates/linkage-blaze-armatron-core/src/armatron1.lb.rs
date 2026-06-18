@@ -2,7 +2,7 @@
           Linkage::start()
         .define_param("raise hand", 0.5)
         .define_param("bend elbow", 0.5)
-        .define_param("close hand", 0.5)
+        .define_param("close hand", 0.0)
         .define_param("lower arm", 0.5)
         .define_param("spin whole arm", 0.5)
         .define_param("spin hand", 0.5)
