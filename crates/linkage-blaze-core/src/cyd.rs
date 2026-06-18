@@ -73,8 +73,6 @@ const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 8;
 
 // ---- linkage colors ----
-const ARM_COLOR: Rgb888 = Rgb888::CSS_DARK_GREEN;
-const ARM_WIDTH: f32 = 3.0;
 
 // ---- RK constants ----
 const RK_INITIAL_STEP: f32 = 0.125;
@@ -100,109 +98,7 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo00000 robot arm linkage 4
-const LINKAGE: Linkage<14, 90> = Linkage::start()
-    .define_param("x/y view", 0.5 + 30.0 / 360.0)
-    .define_param("z", (30.0 + 45.0) / 90.0)
-    .define_param("raise hand", 0.5)
-    .define_param("bend elbow", 0.5)
-    .define_param("close hand", 0.0)
-    .define_param("lower arm", 0.5)
-    .define_param("spin whole", 0.5)
-    .define_param("spin hand", 0.5)
-    .define_param("target yaw 0", 0.5)
-    .define_param("target pitch 1", 0.5)
-    .define_param("target yaw 2", 0.5)
-    .define_param("target pitch 3", 0.5)
-    .define_param("target yaw 4", 0.5)
-    .define_param("target roll 5", 0.5)
-    // ---- floor ----
-    // .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
-    // .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
-    // .pen_color(FLOOR_COLOR)
-    // .disk(FLOOR_RADIUS)
-    // .pen_color(AXIS_COLOR)
-    // .pen_width(AXIS_WIDTH)
-    // // x-axis half-line (forward direction)
-    // .forward(AXIS_RADIUS)
-    // .pen_up()
-    // .yaw(180.0)
-    // .forward(AXIS_RADIUS) // silently return to origin
-    // .yaw(90.0) // now facing +col1 (y axis)
-    // .pen_down()
-    // .forward(AXIS_RADIUS)
-    // .restart()
-    // ---- arm ----
-    .pen_color(ARM_COLOR) // todo0000 default to color white and width 1
-    .pen_width(ARM_WIDTH)
-    .yaw(90.0)
-    .pitch(-90.0)
-    .yaw_param("x/y view", 90.0, -90.0)
-    .pitch_param("z", -45.0, 45.0)
-    .yaw_param("spin whole", 360.0, -360.0)
-    .pitch(90.0)
-    .forward(2.5)
-    .pitch(-90.0)
-    .pitch_param("lower arm", 30.0, 0.0)
-    .forward(3.0)
-    .yaw_param("bend elbow", 90.0, -90.0)
-    .forward(3.0)
-    .pitch_param("raise hand", 90.0, -90.0)
-    .forward(1.0)
-    .roll_param("spin hand", -360.0, 360.0)
-    .forward(0.5)
-    .yaw(90.0)
-    .forward_param("close hand", 0.5, 0.0)
-    .yaw(-90.0)
-    .forward(1.0)
-    .yaw(180.0)
-    .forward(1.0)
-    .yaw(90.0)
-    .forward_param("close hand", 1.0, 0.0)
-    .yaw(90.0)
-    .forward(1.0)
-    // // ---- target (pen up: no arm strokes, only the disk at the end) ----
-    // .pen_up()
-    // .pitch_param(BASE_PITCH_PARAM, -45.0, 45.0)
-    // .yaw_param(BASE_YAW_PARAM, -180.0, 180.0)
-    // .pen_color(TARGET_COLOR)
-    // .yaw(90.0)
-    // .yaw_param("spin whole", 360.0, -360.0)
-    // .pitch(90.0)
-    // .forward(2.5)
-    // .pitch(-90.0)
-    // .pitch_param("lower arm", 30.0, 0.0)
-    // .forward(3.0)
-    // .yaw_param("bend elbow", 90.0, -90.0)
-    // .forward(3.0)
-    // .pitch_param("raise hand", 90.0, -90.0)
-    // .forward(1.0)
-    // .roll_param("spin hand", -360.0, 360.0)
-    // .forward(0.5)
-    // .yaw(90.0)
-    // .forward_param("close hand", 0.5, 0.0)
-    // .yaw(-90.0)
-    // .forward(1.0)
-    // .yaw(180.0)
-    // .forward(1.0)
-    // .yaw(90.0)
-    // .forward_param("close hand", 1.0, 0.0)
-    // .yaw(90.0)
-    // .forward(1.0)
-    // // 6 random extension joints → target position
-    // .yaw_param(TARGET_PARAM_START, -180.0, 180.0)
-    // .forward(2.0)
-    // .pitch_param(TARGET_PARAM_START + 1, -60.0, 60.0)
-    // .forward(2.0)
-    // .yaw_param(TARGET_PARAM_START + 2, -180.0, 180.0)
-    // .forward(2.0)
-    // .pitch_param(TARGET_PARAM_START + 3, -60.0, 60.0)
-    // .forward(2.0)
-    // .yaw_param(TARGET_PARAM_START + 4, -180.0, 180.0)
-    // .forward(2.0)
-    // .roll_param(TARGET_PARAM_START + 5, -180.0, 180.0)
-    // .forward(2.0)
-    // .disk_param("close hand", TARGET_MIN_RADIUS, TARGET_MAX_RADIUS);
-    ;
+const LINKAGE: Linkage<14, 90> = include!("armatron4.lb.rs");
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
