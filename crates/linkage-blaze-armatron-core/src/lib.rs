@@ -17,6 +17,7 @@ use static_cell::StaticCell;
 
 use linkage_blaze_core::{DrawItem, Linkage, Pose, Rgb888, Vec3};
 
+// todo00 I hate all these constants.
 pub const SCREEN_WIDTH: usize = 320;
 pub const SCREEN_HEIGHT: usize = 240;
 pub const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
@@ -300,12 +301,7 @@ impl CydSim {
             ControlledKnob::Param(LOWER_ARM_PARAM),
             ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
         );
-        self.set_param_pair(
-            LOWER_ARM_PARAM,
-            lower_arm,
-            SPIN_WHOLE_ARM_PARAM,
-            spin_whole,
-        )
+        self.set_param_pair(LOWER_ARM_PARAM, lower_arm, SPIN_WHOLE_ARM_PARAM, spin_whole)
     }
 
     pub fn set_controlled_knobs(&mut self, first: ControlledKnob, second: ControlledKnob) {
@@ -830,9 +826,7 @@ impl CydSim {
         .draw(buffer)
         .ok();
         let tilt_knob_y = TILT_TOP
-            + round_to_i32(
-                (TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[BASE_PITCH_PARAM]),
-            );
+            + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[BASE_PITCH_PARAM]));
         Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
             .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_PITCH_PARAM)))
             .draw(buffer)
