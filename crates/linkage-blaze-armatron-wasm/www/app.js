@@ -1,5 +1,15 @@
 import init, { CydSim } from "./pkg/linkage_blaze_armatron_wasm.js";
 
+if ("serviceWorker" in navigator) {
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const reg of registrations) reg.unregister();
+    });
+  } else {
+    navigator.serviceWorker.register("./sw.js");
+  }
+}
+
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
