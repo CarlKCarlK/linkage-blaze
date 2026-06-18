@@ -851,7 +851,7 @@ impl CydSim {
         let zoom_knob_y =
             ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * (1.0 - self.zoom));
         Circle::with_center(Point::new(ZOOM_X, zoom_knob_y), 9)
-            .into_styled(fill_style(LIGHT_SLATE_GRAY))
+            .into_styled(fill_style(YELLOW))
             .draw(buffer)
             .ok();
 
