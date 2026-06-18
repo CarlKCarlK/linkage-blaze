@@ -379,11 +379,22 @@ function applyViewMode(mode) {
   } else {
     camera = orthographicCamera;
     camera.zoom = 1;
-    camera.position.set(target.x, target.y, target.z + viewDistance);
-    if (mode === "top-x-right") {
-      camera.up.set(0, 1, 0);
+    if (mode === "front-y-left") {
+      // Looking along +X: Y goes left, Z goes up
+      camera.position.set(target.x - viewDistance, target.y, target.z);
+      camera.up.set(0, 0, 1);
+    } else if (mode === "side-x-right") {
+      // Looking along +Y: X goes right, Z goes up
+      camera.position.set(target.x, target.y - viewDistance, target.z);
+      camera.up.set(0, 0, 1);
     } else {
-      camera.up.set(1, 0, 0);
+      // Top-down views
+      camera.position.set(target.x, target.y, target.z + viewDistance);
+      if (mode === "top-x-right") {
+        camera.up.set(0, 1, 0);
+      } else {
+        camera.up.set(1, 0, 0);
+      }
     }
   }
 
@@ -585,6 +596,24 @@ async function openFile() {
   }
 }
 
+async function insertHandle(handle) {
+  const text = await (await handle.getFile()).text();
+  const pos = editor.state.selection.main.head;
+  editor.dispatch({ changes: { from: pos, insert: text } });
+  await pushRecent(handle);
+}
+
+async function insertFile() {
+  if (hasFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({ types: FILE_TYPES });
+      await insertHandle(handle);
+    } catch (e) { if (e.name !== "AbortError") console.error(e); }
+  } else {
+    document.querySelector("#file-input-insert").click();
+  }
+}
+
 async function saveFile() {
   if (currentFileHandle) {
     const w = await currentFileHandle.createWritable();
@@ -597,7 +626,8 @@ async function saveFile() {
 async function saveFileAs() {
   if (hasFilePicker) {
     try {
-      const handle = await window.showSaveFilePicker({ suggestedName: "untitled.lb.rs", types: FILE_TYPES });
+      const suggestedName = currentFileHandle ? currentFileHandle.name : "untitled.lb.rs";
+      const handle = await window.showSaveFilePicker({ suggestedName, types: FILE_TYPES });
       const w = await handle.createWritable();
       await w.write(getSource()); await w.close();
       currentFileHandle = handle;
@@ -614,6 +644,7 @@ async function saveFileAs() {
 }
 
 document.querySelector("#btn-open").addEventListener("click", openFile);
+document.querySelector("#btn-insert").addEventListener("click", insertFile);
 document.querySelector("#btn-save").addEventListener("click", saveFile);
 document.querySelector("#btn-save-as").addEventListener("click", saveFileAs);
 
@@ -624,22 +655,51 @@ document.querySelector("#file-input").addEventListener("change", async function 
   this.value = "";
 });
 
-document.querySelector("#recent-select").addEventListener("change", async function () {
-  const name = this.value; this.value = "";
-  if (!name) return;
+document.querySelector("#file-input-insert").addEventListener("change", async function () {
+  const file = this.files[0]; if (!file) return;
+  const text = await file.text();
+  const pos = editor.state.selection.main.head;
+  editor.dispatch({ changes: { from: pos, insert: text } });
+  this.value = "";
+});
+
+const recentSelect = document.querySelector("#recent-select");
+const btnRecentOpen = document.querySelector("#btn-recent-open");
+const btnRecentInsert = document.querySelector("#btn-recent-insert");
+
+recentSelect.addEventListener("change", function () {
+  const hasSelection = this.value !== "";
+  btnRecentOpen.disabled = !hasSelection;
+  btnRecentInsert.disabled = !hasSelection;
+});
+
+async function getSelectedRecentHandle() {
+  const name = recentSelect.value;
+  if (!name) return null;
   const item = (await getRecent()).find(f => f.name === name);
-  if (!item) return;
+  if (!item) return null;
   try {
     if ((await item.handle.queryPermission({ mode: "read" })) !== "granted")
-      if ((await item.handle.requestPermission({ mode: "read" })) !== "granted") return;
-    await loadHandle(item.handle);
-  } catch (e) { console.error(e); }
+      if ((await item.handle.requestPermission({ mode: "read" })) !== "granted") return null;
+    return item.handle;
+  } catch (e) { console.error(e); return null; }
+}
+
+btnRecentOpen.addEventListener("click", async () => {
+  const handle = await getSelectedRecentHandle();
+  if (handle) { recentSelect.value = ""; btnRecentOpen.disabled = true; btnRecentInsert.disabled = true; await loadHandle(handle); }
+});
+
+btnRecentInsert.addEventListener("click", async () => {
+  const handle = await getSelectedRecentHandle();
+  if (handle) { recentSelect.value = ""; btnRecentOpen.disabled = true; btnRecentInsert.disabled = true; await insertHandle(handle); }
 });
 
 window.addEventListener("keydown", e => {
   if (!(e.ctrlKey || e.metaKey)) return;
   if (e.key === "s") { e.preventDefault(); saveFile(); }
   if (e.key === "o") { e.preventDefault(); openFile(); }
+  if (e.key === "i") { e.preventDefault(); insertFile(); }
 });
 
 getRecent().then(populateRecentSelect);

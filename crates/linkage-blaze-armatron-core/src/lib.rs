@@ -707,20 +707,21 @@ impl CydSim {
         color_raw: Rgb888,
     ) {
         let orient = pose.orientation();
-        let Vec3([px, py, _]) = pose.position();
+        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
+        let Vec3([_px, py, pz]) = pose.position();
         let scale = self.scale();
         let r = radius * scale;
         let color = rgb565_from_rgb888(color_raw);
 
-        let cx = round_to_i32(px * scale) + SCREEN_WIDTH as i32 / 2;
-        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(py * scale);
+        let cx = SCREEN_WIDTH as i32 / 2 - round_to_i32(py * scale);
+        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(pz * scale);
 
         // Project disk semi-axes (orientation columns 0 and 1) to screen space.
-        // Screen y is flipped relative to world y, hence the negation on ay/by.
-        let ax = orient[0][0] * r;
-        let ay = -orient[1][0] * r;
-        let bx = orient[0][1] * r;
-        let by = -orient[1][1] * r;
+        // Robot Ortho: drop world X (depth), world Y → screen left (negated), world Z → screen up (negated for flip).
+        let ax = -orient[1][0] * r;
+        let ay = -orient[2][0] * r;
+        let bx = -orient[1][1] * r;
+        let by = -orient[2][1] * r;
 
         let det = ax * by - bx * ay;
         let det_sq = det * det;
@@ -763,19 +764,20 @@ impl CydSim {
         color_raw: Rgb888,
     ) {
         let orient = pose.orientation();
-        let Vec3([px, py, _]) = pose.position();
+        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
+        let Vec3([_px, py, pz]) = pose.position();
         let scale = self.scale();
         let r = radius * scale;
         let color = rgb565_from_rgb888(color_raw);
         let half_w = screen_width_pixels(width, scale) as f32 * 0.5;
 
-        let cx = round_to_i32(px * scale) + SCREEN_WIDTH as i32 / 2;
-        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(py * scale);
+        let cx = SCREEN_WIDTH as i32 / 2 - round_to_i32(py * scale);
+        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(pz * scale);
 
-        let ax = orient[0][0] * r;
-        let ay = -orient[1][0] * r;
-        let bx = orient[0][1] * r;
-        let by = -orient[1][1] * r;
+        let ax = -orient[1][0] * r;
+        let ay = -orient[2][0] * r;
+        let bx = -orient[1][1] * r;
+        let by = -orient[2][1] * r;
 
         let det = ax * by - bx * ay;
         let det_sq = det * det;
@@ -829,14 +831,13 @@ impl CydSim {
             return;
         }
 
-        let Vec3([position_x, position_y, _]) = pose.position();
         let scale = self.scale();
         let diameter = round_to_u32(radius * scale * 2.0);
         if diameter == 0 {
             return;
         }
 
-        Circle::with_center(self.xy_to_screen(position_x, position_y), diameter)
+        Circle::with_center(self.pose_to_screen(pose), diameter)
             .into_styled(PrimitiveStyle::with_fill(rgb565_from_rgb888(color_raw)))
             .draw(target)
             .ok();
@@ -1120,16 +1121,13 @@ impl CydSim {
         }
     }
 
+    //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
     fn pose_to_screen(&self, pose: Pose) -> Point {
-        let Vec3([x, y, _z]) = pose.position();
-        self.xy_to_screen(x, y)
-    }
-
-    fn xy_to_screen(&self, x: f32, y: f32) -> Point {
+        let Vec3([_x, y, z]) = pose.position();
         let scale = self.scale();
         Point::new(
-            round_to_i32(x * scale) + SCREEN_WIDTH as i32 / 2,
-            SCREEN_HEIGHT as i32 / 2 - round_to_i32(y * scale),
+            SCREEN_WIDTH as i32 / 2 - round_to_i32(y * scale),  // +Y goes left
+            SCREEN_HEIGHT as i32 / 2 - round_to_i32(z * scale), // +Z goes up
         )
     }
 

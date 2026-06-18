@@ -25,10 +25,14 @@
       </header>
       <div class="file-toolbar">
         <button id="btn-open" title="Open (Ctrl+O)">Open</button>
+        <button id="btn-insert" title="Insert at cursor (Ctrl+I)">Insert</button>
         <button id="btn-save" title="Save (Ctrl+S)">Save</button>
         <button id="btn-save-as">Save As</button>
         <select id="recent-select"><option value="">Recent…</option></select>
+        <button id="btn-recent-open" disabled title="Open selected recent file">Open</button>
+        <button id="btn-recent-insert" disabled title="Insert selected recent file at cursor">Insert</button>
         <input type="file" id="file-input" accept=".lb.rs,.rs,text/plain" style="display:none">
+        <input type="file" id="file-input-insert" accept=".lb.rs,.rs,text/plain" style="display:none">
       </div>
       <details class="cheatsheet">
         <summary>Cheatsheet</summary>
@@ -79,6 +83,8 @@
           <option value="perspective-y-forward">Perspective: Y-forward</option>
           <option value="top-x-right">Top: X-right, Y-forward</option>
           <option value="top-x-forward">Top: X-forward, Y-left</option>
+          <option value="front-y-left">Front: Y-left, Z-up</option>
+          <option value="side-x-right">Side: X-right, Z-up</option>
         </select>
       </div>
       <div id="camera-readout" class="camera-readout"></div>
