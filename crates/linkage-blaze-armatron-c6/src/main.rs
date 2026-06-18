@@ -19,7 +19,7 @@ use esp_hal::{
     analog::adc::{Adc, AdcConfig, Attenuation},
     delay::Delay,
 };
-use linkage_blaze_core::cyd::{ControlledKnob, CydSim, TickOut};
+use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();

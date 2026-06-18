@@ -19,7 +19,7 @@ pub use display::{
     CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
     LineSegment,
 };
-pub use linkage_blaze_core::cyd::{SCREEN_HEIGHT, SCREEN_WIDTH};
+pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_WIDTH};
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
 
 pub struct Cyd {
