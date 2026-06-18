@@ -1,9 +1,23 @@
 import init, { CydSim } from "./pkg/linkage_blaze_armatron_wasm.js";
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js");
+}
+
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");
 
-await init();
+try {
+  await init();
+} catch (e) {
+  context.fillStyle = "#111418";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#ff4444";
+  context.font = "12px monospace";
+  context.fillText("Load failed:", 8, 20);
+  context.fillText(String(e), 8, 38);
+  throw e;
+}
 
 const sim = new CydSim();
 const image = context.createImageData(sim.width(), sim.height());
@@ -51,6 +65,18 @@ function eventToScreen(event) {
     y: ((event.clientY - bounds.top) * canvas.height) / bounds.height,
   };
 }
+
+const fullscreenBtn = document.querySelector("#fullscreen-btn");
+fullscreenBtn.addEventListener("click", () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen();
+  }
+});
+document.addEventListener("fullscreenchange", () => {
+  fullscreenBtn.textContent = document.fullscreenElement ? "✕" : "⛶";
+});
 
 function scheduleFrame() {
   if (animationFrame !== null) {

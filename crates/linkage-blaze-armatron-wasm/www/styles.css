@@ -20,6 +20,24 @@ body {
   padding: 18px;
 }
 
+#fullscreen-btn {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  background: #1e2328cc;
+  color: #ccc;
+  border: 1px solid #414852;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#fullscreen-btn:hover {
+  background: #2a3038cc;
+}
+
 #screen {
   width: min(96vw, calc(96vh * 4 / 3));
   aspect-ratio: 4 / 3;
