@@ -1,3 +1,5 @@
+#![no_std]
+
 use core::convert::Infallible;
 
 use embassy_time::Instant;
@@ -98,9 +100,10 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo00000 robot arm linkage 4
+// todo0000000 can we use functions to avoid double allocation?
 const VIEW_CONTROL: Linkage<2, 10> = include!("view_control.lb.rs");
 const ARMATRON1: Linkage<6, 30> = include!("armatron1.lb.rs");
-const LINKAGE: Linkage<14, 90> = linkage_concat!(VIEW_CONTROL, ARMATRON1);
+const LINKAGE: Linkage<8, 40> = VIEW_CONTROL.combine(ARMATRON1);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
@@ -139,7 +142,7 @@ const ARM_LINKAGE: Linkage<8, 30> = Linkage::start()
     .yaw(90.0)
     .forward(1.0);
 
-const DOF: usize = Linkage::<14, 90>::DOF;
+const DOF: usize = Linkage::<8, 40>::DOF;
 
 fn param_index(name: &str) -> usize {
     LINKAGE
@@ -164,7 +167,7 @@ fn lower_arm_param() -> usize {
 }
 
 fn spin_whole_arm_param() -> usize {
-    param_index("spin whole")
+    param_index("spin whole arm")
 }
 
 pub struct CydSim {

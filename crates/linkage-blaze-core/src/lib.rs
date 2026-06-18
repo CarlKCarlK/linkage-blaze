@@ -133,6 +133,13 @@ impl Arg {
             Self::Variable(variable_arg) => variable_arg.resolve(params),
         }
     }
+
+    const fn offset_param(self, offset: usize) -> Self {
+        match self {
+            Self::Fixed(_) => self,
+            Self::Variable(v) => Self::Variable(v.offset(offset)),
+        }
+    }
 }
 
 impl VariableArg {
@@ -142,6 +149,10 @@ impl VariableArg {
             low,
             span: high - low,
         }
+    }
+
+    const fn offset(self, offset: usize) -> Self {
+        Self { index: self.index + offset, ..self }
     }
 
     const fn from_degrees(index: usize, low: f32, high: f32) -> Self {
@@ -459,6 +470,95 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.poses(params)
             .last()
             .expect("linkage must yield at least the implicit start pose")
+    }
+
+    /// Append another linkage's steps after this one's, merging their parameters.
+    ///
+    /// The caller must supply the output sizes as const generics since Rust cannot
+    /// compute `DOF + DOF2` as a const expression yet — follow the same pattern as
+    /// `LedLayout::combine_h`. A compile-time assertion verifies the sizes are correct.
+    ///
+    /// The `other` linkage's implicit `Start` step is skipped so evaluation continues
+    /// from wherever `self` ends rather than resetting to the origin.
+    pub const fn combine<const DOF2: usize, const N2: usize, const DOF_OUT: usize, const N_OUT: usize>(
+        self,
+        other: Linkage<DOF2, N2>,
+    ) -> Linkage<DOF_OUT, N_OUT> {
+        assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF1 + DOF2");
+        let other_steps = other.len - 1; // skip the implicit Start step
+        assert!(N_OUT >= self.len + other_steps, "N_OUT must fit all steps from both linkages");
+
+        let mut out = Linkage {
+            steps: [const { Step::Start }; N_OUT],
+            len: 0,
+            params: [Param::EMPTY; DOF_OUT],
+            param_len: 0,
+            remember_names: [""; N_OUT],
+            remember_len: 0,
+        };
+
+        // Copy self's steps as-is
+        let mut i = 0;
+        while i < self.len {
+            out.steps[i] = self.steps[i];
+            i += 1;
+        }
+        out.len = self.len;
+
+        // Copy other's steps (skip index 0 = Start), offsetting param indices by DOF
+        let mut i = 1;
+        while i < other.len {
+            out.steps[out.len] = other.steps[i].offset_params(DOF);
+            out.len += 1;
+            i += 1;
+        }
+
+        // Copy self's params
+        let mut i = 0;
+        while i < self.param_len {
+            out.params[i] = self.params[i];
+            i += 1;
+        }
+
+        // Copy other's params
+        let mut i = 0;
+        while i < other.param_len {
+            out.params[DOF + i] = other.params[i];
+            i += 1;
+        }
+        out.param_len = self.param_len + other.param_len;
+
+        // Copy remember names from both
+        let mut i = 0;
+        while i < self.remember_len {
+            out.remember_names[i] = self.remember_names[i];
+            i += 1;
+        }
+        let mut i = 0;
+        while i < other.remember_len {
+            out.remember_names[self.remember_len + i] = other.remember_names[i];
+            i += 1;
+        }
+        out.remember_len = self.remember_len + other.remember_len;
+
+        out
+    }
+}
+
+impl Step {
+    const fn offset_params(self, offset: usize) -> Self {
+        match self {
+            Self::Yaw(arg) => Self::Yaw(arg.offset_param(offset)),
+            Self::Pitch(arg) => Self::Pitch(arg.offset_param(offset)),
+            Self::Roll(arg) => Self::Roll(arg.offset_param(offset)),
+            Self::Move(arg) => Self::Move(arg.offset_param(offset)),
+            Self::Left(arg) => Self::Left(arg.offset_param(offset)),
+            Self::Up(arg) => Self::Up(arg.offset_param(offset)),
+            Self::DiskParam(v) => Self::DiskParam(v.offset(offset)),
+            Self::RingParam(v) => Self::RingParam(v.offset(offset)),
+            Self::SphereParam(v) => Self::SphereParam(v.offset(offset)),
+            other => other,
+        }
     }
 }
 
