@@ -105,7 +105,8 @@ const VIEW_CONTROL: Linkage<2, 6> = include!("view_control.lb.rs");
 const GRID_9X9: Linkage<0, 81> = include!("grid_9x9.lb.rs");
 const VIEW_AND_GRID: Linkage<2, 86> = VIEW_CONTROL.combine(GRID_9X9);
 const ARMATRON1: Linkage<6, 21> = include!("armatron1.lb.rs");
-const LINKAGE: Linkage<8, 106> = VIEW_AND_GRID.combine(ARMATRON1);
+const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres(0.15);
+const LINKAGE: Linkage<8, 124> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
