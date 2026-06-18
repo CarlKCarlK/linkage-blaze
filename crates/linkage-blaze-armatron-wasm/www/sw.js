@@ -1,18 +1,6 @@
-const CACHE = "robot-arm-v3";
-
-const PRECACHE = [
-  "./",
-  "./index.html",
-  "./app.js",
-  "./styles.css",
-  "./pkg/linkage_blaze_armatron_wasm.js",
-  "./pkg/linkage_blaze_armatron_wasm_bg.wasm",
-];
+const CACHE = "robot-arm-v4";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE))
-  );
   self.skipWaiting();
 });
 
@@ -27,15 +15,14 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok && new URL(event.request.url).origin === self.location.origin) {
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE).then((cache) => cache.put(event.request, clone));
         }
         return response;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });
