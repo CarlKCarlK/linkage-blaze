@@ -146,7 +146,8 @@ const DOF: usize = Linkage::<8, 40>::DOF;
 
 fn param_index(name: &str) -> usize {
     LINKAGE
-        .param_index(name)
+        .param_indices(name)
+        .last()
         .expect("parameter must be defined")
 }
 
@@ -225,7 +226,7 @@ impl CydSim {
 
     #[must_use]
     pub fn param_index(name: &str) -> Option<usize> {
-        LINKAGE.param_index(name)
+        LINKAGE.param_indices(name).last()
     }
 
     #[must_use]
