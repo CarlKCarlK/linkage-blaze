@@ -688,12 +688,13 @@ impl CydSim {
     ) {
         let orient = pose.orientation();
         //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
-        let Vec3([_px, py, pz]) = pose.position();
+        let Vec3([px, py, pz]) = pose.position();
         let scale = self.scale();
-        let r = radius * scale;
+        let factor = self.perspective_factor(px);
+        let r = radius * scale * factor;
         let color = rgb565_from_rgb888(color_raw);
 
-        let (cx, cy) = project_pos(py, pz, scale);
+        let (cx, cy) = project_pos(py * factor, pz * factor, scale);
         let (ax, ay) = project_dir(orient[1][0], orient[2][0], r);
         let (bx, by) = project_dir(orient[1][1], orient[2][1], r);
 
@@ -739,13 +740,14 @@ impl CydSim {
     ) {
         let orient = pose.orientation();
         //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
-        let Vec3([_px, py, pz]) = pose.position();
+        let Vec3([px, py, pz]) = pose.position();
         let scale = self.scale();
-        let r = radius * scale;
+        let factor = self.perspective_factor(px);
+        let r = radius * scale * factor;
         let color = rgb565_from_rgb888(color_raw);
-        let half_w = screen_width_pixels(width, scale) as f32 * 0.5;
+        let half_w = screen_width_pixels(width, scale) as f32 * 0.5 * factor;
 
-        let (cx, cy) = project_pos(py, pz, scale);
+        let (cx, cy) = project_pos(py * factor, pz * factor, scale);
         let (ax, ay) = project_dir(orient[1][0], orient[2][0], r);
         let (bx, by) = project_dir(orient[1][1], orient[2][1], r);
 
@@ -1093,9 +1095,15 @@ impl CydSim {
 
     //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
     fn pose_to_screen(&self, pose: Pose) -> Point {
-        let Vec3([_x, y, z]) = pose.position();
-        let (cx, cy) = project_pos(y, z, self.scale());
+        let Vec3([x, y, z]) = pose.position();
+        let factor = self.perspective_factor(x);
+        let (cx, cy) = project_pos(y * factor, z * factor, self.scale());
         Point::new(cx, cy)
+    }
+
+    fn perspective_factor(&self, depth: f32) -> f32 {
+        let focal = zoom_to_focal(self.zoom);
+        focal / (focal + depth).max(focal * 0.05)
     }
 
     fn scale(&self) -> f32 {
@@ -1469,6 +1477,10 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
 
 fn zoom_to_scale(zoom: f32) -> f32 {
     0.5 + zoom
+}
+
+fn zoom_to_focal(zoom: f32) -> f32 {
+    (0.5 + zoom) * 20.0
 }
 
 fn screen_width_pixels(width: f32, scale: f32) -> u32 {
