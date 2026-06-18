@@ -7,6 +7,7 @@
         .define_param("spin whole arm", 0.5)
         .define_param("spin hand", 0.5)
         .yaw_param("spin whole arm", 180.0, -180.0)
+        .pen_color(Rgb888::CSS_DARK_CYAN)
         .up(2.5)
         .pitch_param("lower arm", -30.0, 0.0)
         .forward(3.0)
