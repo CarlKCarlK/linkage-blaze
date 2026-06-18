@@ -98,7 +98,9 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo00000 robot arm linkage 4
-const LINKAGE: Linkage<14, 90> = include!("armatron4.lb.rs");
+const VIEW_CONTROL: Linkage<2, 10> = include!("view_control.lb.rs");
+const ARMATRON1: Linkage<6, 30> = include!("armatron1.lb.rs");
+const LINKAGE: Linkage<14, 90> = linkage_concat!(VIEW_CONTROL, ARMATRON1);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
