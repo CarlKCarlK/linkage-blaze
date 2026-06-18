@@ -118,40 +118,7 @@ const LINKAGE: Linkage<15, 151> = LINKAGE0
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 // todo00000 robot arm linkage 5
-const ARM_LINKAGE: Linkage<8, 26> = Linkage::start()
-    .define_param("x/y view", 0.5 + 30.0 / 360.0)
-    .define_param("z", (30.0 + 45.0) / 90.0)
-    .define_param("raise hand", 0.5)
-    .define_param("bend elbow", 0.5)
-    .define_param("close hand", 0.0)
-    .define_param("lower arm", 0.5)
-    .define_param("spin whole", 0.5)
-    .define_param("spin hand", 0.5)
-    .pitch_param("z", -45.0, 45.0)
-    .yaw_param("x/y view", -180.0, 180.0)
-    .yaw(90.0)
-    .yaw_param("spin whole", 360.0, -360.0)
-    .pitch(90.0)
-    .forward(2.5)
-    .pitch(-90.0)
-    .pitch_param("lower arm", 30.0, 0.0)
-    .forward(3.0)
-    .yaw_param("bend elbow", 90.0, -90.0)
-    .forward(3.0)
-    .pitch_param("raise hand", 90.0, -90.0)
-    .forward(1.0)
-    .roll_param("spin hand", -360.0, 360.0)
-    .forward(0.5)
-    .yaw(90.0)
-    .forward_param("close hand", 0.5, 0.0)
-    .yaw(-90.0)
-    .forward(1.0)
-    .yaw(180.0)
-    .forward(1.0)
-    .yaw(90.0)
-    .forward_param("close hand", 1.0, 0.0)
-    .yaw(90.0)
-    .forward(1.0);
+const ARM_LINKAGE: Linkage<9, 30> = VIEW_CONTROL.combine(ARMATRON1).recall("wrist").forward(0.25);
 
 const DOF: usize = LINKAGE.dof();
 
@@ -1340,8 +1307,8 @@ fn apply_paired_candidate(params: &mut [f32; DOF], pair_index: usize, step: f32)
 }
 
 fn arm_tip(params: &[f32; DOF]) -> Vec3 {
-    let mut arm_params = [0.0f32; 8];
-    arm_params.copy_from_slice(&params[..8]);
+    let mut arm_params = [0.0f32; 9];
+    arm_params.copy_from_slice(&params[..9]);
     ARM_LINKAGE.final_pose(&arm_params).position()
 }
 
