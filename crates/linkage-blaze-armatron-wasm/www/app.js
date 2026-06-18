@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/linkage_blaze_armatron_core.js";
+import init, { CydSim } from "./pkg/linkage_blaze_armatron_wasm.js";
 
 const canvas = document.querySelector("#screen");
 const context = canvas.getContext("2d");

@@ -25,7 +25,7 @@ use linkage_blaze_cyd::{
     CalibratedCyd, CalibrationConfig, Cyd, CydError, RawPoint, RawTouchEvent, RectBuffer,
     SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
 };
-use linkage_blaze_core::cyd::{CydSim, TickOut, TouchInputEvent};
+use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 

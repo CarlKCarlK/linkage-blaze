@@ -1408,6 +1408,7 @@ dependencies = [
  "esp-hal",
  "esp-println",
  "esp-rtos",
+ "linkage-blaze-armatron-core",
  "linkage-blaze-core",
  "linkage-blaze-cyd",
  "log",
@@ -1427,6 +1428,7 @@ dependencies = [
  "esp-hal",
  "esp-println",
  "esp-rtos",
+ "linkage-blaze-armatron-core",
  "linkage-blaze-core",
  "linkage-blaze-cyd",
  "log",
@@ -1439,6 +1441,19 @@ version = "0.1.4"
 dependencies = [
  "embassy-time",
  "embedded-graphics",
+ "libm",
+ "linkage-blaze-core",
+ "nanorand",
+ "static_cell",
+]
+
+[[package]]
+name = "linkage-blaze-armatron-wasm"
+version = "0.1.4"
+dependencies = [
+ "embassy-time",
+ "embedded-graphics",
+ "linkage-blaze-armatron-core",
  "linkage-blaze-core",
  "wasm-bindgen",
 ]
@@ -1484,6 +1499,7 @@ dependencies = [
  "embedded-hal-bus",
  "esp-hal",
  "heapless 0.8.0",
+ "linkage-blaze-armatron-core",
  "linkage-blaze-core",
  "micromath",
  "mipidsi",

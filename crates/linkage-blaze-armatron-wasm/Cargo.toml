@@ -1,13 +1,15 @@
 [package]
-name = "linkage-blaze-armatron-core"
+name = "linkage-blaze-armatron-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 embassy-time = "0.5.1"
 embedded-graphics = { version = "0.8", default-features = false }
-libm = "0.2"
+linkage-blaze-armatron-core = { path = "../linkage-blaze-armatron-core" }
 linkage-blaze-core.workspace = true
-nanorand = { version = "0.8", default-features = false, features = ["wyrand"] }
-static_cell = "2.1.1"
+wasm-bindgen = "=0.2.118"

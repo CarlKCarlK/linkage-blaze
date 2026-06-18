@@ -54,31 +54,31 @@ build-clock-classic:
 run-clock-classic:
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-clock-classic {{_classic_args}}
 
-# ── linkage-blaze-armatron-core (web simulator + 3D viewer) ─────────────────
+# ── linkage-blaze-armatron-wasm (web simulator + 3D viewer) ─────────────────
 
-_arm_core_crate      := "crates/linkage-blaze-armatron-core"
-_arm_core_www        := "crates/linkage-blaze-armatron-core/www"
-_arm_core_viewer_www := "crates/linkage-blaze-armatron-core/www/viewer"
+_arm_wasm_crate      := "crates/linkage-blaze-armatron-wasm"
+_arm_wasm_www        := "crates/linkage-blaze-armatron-wasm/www"
+_arm_wasm_viewer_www := "crates/linkage-blaze-armatron-wasm/www/viewer"
 _arm_sim_port        := "8081"
 _arm_viewer_port     := "8080"
 
-build-arm-core:
-    wasm-pack build {{_arm_core_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_core
+build-arm-wasm:
+    wasm-pack build {{_arm_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
 
 serve-arm-wasm port=_arm_sim_port:
     -lsof -ti:{{port}} | xargs -r kill
-    cd {{_arm_core_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+    cd {{_arm_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
 
 run-arm-wasm port=_arm_sim_port:
-    just build-arm-core
+    just build-arm-wasm
     just serve-arm-wasm {{port}}
 
 serve-arm-viewer-wasm port=_arm_viewer_port:
     -lsof -ti:{{port}} | xargs -r kill
-    cd {{_arm_core_viewer_www}} && python3 ../../../../.tools/no_cache_http_server.py {{port}}
+    cd {{_arm_wasm_viewer_www}} && python3 ../../../../.tools/no_cache_http_server.py {{port}}
 
 run-arm-viewer-wasm port=_arm_viewer_port:
-    just build-arm-core
+    just build-arm-wasm
     just serve-arm-viewer-wasm {{port}}
 
 # ── linkage-blaze-editor ──────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ esp32 = [
 ]
 
 [dependencies]
+linkage-blaze-armatron-core = { path = "../linkage-blaze-armatron-core" }
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
 linkage-blaze-core.workspace = true
 embassy-executor = "0.10.0"

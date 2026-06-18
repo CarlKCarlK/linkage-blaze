@@ -1,7 +1,7 @@
 use embedded_graphics::prelude::Point;
 use serde::{Deserialize, Serialize};
 
-use linkage_blaze_core::cyd::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RawPoint {
