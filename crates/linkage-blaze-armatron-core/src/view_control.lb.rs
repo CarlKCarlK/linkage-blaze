@@ -7,5 +7,6 @@ Linkage::start()
     .forward_param("zoom", -10.0, 20.0)
     .pitch_param("z", 0.0, -90.0)
     .yaw_param("x/y view", 180.0, -180.0)
+    .remember("after view control")
     .pen_down()
     

@@ -79,8 +79,8 @@ pub enum Step {
     SphereParam(VariableArg),
     /// Save the current pose and pen state under a name for later recall.
     Remember { name: &'static str },
-    /// Restore a previously remembered pose and pen state.
-    Recall { name: &'static str },
+    /// Restore a previously remembered pose and pen state (index resolved at build time).
+    Recall { index: usize },
 }
 
 /// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
@@ -345,7 +345,7 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Save the current pose and pen state under a name for later recall.
     pub const fn remember(mut self, name: &'static str) -> Self {
         assert!(
-            self.remember_index(name).is_none(),
+            self.last_remember_index(name).is_none(),
             "duplicate remember name"
         );
         assert!(self.remember_len < N, "linkage has more remembers than N");
@@ -355,19 +355,45 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 
     /// Restore a previously remembered pose and pen state.
+    /// Resolves `name` at build time using last-definition-wins (shadowing) semantics.
     pub const fn recall(self, name: &'static str) -> Self {
-        assert!(
-            self.remember_index(name).is_some(),
-            "recall of unknown remembered state"
-        );
-        self.push(Step::Recall { name })
+        let index = match self.last_remember_index(name) {
+            Some(i) => i,
+            None => panic!("recall of unknown remembered state"),
+        };
+        self.push(Step::Recall { index })
     }
 
-    const fn remember_index(&self, name: &str) -> Option<usize> {
+    /// Restore the `n`th remembered pose with the given name (0 = first definition).
+    /// Resolves at build time.
+    pub const fn recall_nth(self, name: &'static str, n: usize) -> Self {
+        let index = match self.remember_index_nth(name, n) {
+            Some(i) => i,
+            None => panic!("recall_nth: name not found or n out of range"),
+        };
+        self.push(Step::Recall { index })
+    }
+
+    const fn last_remember_index(&self, name: &str) -> Option<usize> {
+        let mut i = self.remember_len;
+        while i > 0 {
+            i -= 1;
+            if str_eq(self.remember_names[i], name) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    const fn remember_index_nth(&self, name: &str, n: usize) -> Option<usize> {
+        let mut count = 0;
         let mut i = 0;
         while i < self.remember_len {
             if str_eq(self.remember_names[i], name) {
-                return Some(i);
+                if count == n {
+                    return Some(i);
+                }
+                count += 1;
             }
             i += 1;
         }
@@ -600,10 +626,10 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         }
         out.len = self.len;
 
-        // Copy other's steps (skip index 0 = Start), offsetting param indices by DOF
+        // Copy other's steps (skip index 0 = Start), offsetting param and remember indices
         let mut i = 1;
         while i < other.len {
-            out.steps[out.len] = other.steps[i].offset_params(DOF);
+            out.steps[out.len] = other.steps[i].offset_params(DOF, self.remember_len);
             out.len += 1;
             i += 1;
         }
@@ -641,17 +667,18 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
 }
 
 impl Step {
-    const fn offset_params(self, offset: usize) -> Self {
+    const fn offset_params(self, param_offset: usize, remember_offset: usize) -> Self {
         match self {
-            Self::Yaw(arg) => Self::Yaw(arg.offset_param(offset)),
-            Self::Pitch(arg) => Self::Pitch(arg.offset_param(offset)),
-            Self::Roll(arg) => Self::Roll(arg.offset_param(offset)),
-            Self::Move(arg) => Self::Move(arg.offset_param(offset)),
-            Self::Left(arg) => Self::Left(arg.offset_param(offset)),
-            Self::Up(arg) => Self::Up(arg.offset_param(offset)),
-            Self::DiskParam(v) => Self::DiskParam(v.offset(offset)),
-            Self::RingParam(v) => Self::RingParam(v.offset(offset)),
-            Self::SphereParam(v) => Self::SphereParam(v.offset(offset)),
+            Self::Yaw(arg) => Self::Yaw(arg.offset_param(param_offset)),
+            Self::Pitch(arg) => Self::Pitch(arg.offset_param(param_offset)),
+            Self::Roll(arg) => Self::Roll(arg.offset_param(param_offset)),
+            Self::Move(arg) => Self::Move(arg.offset_param(param_offset)),
+            Self::Left(arg) => Self::Left(arg.offset_param(param_offset)),
+            Self::Up(arg) => Self::Up(arg.offset_param(param_offset)),
+            Self::DiskParam(v) => Self::DiskParam(v.offset(param_offset)),
+            Self::RingParam(v) => Self::RingParam(v.offset(param_offset)),
+            Self::SphereParam(v) => Self::SphereParam(v.offset(param_offset)),
+            Self::Recall { index } => Self::Recall { index: index + remember_offset },
             other => other,
         }
     }
@@ -996,7 +1023,6 @@ impl StrokeSegment {
 /// [`Step::Start`].
 #[derive(Clone, Copy)]
 struct RememberedState {
-    name: &'static str,
     pose: Pose,
     pen_style: PenStyle,
 }
@@ -1021,7 +1047,6 @@ impl<'a, const DOF: usize, const N: usize> StyledPoses<'a, DOF, N> {
             pose: Pose::start(),
             pen_style: PenStyle::new(),
             remembered: [RememberedState {
-                name: "",
                 pose: Pose::start(),
                 pen_style: PenStyle::new(),
             }; N],
@@ -1029,16 +1054,6 @@ impl<'a, const DOF: usize, const N: usize> StyledPoses<'a, DOF, N> {
         }
     }
 
-    fn remember_index(&self, name: &str) -> Option<usize> {
-        let mut i = 0;
-        while i < self.remembered_len {
-            if str_eq(self.remembered[i].name, name) {
-                return Some(i);
-            }
-            i += 1;
-        }
-        None
-    }
 }
 
 impl<const DOF: usize, const N: usize> Iterator for StyledPoses<'_, DOF, N> {
@@ -1053,22 +1068,18 @@ impl<const DOF: usize, const N: usize> Iterator for StyledPoses<'_, DOF, N> {
             self.index += 1;
 
             match step {
-                Step::Remember { name } => {
+                Step::Remember { name: _ } => {
                     assert!(self.remembered_len < N, "too many remembered states");
                     self.remembered[self.remembered_len] = RememberedState {
-                        name: *name,
                         pose: self.pose,
                         pen_style: self.pen_style,
                     };
                     self.remembered_len += 1;
                     continue;
                 }
-                Step::Recall { name } => {
-                    let index = self
-                        .remember_index(name)
-                        .expect("recall of unknown remembered state");
-                    self.pose = self.remembered[index].pose;
-                    self.pen_style = self.remembered[index].pen_style;
+                Step::Recall { index } => {
+                    self.pose = self.remembered[*index].pose;
+                    self.pen_style = self.remembered[*index].pen_style;
                     continue;
                 }
                 _ => {}
@@ -1191,7 +1202,6 @@ impl<'a, const DOF: usize, const N: usize> DrawItems<'a, DOF, N> {
             pose: Pose::start(),
             pen_style: PenStyle::new(),
             remembered: [RememberedState {
-                name: "",
                 pose: Pose::start(),
                 pen_style: PenStyle::new(),
             }; N],
@@ -1199,16 +1209,6 @@ impl<'a, const DOF: usize, const N: usize> DrawItems<'a, DOF, N> {
         }
     }
 
-    fn remember_index(&self, name: &str) -> Option<usize> {
-        let mut i = 0;
-        while i < self.remembered_len {
-            if str_eq(self.remembered[i].name, name) {
-                return Some(i);
-            }
-            i += 1;
-        }
-        None
-    }
 }
 
 impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
@@ -1220,22 +1220,18 @@ impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
             self.index += 1;
 
             match step {
-                Step::Remember { name } => {
+                Step::Remember { name: _ } => {
                     assert!(self.remembered_len < N, "too many remembered states");
                     self.remembered[self.remembered_len] = RememberedState {
-                        name: *name,
                         pose: self.pose,
                         pen_style: self.pen_style,
                     };
                     self.remembered_len += 1;
                     continue;
                 }
-                Step::Recall { name } => {
-                    let index = self
-                        .remember_index(name)
-                        .expect("recall of unknown remembered state");
-                    self.pose = self.remembered[index].pose;
-                    self.pen_style = self.remembered[index].pen_style;
+                Step::Recall { index } => {
+                    self.pose = self.remembered[*index].pose;
+                    self.pen_style = self.remembered[*index].pen_style;
                     continue;
                 }
                 _ => {}
