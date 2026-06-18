@@ -508,6 +508,39 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         }
     }
 
+    /// Return the number of parameters defined with the given name.
+    #[must_use]
+    pub const fn param_count_named(&self, name: &str) -> usize {
+        let mut count = 0;
+        let mut param_index = 0;
+        while param_index < self.param_len {
+            if str_eq(self.params[param_index].name, name) {
+                count += 1;
+            }
+            param_index += 1;
+        }
+        count
+    }
+
+    /// Return the index of the `n`th parameter (0-based) with the given name.
+    ///
+    /// Panics at compile time if fewer than `n + 1` parameters have that name.
+    #[must_use]
+    pub const fn param_index(&self, name: &str, n: usize) -> usize {
+        let mut found = 0;
+        let mut slot = 0;
+        while slot < self.param_len {
+            if str_eq(self.params[slot].name, name) {
+                if found == n {
+                    return slot;
+                }
+                found += 1;
+            }
+            slot += 1;
+        }
+        panic!("parameter name not found or occurrence index out of range")
+    }
+
     /// Iterate over poses produced by evaluating this linkage from 0.0 to 1.0 params.
     pub fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a {
         self.styled_poses(params).map(|sp| sp.pose)

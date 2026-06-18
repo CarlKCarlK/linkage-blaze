@@ -145,34 +145,13 @@ const ARM_LINKAGE: Linkage<8, 26> = Linkage::start()
     .yaw(90.0)
     .forward(1.0);
 
-const DOF: usize = Linkage::<8, 40>::DOF;
+const DOF: usize = LINKAGE.dof();
 
-fn param_index(name: &str) -> usize {
-    LINKAGE
-        .param_indices(name)
-        .last()
-        .expect("parameter must be defined")
-}
-
-fn base_yaw_param() -> usize {
-    param_index("x/y view")
-}
-
-fn base_pitch_param() -> usize {
-    param_index("z")
-}
-
-fn bend_elbow_param() -> usize {
-    param_index("bend elbow")
-}
-
-fn lower_arm_param() -> usize {
-    param_index("lower arm")
-}
-
-fn spin_whole_arm_param() -> usize {
-    param_index("spin whole arm")
-}
+const BASE_YAW_PARAM: usize = LINKAGE.param_index("x/y view", 0);
+const BASE_PITCH_PARAM: usize = LINKAGE.param_index("z", 0);
+const BEND_ELBOW_PARAM: usize = LINKAGE.param_index("bend elbow", 0);
+const LOWER_ARM_PARAM: usize = LINKAGE.param_index("lower arm", 0);
+const SPIN_WHOLE_ARM_PARAM: usize = LINKAGE.param_index("spin whole arm", 0);
 
 pub struct CydSim {
     params: [f32; DOF],
@@ -290,8 +269,8 @@ impl CydSim {
             rk_step_hold_active: false,
             touch_cursor: None,
             controlled_knobs: [
-                ControlledKnob::Param(lower_arm_param()),
-                ControlledKnob::Param(spin_whole_arm_param()),
+                ControlledKnob::Param(LOWER_ARM_PARAM),
+                ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
             ],
         }
     }
@@ -319,13 +298,13 @@ impl CydSim {
 
     pub fn set_lower_arm_and_spin_whole(&mut self, lower_arm: f32, spin_whole: f32) -> bool {
         self.set_controlled_knobs(
-            ControlledKnob::Param(lower_arm_param()),
-            ControlledKnob::Param(spin_whole_arm_param()),
+            ControlledKnob::Param(LOWER_ARM_PARAM),
+            ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
         );
         self.set_param_pair(
-            lower_arm_param(),
+            LOWER_ARM_PARAM,
             lower_arm,
-            spin_whole_arm_param(),
+            SPIN_WHOLE_ARM_PARAM,
             spin_whole,
         )
     }
@@ -368,15 +347,13 @@ impl CydSim {
         let xy_mix = xy_mix.clamp(0.0, 1.0);
 
         let mut changed = false;
-        let base_pitch_param = base_pitch_param();
-        let base_yaw_param = base_yaw_param();
 
-        if self.params[base_pitch_param] != z_mix {
-            self.params[base_pitch_param] = z_mix;
+        if self.params[BASE_PITCH_PARAM] != z_mix {
+            self.params[BASE_PITCH_PARAM] = z_mix;
             changed = true;
         }
-        if self.params[base_yaw_param] != xy_mix {
-            self.params[base_yaw_param] = xy_mix;
+        if self.params[BASE_YAW_PARAM] != xy_mix {
+            self.params[BASE_YAW_PARAM] = xy_mix;
             changed = true;
         }
 
@@ -639,7 +616,7 @@ impl CydSim {
                 self.params[param_index] = value;
             }
             ActiveControl::Tilt => {
-                self.params[base_pitch_param()] =
+                self.params[BASE_PITCH_PARAM] =
                     (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32).clamp(0.0, 1.0);
             }
             ActiveControl::Zoom => {
@@ -647,7 +624,7 @@ impl CydSim {
                     (1.0 - (y - ZOOM_TOP as f32) / (ZOOM_BOTTOM - ZOOM_TOP) as f32).clamp(0.0, 1.0);
             }
             ActiveControl::XyView => {
-                self.params[base_yaw_param()] = ((x - VIEW_SLIDER_LEFT as f32)
+                self.params[BASE_YAW_PARAM] = ((x - VIEW_SLIDER_LEFT as f32)
                     / (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32)
                     .clamp(0.0, 1.0);
             }
@@ -853,10 +830,10 @@ impl CydSim {
         .ok();
         let tilt_knob_y = TILT_TOP
             + round_to_i32(
-                (TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[base_pitch_param()]),
+                (TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[BASE_PITCH_PARAM]),
             );
         Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
-            .into_styled(self.knob_fill_style(ControlledKnob::Param(base_pitch_param())))
+            .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_PITCH_PARAM)))
             .draw(buffer)
             .ok();
 
@@ -977,10 +954,10 @@ impl CydSim {
         .ok();
         let view_knob_x = VIEW_SLIDER_LEFT
             + round_to_i32(
-                (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.params[base_yaw_param()],
+                (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.params[BASE_YAW_PARAM],
             );
         Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
-            .into_styled(self.knob_fill_style(ControlledKnob::Param(base_yaw_param())))
+            .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_YAW_PARAM)))
             .draw(buffer)
             .ok();
     }
@@ -1213,10 +1190,8 @@ impl ReverseKinematicsRun {
                     }
 
                     if self.candidate_index >= ARM_PARAM_COUNT {
-                        let bend_elbow_param = bend_elbow_param();
-                        let spin_whole_arm_param = spin_whole_arm_param();
-                        let bend_original = self.search_params[bend_elbow_param];
-                        let spin_original = self.search_params[spin_whole_arm_param];
+                        let bend_original = self.search_params[BEND_ELBOW_PARAM];
+                        let spin_original = self.search_params[SPIN_WHOLE_ARM_PARAM];
                         let pair_index = self.candidate_index - ARM_PARAM_COUNT;
                         if apply_paired_candidate(&mut self.search_params, pair_index, self.step) {
                             self.phase = ReverseKinematicsPhase::EvaluatePair {
@@ -1276,8 +1251,8 @@ impl ReverseKinematicsRun {
                     spin_original,
                 } => {
                     if !self.keep_if_improved() {
-                        self.search_params[bend_elbow_param()] = bend_original;
-                        self.search_params[spin_whole_arm_param()] = spin_original;
+                        self.search_params[BEND_ELBOW_PARAM] = bend_original;
+                        self.search_params[SPIN_WHOLE_ARM_PARAM] = spin_original;
                     }
                     self.finish_candidate();
                     return true;
@@ -1347,15 +1322,13 @@ fn reverse_kinematics_visible_param_step(dt_seconds: f32) -> f32 {
 
 fn apply_paired_candidate(params: &mut [f32; DOF], pair_index: usize, step: f32) -> bool {
     let (bend_direction, spin_direction) = RK_PAIRED_CANDIDATES[pair_index];
-    let bend_elbow_param = bend_elbow_param();
-    let spin_whole_arm_param = spin_whole_arm_param();
-    let bend_original = params[bend_elbow_param];
-    let spin_original = params[spin_whole_arm_param];
+    let bend_original = params[BEND_ELBOW_PARAM];
+    let spin_original = params[SPIN_WHOLE_ARM_PARAM];
 
-    params[bend_elbow_param] = (bend_original + bend_direction * step).clamp(0.0, 1.0);
-    params[spin_whole_arm_param] = (spin_original + spin_direction * step).clamp(0.0, 1.0);
+    params[BEND_ELBOW_PARAM] = (bend_original + bend_direction * step).clamp(0.0, 1.0);
+    params[SPIN_WHOLE_ARM_PARAM] = (spin_original + spin_direction * step).clamp(0.0, 1.0);
 
-    params[bend_elbow_param] != bend_original || params[spin_whole_arm_param] != spin_original
+    params[BEND_ELBOW_PARAM] != bend_original || params[SPIN_WHOLE_ARM_PARAM] != spin_original
 }
 
 fn arm_tip(params: &[f32; DOF]) -> Vec3 {
@@ -1409,10 +1382,8 @@ fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
         }
 
         for pair_index in 0..RK_PAIRED_CANDIDATES.len() {
-            let bend_elbow_param = bend_elbow_param();
-            let spin_whole_arm_param = spin_whole_arm_param();
-            let bend_original = params[bend_elbow_param];
-            let spin_original = params[spin_whole_arm_param];
+            let bend_original = params[BEND_ELBOW_PARAM];
+            let spin_original = params[SPIN_WHOLE_ARM_PARAM];
             if !apply_paired_candidate(params, pair_index, step) {
                 continue;
             }
@@ -1422,8 +1393,8 @@ fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
                 best_distance = distance;
                 improved = true;
             } else {
-                params[bend_elbow_param] = bend_original;
-                params[spin_whole_arm_param] = spin_original;
+                params[BEND_ELBOW_PARAM] = bend_original;
+                params[SPIN_WHOLE_ARM_PARAM] = spin_original;
             }
         }
 
