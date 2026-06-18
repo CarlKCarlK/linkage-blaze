@@ -551,12 +551,22 @@ fn parse_number_or_constant(
         .filter(|character| *character != '_')
         .collect();
 
-    if let Ok(value) = numeric_value.parse::<f32>() {
-        return Ok(value);
+    if let Ok(parsed) = numeric_value.parse::<f32>() {
+        if looks_like_integer(&numeric_value) {
+            return Err(format!(
+                "line {line_number}: `{method_name}` argument `{value}` is an integer; use `{value}.0`"
+            ));
+        }
+        return Ok(parsed);
     }
     number_constant(value).ok_or_else(|| {
         format!("line {line_number}: `{method_name}` argument `{value}` is not a number or known constant")
     })
+}
+
+fn looks_like_integer(s: &str) -> bool {
+    let digits = s.strip_prefix('-').or_else(|| s.strip_prefix('+')).unwrap_or(s);
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
 }
 
 fn parse_radius(
@@ -1027,6 +1037,24 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn rejects_integer_args() {
+        for bad in [".forward(1)", ".yaw(90)", ".up(2)", ".define_param(\"x\", 1)"] {
+            let program = format!("Linkage::start()\n{bad}\n");
+            let result = render_program(&program, &[]);
+            assert!(result.is_err(), "`{bad}` should be rejected as integer");
+        }
+    }
+
+    #[test]
+    fn accepts_float_args() {
+        let result = render_program(
+            "Linkage::start()\n.forward(1.0)\n.yaw(90.0)\n.up(2.0)\n.define_param(\"x\", 1.0)\n",
+            &[],
+        );
+        assert!(result.is_ok(), "floats should be accepted: {:?}", result);
     }
 
     #[test]
