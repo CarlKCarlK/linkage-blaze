@@ -17,7 +17,8 @@
       "Bash(just check-all *)",
       "Bash(mv linkage-blaze-armatron-esp32classic *)",
       "Bash(mv linkage-blaze-armatron-esp32c6 *)",
-      "Bash(mv linkage-blaze-clock-esp32classic *)"
+      "Bash(mv linkage-blaze-clock-esp32classic *)",
+      "Bash(just check-clock-classic *)"
     ]
   }
 }

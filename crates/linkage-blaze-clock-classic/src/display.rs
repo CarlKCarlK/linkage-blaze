@@ -298,11 +298,17 @@ fn scale_glyph_in_place(
 // Convention: model +X=up, model +Y=left.
 // screen_x = -model_y  (left → negative screen X)
 // screen_y = -model_x  (up   → negative screen Y, since embedded-graphics Y goes down)
+//todo00000 revisit projection: should be driven by linkage choice, not hardcoded here
 fn project_x(pos: Vec3, scale: f32) -> i32 {
     -(pos[1] * scale) as i32
 }
+//todo00000 revisit projection: should be driven by linkage choice, not hardcoded here
 fn project_y(pos: Vec3, scale: f32) -> i32 {
     -(pos[0] * scale) as i32
+}
+//todo00000 revisit projection: should be driven by linkage choice, not hardcoded here
+fn project_dir(world_x: f32, world_y: f32, r: f32) -> (f32, f32) {
+    (-world_y * r, -world_x * r)
 }
 
 fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
@@ -315,9 +321,8 @@ fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
     let r = disk.radius();
     Ellipse {
         center,
-        // project orientation axes: screen_x=-model_y, screen_y=-model_x
-        axis_a: (-orient[1][0] * r, -orient[0][0] * r),
-        axis_b: (-orient[1][1] * r, -orient[0][1] * r),
+        axis_a: project_dir(orient[0][0], orient[1][0], r),
+        axis_b: project_dir(orient[0][1], orient[1][1], r),
         radius: r,
         stroke_width: 0,
         color: Rgb565::from(disk.color()),
@@ -335,8 +340,8 @@ fn ring_to_ellipse(ring: RingItem) -> Ellipse {
     let r = ring.radius();
     Ellipse {
         center,
-        axis_a: (-orient[1][0] * r, -orient[0][0] * r),
-        axis_b: (-orient[1][1] * r, -orient[0][1] * r),
+        axis_a: project_dir(orient[0][0], orient[1][0], r),
+        axis_b: project_dir(orient[0][1], orient[1][1], r),
         radius: r,
         stroke_width: clock_width_pixels(ring.width()),
         color: Rgb565::from(ring.color()),

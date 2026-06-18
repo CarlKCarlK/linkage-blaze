@@ -713,15 +713,9 @@ impl CydSim {
         let r = radius * scale;
         let color = rgb565_from_rgb888(color_raw);
 
-        let cx = SCREEN_WIDTH as i32 / 2 - round_to_i32(py * scale);
-        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(pz * scale);
-
-        // Project disk semi-axes (orientation columns 0 and 1) to screen space.
-        // Robot Ortho: drop world X (depth), world Y → screen left (negated), world Z → screen up (negated for flip).
-        let ax = -orient[1][0] * r;
-        let ay = -orient[2][0] * r;
-        let bx = -orient[1][1] * r;
-        let by = -orient[2][1] * r;
+        let (cx, cy) = project_pos(py, pz, scale);
+        let (ax, ay) = project_dir(orient[1][0], orient[2][0], r);
+        let (bx, by) = project_dir(orient[1][1], orient[2][1], r);
 
         let det = ax * by - bx * ay;
         let det_sq = det * det;
@@ -771,13 +765,9 @@ impl CydSim {
         let color = rgb565_from_rgb888(color_raw);
         let half_w = screen_width_pixels(width, scale) as f32 * 0.5;
 
-        let cx = SCREEN_WIDTH as i32 / 2 - round_to_i32(py * scale);
-        let cy = SCREEN_HEIGHT as i32 / 2 - round_to_i32(pz * scale);
-
-        let ax = -orient[1][0] * r;
-        let ay = -orient[2][0] * r;
-        let bx = -orient[1][1] * r;
-        let by = -orient[2][1] * r;
+        let (cx, cy) = project_pos(py, pz, scale);
+        let (ax, ay) = project_dir(orient[1][0], orient[2][0], r);
+        let (bx, by) = project_dir(orient[1][1], orient[2][1], r);
 
         let det = ax * by - bx * ay;
         let det_sq = det * det;
@@ -1124,11 +1114,8 @@ impl CydSim {
     //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
     fn pose_to_screen(&self, pose: Pose) -> Point {
         let Vec3([_x, y, z]) = pose.position();
-        let scale = self.scale();
-        Point::new(
-            SCREEN_WIDTH as i32 / 2 - round_to_i32(y * scale),  // +Y goes left
-            SCREEN_HEIGHT as i32 / 2 - round_to_i32(z * scale), // +Z goes up
-        )
+        let (cx, cy) = project_pos(y, z, self.scale());
+        Point::new(cx, cy)
     }
 
     fn scale(&self) -> f32 {
@@ -1512,6 +1499,22 @@ fn zoom_to_scale(zoom: f32) -> f32 {
 
 fn screen_width_pixels(width: f32, scale: f32) -> u32 {
     round_to_u32(width * scale).max(1)
+}
+
+// Robot Ortho projection: +Y → screen left, +Z → screen up, X is depth (dropped).
+//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
+
+#[inline]
+fn project_pos(world_y: f32, world_z: f32, scale: f32) -> (i32, i32) {
+    (
+        SCREEN_WIDTH as i32 / 2 - round_to_i32(world_y * scale),
+        SCREEN_HEIGHT as i32 / 2 - round_to_i32(world_z * scale),
+    )
+}
+
+#[inline]
+fn project_dir(world_y: f32, world_z: f32, r: f32) -> (f32, f32) {
+    (-world_y * r, -world_z * r)
 }
 
 fn rgb565_from_rgb888(color: Rgb888) -> Rgb565 {
