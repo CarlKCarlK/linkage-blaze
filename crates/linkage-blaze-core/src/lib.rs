@@ -428,6 +428,58 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         self.push(Step::SphereParam(VariableArg::new(index, low, high)))
     }
 
+    /// Return a new linkage with a sphere at the start and end of every move step
+    /// (Move, Left, Up — both fixed and parametric).
+    ///
+    /// Spheres at adjacent move endpoints overlap and render twice, which is fine.
+    /// `NOUT` must be ≥ `self.len` + (number of move steps × 2).
+    pub const fn with_joint_spheres<const NOUT: usize>(
+        self,
+        joint_radius: f32,
+    ) -> Linkage<DOF, NOUT> {
+        let mut out = Linkage {
+            steps: [const { Step::Start }; NOUT],
+            len: 0,
+            params: [Param::EMPTY; DOF],
+            param_len: self.param_len,
+            remember_names: [""; NOUT],
+            remember_len: self.remember_len,
+        };
+        let mut i = 0;
+        while i < self.param_len {
+            out.params[i] = self.params[i];
+            i += 1;
+        }
+        let mut i = 0;
+        while i < self.remember_len {
+            out.remember_names[i] = self.remember_names[i];
+            i += 1;
+        }
+        let mut i = 0;
+        while i < self.len {
+            let step = self.steps[i];
+            let is_move = match step {
+                Step::Move(_) | Step::Left(_) | Step::Up(_) => true,
+                _ => false,
+            };
+            if is_move {
+                assert!(out.len < NOUT, "NOUT too small for with_joint_spheres");
+                out.steps[out.len] = Step::Sphere(joint_radius);
+                out.len += 1;
+            }
+            assert!(out.len < NOUT, "NOUT too small for with_joint_spheres");
+            out.steps[out.len] = step;
+            out.len += 1;
+            if is_move {
+                assert!(out.len < NOUT, "NOUT too small for with_joint_spheres");
+                out.steps[out.len] = Step::Sphere(joint_radius);
+                out.len += 1;
+            }
+            i += 1;
+        }
+        out
+    }
+
     const fn push(mut self, step: Step) -> Self {
         assert!(self.len < N, "linkage has more steps than N");
         self.steps[self.len] = step;

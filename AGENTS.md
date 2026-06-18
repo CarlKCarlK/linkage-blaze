@@ -176,6 +176,20 @@ let steps = [step1, step2];
 arm.simulate(&steps);
 ```
 
+## Const Generic Turbofish
+
+Omit turbofish const-generic suffixes (e.g. `::<39>`) when the value can be inferred from context. This is almost always the case when the result is assigned to a typed `const`:
+
+```rust
+// Bad — redundant turbofish; the 39 is already stated in the const type
+const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres::<39>(0.15);
+
+// Good — type annotation on the const is sufficient
+const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres(0.15);
+```
+
+Only write the turbofish when inference would otherwise be ambiguous or when a call site has no surrounding type annotation to infer from.
+
 ## Visibility and Documentation
 
 When something should not be in the public API docs, express that through visibility modifiers rather than doc attributes.
