@@ -35,6 +35,13 @@ check-cyd:
 
 # ── linkage-blaze-armatron-classic ───────────────────────────────────────
 
+_arm_classic_elf := "target/xtensa-esp32-none-elf/release/linkage-blaze-armatron-classic"
+
+# Build and report flash + RAM usage for the ESP32 classic target
+size-arm-classic:
+    just build-arm-classic
+    source ~/export-esp.sh && python3 .tools/elf_size.py {{_arm_classic_elf}}
+
 check-arm-classic:
     cargo +esp check -p linkage-blaze-armatron-classic {{_classic_args}}
 
