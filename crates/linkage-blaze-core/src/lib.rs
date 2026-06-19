@@ -114,6 +114,7 @@ impl Param {
         default: 0.0,
     };
 
+    // todo000 maybe later not static.
     /// Return the parameter's display name.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -244,44 +245,6 @@ pub trait Linkage {
     /// ```
     fn param(&self, index: usize) -> Param;
 
-    /// Return a parameter's name by index.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index >= dof()`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use linkage_blaze_core::LinkageFixed;
-    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
-    ///     .define_param("rotation", 0.0)
-    ///     .define_param("scale", 1.0);
-    ///
-    /// assert_eq!(LINKAGE.param_name(0), "rotation");
-    /// assert_eq!(LINKAGE.param_name(1), "scale");
-    /// ```
-    fn param_name(&self, index: usize) -> &'static str;
-
-    /// Return a parameter's default value by index (normalized to [0.0, 1.0]).
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index >= dof()`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use linkage_blaze_core::LinkageFixed;
-    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
-    ///     .define_param("a", 0.3)
-    ///     .define_param("b", 0.7);
-    ///
-    /// assert_eq!(LINKAGE.param_default(0), 0.3);
-    /// assert_eq!(LINKAGE.param_default(1), 0.7);
-    /// ```
-    fn param_default(&self, index: usize) -> f32;
-
     /// Return the number of parameters defined with the given name.
     ///
     /// Supports shadowing: if the same parameter name is defined multiple times,
@@ -298,14 +261,13 @@ pub trait Linkage {
     ///
     /// assert_eq!(LINKAGE.param_count_named("angle"), 2);
     /// assert_eq!(LINKAGE.param_count_named("distance"), 1);
-    /// assert_eq!(LINKAGE.param_count_named("unknown"), 0);
     /// ```
+    // todo000 param_count_named and param_index names seem poor and don't go well together.
     fn param_count_named(&self, name: &str) -> usize;
 
     /// Return the index of the `n`th parameter (0-based) with the given name.
     ///
-    /// With shadowing, multiple parameters may share the same name. This allows
-    /// accessing any of them by occurrence number.
+    /// With shadowing, multiple parameters may share the same name.
     ///
     /// # Panics
     ///
@@ -318,11 +280,10 @@ pub trait Linkage {
     /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.0)
     ///     .define_param("y", 0.5)
-    ///     .define_param("x", 0.8);  // shadow: second "x"
+    ///     .define_param("x", 0.8);
     ///
     /// assert_eq!(LINKAGE.param_index("x", 0), 0);  // first "x"
     /// assert_eq!(LINKAGE.param_index("x", 1), 2);  // second "x"
-    /// assert_eq!(LINKAGE.param_index("y", 0), 1);  // only "y"
     /// ```
     fn param_index(&self, name: &str, n: usize) -> usize;
 }
@@ -846,14 +807,6 @@ impl<const DOF: usize, const N: usize> Linkage for LinkageFixed<DOF, N> {
     fn param(&self, index: usize) -> Param {
         assert!(index < self.param_len, "parameter index must be defined");
         self.params[index]
-    }
-
-    fn param_name(&self, index: usize) -> &'static str {
-        self.param(index).name()
-    }
-
-    fn param_default(&self, index: usize) -> f32 {
-        self.param(index).default()
     }
 
     fn param_count_named(&self, name: &str) -> usize {
