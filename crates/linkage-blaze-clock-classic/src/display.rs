@@ -13,7 +13,7 @@ use embedded_graphics::{
 };
 use esp_hal::time::Instant;
 use linkage_blaze_core::{
-    DiskItem, DrawItem, Linkage, LinkageFixed, Pose, Rgb888, RingItem, SphereItem, Vec3,
+    DiskItem, DrawItem, LinkageFixed, Pose, Rgb888, RingItem, SphereItem, Vec3,
 };
 use linkage_blaze_cyd::{
     Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, RectWorkspace, SCREEN_WIDTH,

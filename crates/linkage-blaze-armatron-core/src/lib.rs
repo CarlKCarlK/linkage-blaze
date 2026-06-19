@@ -15,7 +15,7 @@ use embedded_graphics::{
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use linkage_blaze_core::{DrawItem, Linkage, LinkageFixed, Pose, Rgb888, Vec3};
+use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Rgb888, Vec3};
 
 // todo00 I hate all these constants.
 pub const SCREEN_WIDTH: usize = 320;

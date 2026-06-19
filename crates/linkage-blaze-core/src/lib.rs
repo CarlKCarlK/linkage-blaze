@@ -20,6 +20,7 @@
 //todo00 could have (compile-time?) optimizations that collapse adjacent steps of the same type into one step with a combined angle/distance. Would that be worth it? or even multiple moves if one doesn't have parameters.
 //todo00 might be nice to have invisible or colored links, but that would be more turtle than linkage.
 //todo00 if we did have colored links RGBA, could use a fluent command.
+//todo "DOF" == params = parameters. do these names make sense? are they explained well?
 
 #[cfg(test)]
 extern crate std;
@@ -1554,7 +1555,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, LinkageFixed, Pose, Rgb888, Vec3};
+    use super::{DrawItem, LinkageFixed, Pose, Vec3};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
