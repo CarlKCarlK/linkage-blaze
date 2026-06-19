@@ -5,7 +5,7 @@ _c6_args      := "--target riscv32imac-unknown-none-elf --release --no-default-f
 
 # ── Tests / checks ───────────────────────────────────────────────────────────
 
-# Run linkage-blaze-core tests
+# Run linkage-blaze-core tests (unit tests + doc tests)
 test-core:
     cargo test -p linkage-blaze-core
 
