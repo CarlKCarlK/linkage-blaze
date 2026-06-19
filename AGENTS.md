@@ -16,6 +16,10 @@ This file contains shared workspace rules for this repository.
 - Prefer `const` values defined in the local context when they are only used there.
 - Do not add redundant command wrappers that only mirror an existing `cargo` command.
 
+## Local CI
+
+`just check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite.
+
 ## Module Structure Convention
 
 Do not create `mod.rs` files.
