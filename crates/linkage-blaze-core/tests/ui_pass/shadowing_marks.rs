@@ -1,8 +1,8 @@
 /// Design decision: Shadowing marks within a single linkage.
 /// Redefining a mark updates which position .restore() uses (last-definition-wins).
-use linkage_blaze_core::Linkage;
+use linkage_blaze_core::LinkageFixed;
 
-const SHADOWING_MARKS: Linkage<0, 10> = Linkage::start()
+const SHADOWING_MARKS: LinkageFixed<0, 10> = LinkageFixed::start()
     .mark("wrist")
     .forward(1.0)
     .mark("wrist") // allowed: redefine the mark

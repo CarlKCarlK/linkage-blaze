@@ -1,4 +1,4 @@
-          Linkage::start()
+          LinkageFixed::start()
         .define_param("raise hand", 0.5)
         .define_param("bend elbow", 0.5)
         .define_param("close hand", 0.0)

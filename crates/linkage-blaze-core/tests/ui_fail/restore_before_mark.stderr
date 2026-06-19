@@ -1,12 +1,12 @@
 error[E0080]: evaluation panicked: restore: no mark found with name (mark must be defined before restore)
- --> tests/ui_fail/restore_before_mark.rs:5:45
+ --> tests/ui_fail/restore_before_mark.rs:5:50
   |
-5 |   const RESTORE_BEFORE_MARK: Linkage<0, 10> = Linkage::start()
-  |  _____________________________________________^
+5 |   const RESTORE_BEFORE_MARK: LinkageFixed<0, 10> = LinkageFixed::start()
+  |  __________________________________________________^
 6 | |     .restore("wrist") // error: mark must be defined before restore
   | |_____________________^ evaluation of `RESTORE_BEFORE_MARK` failed inside this call
   |
-note: inside `Linkage::<0, 10>::restore`
+note: inside `LinkageFixed::<0, 10>::restore`
  --> $RUST/core/src/panic.rs
   |
   |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));

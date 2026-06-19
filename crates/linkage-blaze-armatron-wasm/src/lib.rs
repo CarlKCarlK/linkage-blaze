@@ -3,14 +3,14 @@
 use core::convert::Infallible;
 
 use embassy_time::Instant;
+use embedded_graphics::prelude::WebColors;
 use embedded_graphics::{
     Pixel,
     pixelcolor::Rgb565,
     prelude::{DrawTarget, Drawable, OriginDimensions, Size},
 };
 use linkage_blaze_armatron_core::{CydSim as CoreCydSim, FrameBuffer, TickOut};
-use embedded_graphics::prelude::WebColors;
-use linkage_blaze_core::{Linkage, Pose, Rgb888, Vec3};
+use linkage_blaze_core::{Linkage, LinkageFixed, Pose, Rgb888, Vec3};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
@@ -204,7 +204,8 @@ fn scale_rgb565_channel(value: u8, max: u8) -> u8 {
 
 // ---- Three.js viewer exports ----
 
-const VIEWER_LINKAGE: Linkage<6, 25> = include!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
+const VIEWER_LINKAGE: LinkageFixed<6, 25> =
+    include!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
 
 #[wasm_bindgen]
 pub fn dof() -> usize {
