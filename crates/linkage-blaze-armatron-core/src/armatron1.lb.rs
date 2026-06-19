@@ -25,3 +25,7 @@
         .yaw(-90.0)
         .forward_param("close hand", 0.5, 0.0)
         .left(1.0)
+   .restore("wrist") // end with invisible point in middle of hand
+        .pen_up()
+        .forward(0.25)
+        .pen_down()

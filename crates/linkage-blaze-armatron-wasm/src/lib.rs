@@ -204,7 +204,7 @@ fn scale_rgb565_channel(value: u8, max: u8) -> u8 {
 
 // ---- Three.js viewer exports ----
 
-const VIEWER_LINKAGE: Linkage<6, 21> = include!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
+const VIEWER_LINKAGE: Linkage<6, 25> = include!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
 
 #[wasm_bindgen]
 pub fn dof() -> usize {
