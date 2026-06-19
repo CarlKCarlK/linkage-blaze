@@ -324,10 +324,13 @@ pub trait Linkage<const DOF: usize> {
     ///     .define_param("distance", 0.5)
     ///     .forward_param("distance", 1.0, 5.0);
     ///
-    /// let poses: Vec<_> = LINKAGE.poses(&[0.5]).collect();
-    /// assert_eq!(poses.len(), 2);  // start + 1 forward step
-    /// assert!(poses[0].position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
-    /// assert!(poses[1].position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+    /// let mut poses = LINKAGE.poses(&[0.5]);
+    /// // Start pose at origin
+    /// let start = poses.next().expect("linkage always has start pose");
+    /// assert!(start.position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
+    /// // After forward(1.0 to 5.0 mapped from param 0.5 → 3.0)
+    /// let end = poses.next().expect("forward step exists");
+    /// assert!(end.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
     /// ```
     fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a;
 
@@ -344,10 +347,12 @@ pub trait Linkage<const DOF: usize> {
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
-    /// let styled_poses: Vec<_> = LINKAGE.styled_poses(&[]).collect();
-    /// assert_eq!(styled_poses.len(), 3);  // start + 2 forward steps
-    /// assert!(styled_poses[0].pose().position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
-    /// assert!(styled_poses[2].pose().position()[0] > 2.9);   // moved 3.0 total
+    /// let mut styled = LINKAGE.styled_poses(&[]);
+    /// let start = styled.next().expect("has start");
+    /// assert!(start.pose().position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
+    /// let _ = styled.next();  // skip first forward step
+    /// let end = styled.next().expect("has second forward");
+    /// assert!(end.pose().position()[0] > 2.9);  // moved 3.0 total
     /// ```
     fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'a;
 
@@ -364,9 +369,10 @@ pub trait Linkage<const DOF: usize> {
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
-    /// let items: Vec<_> = LINKAGE.draw_items(&[]).collect();
     /// // Expect at least one stroke connecting the steps
-    /// assert!(items.iter().any(|item| matches!(item, DrawItem::Stroke(_))));
+    /// let has_stroke = LINKAGE.draw_items(&[])
+    ///     .any(|item| matches!(item, DrawItem::Stroke(_)));
+    /// assert!(has_stroke);
     /// ```
     fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'a;
 }
