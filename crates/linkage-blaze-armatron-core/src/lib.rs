@@ -104,24 +104,17 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 const VIEW_CONTROL: Linkage<3, 8> = include!("view_control.lb.rs");
 const GRID_9X9: Linkage<0, 81> = include!("grid_9x9.lb.rs");
 const VIEW_AND_GRID: Linkage<3, 88> = VIEW_CONTROL.combine(GRID_9X9);
-const ARMATRON1: Linkage<6, 21> = include!("armatron1.lb.rs");
-const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres(0.15);
-const LINKAGE0: Linkage<9, 127> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
-const LINKAGE: Linkage<15, 151> = LINKAGE0
+const ARMATRON1: Linkage<6, 25> = include!("armatron1.lb.rs");
+const ARMATRON1_WITH_JOINTS: Linkage<6, 45> = ARMATRON1.with_joint_spheres(0.15);
+const LINKAGE0: Linkage<9, 133> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
+const LINKAGE: Linkage<15, 159> = LINKAGE0
     .restore("scene origin")
     .combine(ARMATRON1)
-    .restore("wrist")
-    .forward(0.25)
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
-const REVERSE_KINEMATICS_LINKAGE: Linkage<9, 30> = VIEW_CONTROL
-    .combine(ARMATRON1)
-    .restore("wrist")
-    .forward(0.25);
-// todo000000 run linkage, but not until end
-// todo000000 in main model have an invisible point at the target center.
+const REVERSE_KINEMATICS_LINKAGE: Linkage<9, 32> = VIEW_CONTROL.combine(ARMATRON1);
 // todo000000 audit actual memory use
 
 const DOF: usize = LINKAGE.dof();
