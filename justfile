@@ -12,9 +12,12 @@ test-core:
 # Build all embedded crates and run tests (build is required for real checking on microcontrollers)
 check-all:
     just test-core
+    just check-cyd
     source ~/export-esp.sh && just build-arm-classic
     just build-arm-c6
     source ~/export-esp.sh && just build-clock-classic
+    just check-arm-wasm
+    just check-editor
 
 # Build everything
 build:
