@@ -90,7 +90,7 @@ impl Mul<f32> for Vec3 {
     }
 }
 
-/// 3x3 rotation matrix, row-major: mat[row][col].
+/// 3x3 rotation matrix, row-major: mat\[row\]\[col\].
 ///
 /// Columns are local-frame axes: col 0 = +X (forward), col 1 = +Y (left), col 2 = +Z (up).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -111,21 +111,21 @@ impl Mat3 {
         self.0
     }
 
-    /// Rotation around z. Yaw = Rz: [[c,-s,0],[s,c,0],[0,0,1]].
+    /// Rotation around z. Yaw = Rz: \[\[c,-s,0\],\[s,c,0\],\[0,0,1\]\].
     pub fn yaw(radians: f32) -> Self {
         let cos = libm::cosf(radians);
         let sin = libm::sinf(radians);
         Self([[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]])
     }
 
-    /// Rotation around y. Pitch = Ry: [[c,0,s],[0,1,0],[-s,0,c]].
+    /// Rotation around y. Pitch = Ry: \[\[c,0,s\],\[0,1,0\],\[-s,0,c\]\].
     pub fn pitch(radians: f32) -> Self {
         let cos = libm::cosf(radians);
         let sin = libm::sinf(radians);
         Self([[cos, 0.0, sin], [0.0, 1.0, 0.0], [-sin, 0.0, cos]])
     }
 
-    /// Rotation around x. Roll = Rx: [[1,0,0],[0,c,-s],[0,s,c]].
+    /// Rotation around x. Roll = Rx: \[\[1,0,0\],\[0,c,-s\],\[0,s,c\]\].
     pub fn roll(radians: f32) -> Self {
         let cos = libm::cosf(radians);
         let sin = libm::sinf(radians);
