@@ -178,23 +178,39 @@ impl VariableArg {
 ///
 /// # Examples
 ///
-/// Query and evaluate a linkage:
+/// Define parameters and evaluate with different values:
 ///
 /// ```rust
 /// # use linkage_blaze_core::{Linkage, LinkageFixed};
-/// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
-///     .define_param("x", 0.5)
-///     .define_param("y", 0.5)
-///     .forward(1.0);
+/// const LINKAGE: LinkageFixed<1, 8> = LinkageFixed::start()
+///     .define_param("distance", 0.5)
+///     .forward_param("distance", 1.0, 5.0);
 ///
+/// assert_eq!(LINKAGE.dof(), 1);
 /// assert_eq!(LINKAGE.len(), 2);
-/// let params = [0.5, 0.5];
-/// let final_pose = LINKAGE.final_pose(&params);
+///
+/// // Evaluate with distance parameter at 0.5 (maps to 3.0 units)
+/// let pose1 = LINKAGE.final_pose(&[0.5]);
+///
+/// // Evaluate with distance parameter at 0.0 (maps to 1.0 units)
+/// let pose2 = LINKAGE.final_pose(&[0.0]);
 /// ```
 pub trait Linkage<const DOF: usize> {
     /// Return the number of runtime parameters (degrees of freedom).
     ///
     /// For `LinkageFixed`, this always equals `DOF`. For `LinkageBuf` (future), it may be dynamic.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
+    ///     .define_param("rotation", 0.5)
+    ///     .define_param("height", 0.5)
+    ///     .define_param("width", 0.5);
+    ///
+    /// assert_eq!(LINKAGE.dof(), 3);
+    /// ```
     fn dof(&self) -> usize;
 
     /// Return the number of linkage steps, including the implicit start step.
@@ -281,13 +297,14 @@ pub trait Linkage<const DOF: usize> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::LinkageFixed;
-    /// const LINKAGE: LinkageFixed<0, 3> = LinkageFixed::start()
-    ///     .forward(2.0)
-    ///     .forward(3.0);  // total 5 units forward
+    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+    ///     .define_param("yaw", 0.5)
+    ///     .define_param("distance", 0.5)
+    ///     .yaw_param("yaw", -90.0, 90.0)
+    ///     .forward_param("distance", 1.0, 5.0);
     ///
-    /// let params = [];
-    /// let pose = LINKAGE.final_pose(&params);
-    /// // pose has moved 5 units along +X axis
+    /// // Rotate 45° and move 3 units
+    /// let pose = LINKAGE.final_pose(&[0.5, 0.6]);
     /// ```
     fn final_pose(&self, params: &[f32; DOF]) -> Pose;
 }
