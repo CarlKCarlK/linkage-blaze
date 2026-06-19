@@ -10,7 +10,7 @@ use embedded_graphics::{
     prelude::{DrawTarget, Drawable, OriginDimensions, Size},
 };
 use linkage_blaze_armatron_core::{CydSim as CoreCydSim, FrameBuffer, TickOut};
-use linkage_blaze_core::{Linkage, LinkageFixed, Pose, Rgb888, Vec3};
+use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
