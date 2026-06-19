@@ -310,6 +310,65 @@ pub trait Linkage<const DOF: usize> {
     /// assert!(pose.position().is_close_to(&Vec3::from([3.4, 0.0, 0.0]), 1e-5));
     /// ```
     fn final_pose(&self, params: &[f32; DOF]) -> Pose;
+
+    /// Iterate over all intermediate poses produced by evaluating this linkage.
+    ///
+    /// The sequence includes the implicit start pose at the origin, followed by poses
+    /// at each step. This is useful for drawing linkage motion or analyzing intermediate states.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::{LinkageFixed, Vec3};
+    /// const LINKAGE: LinkageFixed<1, 8> = LinkageFixed::start()
+    ///     .define_param("distance", 0.5)
+    ///     .forward_param("distance", 1.0, 5.0);
+    ///
+    /// let poses: Vec<_> = LINKAGE.poses(&[0.5]).collect();
+    /// assert_eq!(poses.len(), 2);  // start + 1 forward step
+    /// assert!(poses[0].position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
+    /// assert!(poses[1].position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+    /// ```
+    fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a;
+
+    /// Iterate over all styled poses with their pen state (color, width, visibility).
+    ///
+    /// Each styled pose includes the position/orientation along with pen rendering properties.
+    /// This is the full data needed for interactive visualization or analysis.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::{LinkageFixed, Vec3};
+    /// const LINKAGE: LinkageFixed<0, 8> = LinkageFixed::start()
+    ///     .forward(1.0)
+    ///     .forward(2.0);
+    ///
+    /// let styled_poses: Vec<_> = LINKAGE.styled_poses(&[]).collect();
+    /// assert_eq!(styled_poses.len(), 3);  // start + 2 forward steps
+    /// assert!(styled_poses[0].pose().position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
+    /// assert!(styled_poses[2].pose().position()[0] > 2.9);   // moved 3.0 total
+    /// ```
+    fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'a;
+
+    /// Iterate over all draw items (strokes, disks, rings, spheres) produced by this linkage.
+    ///
+    /// This produces the final rendering primitives ready for display. Items include pen width,
+    /// color, and other visual properties. Marked steps are tracked for interactive highlighting.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::{LinkageFixed, DrawItem};
+    /// const LINKAGE: LinkageFixed<0, 8> = LinkageFixed::start()
+    ///     .forward(1.0)
+    ///     .forward(2.0);
+    ///
+    /// let items: Vec<_> = LINKAGE.draw_items(&[]).collect();
+    /// // Expect at least one stroke connecting the steps
+    /// assert!(items.iter().any(|item| matches!(item, DrawItem::Stroke(_))));
+    /// ```
+    fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'a;
 }
 
 /// A fixed-size linkage description.
@@ -864,6 +923,18 @@ impl<const DOF: usize, const N: usize> Linkage<DOF> for LinkageFixed<DOF, N> {
         self.poses(params)
             .last()
             .expect("linkage must yield at least the implicit start pose")
+    }
+
+    fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a {
+        self.styled_poses(params).map(|sp| sp.pose)
+    }
+
+    fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'a {
+        StyledPoses::new(self, params)
+    }
+
+    fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'a {
+        DrawItems::new(self, params)
     }
 }
 
