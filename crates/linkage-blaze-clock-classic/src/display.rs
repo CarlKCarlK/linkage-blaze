@@ -13,7 +13,7 @@ use embedded_graphics::{
 };
 use esp_hal::time::Instant;
 use linkage_blaze_core::{
-    DiskItem, DrawItem, Linkage, LinkageFixed, Pose, Rgb888, RingItem, SphereItem, Vec3,
+    DiskItem, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, RingItem, SphereItem, Vec3,
 };
 use linkage_blaze_cyd::{
     Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, RectWorkspace, SCREEN_WIDTH,
@@ -129,7 +129,7 @@ impl CydClockDisplay {
             self.last_time_text.push_str(time_text).ok();
         }
 
-        self.show_clock(&CLOCK_HANDS, clock_time)?;
+        self.show_clock(CLOCK_HANDS.view(), clock_time)?;
 
         Ok(())
     }
@@ -231,7 +231,7 @@ impl CydClockDisplay {
 
     fn show_clock(
         &mut self,
-        linkage: &impl Linkage<2>,
+        linkage: LinkageView<'_, 2>,
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         let params = clock_time.map_or([0.0; 2], |t| t.params());

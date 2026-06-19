@@ -7,17 +7,17 @@ _c6_args      := "--target riscv32imac-unknown-none-elf --release --no-default-f
 
 # Run linkage-blaze-core tests (unit tests + doc tests)
 test-core:
-    cargo test -p linkage-blaze-core
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
 
 # Check and build all crates
 check-all:
-    just test-core
-    just check-cyd
-    source ~/export-esp.sh && just build-arm-classic
-    just build-arm-c6
-    source ~/export-esp.sh && just build-clock-classic
-    just build-arm-wasm
-    just build-editor
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
+    env RUSTFLAGS="-D warnings" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="-D warnings" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
+    env RUSTFLAGS="-D warnings" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="-D warnings" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
+    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
+    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
 
 # Alias for check-all
 build:
@@ -25,7 +25,7 @@ build:
 
 # Generate docs and open in browser
 docs:
-    cargo doc -p linkage-blaze-core --no-deps --open
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --open
 
 # ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
 
