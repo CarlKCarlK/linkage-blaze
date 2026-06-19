@@ -11,6 +11,9 @@ libm = "0.2"
 nanorand = { version = "0.8", default-features = false, features = ["wyrand"] }
 static_cell = "2.1.1"
 
+[features]
+alloc = []
+
 [dev-dependencies]
 png = "0.18"
 trybuild = "1.0"
