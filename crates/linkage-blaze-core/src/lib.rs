@@ -173,11 +173,11 @@ impl VariableArg {
     }
 }
 
-/// A linkage that can be queried for runtime parameters and evaluated to produce poses and draw items.
+/// A linkage expression/storage type that can expose a borrowed view for evaluation and rendering.
 ///
-/// This trait provides a uniform interface for linkage expression/storage types. The primary method
-/// is [`view()`](Linkage::view), which returns a [`LinkageView`] for evaluation and rendering.
-/// Other methods have default implementations that delegate to the view.
+/// This trait provides a minimal, uniform interface for linkage types. The only required method is
+/// [`view()`](Linkage::view), which returns a [`LinkageView`] where all evaluation and rendering
+/// happens. This keeps the API clean by separating expression/storage from evaluation.
 ///
 /// # Examples
 ///
@@ -187,94 +187,44 @@ impl VariableArg {
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
-/// // Get a view for evaluation
-/// let view = LINKAGE.view();
-/// assert_eq!(view.dof(), 1);
-/// assert_eq!(view.len(), 2);
+/// // Get a view and evaluate
+/// let pose = LINKAGE.view().final_pose(&[0.5]);
 /// ```
 pub trait Linkage<const DOF: usize> {
     /// Create a borrowed view for evaluation and rendering.
     ///
-    /// This is the primary method; all other methods have default implementations
-    /// that delegate to the view.
+    /// All evaluation methods (final_pose, poses, draw_items, etc.) are available on the returned
+    /// [`LinkageView`]. This keeps the conceptual model clean: storage types (LinkageFixed, LinkageBuf)
+    /// define expressions; views evaluate them.
     fn view(&self) -> LinkageView<'_, DOF>;
 
     /// Return the number of runtime parameters (degrees of freedom).
     ///
-    /// Default implementation: `DOF`
+    /// Default implementation: returns `DOF`.
     fn dof(&self) -> usize {
         DOF
     }
 
     /// Return the number of linkage steps, including the implicit start step.
     ///
-    /// Default implementation delegates to the view.
+    /// Default implementation: delegates to the view.
     fn len(&self) -> usize {
         self.view().len()
     }
 
-    /// Return a parameter definition by index.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index >= dof()`.
-    ///
-    /// Default implementation delegates to the view.
-    fn param(&self, index: usize) -> Param {
-        self.view().param(index)
-    }
-
     /// Return a reference to the parameter array.
     ///
-    /// Default implementation delegates to the view.
+    /// Default implementation: delegates to the view.
     fn params(&self) -> &[Param; DOF] {
         self.view().params()
     }
 
     /// Return a reference to the step slice.
     ///
-    /// Default implementation delegates to the view.
+    /// Default implementation: delegates to the view.
     fn steps(&self) -> &[Step] {
         self.view().steps()
     }
-
-    /// Return the index of the `n`th parameter (0-based) with the given name.
-    ///
-    /// With shadowing, multiple parameters may share the same name.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the name is not found or if `n` exceeds the occurrence count.
-    ///
-    /// Default implementation delegates to the view.
-    fn param_index(&self, name: &str, n: usize) -> usize {
-        self.view().param_index(name, n)
-    }
-
-    /// Return the final pose after evaluating all steps.
-    ///
-    /// Default implementation delegates to the view.
-    fn final_pose(&self, params: &[f32; DOF]) -> Pose {
-        self.view().final_pose(params)
-    }
-
-    /// Iterate over all intermediate poses produced by evaluating this linkage.
-    ///
-    /// The sequence includes the implicit start pose at the origin, followed by poses
-    /// at each step. This is useful for drawing linkage motion or analyzing intermediate states.
-    fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a;
-
-    /// Iterate over all styled poses with their pen state (color, width, visibility).
-    ///
-    /// Each styled pose includes the position/orientation along with pen rendering properties.
-    /// This is the full data needed for interactive visualization or analysis.
-    fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'a;
-
-    /// Iterate over all draw items (strokes, disks, rings, spheres) produced by this linkage.
-    ///
-    /// This produces the final rendering primitives ready for display. Items include pen width,
-    /// color, and other visual properties. Marked steps are tracked for interactive highlighting.
-    fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'a;
 }
 
 /// A borrowed view of a linkage for evaluation and rendering.
@@ -984,16 +934,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF> for LinkageFixed<DOF, N> {
         LinkageView::new(&self.params, &self.steps[..self.len])
     }
 
-    fn dof(&self) -> usize {
-        DOF
-    }
-
     fn len(&self) -> usize {
         self.len
-    }
-
-    fn param(&self, index: usize) -> Param {
-        self.view().param(index)
     }
 
     fn params(&self) -> &[Param; DOF] {
@@ -1003,43 +945,11 @@ impl<const DOF: usize, const N: usize> Linkage<DOF> for LinkageFixed<DOF, N> {
     fn steps(&self) -> &[Step] {
         &self.steps[..self.len]
     }
-
-    fn param_index(&self, name: &str, n: usize) -> usize {
-        self.view().param_index(name, n)
-    }
-
-    fn final_pose(&self, params: &[f32; DOF]) -> Pose {
-        self.view().final_pose(params)
-    }
-
-    fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a {
-        StyledPoses::new(self, params).map(|sp| sp.pose())
-    }
-
-    fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'a {
-        StyledPoses::new(self, params)
-    }
-
-    fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'a {
-        DrawItems::new(self, params)
-    }
 }
 
 impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
     fn view(&self) -> LinkageView<'_, DOF> {
         *self
-    }
-
-    fn poses<'b>(&'b self, params: &'b [f32; DOF]) -> impl Iterator<Item = Pose> + 'b {
-        self.poses(params)
-    }
-
-    fn styled_poses<'b>(&'b self, params: &'b [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'b {
-        self.styled_poses(params)
-    }
-
-    fn draw_items<'b>(&'b self, params: &'b [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'b {
-        self.draw_items(params)
     }
 }
 
@@ -1351,16 +1261,8 @@ impl<const DOF: usize> Linkage<DOF> for LinkageBuf<DOF> {
         LinkageView::new(&self.params, &self.steps)
     }
 
-    fn dof(&self) -> usize {
-        DOF
-    }
-
     fn len(&self) -> usize {
         self.steps.len()
-    }
-
-    fn param(&self, index: usize) -> Param {
-        self.view().param(index)
     }
 
     fn params(&self) -> &[Param; DOF] {
@@ -1369,26 +1271,6 @@ impl<const DOF: usize> Linkage<DOF> for LinkageBuf<DOF> {
 
     fn steps(&self) -> &[Step] {
         &self.steps
-    }
-
-    fn param_index(&self, name: &str, n: usize) -> usize {
-        self.view().param_index(name, n)
-    }
-
-    fn final_pose(&self, params: &[f32; DOF]) -> Pose {
-        self.view().final_pose(params)
-    }
-
-    fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a {
-        StyledPosesView::new(&self.steps, params).map(|sp| sp.pose())
-    }
-
-    fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'a {
-        StyledPosesView::new(&self.steps, params)
-    }
-
-    fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'a {
-        DrawItemsView::new(&self.steps, params)
     }
 }
 
@@ -1773,6 +1655,7 @@ pub struct StyledPoses<'a, const DOF: usize, const N: usize> {
 }
 
 impl<'a, const DOF: usize, const N: usize> StyledPoses<'a, DOF, N> {
+    #[allow(dead_code)]
     fn new(linkage: &'a LinkageFixed<DOF, N>, params: &'a [f32; DOF]) -> Self {
         validate_params(params);
         Self {
@@ -2118,6 +2001,7 @@ pub struct DrawItems<'a, const DOF: usize, const N: usize> {
 }
 
 impl<'a, const DOF: usize, const N: usize> DrawItems<'a, DOF, N> {
+    #[allow(dead_code)]
     fn new(linkage: &'a LinkageFixed<DOF, N>, params: &'a [f32; DOF]) -> Self {
         validate_params(params);
         Self {
@@ -2234,7 +2118,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, LinkageFixed, Linkage, Pose, Vec3};
+    use super::{DrawItem, LinkageFixed, Pose, Vec3};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
@@ -2300,6 +2184,7 @@ mod tests {
 
         let params = [];
         let draw_item = LINKAGE
+            .view()
             .draw_items(&params)
             .next()
             .expect("zero-width pen should still produce a stroke");
@@ -2317,7 +2202,7 @@ mod tests {
         const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().forward(10.0);
 
         let params = [];
-        let actual = LINKAGE.final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params).position();
 
         assert!(actual.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-6));
     }
@@ -2327,7 +2212,7 @@ mod tests {
         const LINKAGE: LinkageFixed<0, 3> = LinkageFixed::start().yaw(90.0).forward(10.0);
 
         let params = [];
-        let actual = LINKAGE.final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params).position();
 
         assert!(actual.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-5));
     }
@@ -2337,7 +2222,7 @@ mod tests {
         const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().left(10.0);
 
         let params = [];
-        let actual = LINKAGE.final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params).position();
 
         assert!(actual.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-6));
     }
@@ -2347,7 +2232,7 @@ mod tests {
         const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().up(10.0);
 
         let params = [];
-        let actual = LINKAGE.final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params).position();
 
         assert!(actual.is_close_to(&Vec3::from([0.0, 0.0, 10.0]), 1e-6));
     }
@@ -2363,7 +2248,7 @@ mod tests {
             .up_param("up", 0.0, 30.0);
 
         let params = [0.2, 0.3, 0.4];
-        let actual = LINKAGE.final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params).position();
 
         assert!(actual.is_close_to(&Vec3::from([2.0, 6.0, 12.0]), 1e-6));
     }
@@ -2377,7 +2262,7 @@ mod tests {
             .forward(5.0);
 
         let params = [];
-        let actual = LINKAGE.final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params).position();
 
         assert!(actual.is_close_to(&Vec3::from([10.0, 5.0, 0.0]), 1e-5));
     }
@@ -2387,14 +2272,14 @@ mod tests {
         // Fractions for [raise hand, bend elbow, close hand,
         //  lower arm, spin whole arm, spin hand].
         let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
-        assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.poses(&params))
+        assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.view().poses(&params))
     }
 
     #[test]
     fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn Error>> {
         // [spin whole arm, bend elbow, close hand]
         let params = [0.30, 0.02, 0.10];
-        assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.poses(&params))
+        assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.view().poses(&params))
     }
 
     #[test]
@@ -2408,7 +2293,7 @@ mod tests {
             0.6254387123, // spin whole arm
             1.0,          // spin hand
         ];
-        let pose = LINKAGE0.final_pose(&params);
+        let pose = LINKAGE0.view().final_pose(&params);
         let expected = Pose::new(
             [
                 [0.48325038, 0.7270788, 0.48767346],
@@ -2430,7 +2315,7 @@ mod tests {
             0.02, // bend elbow
             0.10, // close hand
         ];
-        let pose = LINKAGE1.final_pose(&params);
+        let pose = LINKAGE1.view().final_pose(&params);
         let expected = Pose::new(
             [
                 [-0.368124515, 0.929776430, 0.0],
@@ -2455,7 +2340,7 @@ mod tests {
             0.5, // spin whole arm
             0.5, // spin hand
         ];
-        let pose = LINKAGE0.final_pose(&params);
+        let pose = LINKAGE0.view().final_pose(&params);
         let expected = Pose::new(
             [
                 [-0.5877855, -0.80901694, 0.0],
@@ -2503,7 +2388,7 @@ mod tests {
             0.5, // spin hand
         ];
 
-        let _ = LINKAGE0.final_pose(&params);
+        let _ = LINKAGE0.view().final_pose(&params);
     }
 
     // ── Shadowing semantics ───────────────────────────────────────────────────
@@ -2538,7 +2423,7 @@ mod tests {
             .forward(10.0);
 
         let params = [1.0, 0.0]; // index 0 = full, index 1 = zero
-        let pos = LINKAGE.final_pose(&params).position();
+        let pos = LINKAGE.view().final_pose(&params).position();
         // yaw driven by index 1 = 0.0 → 0° → moves along +X
         assert!(pos.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-5));
     }
