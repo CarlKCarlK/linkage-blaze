@@ -1,4 +1,4 @@
-use crate::{LinkageFixed, Pose, Vec3};
+use crate::{Linkage, LinkageFixed, Pose, Vec3};
 use core::convert::Infallible;
 use embedded_graphics::{
     draw_target::DrawTarget,

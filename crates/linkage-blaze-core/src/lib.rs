@@ -25,6 +25,9 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 mod math;
 
 pub use math::{Mat3, Vec3};
@@ -172,8 +175,9 @@ impl VariableArg {
 
 /// A linkage that can be queried for runtime parameters and evaluated to produce poses and draw items.
 ///
-/// This trait provides a uniform interface for linkage types. The primary method is [`view()`](Linkage::view),
-/// which returns a [`LinkageView`] for evaluation. Other methods have default implementations that delegate to the view.
+/// This trait provides a uniform interface for linkage expression/storage types. The primary method
+/// is [`view()`](Linkage::view), which returns a [`LinkageView`] for evaluation and rendering.
+/// Other methods have default implementations that delegate to the view.
 ///
 /// # Examples
 ///
@@ -501,7 +505,11 @@ impl<'a, const DOF: usize, const N: usize> From<&'a LinkageFixed<DOF, N>> for Li
     }
 }
 
-/// A fixed-size linkage description.
+/// A fixed-capacity const linkage expression/storage type.
+///
+/// `LinkageFixed` stores linkage steps and parameters in fixed-size arrays, enabling
+/// `const` construction and evaluation without allocation. Use the fluent DSL methods
+/// to extend the linkage expression and build complex arm kinematics at compile time.
 pub struct LinkageFixed<const DOF: usize, const N: usize> {
     steps: [Step; N],
     len: usize,
@@ -610,7 +618,7 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     /// Define a named runtime parameter.
     ///
     /// Duplicate names are allowed; later definitions shadow earlier ones when
-    /// a builder method like `yaw_param` looks up the name.
+    /// a DSL method like `yaw_param` looks up the name.
     pub const fn define_param(mut self, name: &'static str, default: f32) -> Self {
         assert!(self.param_len < DOF, "linkage has more params than DOF");
         assert!(default >= 0.0, "parameter default must be at least 0.0");
@@ -1035,6 +1043,375 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
     }
 }
 
+#[cfg(feature = "alloc")]
+/// A growable linkage expression/storage type.
+///
+/// `LinkageBuf` stores linkage steps in a [`Vec`](alloc::vec::Vec) and parameters in an array,
+/// allowing dynamic growth at runtime. Unlike [`LinkageFixed`], construction is not `const`,
+/// but the fluent DSL methods and evaluation interface are identical.
+///
+/// Use [`LinkageBuf::start()`] to begin building, then chain fluent DSL methods to extend
+/// the linkage expression. Call [`view()`](LinkageBuf::view) to create a borrowed view
+/// for evaluation and rendering.
+///
+/// # Building linkage expressions
+///
+/// ```rust
+/// # #[cfg(feature = "alloc")]
+/// # {
+/// # use linkage_blaze_core::{LinkageBuf, Vec3};
+/// let linkage = LinkageBuf::start()
+///     .define_param("distance", 0.5)
+///     .forward_param("distance", 1.0, 5.0);
+///
+/// let pose = linkage.view().final_pose(&[0.5]);
+/// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+/// # }
+/// ```
+///
+/// # Converting from fixed storage
+///
+/// ```rust
+/// # #[cfg(feature = "alloc")]
+/// # {
+/// # use linkage_blaze_core::{LinkageFixed, LinkageBuf, Vec3};
+/// const FIXED: LinkageFixed<1, 8> = LinkageFixed::start()
+///     .define_param("distance", 0.5)
+///     .forward_param("distance", 1.0, 5.0);
+///
+/// let buf = LinkageBuf::from(&FIXED);
+/// let pose = buf.view().final_pose(&[0.5]);
+/// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+/// # }
+/// ```
+pub struct LinkageBuf<const DOF: usize> {
+    params: [Param; DOF],
+    param_len: usize,
+    steps: alloc::vec::Vec<Step>,
+    mark_names: alloc::vec::Vec<&'static str>,
+}
+
+#[cfg(feature = "alloc")]
+impl<const DOF: usize> LinkageBuf<DOF> {
+    /// Start a growable linkage with an implicit origin.
+    pub fn start() -> Self {
+        Self {
+            params: [Param::EMPTY; DOF],
+            param_len: 0,
+            steps: {
+                let mut v = alloc::vec::Vec::new();
+                v.push(Step::Start);
+                v
+            },
+            mark_names: alloc::vec::Vec::new(),
+        }
+    }
+
+    /// Number of runtime parameters this linkage expects.
+    pub const DOF: usize = DOF;
+
+    /// Create a borrowed view for evaluation and rendering.
+    ///
+    /// The view erases the step capacity while preserving the degree-of-freedom `DOF`.
+    /// All evaluation methods (poses, draw_items, etc.) operate on the view.
+    #[must_use]
+    #[inline]
+    pub fn view(&self) -> LinkageView<'_, DOF> {
+        LinkageView::new(&self.params, &self.steps)
+    }
+
+    /// Define a named runtime parameter, extending the linkage expression.
+    ///
+    /// Duplicate names are allowed; later definitions shadow earlier ones when
+    /// a DSL method like `yaw_param` looks up the name.
+    pub fn define_param(mut self, name: &'static str, default: f32) -> Self {
+        assert!(self.param_len < DOF, "linkage has more params than DOF");
+        assert!(default >= 0.0, "parameter default must be at least 0.0");
+        assert!(default <= 1.0, "parameter default must be at most 1.0");
+        self.params[self.param_len] = Param { name, default };
+        self.param_len += 1;
+        self
+    }
+
+    /// Add a yaw step from a user-facing angle in degrees.
+    pub fn yaw(self, degrees: f32) -> Self {
+        self.push_step(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
+    }
+
+    /// Add a yaw step from a runtime parameter in degrees.
+    pub fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
+            index, low, high,
+        ))))
+    }
+
+    /// Add a pitch step from a user-facing angle in degrees.
+    pub fn pitch(self, degrees: f32) -> Self {
+        self.push_step(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
+    }
+
+    /// Add a pitch step from a runtime parameter in degrees.
+    pub fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
+            index, low, high,
+        ))))
+    }
+
+    /// Add a roll step from a user-facing angle in degrees.
+    pub fn roll(self, degrees: f32) -> Self {
+        self.push_step(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
+    }
+
+    /// Add a roll step from a runtime parameter in degrees.
+    pub fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::Roll(Arg::Variable(VariableArg::from_degrees(
+            index, low, high,
+        ))))
+    }
+
+    /// Add a fixed forward move step.
+    pub fn forward(self, distance: f32) -> Self {
+        self.push_step(Step::Move(Arg::Fixed(distance)))
+    }
+
+    /// Add a move step from a runtime parameter.
+    pub fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::Move(Arg::Variable(VariableArg::new(
+            index, low, high,
+        ))))
+    }
+
+    /// Add a fixed left move step.
+    pub fn left(self, distance: f32) -> Self {
+        self.push_step(Step::Left(Arg::Fixed(distance)))
+    }
+
+    /// Add a left move step from a runtime parameter.
+    pub fn left_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::Left(Arg::Variable(VariableArg::new(
+            index, low, high,
+        ))))
+    }
+
+    /// Add a fixed up move step.
+    pub fn up(self, distance: f32) -> Self {
+        self.push_step(Step::Up(Arg::Fixed(distance)))
+    }
+
+    /// Add an up move step from a runtime parameter.
+    pub fn up_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
+    }
+
+    /// Save the current pose and pen state under a name for later recall.
+    pub fn mark(mut self, name: &'static str) -> Self {
+        self.mark_names.push(name);
+        self.push_step_internal(Step::Mark { name });
+        self
+    }
+
+    /// Restore a previously marked pose and pen state.
+    /// Resolves `name` at build time using last-definition-wins (shadowing) semantics.
+    pub fn restore(self, name: &'static str) -> Self {
+        let index = match self.last_mark_index(name) {
+            Some(i) => i,
+            None => {
+                panic!("restore: no mark found with name (mark must be defined before restore)")
+            }
+        };
+        self.push_step(Step::Restore { index })
+    }
+
+    /// Restore the `n`th marked pose with the given name (0 = first definition).
+    /// Resolves at build time.
+    pub fn restore_nth(self, name: &'static str, n: usize) -> Self {
+        let index = match self.mark_index_nth(name, n) {
+            Some(i) => i,
+            None => panic!(
+                "restore_nth: no matching mark found (must define mark before restoring nth)"
+            ),
+        };
+        self.push_step(Step::Restore { index })
+    }
+
+    /// Lift the pen so later move steps don't draw.
+    pub fn pen_up(self) -> Self {
+        self.push_step(Step::PenUp)
+    }
+
+    /// Lower the pen so later move steps draw.
+    pub fn pen_down(self) -> Self {
+        self.push_step(Step::PenDown)
+    }
+
+    /// Set the pen color for later move steps.
+    pub fn pen_color(self, color: Rgb888) -> Self {
+        self.push_step(Step::PenColor(color))
+    }
+
+    /// Set the pen width in linkage units for later move steps.
+    pub fn pen_width(self, width: f32) -> Self {
+        assert!(width >= 0.0, "pen width must be non-negative");
+        self.push_step(Step::PenWidth(width))
+    }
+
+    /// Add a filled disk at the current pose, in the local v0-v1 plane.
+    pub fn disk(self, radius: f32) -> Self {
+        self.push_step(Step::Disk(radius))
+    }
+
+    /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
+    pub fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::DiskParam(VariableArg::new(index, low, high)))
+    }
+
+    /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is the current pen width.
+    pub fn ring(self, radius: f32) -> Self {
+        self.push_step(Step::Ring(radius))
+    }
+
+    /// Add a ring at the current pose; radius is driven by a degree-of-freedom parameter.
+    pub fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::RingParam(VariableArg::new(index, low, high)))
+    }
+
+    /// Add a sphere centered at the current pose.
+    pub fn sphere(self, radius: f32) -> Self {
+        self.push_step(Step::Sphere(radius))
+    }
+
+    /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
+    pub fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
+        let index = self.expect_param_index(name);
+        self.push_step(Step::SphereParam(VariableArg::new(index, low, high)))
+    }
+
+    fn push_step(mut self, step: Step) -> Self {
+        self.steps.push(step);
+        self
+    }
+
+    fn push_step_internal(&mut self, step: Step) {
+        self.steps.push(step);
+    }
+
+    fn last_mark_index(&self, name: &str) -> Option<usize> {
+        let mut i = self.mark_names.len();
+        while i > 0 {
+            i -= 1;
+            if str_eq(self.mark_names[i], name) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn mark_index_nth(&self, name: &str, n: usize) -> Option<usize> {
+        let mut count = 0;
+        for (i, &mark_name) in self.mark_names.iter().enumerate() {
+            if str_eq(mark_name, name) {
+                if count == n {
+                    return Some(i);
+                }
+                count += 1;
+            }
+        }
+        None
+    }
+
+    fn last_param_index(&self, name: &str) -> Option<usize> {
+        let mut i = self.param_len;
+        while i > 0 {
+            i -= 1;
+            if str_eq(self.params[i].name, name) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn expect_param_index(&self, name: &str) -> usize {
+        match self.last_param_index(name) {
+            Some(index) => index,
+            None => panic!("unknown parameter name"),
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<const DOF: usize> Linkage<DOF> for LinkageBuf<DOF> {
+    fn view(&self) -> LinkageView<'_, DOF> {
+        LinkageView::new(&self.params, &self.steps)
+    }
+
+    fn dof(&self) -> usize {
+        DOF
+    }
+
+    fn len(&self) -> usize {
+        self.steps.len()
+    }
+
+    fn param(&self, index: usize) -> Param {
+        self.view().param(index)
+    }
+
+    fn params(&self) -> &[Param; DOF] {
+        &self.params
+    }
+
+    fn steps(&self) -> &[Step] {
+        &self.steps
+    }
+
+    fn param_index(&self, name: &str, n: usize) -> usize {
+        self.view().param_index(name, n)
+    }
+
+    fn final_pose(&self, params: &[f32; DOF]) -> Pose {
+        self.view().final_pose(params)
+    }
+
+    fn poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = Pose> + 'a {
+        StyledPosesView::new(&self.steps, params).map(|sp| sp.pose())
+    }
+
+    fn styled_poses<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = StyledPose> + 'a {
+        StyledPosesView::new(&self.steps, params)
+    }
+
+    fn draw_items<'a>(&'a self, params: &'a [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'a {
+        DrawItemsView::new(&self.steps, params)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<const DOF: usize, const N: usize> From<&LinkageFixed<DOF, N>> for LinkageBuf<DOF> {
+    fn from(linkage: &LinkageFixed<DOF, N>) -> Self {
+        Self {
+            params: linkage.params.clone(),
+            param_len: linkage.param_len,
+            steps: linkage.steps[..linkage.len].to_vec(),
+            mark_names: linkage.mark_names[..linkage.mark_len].to_vec(),
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a, const DOF: usize> From<&'a LinkageBuf<DOF>> for LinkageView<'a, DOF> {
+    fn from(linkage: &'a LinkageBuf<DOF>) -> Self {
+        linkage.view()
+    }
+}
+
 impl Step {
     const fn offset_params(self, param_offset: usize, remember_offset: usize) -> Self {
         match self {
@@ -1059,7 +1436,7 @@ impl Step {
 ///
 /// Returned by [`LinkageFixed::param_indices`]. Scans forward through the param list,
 /// so `.next()` gives the first definition and `.last()` gives the most recent one
-/// (shadowing semantics — the one builder methods like `yaw_param` bind to).
+/// (shadowing semantics — the one DSL methods like `yaw_param` bind to).
 pub struct ParamIndices<'a, const DOF: usize, const N: usize> {
     linkage: &'a LinkageFixed<DOF, N>,
     name: &'a str,
@@ -1858,7 +2235,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, LinkageFixed, Pose, Vec3};
+    use super::{DrawItem, LinkageFixed, Linkage, Pose, Vec3};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
