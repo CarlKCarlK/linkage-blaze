@@ -509,7 +509,7 @@ impl<'a, const DOF: usize, const N: usize> From<&'a LinkageFixed<DOF, N>> for Li
 ///
 /// `LinkageFixed` stores linkage steps and parameters in fixed-size arrays, enabling
 /// `const` construction and evaluation without allocation. Use the fluent DSL methods
-/// to extend the linkage expression and build complex arm kinematics at compile time.
+/// to extend the linkage expression and define complex arm kinematics at compile time.
 pub struct LinkageFixed<const DOF: usize, const N: usize> {
     steps: [Step; N],
     len: usize,
@@ -1050,9 +1050,8 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
 /// allowing dynamic growth at runtime. Unlike [`LinkageFixed`], construction is not `const`,
 /// but the fluent DSL methods and evaluation interface are identical.
 ///
-/// Use [`LinkageBuf::start()`] to begin building, then chain fluent DSL methods to extend
-/// the linkage expression. Call [`view()`](LinkageBuf::view) to create a borrowed view
-/// for evaluation and rendering.
+/// Use [`LinkageBuf::start()`] to begin a linkage expression, then chain fluent DSL methods to extend
+/// it. Call [`view()`](LinkageBuf::view) to create a borrowed view for evaluation and rendering.
 ///
 /// # Building linkage expressions
 ///
@@ -2509,7 +2508,7 @@ mod tests {
 
     // ── Shadowing semantics ───────────────────────────────────────────────────
     //
-    // A param name may appear more than once in a linkage.  Builder methods like
+    // A param name may appear more than once in a linkage.  DSL methods like
     // `yaw_param` bind to the *most recently defined* param with that name —
     // this is "shadowing".  The earlier definition is not removed; it still
     // occupies its slot in the param array and can be reached via
