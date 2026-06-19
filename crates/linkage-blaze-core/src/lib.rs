@@ -342,7 +342,7 @@ pub trait Linkage<const DOF: usize> {
     /// # Examples
     ///
     /// ```rust
-    /// # use linkage_blaze_core::{LinkageFixed, Vec3};
+    /// # use linkage_blaze_core::{LinkageFixed, Vec3, PenState};
     /// const LINKAGE: LinkageFixed<0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
@@ -350,6 +350,7 @@ pub trait Linkage<const DOF: usize> {
     /// let mut styled = LINKAGE.styled_poses(&[]);
     /// let start = styled.next().expect("has start");
     /// assert!(start.pose().position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
+    /// assert_eq!(start.pen(), PenState::Down);  // default pen state is down
     /// let _ = styled.next();  // skip first forward step
     /// let end = styled.next().expect("has second forward");
     /// assert!(end.pose().position()[0] > 2.9);  // moved 3.0 total
