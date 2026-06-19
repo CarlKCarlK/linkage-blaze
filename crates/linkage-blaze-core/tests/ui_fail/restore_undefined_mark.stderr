@@ -12,5 +12,6 @@ note: inside `LinkageFixed::<0, 10>::restore`
   |
  ::: src/lib.rs
   |
-  |                 panic!("restore: no mark found with name (mark must be defined before restore)")
-  |                 -------------------------------------------------------------------------------- in this macro invocation
+  |     emit_fixed_step_methods!();
+  |     -------------------------- in this macro invocation
+  = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `emit_fixed_step_methods` (in Nightly builds, run with -Z macro-backtrace for more info)

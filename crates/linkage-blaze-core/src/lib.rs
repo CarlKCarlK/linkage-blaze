@@ -560,6 +560,7 @@ macro_rules! emit_fixed_step_methods {
 
 /// Emit ordinary fn fluent DSL methods for LinkageBuf.
 /// These are the simple one-step methods that work the same way for both storage types.
+#[cfg(feature = "alloc")]
 macro_rules! emit_buf_step_methods {
     () => {
         // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
@@ -730,18 +731,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     #[must_use]
     pub const fn param_default(&self, index: usize) -> f32 {
         self.param(index).default()
-    }
-
-    /// Iterate over all indices of parameters with a given name.
-    ///
-    /// Use `.last()` for shadowing semantics (most recently defined wins),
-    /// `.next()` for the first definition, or collect/iterate for all of them.
-    pub fn param_indices<'a>(&'a self, name: &'a str) -> ParamIndices<'a, DOF, N> {
-        ParamIndices {
-            linkage: self,
-            name,
-            pos: 0,
-        }
     }
 
     /// Return this linkage's normalized parameter defaults.
@@ -1230,32 +1219,6 @@ impl Step {
             },
             other => other,
         }
-    }
-}
-
-/// Iterator over all parameter indices with a given name.
-///
-/// Returned by [`LinkageFixed::param_indices`]. Scans forward through the param list,
-/// so `.next()` gives the first definition and `.last()` gives the most recent one
-/// (shadowing semantics — the one DSL methods like `yaw_param` bind to).
-pub struct ParamIndices<'a, const DOF: usize, const N: usize> {
-    linkage: &'a LinkageFixed<DOF, N>,
-    name: &'a str,
-    pos: usize,
-}
-
-impl<'a, const DOF: usize, const N: usize> Iterator for ParamIndices<'a, DOF, N> {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.pos < self.linkage.dof() {
-            let i = self.pos;
-            self.pos += 1;
-            if str_eq(self.linkage.params[i].name, self.name) {
-                return Some(i);
-            }
-        }
-        None
     }
 }
 
@@ -1848,7 +1811,7 @@ mod tests {
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
     };
-    use std::{boxed::Box, error::Error, vec::Vec};
+    use std::{boxed::Box, error::Error};
 
     //todo000 *_param might not be a good suffix.
     const LINKAGE0: LinkageFixed<6, 24> = LinkageFixed::start()
@@ -2121,8 +2084,7 @@ mod tests {
     // A param name may appear more than once in a linkage.  DSL methods like
     // `yaw_param` bind to the *most recently defined* param with that name —
     // this is "shadowing".  The earlier definition is not removed; it still
-    // occupies its slot in the param array and can be reached via
-    // `param_indices(...).next()`.
+    // occupies its slot in the param array.
 
     #[test]
     fn duplicate_define_param_does_not_panic() {
@@ -2153,77 +2115,4 @@ mod tests {
         assert!(pos.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-5));
     }
 
-    #[test]
-    fn param_indices_returns_all_matches_in_forward_order() {
-        // Three params: "spin" at 0, "angle" at 1, "spin" again at 2.
-        // param_indices("spin") should yield indices 0 and 2 in that order.
-        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
-            .define_param("spin", 0.2) // index 0
-            .define_param("angle", 0.5) // index 1
-            .define_param("spin", 0.8); // index 2
-
-        let indices: Vec<usize> = LINKAGE.param_indices("spin").collect();
-        assert_eq!(indices, [0, 2]);
-    }
-
-    #[test]
-    fn param_indices_next_gives_first_definition() {
-        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
-            .define_param("spin", 0.2)
-            .define_param("angle", 0.5)
-            .define_param("spin", 0.8);
-
-        // .next() iterates forward — first hit is the earliest definition
-        assert_eq!(LINKAGE.param_indices("spin").next(), Some(0));
-    }
-
-    #[test]
-    fn param_indices_last_gives_most_recent_definition() {
-        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
-            .define_param("spin", 0.2)
-            .define_param("angle", 0.5)
-            .define_param("spin", 0.8);
-
-        // .last() exhausts the iterator forward and returns the final element,
-        // which is the most recently defined — the shadowing definition.
-        assert_eq!(LINKAGE.param_indices("spin").last(), Some(2));
-    }
-
-    #[test]
-    fn param_indices_count_shows_how_many_times_a_name_appears() {
-        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
-            .define_param("spin", 0.2)
-            .define_param("angle", 0.5)
-            .define_param("spin", 0.8);
-
-        assert_eq!(LINKAGE.param_indices("spin").count(), 2);
-        assert_eq!(LINKAGE.param_indices("angle").count(), 1);
-    }
-
-    #[test]
-    fn param_indices_returns_empty_for_unknown_name() {
-        const LINKAGE: LinkageFixed<1, 2> = LinkageFixed::start().define_param("spin", 0.5);
-
-        assert_eq!(LINKAGE.param_indices("unknown").next(), None);
-        assert_eq!(LINKAGE.param_indices("unknown").count(), 0);
-    }
-
-    #[test]
-    fn combine_each_piece_can_have_its_own_names_or_shared_names() {
-        // After combine, each piece's params appear in order: A's first, then B's.
-        // If both define a name, param_indices returns both indices.
-        const A: LinkageFixed<1, 2> = LinkageFixed::start().define_param("angle", 0.25); // index 0
-        const B: LinkageFixed<1, 2> = LinkageFixed::start().define_param("angle", 0.75); // becomes index 1
-        const COMBINED: LinkageFixed<2, 3> = A.combine::<1, 2, 2, 3>(B);
-
-        // Both definitions are visible
-        let indices: Vec<usize> = COMBINED.param_indices("angle").collect();
-        assert_eq!(indices, [0, 1]);
-
-        // The shadowing definition (most recent, from B) is at index 1
-        assert_eq!(COMBINED.param_indices("angle").last(), Some(1));
-
-        // The first definition (from A) is at index 0
-        assert_eq!(COMBINED.param_indices("angle").next(), Some(0));
-    }
 }
