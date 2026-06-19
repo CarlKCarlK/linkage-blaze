@@ -95,7 +95,7 @@ controls.mouseButtons = {
   RIGHT: THREE.MOUSE.PAN,
 };
 
-// Scroll to zoom (exponential, matching robot-arm-wasm)
+// Dolly camera on scroll (zoom UI label, exponential factor)
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();

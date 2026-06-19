@@ -24,11 +24,11 @@ pub const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 // ---- layout constants ----
 const TILT_X: i32 = 16;
-const ZOOM_X: i32 = 42;
+const DOLLY_X: i32 = 42;
 const TILT_TOP: i32 = 24;
 const TILT_BOTTOM: i32 = 224;
-const ZOOM_TOP: i32 = 24;
-const ZOOM_BOTTOM: i32 = 74;
+const DOLLY_TOP: i32 = 24;
+const DOLLY_BOTTOM: i32 = 74;
 const RK_CONTROL_TOP: i32 = 86;
 const RK_RUN_LEFT: i32 = 27;
 const RK_STEP_LEFT: i32 = 55;
@@ -116,7 +116,7 @@ const LINKAGE: Linkage<15, 151> = LINKAGE0
     .sphere_param("close hand", 0.5, 0.0);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
-const ARM_LINKAGE: Linkage<9, 30> = VIEW_CONTROL
+const REVERSE_KINEMATICS_LINKAGE: Linkage<9, 30> = VIEW_CONTROL
     .combine(ARMATRON1)
     .recall("wrist")
     .forward(0.25);
@@ -128,7 +128,7 @@ const DOF: usize = LINKAGE.dof();
 
 const BASE_YAW_PARAM: usize = LINKAGE.param_index("x/y view", 0);
 const BASE_PITCH_PARAM: usize = LINKAGE.param_index("z", 0);
-const ZOOM_PARAM: usize = LINKAGE.param_index("zoom", 0);
+const DOLLY_PARAM: usize = LINKAGE.param_index("zoom", 0);
 const BEND_ELBOW_PARAM: usize = LINKAGE.param_index("bend elbow", 0);
 const LOWER_ARM_PARAM: usize = LINKAGE.param_index("lower arm", 0);
 const SPIN_WHOLE_ARM_PARAM: usize = LINKAGE.param_index("spin whole arm", 0);
@@ -314,7 +314,7 @@ impl CydSim {
 
     /// Set the base joint params that control the view orientation.
     ///
-    /// `z_mix` maps directly to base pitch (-45..45 degrees), `xy_mix` to base yaw rotation.
+    /// `z_mix` maps directly to base pitch, `xy_mix` to base yaw rotation.
     pub fn set_view_mixes(&mut self, z_mix: f32, xy_mix: f32) -> bool {
         let z_mix = z_mix.clamp(0.0, 1.0);
         let xy_mix = xy_mix.clamp(0.0, 1.0);
@@ -592,9 +592,9 @@ impl CydSim {
                 self.params[BASE_PITCH_PARAM] =
                     (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32).clamp(0.0, 1.0);
             }
-            ActiveControl::Zoom => {
-                self.params[ZOOM_PARAM] =
-                    ((y - ZOOM_TOP as f32) / (ZOOM_BOTTOM - ZOOM_TOP) as f32).clamp(0.0, 1.0);
+            ActiveControl::Dolly => {
+                self.params[DOLLY_PARAM] =
+                    ((y - DOLLY_TOP as f32) / (DOLLY_BOTTOM - DOLLY_TOP) as f32).clamp(0.0, 1.0);
             }
             ActiveControl::XyView => {
                 self.params[BASE_YAW_PARAM] = ((x - VIEW_SLIDER_LEFT as f32)
@@ -810,20 +810,20 @@ impl CydSim {
             .draw(buffer)
             .ok();
 
-        // zoom slider (disconnected — shown in gray)
+        // dolly slider (disconnected — shown in gray)
         Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top)
             .draw(buffer)
             .ok();
         Line::new(
-            Point::new(ZOOM_X, ZOOM_TOP),
-            Point::new(ZOOM_X, ZOOM_BOTTOM),
+            Point::new(DOLLY_X, DOLLY_TOP),
+            Point::new(DOLLY_X, DOLLY_BOTTOM),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
         .draw(buffer)
         .ok();
-        let zoom_knob_y =
-            ZOOM_TOP + round_to_i32((ZOOM_BOTTOM - ZOOM_TOP) as f32 * self.params[ZOOM_PARAM]);
-        Circle::with_center(Point::new(ZOOM_X, zoom_knob_y), 9)
+        let dolly_knob_y =
+            DOLLY_TOP + round_to_i32((DOLLY_BOTTOM - DOLLY_TOP) as f32 * self.params[DOLLY_PARAM]);
+        Circle::with_center(Point::new(DOLLY_X, dolly_knob_y), 9)
             .into_styled(fill_style(YELLOW))
             .draw(buffer)
             .ok();
@@ -1092,7 +1092,7 @@ impl Default for CydSim {
 enum ActiveControl {
     RightSlider(usize), // absolute param index
     Tilt,
-    Zoom,
+    Dolly,
     XyView,
     PreviousTarget,
     NextTarget,
@@ -1313,7 +1313,9 @@ fn apply_paired_candidate(params: &mut [f32; DOF], pair_index: usize, step: f32)
 fn arm_tip(params: &[f32; DOF]) -> Vec3 {
     let mut arm_params = [0.0f32; 9];
     arm_params.copy_from_slice(&params[..9]);
-    ARM_LINKAGE.final_pose(&arm_params).position()
+    REVERSE_KINEMATICS_LINKAGE
+        .final_pose(&arm_params)
+        .position()
 }
 
 fn target_center(params: &[f32; DOF]) -> Vec3 {
@@ -1396,8 +1398,8 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
     if (x - TILT_X as f32).abs() <= 14.0 && (TILT_TOP as f32..=TILT_BOTTOM as f32).contains(&y) {
         return Some(ActiveControl::Tilt);
     }
-    if (x - ZOOM_X as f32).abs() <= 14.0 && (ZOOM_TOP as f32..=ZOOM_BOTTOM as f32).contains(&y) {
-        return Some(ActiveControl::Zoom);
+    if (x - DOLLY_X as f32).abs() <= 14.0 && (DOLLY_TOP as f32..=DOLLY_BOTTOM as f32).contains(&y) {
+        return Some(ActiveControl::Dolly);
     }
     if (RK_RUN_LEFT as f32..=(RK_RUN_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
         && (RK_CONTROL_TOP as f32..=(RK_CONTROL_TOP + RK_BUTTON_SIZE) as f32).contains(&y)
