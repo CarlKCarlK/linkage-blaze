@@ -168,30 +168,178 @@ impl VariableArg {
     }
 }
 
-/// Trait for a linkage that can be evaluated to produce poses and draw items.
+/// A linkage that can be queried for runtime parameters and evaluated to produce poses and draw items.
+///
+/// `Linkage` defines the read-only interface for querying parameter metadata. Concrete
+/// implementations like [`LinkageFixed`] add builder methods and evaluation capabilities.
+///
+/// # Parameters
+///
+/// A linkage has degrees-of-freedom (DOF) which correspond to named runtime parameters
+/// that control its behavior. Each parameter has a name, default value, and index.
+///
+/// # Examples
+///
+/// Query a linkage for its parameter count and metadata:
+///
+/// ```rust
+/// # use linkage_blaze_core::{Linkage, LinkageFixed};
+/// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+///     .define_param("x", 0.5)
+///     .define_param("y", 0.5);
+///
+/// assert_eq!(LINKAGE.dof(), 2);
+/// assert_eq!(LINKAGE.param_name(0), "x");
+/// ```
 pub trait Linkage {
-    /// Return the number of runtime parameters this linkage expects.
+    /// Return the number of runtime parameters (degrees of freedom) this linkage expects.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
+    ///     .define_param("rotation", 0.5)
+    ///     .define_param("height", 0.5)
+    ///     .define_param("width", 0.5);
+    ///
+    /// assert_eq!(LINKAGE.dof(), 3);
+    /// ```
     fn dof(&self) -> usize;
 
     /// Return the number of linkage steps, including the implicit start step.
+    ///
+    /// Every linkage begins with an implicit step at the origin, so `len() >= 1`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<0, 5> = LinkageFixed::start()
+    ///     .forward(1.0)
+    ///     .forward(2.0);
+    ///
+    /// assert_eq!(LINKAGE.len(), 3);  // start + 2 forward steps
+    /// ```
     fn len(&self) -> usize;
 
     /// Return the number of named parameters defined in this linkage.
+    ///
+    /// This is the count of parameters that have been explicitly defined via `define_param`.
+    /// It is always ≤ [`dof`](Self::dof).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
+    ///     .define_param("x", 0.0)
+    ///     .define_param("y", 0.5);
+    ///
+    /// assert_eq!(LINKAGE.param_len(), 2);
+    /// ```
     fn param_len(&self) -> usize;
 
     /// Return a parameter definition by index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= param_len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+    ///     .define_param("angle", 0.25)
+    ///     .define_param("distance", 0.75);
+    ///
+    /// let param = LINKAGE.param(0);
+    /// assert_eq!(param.name(), "angle");
+    /// assert_eq!(param.default(), 0.25);
+    /// ```
     fn param(&self, index: usize) -> Param;
 
     /// Return a parameter's name by index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= param_len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+    ///     .define_param("rotation", 0.0)
+    ///     .define_param("scale", 1.0);
+    ///
+    /// assert_eq!(LINKAGE.param_name(0), "rotation");
+    /// assert_eq!(LINKAGE.param_name(1), "scale");
+    /// ```
     fn param_name(&self, index: usize) -> &'static str;
 
-    /// Return a parameter's default value by index.
+    /// Return a parameter's default value by index (normalized to [0.0, 1.0]).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index >= param_len()`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+    ///     .define_param("a", 0.3)
+    ///     .define_param("b", 0.7);
+    ///
+    /// assert_eq!(LINKAGE.param_default(0), 0.3);
+    /// assert_eq!(LINKAGE.param_default(1), 0.7);
+    /// ```
     fn param_default(&self, index: usize) -> f32;
 
     /// Return the number of parameters defined with the given name.
+    ///
+    /// Supports shadowing: if the same parameter name is defined multiple times,
+    /// this counts all occurrences.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
+    ///     .define_param("angle", 0.0)
+    ///     .define_param("angle", 0.5)  // shadow with new default
+    ///     .define_param("distance", 1.0);
+    ///
+    /// assert_eq!(LINKAGE.param_count_named("angle"), 2);
+    /// assert_eq!(LINKAGE.param_count_named("distance"), 1);
+    /// assert_eq!(LINKAGE.param_count_named("unknown"), 0);
+    /// ```
     fn param_count_named(&self, name: &str) -> usize;
 
-    /// Return the index of the `n`th parameter with the given name.
+    /// Return the index of the `n`th parameter (0-based) with the given name.
+    ///
+    /// With shadowing, multiple parameters may share the same name. This allows
+    /// accessing any of them by occurrence number.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the name is not found or if `n` exceeds the occurrence count.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
+    ///     .define_param("x", 0.0)
+    ///     .define_param("y", 0.5)
+    ///     .define_param("x", 0.8);  // shadow: second "x"
+    ///
+    /// assert_eq!(LINKAGE.param_index("x", 0), 0);  // first "x"
+    /// assert_eq!(LINKAGE.param_index("x", 1), 2);  // second "x"
+    /// assert_eq!(LINKAGE.param_index("y", 0), 1);  // only "y"
+    /// ```
     fn param_index(&self, name: &str, n: usize) -> usize;
 }
 
