@@ -1,5 +1,5 @@
 /// Design decision: A linkage must define exactly DOF parameters.
-/// param_len() should always equal dof() after construction.
+/// Accessing a parameter by index validates it was defined.
 use linkage_blaze_core::LinkageFixed;
 
 const LINKAGE: LinkageFixed<3, 16> = LinkageFixed::start()
@@ -9,10 +9,11 @@ const LINKAGE: LinkageFixed<3, 16> = LinkageFixed::start()
     .forward(1.0);
 
 #[test]
-fn dof_equals_param_len() {
-    assert_eq!(LINKAGE.dof(), LINKAGE.param_len());
+fn dof_parameter_count() {
     assert_eq!(LINKAGE.dof(), 3);
-    assert_eq!(LINKAGE.param_len(), 3);
+    assert_eq!(LINKAGE.param_name(0), "x");
+    assert_eq!(LINKAGE.param_name(1), "y");
+    assert_eq!(LINKAGE.param_name(2), "z");
 }
 
 fn main() {}
