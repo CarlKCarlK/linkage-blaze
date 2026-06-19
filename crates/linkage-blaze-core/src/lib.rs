@@ -172,41 +172,29 @@ impl VariableArg {
 
 /// A linkage that can be queried for runtime parameters and evaluated to produce poses and draw items.
 ///
-/// `Linkage` defines the read-only interface for querying parameter metadata. Concrete
-/// implementations like [`LinkageFixed`] add builder methods and evaluation capabilities.
-///
-/// # Parameters
-///
-/// A linkage has degrees-of-freedom (DOF) which correspond to named runtime parameters
-/// that control its behavior. Each parameter has a name, default value, and index.
+/// `Linkage<DOF>` is generic over the degrees-of-freedom, enabling evaluation methods that depend
+/// on a fixed parameter count. Concrete implementations like [`LinkageFixed`] can be used with
+/// `impl Linkage<DOF>` for generic code.
 ///
 /// # Examples
 ///
-/// Query a linkage for its parameter count and metadata:
+/// Query and evaluate a linkage:
 ///
 /// ```rust
 /// # use linkage_blaze_core::{Linkage, LinkageFixed};
 /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
 ///     .define_param("x", 0.5)
-///     .define_param("y", 0.5);
+///     .define_param("y", 0.5)
+///     .forward(1.0);
 ///
-/// assert_eq!(LINKAGE.dof(), 2);
-/// assert_eq!(LINKAGE.param_name(0), "x");
+/// assert_eq!(LINKAGE.len(), 2);
+/// let params = [0.5, 0.5];
+/// let final_pose = LINKAGE.final_pose(&params);
 /// ```
-pub trait Linkage {
-    /// Return the number of runtime parameters (degrees of freedom) this linkage expects.
+pub trait Linkage<const DOF: usize> {
+    /// Return the number of runtime parameters (degrees of freedom).
     ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use linkage_blaze_core::LinkageFixed;
-    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
-    ///     .define_param("rotation", 0.5)
-    ///     .define_param("height", 0.5)
-    ///     .define_param("width", 0.5);
-    ///
-    /// assert_eq!(LINKAGE.dof(), 3);
-    /// ```
+    /// For `LinkageFixed`, this always equals `DOF`. For `LinkageBuf` (future), it may be dynamic.
     fn dof(&self) -> usize;
 
     /// Return the number of linkage steps, including the implicit start step.
@@ -286,6 +274,22 @@ pub trait Linkage {
     /// assert_eq!(LINKAGE.param_index("x", 1), 2);  // second "x"
     /// ```
     fn param_index(&self, name: &str, n: usize) -> usize;
+
+    /// Return the final pose after evaluating all steps.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<0, 3> = LinkageFixed::start()
+    ///     .forward(2.0)
+    ///     .forward(3.0);  // total 5 units forward
+    ///
+    /// let params = [];
+    /// let pose = LINKAGE.final_pose(&params);
+    /// // pose has moved 5 units along +X axis
+    /// ```
+    fn final_pose(&self, params: &[f32; DOF]) -> Pose;
 }
 
 /// A fixed-size linkage description.
@@ -795,7 +799,7 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     }
 }
 
-impl<const DOF: usize, const N: usize> Linkage for LinkageFixed<DOF, N> {
+impl<const DOF: usize, const N: usize> Linkage<DOF> for LinkageFixed<DOF, N> {
     fn dof(&self) -> usize {
         DOF
     }
@@ -834,6 +838,12 @@ impl<const DOF: usize, const N: usize> Linkage for LinkageFixed<DOF, N> {
             slot += 1;
         }
         panic!("parameter name not found or occurrence index out of range")
+    }
+
+    fn final_pose(&self, params: &[f32; DOF]) -> Pose {
+        self.poses(params)
+            .last()
+            .expect("linkage must yield at least the implicit start pose")
     }
 }
 
