@@ -9,24 +9,19 @@ _c6_args      := "--target riscv32imac-unknown-none-elf --release --no-default-f
 test-core:
     cargo test -p linkage-blaze-core
 
-# Build all embedded crates and run tests (build is required for real checking on microcontrollers)
+# Check and build all crates
 check-all:
     just test-core
     just check-cyd
     source ~/export-esp.sh && just build-arm-classic
     just build-arm-c6
     source ~/export-esp.sh && just build-clock-classic
-    just check-arm-wasm
-    just check-editor
-
-# Build everything
-build:
-    just test-core
-    source ~/export-esp.sh && just build-arm-classic
-    just build-arm-c6
-    source ~/export-esp.sh && just build-clock-classic
     just build-arm-wasm
     just build-editor
+
+# Alias for check-all
+build:
+    just check-all
 
 # ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
 
