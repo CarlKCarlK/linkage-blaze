@@ -70,7 +70,7 @@ renderer.domElement.addEventListener(
   (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
-    zoomCamera(event.deltaY);
+    dollyCamera(event.deltaY);
     render();
   },
   { capture: true, passive: false },
@@ -255,15 +255,15 @@ function fitView() {
   controls.update();
 }
 
-function zoomCamera(deltaY) {
+function dollyCamera(deltaY) {
   const direction = camera.position.clone().sub(controls.target);
   const currentDistance = direction.length();
   if (currentDistance === 0) {
     return;
   }
 
-  const zoomFactor = Math.exp(clamp(deltaY, -80, 80) * 0.0015);
-  const nextDistance = clamp(currentDistance * zoomFactor, controls.minDistance, controls.maxDistance);
+  const dollyFactor = Math.exp(clamp(deltaY, -80, 80) * 0.0015);
+  const nextDistance = clamp(currentDistance * dollyFactor, controls.minDistance, controls.maxDistance);
   camera.position.copy(controls.target).add(direction.multiplyScalar(nextDistance / currentDistance));
   camera.updateProjectionMatrix();
   controls.update();
