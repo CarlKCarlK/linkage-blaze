@@ -224,28 +224,11 @@ pub trait Linkage {
     /// ```
     fn len(&self) -> usize;
 
-    /// Return the number of named parameters defined in this linkage.
-    ///
-    /// This is the count of parameters that have been explicitly defined via `define_param`.
-    /// It is always ≤ [`dof`](Self::dof).
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use linkage_blaze_core::LinkageFixed;
-    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
-    ///     .define_param("x", 0.0)
-    ///     .define_param("y", 0.5);
-    ///
-    /// assert_eq!(LINKAGE.param_len(), 2);
-    /// ```
-    fn param_len(&self) -> usize;
-
     /// Return a parameter definition by index.
     ///
     /// # Panics
     ///
-    /// Panics if `index >= param_len()`.
+    /// Panics if `index >= dof()`.
     ///
     /// # Examples
     ///
@@ -265,7 +248,7 @@ pub trait Linkage {
     ///
     /// # Panics
     ///
-    /// Panics if `index >= param_len()`.
+    /// Panics if `index >= dof()`.
     ///
     /// # Examples
     ///
@@ -284,7 +267,7 @@ pub trait Linkage {
     ///
     /// # Panics
     ///
-    /// Panics if `index >= param_len()`.
+    /// Panics if `index >= dof()`.
     ///
     /// # Examples
     ///
@@ -384,12 +367,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     #[must_use]
     pub const fn dof(&self) -> usize {
         DOF
-    }
-
-    /// Return the number of named parameters defined in this linkage.
-    #[must_use]
-    pub const fn param_len(&self) -> usize {
-        self.param_len
     }
 
     /// Return a parameter definition by index.
@@ -866,10 +843,6 @@ impl<const DOF: usize, const N: usize> Linkage for LinkageFixed<DOF, N> {
         self.len
     }
 
-    fn param_len(&self) -> usize {
-        self.param_len
-    }
-
     fn param(&self, index: usize) -> Param {
         assert!(index < self.param_len, "parameter index must be defined");
         self.params[index]
@@ -946,7 +919,7 @@ impl<'a, const DOF: usize, const N: usize> Iterator for ParamIndices<'a, DOF, N>
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.pos < self.linkage.param_len() {
+        while self.pos < self.linkage.dof() {
             let i = self.pos;
             self.pos += 1;
             if str_eq(self.linkage.params[i].name, self.name) {
