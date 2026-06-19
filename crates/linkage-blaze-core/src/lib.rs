@@ -455,6 +455,7 @@ impl<'a, const DOF: usize, const N: usize> From<&'a LinkageFixed<DOF, N>> for Li
     }
 }
 
+
 /// A fixed-capacity const linkage expression/storage type.
 ///
 /// `LinkageFixed` stores linkage steps and parameters in fixed-size arrays, enabling
@@ -577,6 +578,13 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         self.param_len += 1;
         self
     }
+
+    // FLUENT DSL METHODS
+    // Note: These methods are intentionally kept identical in LinkageFixed and LinkageBuf,
+    // synchronized by inspection. The only differences are:
+    // - LinkageFixed: pub const fn, uses self.push(step)
+    // - LinkageBuf: pub fn, uses self.push_step(step)
+    // When adding new fluent methods (yaw, forward, disk, etc.), add them identically to both types.
 
     /// Add a yaw step from a user-facing angle in degrees.
     pub const fn yaw(self, degrees: f32) -> Self {
