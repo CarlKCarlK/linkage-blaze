@@ -313,15 +313,15 @@ fn apply_method(
                 ));
             }
         }
-        "remember" => {
+        "mark" => {
             expect_arg_count(line_number, method_call, 1)?;
             let name = parse_identifier(line_number, method_call, 0)?;
-            turtle.remember(name);
+            turtle.mark(name);
         }
-        "recall" => {
+        "restore" => {
             expect_arg_count(line_number, method_call, 1)?;
             let name = parse_identifier(line_number, method_call, 0)?;
-            turtle.recall(name);
+            turtle.restore(name);
         }
         "disk" => {
             expect_arg_count(line_number, method_call, 1)?;
@@ -841,7 +841,7 @@ impl Turtle {
         }
     }
 
-    fn remember(&mut self, name: &'static str) {
+    fn mark(&mut self, name: &'static str) {
         if self.remembered_len < 16 {
             self.remembered[self.remembered_len] = (Some(name), TurtleState {
                 pose: self.pose,
@@ -853,7 +853,7 @@ impl Turtle {
         }
     }
 
-    fn recall(&mut self, name: &'static str) {
+    fn restore(&mut self, name: &'static str) {
         let mut i = 0;
         while i < self.remembered_len {
             if let (Some(n), state) = self.remembered[i] {

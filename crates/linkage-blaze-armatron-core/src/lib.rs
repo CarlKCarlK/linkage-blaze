@@ -108,9 +108,9 @@ const ARMATRON1: Linkage<6, 21> = include!("armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres(0.15);
 const LINKAGE0: Linkage<9, 127> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE: Linkage<15, 151> = LINKAGE0
-    .recall("after view control")
+    .restore("scene origin")
     .combine(ARMATRON1)
-    .recall("wrist")
+    .restore("wrist")
     .forward(0.25)
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
@@ -118,7 +118,7 @@ const LINKAGE: Linkage<15, 151> = LINKAGE0
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 const REVERSE_KINEMATICS_LINKAGE: Linkage<9, 30> = VIEW_CONTROL
     .combine(ARMATRON1)
-    .recall("wrist")
+    .restore("wrist")
     .forward(0.25);
 // todo000000 run linkage, but not until end
 // todo000000 in main model have an invisible point at the target center.
