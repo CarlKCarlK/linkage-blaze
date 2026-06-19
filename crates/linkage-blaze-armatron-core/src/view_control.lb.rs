@@ -1,4 +1,4 @@
-Linkage::start()
+LinkageFixed::start()
     .define_param("x/y view", 0.58333)
     .define_param("z", 0.39)
     .define_param("zoom", 0.5)

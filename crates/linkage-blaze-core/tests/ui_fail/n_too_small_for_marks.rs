@@ -1,8 +1,8 @@
 /// Design decision: N must be large enough to store all mark names.
 /// Exceeding the capacity N for marks is a compile error.
-use linkage_blaze_core::Linkage;
+use linkage_blaze_core::LinkageFixed;
 
-const N_TOO_SMALL: Linkage<0, 3> = Linkage::start()
+const N_TOO_SMALL: LinkageFixed<0, 3> = LinkageFixed::start()
     .mark("mark1")
     .forward(1.0)
     .mark("mark2")

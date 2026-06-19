@@ -1,4 +1,4 @@
-use crate::{Linkage, Pose, Vec3};
+use crate::{Linkage, LinkageFixed, Pose, Vec3};
 use core::convert::Infallible;
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -205,7 +205,7 @@ impl OriginDimensions for Canvas {
 }
 
 pub(super) fn draw_linkage_xy_canvas<const DOF: usize, const N: usize>(
-    linkage: &Linkage<DOF, N>,
+    linkage: &LinkageFixed<DOF, N>,
     params: &[f32; DOF],
 ) -> Canvas {
     draw_linkage_xy_canvas_from_poses(linkage.poses(params))

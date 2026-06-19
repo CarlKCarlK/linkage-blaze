@@ -1,6 +1,5 @@
 use core::fmt;
 
-use linkage_blaze_cyd::{Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, RectWorkspace, SCREEN_WIDTH};
 use embedded_graphics::{
     Drawable,
     mono_font::{
@@ -13,7 +12,12 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use esp_hal::time::Instant;
-use linkage_blaze_core::{DiskItem, DrawItem, Linkage, Pose, Rgb888, RingItem, SphereItem, Vec3};
+use linkage_blaze_core::{
+    DiskItem, DrawItem, Linkage, LinkageFixed, Pose, Rgb888, RingItem, SphereItem, Vec3,
+};
+use linkage_blaze_cyd::{
+    Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, RectWorkspace, SCREEN_WIDTH,
+};
 use static_cell::StaticCell;
 
 const SMALL_GLYPH_WIDTH: usize = 6;
@@ -41,7 +45,7 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const CLOCK_HANDS: Linkage<2, 48> = include!("clock.lb.rs");
+const CLOCK_HANDS: LinkageFixed<2, 48> = include!("clock.lb.rs");
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 

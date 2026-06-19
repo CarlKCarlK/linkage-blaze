@@ -75,11 +75,11 @@ fn parse_overrides(json: &str) -> Vec<(String, f32)> {
 
 fn parse_method_call(line_number: usize, line: &str) -> Result<Option<MethodCall>, String> {
     let line = strip_rust_comment(line).trim();
-    if line.is_empty() || line == "Linkage::start()" {
+    if line.is_empty() || line == "LinkageFixed::start()" {
         return Ok(None);
     }
 
-    if line.contains("Linkage::start()") {
+    if line.contains("LinkageFixed::start()") {
         return Ok(None);
     }
 
@@ -1136,7 +1136,7 @@ mod tests {
     fn accepts_rust_rgb888_new_color() {
         assert!(
             render_program(
-                r#"Linkage::start()
+                r#"LinkageFixed::start()
 .pen_color(Rgb888::new(245, 238, 210))
 .disk(1.0)
 "#,
@@ -1149,7 +1149,7 @@ mod tests {
     #[test]
     fn rejects_integer_args() {
         for bad in [".forward(1)", ".yaw(90)", ".up(2)", ".define_param(\"x\", 1)"] {
-            let program = format!("Linkage::start()\n{bad}\n");
+            let program = format!("LinkageFixed::start()\n{bad}\n");
             let result = render_program(&program, &[]);
             assert!(result.is_err(), "`{bad}` should be rejected as integer");
         }
@@ -1158,7 +1158,7 @@ mod tests {
     #[test]
     fn accepts_float_args() {
         let result = render_program(
-            "Linkage::start()\n.forward(1.0)\n.yaw(90.0)\n.up(2.0)\n.define_param(\"x\", 1.0)\n",
+            "LinkageFixed::start()\n.forward(1.0)\n.yaw(90.0)\n.up(2.0)\n.define_param(\"x\", 1.0)\n",
             &[],
         );
         assert!(result.is_ok(), "floats should be accepted: {:?}", result);
@@ -1168,7 +1168,7 @@ mod tests {
     fn rejects_non_rust_color_forms() {
         for color in ["white", "CSS_RED", "#ff0000"] {
             let program = format!(
-                r#"Linkage::start()
+                r#"LinkageFixed::start()
 .pen_color({color})
 .disk(1.0)
 "#

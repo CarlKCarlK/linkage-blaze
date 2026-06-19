@@ -169,7 +169,7 @@ impl VariableArg {
 }
 
 /// A fixed-size linkage description.
-pub struct Linkage<const DOF: usize, const N: usize> {
+pub struct LinkageFixed<const DOF: usize, const N: usize> {
     steps: [Step; N],
     len: usize,
     params: [Param; DOF],
@@ -178,7 +178,7 @@ pub struct Linkage<const DOF: usize, const N: usize> {
     mark_len: usize,
 }
 
-impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
+impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     /// Start a fixed-size linkage with an implicit origin row.
     pub const fn start() -> Self {
         assert!(N > 0, "linkage must have room for the implicit start step");
@@ -469,7 +469,7 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     pub const fn with_joint_spheres<const NOUT: usize>(
         self,
         joint_radius: f32,
-    ) -> Linkage<DOF, NOUT> {
+    ) -> LinkageFixed<DOF, NOUT> {
         let mut out = Linkage {
             steps: [const { Step::Start }; NOUT],
             len: 0,
@@ -615,8 +615,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
         const N_OUT: usize,
     >(
         self,
-        other: Linkage<DOF2, N2>,
-    ) -> Linkage<DOF_OUT, N_OUT> {
+        other: LinkageFixed<DOF2, N2>,
+    ) -> LinkageFixed<DOF_OUT, N_OUT> {
         assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF1 + DOF2");
         let other_steps = other.len - 1; // skip the implicit Start step
         assert!(
@@ -681,6 +681,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     }
 }
 
+/// Type alias for backwards compatibility. Use `LinkageFixed` directly.
+pub type Linkage<const DOF: usize, const N: usize> = LinkageFixed<DOF, N>;
+
 impl Step {
     const fn offset_params(self, param_offset: usize, remember_offset: usize) -> Self {
         match self {
@@ -703,11 +706,11 @@ impl Step {
 
 /// Iterator over all parameter indices with a given name.
 ///
-/// Returned by [`Linkage::param_indices`]. Scans forward through the param list,
+/// Returned by [`LinkageFixed::param_indices`]. Scans forward through the param list,
 /// so `.next()` gives the first definition and `.last()` gives the most recent one
 /// (shadowing semantics — the one builder methods like `yaw_param` bind to).
 pub struct ParamIndices<'a, const DOF: usize, const N: usize> {
-    linkage: &'a Linkage<DOF, N>,
+    linkage: &'a LinkageFixed<DOF, N>,
     name: &'a str,
     pos: usize,
 }
@@ -1045,7 +1048,7 @@ struct MarkedState {
 }
 
 pub struct StyledPoses<'a, const DOF: usize, const N: usize> {
-    linkage: &'a Linkage<DOF, N>,
+    linkage: &'a LinkageFixed<DOF, N>,
     params: &'a [f32; DOF],
     index: usize,
     pose: Pose,
@@ -1055,7 +1058,7 @@ pub struct StyledPoses<'a, const DOF: usize, const N: usize> {
 }
 
 impl<'a, const DOF: usize, const N: usize> StyledPoses<'a, DOF, N> {
-    fn new(linkage: &'a Linkage<DOF, N>, params: &'a [f32; DOF]) -> Self {
+    fn new(linkage: &'a LinkageFixed<DOF, N>, params: &'a [f32; DOF]) -> Self {
         validate_params(params);
         Self {
             linkage,
@@ -1199,7 +1202,7 @@ pub enum DrawItem {
 /// Translation steps with the pen down yield [`DrawItem::Stroke`]. Shape steps
 /// always yield their respective variants. All other steps only update state.
 pub struct DrawItems<'a, const DOF: usize, const N: usize> {
-    linkage: &'a Linkage<DOF, N>,
+    linkage: &'a LinkageFixed<DOF, N>,
     params: &'a [f32; DOF],
     index: usize,
     pose: Pose,
@@ -1209,7 +1212,7 @@ pub struct DrawItems<'a, const DOF: usize, const N: usize> {
 }
 
 impl<'a, const DOF: usize, const N: usize> DrawItems<'a, DOF, N> {
-    fn new(linkage: &'a Linkage<DOF, N>, params: &'a [f32; DOF]) -> Self {
+    fn new(linkage: &'a LinkageFixed<DOF, N>, params: &'a [f32; DOF]) -> Self {
         validate_params(params);
         Self {
             linkage,
@@ -1325,7 +1328,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, Linkage, Pose, Rgb888, Vec3};
+    use super::{DrawItem, Linkage, LinkageFixed, Pose, Rgb888, Vec3};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
@@ -1333,7 +1336,7 @@ mod tests {
     use std::{boxed::Box, error::Error, vec::Vec};
 
     //todo000 *_param might not be a good suffix.
-    const LINKAGE0: Linkage<6, 24> = Linkage::start()
+    const LINKAGE0: LinkageFixed<6, 24> = LinkageFixed::start()
         .define_param("raise hand", 0.5)
         .define_param("bend elbow", 0.5)
         .define_param("close hand", 0.5)
@@ -1365,7 +1368,7 @@ mod tests {
         .forward(1.0);
 
     // todo0000 kill 2nd one
-    const LINKAGE1: Linkage<3, 16> = Linkage::start()
+    const LINKAGE1: LinkageFixed<3, 16> = LinkageFixed::start()
         .define_param("spin whole arm", 0.5)
         .define_param("bend elbow", 0.5)
         .define_param("close hand", 0.5)
@@ -1387,7 +1390,7 @@ mod tests {
 
     #[test]
     fn zero_pen_width_still_draws() {
-        const LINKAGE: Linkage<0, 4> = Linkage::start().pen_width(0.0).forward(1.0);
+        const LINKAGE: LinkageFixed<0, 4> = LinkageFixed::start().pen_width(0.0).forward(1.0);
 
         let params = [];
         let draw_item = LINKAGE
@@ -1405,7 +1408,7 @@ mod tests {
 
     #[test]
     fn forward_moves_along_positive_x() {
-        const LINKAGE: Linkage<0, 2> = Linkage::start().forward(10.0);
+        const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().forward(10.0);
 
         let params = [];
         let actual = LINKAGE.final_pose(&params).position();
@@ -1415,7 +1418,7 @@ mod tests {
 
     #[test]
     fn yaw_then_forward_moves_along_positive_y() {
-        const LINKAGE: Linkage<0, 3> = Linkage::start().yaw(90.0).forward(10.0);
+        const LINKAGE: LinkageFixed<0, 3> = LinkageFixed::start().yaw(90.0).forward(10.0);
 
         let params = [];
         let actual = LINKAGE.final_pose(&params).position();
@@ -1425,7 +1428,7 @@ mod tests {
 
     #[test]
     fn left_moves_along_positive_y() {
-        const LINKAGE: Linkage<0, 2> = Linkage::start().left(10.0);
+        const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().left(10.0);
 
         let params = [];
         let actual = LINKAGE.final_pose(&params).position();
@@ -1435,7 +1438,7 @@ mod tests {
 
     #[test]
     fn up_moves_along_positive_z() {
-        const LINKAGE: Linkage<0, 2> = Linkage::start().up(10.0);
+        const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().up(10.0);
 
         let params = [];
         let actual = LINKAGE.final_pose(&params).position();
@@ -1445,7 +1448,7 @@ mod tests {
 
     #[test]
     fn translation_params_move_along_named_axes() {
-        const LINKAGE: Linkage<3, 7> = Linkage::start()
+        const LINKAGE: LinkageFixed<3, 7> = LinkageFixed::start()
             .define_param("forward", 0.5)
             .define_param("left", 0.5)
             .define_param("up", 0.5)
@@ -1461,7 +1464,7 @@ mod tests {
 
     #[test]
     fn planar_two_link_arm_uses_yaw_then_forward() {
-        const LINKAGE: Linkage<0, 5> = Linkage::start()
+        const LINKAGE: LinkageFixed<0, 5> = LinkageFixed::start()
             .yaw(0.0)
             .forward(10.0)
             .yaw(90.0)
@@ -1609,7 +1612,7 @@ mod tests {
     fn duplicate_define_param_does_not_panic() {
         // Simply building a linkage with a duplicate name must succeed.
         // (Previously this would panic with "duplicate parameter name".)
-        const _: Linkage<2, 2> = Linkage::start()
+        const _: LinkageFixed<2, 2> = LinkageFixed::start()
             .define_param("angle", 0.25) // index 0
             .define_param("angle", 0.75); // index 1 — shadows index 0
     }
@@ -1622,7 +1625,7 @@ mod tests {
         // We verify this by setting params = [1.0, 0.0]:
         //   - if bound to index 0 → yaw 90° → forward lands at ~(0, 10, 0)
         //   - if bound to index 1 → yaw  0° → forward lands at (10, 0, 0)  ✓
-        const LINKAGE: Linkage<2, 5> = Linkage::start()
+        const LINKAGE: LinkageFixed<2, 5> = LinkageFixed::start()
             .define_param("angle", 0.0) // index 0, default 0.0
             .define_param("angle", 1.0) // index 1, default 1.0 — shadows index 0
             .yaw_param("angle", 0.0, 90.0) // binds to index 1 (most recent)
@@ -1638,7 +1641,7 @@ mod tests {
     fn param_indices_returns_all_matches_in_forward_order() {
         // Three params: "spin" at 0, "angle" at 1, "spin" again at 2.
         // param_indices("spin") should yield indices 0 and 2 in that order.
-        const LINKAGE: Linkage<3, 2> = Linkage::start()
+        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
             .define_param("spin", 0.2) // index 0
             .define_param("angle", 0.5) // index 1
             .define_param("spin", 0.8); // index 2
@@ -1649,7 +1652,7 @@ mod tests {
 
     #[test]
     fn param_indices_next_gives_first_definition() {
-        const LINKAGE: Linkage<3, 2> = Linkage::start()
+        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
             .define_param("spin", 0.2)
             .define_param("angle", 0.5)
             .define_param("spin", 0.8);
@@ -1660,7 +1663,7 @@ mod tests {
 
     #[test]
     fn param_indices_last_gives_most_recent_definition() {
-        const LINKAGE: Linkage<3, 2> = Linkage::start()
+        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
             .define_param("spin", 0.2)
             .define_param("angle", 0.5)
             .define_param("spin", 0.8);
@@ -1672,7 +1675,7 @@ mod tests {
 
     #[test]
     fn param_indices_count_shows_how_many_times_a_name_appears() {
-        const LINKAGE: Linkage<3, 2> = Linkage::start()
+        const LINKAGE: LinkageFixed<3, 2> = LinkageFixed::start()
             .define_param("spin", 0.2)
             .define_param("angle", 0.5)
             .define_param("spin", 0.8);
@@ -1683,7 +1686,7 @@ mod tests {
 
     #[test]
     fn param_indices_returns_empty_for_unknown_name() {
-        const LINKAGE: Linkage<1, 2> = Linkage::start().define_param("spin", 0.5);
+        const LINKAGE: LinkageFixed<1, 2> = LinkageFixed::start().define_param("spin", 0.5);
 
         assert_eq!(LINKAGE.param_indices("unknown").next(), None);
         assert_eq!(LINKAGE.param_indices("unknown").count(), 0);
@@ -1693,9 +1696,9 @@ mod tests {
     fn combine_each_piece_can_have_its_own_names_or_shared_names() {
         // After combine, each piece's params appear in order: A's first, then B's.
         // If both define a name, param_indices returns both indices.
-        const A: Linkage<1, 2> = Linkage::start().define_param("angle", 0.25); // index 0
-        const B: Linkage<1, 2> = Linkage::start().define_param("angle", 0.75); // becomes index 1
-        const COMBINED: Linkage<2, 3> = A.combine::<1, 2, 2, 3>(B);
+        const A: LinkageFixed<1, 2> = LinkageFixed::start().define_param("angle", 0.25); // index 0
+        const B: LinkageFixed<1, 2> = LinkageFixed::start().define_param("angle", 0.75); // becomes index 1
+        const COMBINED: LinkageFixed<2, 3> = A.combine::<1, 2, 2, 3>(B);
 
         // Both definitions are visible
         let indices: Vec<usize> = COMBINED.param_indices("angle").collect();
