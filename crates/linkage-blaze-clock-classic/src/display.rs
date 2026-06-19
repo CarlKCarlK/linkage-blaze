@@ -13,7 +13,7 @@ use embedded_graphics::{
 };
 use esp_hal::time::Instant;
 use linkage_blaze_core::{
-    DiskItem, DrawItem, LinkageFixed, Pose, Rgb888, RingItem, SphereItem, Vec3,
+    DiskItem, DrawItem, Linkage, LinkageFixed, Pose, Rgb888, RingItem, SphereItem, Vec3,
 };
 use linkage_blaze_cyd::{
     Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, RectWorkspace, SCREEN_WIDTH,
@@ -129,7 +129,7 @@ impl CydClockDisplay {
             self.last_time_text.push_str(time_text).ok();
         }
 
-        self.show_clock(clock_time)?;
+        self.show_clock(&CLOCK_HANDS, clock_time)?;
 
         Ok(())
     }
@@ -229,11 +229,15 @@ impl CydClockDisplay {
         Ok(())
     }
 
-    fn show_clock(&mut self, clock_time: Option<&ClockTime>) -> Result<(), CydClockDisplayError> {
+    fn show_clock(
+        &mut self,
+        linkage: &impl Linkage<2>,
+        clock_time: Option<&ClockTime>,
+    ) -> Result<(), CydClockDisplayError> {
         let params = clock_time.map_or([0.0; 2], |t| t.params());
         let mut primitives = heapless::Vec::<DrawPrimitive, 16>::new();
 
-        for draw_item in CLOCK_HANDS.draw_items(&params) {
+        for draw_item in linkage.draw_items(&params) {
             let prim = match draw_item {
                 DrawItem::Stroke(stroke) => {
                     let start = pose_to_point(stroke.start());
