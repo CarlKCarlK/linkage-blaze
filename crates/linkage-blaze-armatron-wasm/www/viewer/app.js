@@ -1,18 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import init, { linkage_points } from "../pkg/linkage_blaze_armatron_wasm.js";
-
-// todo0000 why is this here????
-const PARAMS = [
-  { name: "raise hand", value: 0.5 },
-  { name: "bend elbow", value: 0.5 },
-  { name: "close hand", value: 0.0 },
-  { name: "lower arm", value: 0.5 },
-  { name: "spin whole arm", value: 0.5 },
-  { name: "spin hand", value: 0.5 },
-];
-
-const DEFAULT_PARAMS = PARAMS.map((param) => param.value);
+import init, { linkage_points, dof, param_name, param_default } from "../pkg/linkage_blaze_armatron_wasm.js";
 const canvas = document.querySelector("#arm-canvas");
 const sliders = document.querySelector("#sliders");
 const resetView = document.querySelector("#reset-view");
@@ -63,6 +51,10 @@ const rodMeshes = [];
 const joints = [];
 
 await init();
+const PARAMS = Array.from({ length: dof() }, (_, index) => ({
+  name: param_name(index),
+  value: param_default(index),
+}));
 buildControls();
 resize();
 update();
@@ -91,7 +83,7 @@ resetView.addEventListener("click", () => {
 
 resetParams.addEventListener("click", () => {
   for (let index = 0; index < PARAMS.length; index += 1) {
-    PARAMS[index].value = DEFAULT_PARAMS[index];
+    PARAMS[index].value = param_default(index);
   }
   syncControls();
   update();
