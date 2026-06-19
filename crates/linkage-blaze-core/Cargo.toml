@@ -13,3 +13,4 @@ static_cell = "2.1.1"
 
 [dev-dependencies]
 png = "0.18"
+trybuild = "1.0"
