@@ -1,0 +1,25 @@
+error[E0080]: evaluation panicked: linkage has more steps than N
+ --> tests/ui_fail/n_too_small_for_marks.rs:5:36
+  |
+5 |   const N_TOO_SMALL: Linkage<0, 3> = Linkage::start()
+  |  ____________________________________^
+6 | |     .mark("mark1")
+7 | |     .forward(1.0)
+8 | |     .mark("mark2")
+  | |__________________^ evaluation of `N_TOO_SMALL` failed inside this call
+  |
+note: inside `Linkage::<0, 3>::mark`
+ --> src/lib.rs
+  |
+  |         self.push(Step::Mark { name })
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: inside `Linkage::<0, 3>::push`
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
+  |
+ ::: src/lib.rs
+  |
+  |         assert!(self.len < N, "linkage has more steps than N");
+  |         ------------------------------------------------------ in this macro invocation
