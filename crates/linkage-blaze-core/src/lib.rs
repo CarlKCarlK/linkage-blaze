@@ -470,7 +470,7 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         self,
         joint_radius: f32,
     ) -> LinkageFixed<DOF, NOUT> {
-        let mut out = Linkage {
+        let mut out = LinkageFixed {
             steps: [const { Step::Start }; NOUT],
             len: 0,
             params: [Param::EMPTY; DOF],
@@ -624,7 +624,7 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
             "N_OUT must fit all steps from both linkages"
         );
 
-        let mut out = Linkage {
+        let mut out = LinkageFixed {
             steps: [const { Step::Start }; N_OUT],
             len: 0,
             params: [Param::EMPTY; DOF_OUT],
@@ -680,9 +680,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         out
     }
 }
-
-/// Type alias for backwards compatibility. Use `LinkageFixed` directly.
-pub type Linkage<const DOF: usize, const N: usize> = LinkageFixed<DOF, N>;
 
 impl Step {
     const fn offset_params(self, param_offset: usize, remember_offset: usize) -> Self {
@@ -1328,7 +1325,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, Linkage, LinkageFixed, Pose, Rgb888, Vec3};
+    use super::{DrawItem, LinkageFixed, Pose, Rgb888, Vec3};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
