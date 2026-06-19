@@ -1162,12 +1162,144 @@ impl<const DOF: usize> LinkageBuf<DOF> {
             None => panic!("unknown parameter name"),
         }
     }
+
+    /// Append another linkage buffer's steps and parameters, creating a new buffer with combined DOF.
+    ///
+    /// This method consumes both buffers and produces a new one with DOF_OUT = DOF + DOF2.
+    /// Parameters from `other` are concatenated after parameters from `self`.
+    /// Steps from `other` (excluding its implicit Start step) are appended after this linkage's steps,
+    /// with parameter and mark indices offset appropriately.
+    ///
+    /// The caller must provide the expected output DOF as an explicit type parameter,
+    /// matching `DOF + DOF2`. This mirrors the pattern used in `LinkageFixed::combine`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `DOF_OUT != DOF + DOF2`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[cfg(feature = "alloc")]
+    /// # {
+    /// # use linkage_blaze_core::{LinkageBuf, Vec3};
+    /// let a = LinkageBuf::<1>::start()
+    ///     .define_param("x", 0.5)
+    ///     .forward_param("x", 0.0, 10.0);
+    ///
+    /// let b = LinkageBuf::<1>::start()
+    ///     .define_param("y", 0.5)
+    ///     .left_param("y", 0.0, 5.0);
+    ///
+    /// let c: LinkageBuf<2> = a.append::<1, 2>(b);
+    /// let params = [0.5, 0.5];
+    /// let pose = c.view().final_pose(&params);
+    /// # }
+    /// ```
+    pub fn append<const DOF2: usize, const DOF_OUT: usize>(
+        self,
+        other: LinkageBuf<DOF2>,
+    ) -> LinkageBuf<DOF_OUT> {
+        assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF + DOF2");
+
+        let mut out = LinkageBuf {
+            params: [Param::EMPTY; DOF_OUT],
+            param_len: 0,
+            steps: alloc::vec::Vec::new(),
+            mark_names: alloc::vec::Vec::new(),
+        };
+
+        // Copy self's steps (including Start)
+        out.steps.extend_from_slice(&self.steps);
+
+        // Append other's steps (skip Start), offsetting param and mark indices
+        let mark_offset = self.mark_names.len();
+        for i in 1..other.steps.len() {
+            let step = other.steps[i].offset_params(DOF, mark_offset);
+            out.steps.push(step);
+        }
+
+        // Copy self's params
+        let mut i = 0;
+        while i < self.param_len {
+            out.params[i] = self.params[i];
+            i += 1;
+        }
+
+        // Copy other's params
+        let mut i = 0;
+        while i < other.param_len {
+            out.params[DOF + i] = other.params[i];
+            i += 1;
+        }
+        out.param_len = self.param_len + other.param_len;
+
+        // Copy mark names from both
+        out.mark_names.extend_from_slice(&self.mark_names);
+        out.mark_names.extend_from_slice(&other.mark_names);
+
+        out
+    }
+
+    /// Extend this linkage with steps and parameters from a linkage view.
+    ///
+    /// Similar to `append`, but copies steps and parameters from a `LinkageView` instead.
+    /// This is useful when you have a view of an existing linkage.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `DOF_OUT != DOF + DOF2`.
+    pub fn extend_view<const DOF2: usize, const DOF_OUT: usize>(
+        self,
+        other: LinkageView<'_, DOF2>,
+    ) -> LinkageBuf<DOF_OUT> {
+        assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF + DOF2");
+
+        let mut out = LinkageBuf {
+            params: [Param::EMPTY; DOF_OUT],
+            param_len: 0,
+            steps: alloc::vec::Vec::new(),
+            mark_names: alloc::vec::Vec::new(),
+        };
+
+        // Copy self's steps (including Start)
+        out.steps.extend_from_slice(&self.steps);
+
+        // Append steps from the view (skip Start)
+        let mark_offset = self.mark_names.len();
+        let view_steps = other.steps();
+        for i in 1..view_steps.len() {
+            let step = view_steps[i].offset_params(DOF, mark_offset);
+            out.steps.push(step);
+        }
+
+        // Copy self's params
+        let mut i = 0;
+        while i < self.param_len {
+            out.params[i] = self.params[i];
+            i += 1;
+        }
+
+        // Copy params from the view
+        let view_params = other.params();
+        let mut i = 0;
+        while i < DOF2 {
+            out.params[DOF + i] = view_params[i];
+            i += 1;
+        }
+        out.param_len = self.param_len + DOF2;
+
+        // Copy mark names from self
+        out.mark_names.extend_from_slice(&self.mark_names);
+
+        out
+    }
 }
 
 #[cfg(feature = "alloc")]
 impl<const DOF: usize> Linkage<DOF> for LinkageBuf<DOF> {
     fn view(&self) -> LinkageView<'_, DOF> {
-        LinkageView::new(&self.params, &self.steps)
+        self.view()
     }
 
     fn len(&self) -> usize {
@@ -1187,7 +1319,7 @@ impl<const DOF: usize> Linkage<DOF> for LinkageBuf<DOF> {
 impl<const DOF: usize, const N: usize> From<&LinkageFixed<DOF, N>> for LinkageBuf<DOF> {
     fn from(linkage: &LinkageFixed<DOF, N>) -> Self {
         Self {
-            params: linkage.params.clone(),
+            params: linkage.params,
             param_len: linkage.param_len,
             steps: linkage.steps[..linkage.len].to_vec(),
             mark_names: linkage.mark_names[..linkage.mark_len].to_vec(),
