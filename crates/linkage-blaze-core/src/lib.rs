@@ -456,6 +456,196 @@ impl<'a, const DOF: usize, const N: usize> From<&'a LinkageFixed<DOF, N>> for Li
 }
 
 
+/// Emit const fn fluent DSL methods for LinkageFixed.
+/// These are the simple one-step methods that work the same way for both storage types.
+macro_rules! emit_fixed_step_methods {
+    () => {
+        // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
+        pub const fn yaw(self, degrees: f32) -> Self {
+            self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
+        }
+        pub const fn pitch(self, degrees: f32) -> Self {
+            self.push(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
+        }
+        pub const fn roll(self, degrees: f32) -> Self {
+            self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
+        }
+        pub const fn forward(self, distance: f32) -> Self {
+            self.push(Step::Move(Arg::Fixed(distance)))
+        }
+        pub const fn left(self, distance: f32) -> Self {
+            self.push(Step::Left(Arg::Fixed(distance)))
+        }
+        pub const fn up(self, distance: f32) -> Self {
+            self.push(Step::Up(Arg::Fixed(distance)))
+        }
+        pub const fn pen_up(self) -> Self {
+            self.push(Step::PenUp)
+        }
+        pub const fn pen_down(self) -> Self {
+            self.push(Step::PenDown)
+        }
+        pub const fn pen_color(self, color: Rgb888) -> Self {
+            self.push(Step::PenColor(color))
+        }
+        pub const fn pen_width(self, width: f32) -> Self {
+            assert!(width >= 0.0, "pen width must be non-negative");
+            self.push(Step::PenWidth(width))
+        }
+        pub const fn disk(self, radius: f32) -> Self {
+            self.push(Step::Disk(radius))
+        }
+        pub const fn ring(self, radius: f32) -> Self {
+            self.push(Step::Ring(radius))
+        }
+        pub const fn sphere(self, radius: f32) -> Self {
+            self.push(Step::Sphere(radius))
+        }
+
+        // Parameterized methods (yaw_param, pitch_param, etc.)
+        pub const fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::Yaw(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+        }
+        pub const fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::Pitch(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+        }
+        pub const fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::Roll(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+        }
+        pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::Move(Arg::Variable(VariableArg::new(index, low, high))))
+        }
+        pub const fn left_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::Left(Arg::Variable(VariableArg::new(index, low, high))))
+        }
+        pub const fn up_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
+        }
+        pub const fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::DiskParam(VariableArg::new(index, low, high)))
+        }
+        pub const fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::RingParam(VariableArg::new(index, low, high)))
+        }
+        pub const fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push(Step::SphereParam(VariableArg::new(index, low, high)))
+        }
+
+        // Restore methods
+        pub const fn restore(self, name: &'static str) -> Self {
+            let index = match self.last_mark_index(name) {
+                Some(i) => i,
+                None => panic!("restore: no mark found with name (mark must be defined before restore)"),
+            };
+            self.push(Step::Restore { index })
+        }
+        pub const fn restore_nth(self, name: &'static str, n: usize) -> Self {
+            let index = match self.mark_index_nth(name, n) {
+                Some(i) => i,
+                None => panic!("restore_nth: no matching mark found (must define mark before restoring nth)"),
+            };
+            self.push(Step::Restore { index })
+        }
+    };
+}
+
+/// Emit ordinary fn fluent DSL methods for LinkageBuf.
+/// These are the simple one-step methods that work the same way for both storage types.
+macro_rules! emit_buf_step_methods {
+    () => {
+        // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
+        pub fn yaw(self, degrees: f32) -> Self {
+            self.push_step(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
+        }
+        pub fn pitch(self, degrees: f32) -> Self {
+            self.push_step(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
+        }
+        pub fn roll(self, degrees: f32) -> Self {
+            self.push_step(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
+        }
+        pub fn forward(self, distance: f32) -> Self {
+            self.push_step(Step::Move(Arg::Fixed(distance)))
+        }
+        pub fn left(self, distance: f32) -> Self {
+            self.push_step(Step::Left(Arg::Fixed(distance)))
+        }
+        pub fn up(self, distance: f32) -> Self {
+            self.push_step(Step::Up(Arg::Fixed(distance)))
+        }
+        pub fn pen_up(self) -> Self {
+            self.push_step(Step::PenUp)
+        }
+        pub fn pen_down(self) -> Self {
+            self.push_step(Step::PenDown)
+        }
+        pub fn pen_color(self, color: Rgb888) -> Self {
+            self.push_step(Step::PenColor(color))
+        }
+        pub fn pen_width(self, width: f32) -> Self {
+            assert!(width >= 0.0, "pen width must be non-negative");
+            self.push_step(Step::PenWidth(width))
+        }
+        pub fn disk(self, radius: f32) -> Self {
+            self.push_step(Step::Disk(radius))
+        }
+        pub fn ring(self, radius: f32) -> Self {
+            self.push_step(Step::Ring(radius))
+        }
+        pub fn sphere(self, radius: f32) -> Self {
+            self.push_step(Step::Sphere(radius))
+        }
+
+        // Parameterized methods (yaw_param, pitch_param, etc.)
+        pub fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::Yaw(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+        }
+        pub fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::Pitch(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+        }
+        pub fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::Roll(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+        }
+        pub fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::Move(Arg::Variable(VariableArg::new(index, low, high))))
+        }
+        pub fn left_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::Left(Arg::Variable(VariableArg::new(index, low, high))))
+        }
+        pub fn up_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
+        }
+        pub fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::DiskParam(VariableArg::new(index, low, high)))
+        }
+        pub fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::RingParam(VariableArg::new(index, low, high)))
+        }
+        pub fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
+            let index = self.expect_param_index(name);
+            self.push_step(Step::SphereParam(VariableArg::new(index, low, high)))
+        }
+
+        // Restore methods - handled specially for LinkageBuf
+    };
+}
+
 /// A fixed-capacity const linkage expression/storage type.
 ///
 /// `LinkageFixed` stores linkage steps and parameters in fixed-size arrays, enabling
@@ -579,120 +769,16 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         self
     }
 
-    // FLUENT DSL METHODS
-    // Note: These methods are intentionally kept identical in LinkageFixed and LinkageBuf,
-    // synchronized by inspection. The only differences are:
-    // - LinkageFixed: pub const fn, uses self.push(step)
-    // - LinkageBuf: pub fn, uses self.push_step(step)
-    // When adding new fluent methods (yaw, forward, disk, etc.), add them identically to both types.
+    // ── Fluent DSL methods (generated from emit_fixed_step_methods macro) ──
+    // To add a new simple step method, edit the macro, not this impl block.
+    emit_fixed_step_methods!();
 
-    /// Add a yaw step from a user-facing angle in degrees.
-    pub const fn yaw(self, degrees: f32) -> Self {
-        self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
-    }
-
-    /// Add a yaw step from a runtime parameter in degrees.
-    pub const fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a pitch step from a user-facing angle in degrees.
-    pub const fn pitch(self, degrees: f32) -> Self {
-        self.push(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
-    }
-
-    /// Add a pitch step from a runtime parameter in degrees.
-    pub const fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a roll step from a user-facing angle in degrees.
-    pub const fn roll(self, degrees: f32) -> Self {
-        self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
-    }
-
-    /// Add a roll step from a runtime parameter in degrees.
-    pub const fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::Roll(Arg::Variable(VariableArg::from_degrees(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a fixed forward move step.
-    pub const fn forward(self, distance: f32) -> Self {
-        self.push(Step::Move(Arg::Fixed(distance)))
-    }
-
-    /// Add a move step from a runtime parameter.
-    pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::Move(Arg::Variable(VariableArg::new(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a fixed left move step.
-    pub const fn left(self, distance: f32) -> Self {
-        self.push(Step::Left(Arg::Fixed(distance)))
-    }
-
-    /// Add a left move step from a runtime parameter.
-    pub const fn left_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::Left(Arg::Variable(VariableArg::new(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a fixed up move step.
-    pub const fn up(self, distance: f32) -> Self {
-        self.push(Step::Up(Arg::Fixed(distance)))
-    }
-
-    /// Add an up move step from a runtime parameter.
-    pub const fn up_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
-    }
-
-    /// Restart the linkage path from the origin pose.
     /// Save the current pose and pen state under a name for later recall.
     pub const fn mark(mut self, name: &'static str) -> Self {
         assert!(self.mark_len < N, "linkage has more marks than N");
         self.mark_names[self.mark_len] = name;
         self.mark_len += 1;
         self.push(Step::Mark { name })
-    }
-
-    /// Restore a previously marked pose and pen state.
-    /// Resolves `name` at build time using last-definition-wins (shadowing) semantics.
-    pub const fn restore(self, name: &'static str) -> Self {
-        let index = match self.last_mark_index(name) {
-            Some(i) => i,
-            None => {
-                panic!("restore: no mark found with name (mark must be defined before restore)")
-            }
-        };
-        self.push(Step::Restore { index })
-    }
-
-    /// Restore the `n`th marked pose with the given name (0 = first definition).
-    /// Resolves at build time.
-    pub const fn restore_nth(self, name: &'static str, n: usize) -> Self {
-        let index = match self.mark_index_nth(name, n) {
-            Some(i) => i,
-            None => panic!(
-                "restore_nth: no matching mark found (must define mark before restoring nth)"
-            ),
-        };
-        self.push(Step::Restore { index })
     }
 
     const fn last_mark_index(&self, name: &str) -> Option<usize> {
@@ -719,60 +805,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
             i += 1;
         }
         None
-    }
-
-    /// Lift the pen so later move steps don't draw.
-    pub const fn pen_up(self) -> Self {
-        self.push(Step::PenUp)
-    }
-
-    /// Lower the pen so later move steps draw.
-    pub const fn pen_down(self) -> Self {
-        self.push(Step::PenDown)
-    }
-
-    /// Set the pen color for later move steps.
-    pub const fn pen_color(self, color: Rgb888) -> Self {
-        self.push(Step::PenColor(color))
-    }
-
-    /// Set the pen width in linkage units for later move steps.
-    pub const fn pen_width(self, width: f32) -> Self {
-        assert!(width >= 0.0, "pen width must be non-negative");
-        self.push(Step::PenWidth(width))
-    }
-
-    /// Add a filled disk at the current pose, in the local v0-v1 plane.
-    pub const fn disk(self, radius: f32) -> Self {
-        self.push(Step::Disk(radius))
-    }
-
-    /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
-    pub const fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::DiskParam(VariableArg::new(index, low, high)))
-    }
-
-    /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is the current pen width.
-    pub const fn ring(self, radius: f32) -> Self {
-        self.push(Step::Ring(radius))
-    }
-
-    /// Add a ring at the current pose; radius is driven by a degree-of-freedom parameter.
-    pub const fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::RingParam(VariableArg::new(index, low, high)))
-    }
-
-    /// Add a sphere centered at the current pose.
-    pub const fn sphere(self, radius: f32) -> Self {
-        self.push(Step::Sphere(radius))
-    }
-
-    /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
-    pub const fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push(Step::SphereParam(VariableArg::new(index, low, high)))
     }
 
     /// Return a new linkage with a sphere at the start and end of every move step
@@ -1055,81 +1087,9 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         self
     }
 
-    /// Add a yaw step from a user-facing angle in degrees.
-    pub fn yaw(self, degrees: f32) -> Self {
-        self.push_step(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
-    }
-
-    /// Add a yaw step from a runtime parameter in degrees.
-    pub fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a pitch step from a user-facing angle in degrees.
-    pub fn pitch(self, degrees: f32) -> Self {
-        self.push_step(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
-    }
-
-    /// Add a pitch step from a runtime parameter in degrees.
-    pub fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a roll step from a user-facing angle in degrees.
-    pub fn roll(self, degrees: f32) -> Self {
-        self.push_step(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
-    }
-
-    /// Add a roll step from a runtime parameter in degrees.
-    pub fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::Roll(Arg::Variable(VariableArg::from_degrees(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a fixed forward move step.
-    pub fn forward(self, distance: f32) -> Self {
-        self.push_step(Step::Move(Arg::Fixed(distance)))
-    }
-
-    /// Add a move step from a runtime parameter.
-    pub fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::Move(Arg::Variable(VariableArg::new(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a fixed left move step.
-    pub fn left(self, distance: f32) -> Self {
-        self.push_step(Step::Left(Arg::Fixed(distance)))
-    }
-
-    /// Add a left move step from a runtime parameter.
-    pub fn left_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::Left(Arg::Variable(VariableArg::new(
-            index, low, high,
-        ))))
-    }
-
-    /// Add a fixed up move step.
-    pub fn up(self, distance: f32) -> Self {
-        self.push_step(Step::Up(Arg::Fixed(distance)))
-    }
-
-    /// Add an up move step from a runtime parameter.
-    pub fn up_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
-    }
+    // ── Fluent DSL methods (generated from emit_buf_step_methods macro) ──
+    // To add a new simple step method, edit the macro, not this impl block.
+    emit_buf_step_methods!();
 
     /// Save the current pose and pen state under a name for later recall.
     pub fn mark(mut self, name: &'static str) -> Self {
@@ -1162,59 +1122,6 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         self.push_step(Step::Restore { index })
     }
 
-    /// Lift the pen so later move steps don't draw.
-    pub fn pen_up(self) -> Self {
-        self.push_step(Step::PenUp)
-    }
-
-    /// Lower the pen so later move steps draw.
-    pub fn pen_down(self) -> Self {
-        self.push_step(Step::PenDown)
-    }
-
-    /// Set the pen color for later move steps.
-    pub fn pen_color(self, color: Rgb888) -> Self {
-        self.push_step(Step::PenColor(color))
-    }
-
-    /// Set the pen width in linkage units for later move steps.
-    pub fn pen_width(self, width: f32) -> Self {
-        assert!(width >= 0.0, "pen width must be non-negative");
-        self.push_step(Step::PenWidth(width))
-    }
-
-    /// Add a filled disk at the current pose, in the local v0-v1 plane.
-    pub fn disk(self, radius: f32) -> Self {
-        self.push_step(Step::Disk(radius))
-    }
-
-    /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
-    pub fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::DiskParam(VariableArg::new(index, low, high)))
-    }
-
-    /// Add a ring at the current pose, in the local v0-v1 plane. Stroke width is the current pen width.
-    pub fn ring(self, radius: f32) -> Self {
-        self.push_step(Step::Ring(radius))
-    }
-
-    /// Add a ring at the current pose; radius is driven by a degree-of-freedom parameter.
-    pub fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::RingParam(VariableArg::new(index, low, high)))
-    }
-
-    /// Add a sphere centered at the current pose.
-    pub fn sphere(self, radius: f32) -> Self {
-        self.push_step(Step::Sphere(radius))
-    }
-
-    /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
-    pub fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
-        let index = self.expect_param_index(name);
-        self.push_step(Step::SphereParam(VariableArg::new(index, low, high)))
-    }
 
     fn push_step(mut self, step: Step) -> Self {
         self.steps.push(step);
