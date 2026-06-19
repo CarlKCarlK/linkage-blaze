@@ -168,6 +168,33 @@ impl VariableArg {
     }
 }
 
+/// Trait for a linkage that can be evaluated to produce poses and draw items.
+pub trait Linkage {
+    /// Return the number of runtime parameters this linkage expects.
+    fn dof(&self) -> usize;
+
+    /// Return the number of linkage steps, including the implicit start step.
+    fn len(&self) -> usize;
+
+    /// Return the number of named parameters defined in this linkage.
+    fn param_len(&self) -> usize;
+
+    /// Return a parameter definition by index.
+    fn param(&self, index: usize) -> Param;
+
+    /// Return a parameter's name by index.
+    fn param_name(&self, index: usize) -> &'static str;
+
+    /// Return a parameter's default value by index.
+    fn param_default(&self, index: usize) -> f32;
+
+    /// Return the number of parameters defined with the given name.
+    fn param_count_named(&self, name: &str) -> usize;
+
+    /// Return the index of the `n`th parameter with the given name.
+    fn param_index(&self, name: &str, n: usize) -> usize;
+}
+
 /// A fixed-size linkage description.
 pub struct LinkageFixed<const DOF: usize, const N: usize> {
     steps: [Step; N],
@@ -678,6 +705,60 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         out.mark_len = self.mark_len + other.mark_len;
 
         out
+    }
+}
+
+impl<const DOF: usize, const N: usize> Linkage for LinkageFixed<DOF, N> {
+    fn dof(&self) -> usize {
+        DOF
+    }
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn param_len(&self) -> usize {
+        self.param_len
+    }
+
+    fn param(&self, index: usize) -> Param {
+        assert!(index < self.param_len, "parameter index must be defined");
+        self.params[index]
+    }
+
+    fn param_name(&self, index: usize) -> &'static str {
+        self.param(index).name()
+    }
+
+    fn param_default(&self, index: usize) -> f32 {
+        self.param(index).default()
+    }
+
+    fn param_count_named(&self, name: &str) -> usize {
+        let mut count = 0;
+        let mut param_index = 0;
+        while param_index < self.param_len {
+            if str_eq(self.params[param_index].name, name) {
+                count += 1;
+            }
+            param_index += 1;
+        }
+        count
+    }
+
+    fn param_index(&self, name: &str, n: usize) -> usize {
+        let mut found = 0;
+        let mut slot = 0;
+        while slot < self.param_len {
+            if str_eq(self.params[slot].name, name) {
+                if found == n {
+                    return slot;
+                }
+                found += 1;
+            }
+            slot += 1;
+        }
+        panic!("parameter name not found or occurrence index out of range")
     }
 }
 
