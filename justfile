@@ -23,6 +23,10 @@ check-all:
 build:
     just check-all
 
+# Generate docs and open in browser
+docs:
+    cargo doc -p linkage-blaze-core --no-deps --open
+
 # ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
 
 check-cyd:
