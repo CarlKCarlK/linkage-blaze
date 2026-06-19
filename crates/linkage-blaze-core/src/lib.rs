@@ -152,7 +152,10 @@ impl VariableArg {
     }
 
     const fn offset(self, offset: usize) -> Self {
-        Self { index: self.index + offset, ..self }
+        Self {
+            index: self.index + offset,
+            ..self
+        }
     }
 
     const fn from_degrees(index: usize, low: f32, high: f32) -> Self {
@@ -237,7 +240,11 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Use `.last()` for shadowing semantics (most recently defined wins),
     /// `.next()` for the first definition, or collect/iterate for all of them.
     pub fn param_indices<'a>(&'a self, name: &'a str) -> ParamIndices<'a, DOF, N> {
-        ParamIndices { linkage: self, name, pos: 0 }
+        ParamIndices {
+            linkage: self,
+            name,
+            pos: 0,
+        }
     }
 
     /// Return this linkage's normalized parameter defaults.
@@ -344,11 +351,7 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     /// Restart the linkage path from the origin pose.
     /// Save the current pose and pen state under a name for later recall.
     pub const fn mark(mut self, name: &'static str) -> Self {
-        assert!(
-            self.last_mark_index(name).is_none(),
-            "duplicate remember name"
-        );
-        assert!(self.mark_len < N, "linkage has more remembers than N");
+        assert!(self.mark_len < N, "linkage has more marks than N");
         self.mark_names[self.mark_len] = name;
         self.mark_len += 1;
         self.push(Step::Mark { name })
@@ -359,7 +362,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     pub const fn restore(self, name: &'static str) -> Self {
         let index = match self.last_mark_index(name) {
             Some(i) => i,
-            None => panic!("recall of unknown marked state"),
+            None => {
+                panic!("restore: no mark found with name (mark must be defined before restore)")
+            }
         };
         self.push(Step::Restore { index })
     }
@@ -369,7 +374,9 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     pub const fn restore_nth(self, name: &'static str, n: usize) -> Self {
         let index = match self.mark_index_nth(name, n) {
             Some(i) => i,
-            None => panic!("restore_nth: name not found or n out of range"),
+            None => panic!(
+                "restore_nth: no matching mark found (must define mark before restoring nth)"
+            ),
         };
         self.push(Step::Restore { index })
     }
@@ -601,13 +608,21 @@ impl<const DOF: usize, const N: usize> Linkage<DOF, N> {
     ///
     /// The `other` linkage's implicit `Start` step is skipped so evaluation continues
     /// from wherever `self` ends rather than resetting to the origin.
-    pub const fn combine<const DOF2: usize, const N2: usize, const DOF_OUT: usize, const N_OUT: usize>(
+    pub const fn combine<
+        const DOF2: usize,
+        const N2: usize,
+        const DOF_OUT: usize,
+        const N_OUT: usize,
+    >(
         self,
         other: Linkage<DOF2, N2>,
     ) -> Linkage<DOF_OUT, N_OUT> {
         assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF1 + DOF2");
         let other_steps = other.len - 1; // skip the implicit Start step
-        assert!(N_OUT >= self.len + other_steps, "N_OUT must fit all steps from both linkages");
+        assert!(
+            N_OUT >= self.len + other_steps,
+            "N_OUT must fit all steps from both linkages"
+        );
 
         let mut out = Linkage {
             steps: [const { Step::Start }; N_OUT],
@@ -678,7 +693,9 @@ impl Step {
             Self::DiskParam(v) => Self::DiskParam(v.offset(param_offset)),
             Self::RingParam(v) => Self::RingParam(v.offset(param_offset)),
             Self::SphereParam(v) => Self::SphereParam(v.offset(param_offset)),
-            Self::Restore { index } => Self::Restore { index: index + remember_offset },
+            Self::Restore { index } => Self::Restore {
+                index: index + remember_offset,
+            },
             other => other,
         }
     }
@@ -1053,7 +1070,6 @@ impl<'a, const DOF: usize, const N: usize> StyledPoses<'a, DOF, N> {
             marked_len: 0,
         }
     }
-
 }
 
 impl<const DOF: usize, const N: usize> Iterator for StyledPoses<'_, DOF, N> {
@@ -1208,7 +1224,6 @@ impl<'a, const DOF: usize, const N: usize> DrawItems<'a, DOF, N> {
             marked_len: 0,
         }
     }
-
 }
 
 impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
@@ -1595,7 +1610,7 @@ mod tests {
         // Simply building a linkage with a duplicate name must succeed.
         // (Previously this would panic with "duplicate parameter name".)
         const _: Linkage<2, 2> = Linkage::start()
-            .define_param("angle", 0.25)  // index 0
+            .define_param("angle", 0.25) // index 0
             .define_param("angle", 0.75); // index 1 — shadows index 0
     }
 
@@ -1608,8 +1623,8 @@ mod tests {
         //   - if bound to index 0 → yaw 90° → forward lands at ~(0, 10, 0)
         //   - if bound to index 1 → yaw  0° → forward lands at (10, 0, 0)  ✓
         const LINKAGE: Linkage<2, 5> = Linkage::start()
-            .define_param("angle", 0.0)    // index 0, default 0.0
-            .define_param("angle", 1.0)    // index 1, default 1.0 — shadows index 0
+            .define_param("angle", 0.0) // index 0, default 0.0
+            .define_param("angle", 1.0) // index 1, default 1.0 — shadows index 0
             .yaw_param("angle", 0.0, 90.0) // binds to index 1 (most recent)
             .forward(10.0);
 
@@ -1624,9 +1639,9 @@ mod tests {
         // Three params: "spin" at 0, "angle" at 1, "spin" again at 2.
         // param_indices("spin") should yield indices 0 and 2 in that order.
         const LINKAGE: Linkage<3, 2> = Linkage::start()
-            .define_param("spin", 0.2)   // index 0
-            .define_param("angle", 0.5)  // index 1
-            .define_param("spin", 0.8);  // index 2
+            .define_param("spin", 0.2) // index 0
+            .define_param("angle", 0.5) // index 1
+            .define_param("spin", 0.8); // index 2
 
         let indices: Vec<usize> = LINKAGE.param_indices("spin").collect();
         assert_eq!(indices, [0, 2]);
