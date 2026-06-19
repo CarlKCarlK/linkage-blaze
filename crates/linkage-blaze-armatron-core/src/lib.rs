@@ -179,7 +179,8 @@ impl CydSim {
 
     #[must_use]
     pub fn param_index(name: &str) -> Option<usize> {
-        LINKAGE.param_indices(name).last()
+        let params = LINKAGE.view().params();
+        (0..DOF).rev().find(|&i| params[i].name() == name)
     }
 
     #[must_use]
