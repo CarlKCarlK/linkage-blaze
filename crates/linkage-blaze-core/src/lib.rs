@@ -181,7 +181,7 @@ impl VariableArg {
 /// Define parameters and evaluate with different values:
 ///
 /// ```rust
-/// # use linkage_blaze_core::{Linkage, LinkageFixed};
+/// # use linkage_blaze_core::{Linkage, LinkageFixed, Vec3};
 /// const LINKAGE: LinkageFixed<1, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
@@ -191,9 +191,11 @@ impl VariableArg {
 ///
 /// // Evaluate with distance parameter at 0.5 (maps to 3.0 units)
 /// let pose1 = LINKAGE.final_pose(&[0.5]);
+/// assert!(pose1.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
 ///
 /// // Evaluate with distance parameter at 0.0 (maps to 1.0 units)
 /// let pose2 = LINKAGE.final_pose(&[0.0]);
+/// assert!(pose2.position().is_close_to(&Vec3::from([1.0, 0.0, 0.0]), 1e-5));
 /// ```
 pub trait Linkage<const DOF: usize> {
     /// Return the number of runtime parameters (degrees of freedom).
@@ -296,15 +298,16 @@ pub trait Linkage<const DOF: usize> {
     /// # Examples
     ///
     /// ```rust
-    /// # use linkage_blaze_core::LinkageFixed;
+    /// # use linkage_blaze_core::{LinkageFixed, Vec3};
     /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
     ///     .define_param("yaw", 0.5)
     ///     .define_param("distance", 0.5)
     ///     .yaw_param("yaw", -90.0, 90.0)
     ///     .forward_param("distance", 1.0, 5.0);
     ///
-    /// // Rotate 45° and move 3 units
+    /// // Yaw=0° (parameter 0.5), move forward 3.4 units (parameter 0.6)
     /// let pose = LINKAGE.final_pose(&[0.5, 0.6]);
+    /// assert!(pose.position().is_close_to(&Vec3::from([3.4, 0.0, 0.0]), 1e-5));
     /// ```
     fn final_pose(&self, params: &[f32; DOF]) -> Pose;
 }
