@@ -109,13 +109,12 @@ const ARMATRON1_WITH_JOINTS: Linkage<6, 45> = ARMATRON1.with_joint_spheres(0.15)
 const LINKAGE0: Linkage<9, 133> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE: Linkage<15, 159> = LINKAGE0
     .restore("scene origin")
-    .combine(ARMATRON1)
+    .combine(ARMATRON1) // Add ghost arm to hold target.
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 const REVERSE_KINEMATICS_LINKAGE: Linkage<9, 32> = VIEW_CONTROL.combine(ARMATRON1);
-// todo000000 audit actual memory use
 
 const DOF: usize = LINKAGE.dof();
 
