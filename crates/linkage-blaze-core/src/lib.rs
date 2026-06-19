@@ -1064,7 +1064,7 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
 
 /// Logo-style pen state for linkage drawing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Pen {
+pub enum PenState {
     Up,
     Down,
 }
@@ -1072,7 +1072,7 @@ pub enum Pen {
 /// Drawing state carried while evaluating a linkage.
 #[derive(Clone, Copy, Debug)]
 pub struct PenStyle {
-    pen: Pen,
+    pen: PenState,
     color: Rgb888,
     width: f32,
 }
@@ -1082,7 +1082,7 @@ impl PenStyle {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            pen: Pen::Down,
+            pen: PenState::Down,
             color: Rgb888::new(255, 255, 255),
             width: 0.1,
         }
@@ -1094,7 +1094,7 @@ impl PenStyle {
 
     /// Return the current pen state.
     #[must_use]
-    pub const fn pen(self) -> Pen {
+    pub const fn pen(self) -> PenState {
         self.pen
     }
 
@@ -1113,8 +1113,8 @@ impl PenStyle {
     fn apply(&mut self, step: &Step) {
         match step {
             Step::Start => self.reset(),
-            Step::PenUp => self.pen = Pen::Up,
-            Step::PenDown => self.pen = Pen::Down,
+            Step::PenUp => self.pen = PenState::Up,
+            Step::PenDown => self.pen = PenState::Down,
             Step::PenColor(color) => self.color = *color,
             Step::PenWidth(width) => self.width = *width,
             Step::Yaw(_)
@@ -1227,21 +1227,9 @@ impl StyledPose {
         self.pose
     }
 
-    /// Return this styled pose's orientation matrix.
-    #[must_use]
-    pub const fn orientation(self) -> Mat3 {
-        self.pose.orientation()
-    }
-
-    /// Return this styled pose's position.
-    #[must_use]
-    pub const fn position(self) -> Vec3 {
-        self.pose.position()
-    }
-
     /// Return this styled pose's pen state.
     #[must_use]
-    pub const fn pen(self) -> Pen {
+    pub const fn pen(self) -> PenState {
         self.pen_style.pen()
     }
 
@@ -1522,7 +1510,7 @@ impl<const DOF: usize, const N: usize> Iterator for DrawItems<'_, DOF, N> {
 
             match step {
                 Step::Move(_) | Step::Left(_) | Step::Up(_)
-                    if matches!(pen_style.pen(), Pen::Down) =>
+                    if matches!(pen_style.pen(), PenState::Down) =>
                 {
                     return Some(DrawItem::Stroke(StrokeSegment {
                         start: start_pose,
