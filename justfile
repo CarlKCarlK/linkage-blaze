@@ -25,7 +25,7 @@ build:
 
 # Generate docs and open in browser
 docs:
-    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --open
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc --open
 
 # ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
 
