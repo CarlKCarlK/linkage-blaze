@@ -3,49 +3,9 @@
 use core::f32::consts::PI;
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
-// todo00000 robot arm linkage 6
-const DEFAULT_PROGRAM: &str = r#"Linkage::start()
-.define_param("x/y view", 0.5833333)
-.define_param("z", 0.8333333)
-.define_param("raise hand", 0.5)
-.define_param("bend elbow", 0.5)
-.define_param("close hand", 0.0)
-.define_param("lower arm", 0.5)
-.define_param("spin whole", 0.5)
-.define_param("spin hand", 0.5)
-.pen_color(Rgb888::CSS_DARK_GREEN)
-.pen_width(ARM_WIDTH)
-.yaw(90.0)
-.pitch(-90.0)
-.yaw_param("x/y view", 90.0, -90.0)
-.pitch_param("z", -45.0, 45.0)
-.yaw_param("spin whole", 360.0, -360.0)
-.pitch(90.0)
-.forward(2.5)
-.pitch(-90.0)
-.pitch_param("lower arm", 30.0, 0.0)
-.forward(3.0)
-.yaw_param("bend elbow", 90.0, -90.0)
-.forward(3.0)
-.pitch_param("raise hand", 90.0, -90.0)
-.forward(1.0)
-.roll_param("spin hand", -360.0, 360.0)
-.forward(0.5)
-.yaw(90.0)
-.forward_param("close hand", 0.5, 0.0)
-.yaw(-90.0)
-.forward(1.0)
-.yaw(180.0)
-.forward(1.0)
-.yaw(90.0)
-.forward_param("close hand", 1.0, 0.0)
-.yaw(90.0)
-.forward(1.0)
-"#;
-
 #[wasm_bindgen]
 pub fn default_program() -> String {
-    DEFAULT_PROGRAM.into()
+    include_str!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs").into()
 }
 
 #[wasm_bindgen]
