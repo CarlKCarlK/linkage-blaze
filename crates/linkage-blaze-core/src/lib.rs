@@ -960,6 +960,11 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
 /// allowing dynamic growth at runtime. Unlike [`LinkageFixed`], construction is not `const`,
 /// but the fluent DSL methods and evaluation interface are identical.
 ///
+/// **Note:** `LinkageBuf` requires the `alloc` feature. Enable it in `Cargo.toml`:
+/// ```toml
+/// linkage-blaze-core = { features = ["alloc"] }
+/// ```
+///
 /// Use [`LinkageBuf::start()`] to begin a linkage expression, then chain fluent DSL methods to extend
 /// it. Call [`view()`](LinkageBuf::view) to create a borrowed view for evaluation and rendering.
 ///
