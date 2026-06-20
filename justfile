@@ -1,7 +1,10 @@
 set shell := ["bash", "-cu"]
 
-_classic_args := "--target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
-_c6_args      := "--target riscv32imac-unknown-none-elf --release --no-default-features --features esp32c6"
+_classic_args    := "--target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
+_c6_args         := "--target riscv32imac-unknown-none-elf --release --no-default-features --features esp32c6"
+# RUSTFLAGS for ESP targets: -D warnings PLUS the linker script that .cargo/config.toml provides
+# but that env RUSTFLAGS= would otherwise override.
+_esp_rustflags   := "-D warnings -C link-arg=-Tlinkall.x"
 
 # ── Tests / checks ───────────────────────────────────────────────────────────
 
@@ -14,10 +17,10 @@ test-core:
 check-all:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
-    env RUSTFLAGS="-D warnings" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="-D warnings" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
-    env RUSTFLAGS="-D warnings" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="-D warnings" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
+    env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
 

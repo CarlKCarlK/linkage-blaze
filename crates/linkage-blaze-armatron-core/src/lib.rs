@@ -101,12 +101,12 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo0000000 can we use functions to avoid double allocation?
-const VIEW_CONTROL: LinkageFixed<3, 8> = linkage_fixed!("view_control.lb.rs");
+const CAMERA_CONTROL: LinkageFixed<3, 8> = linkage_fixed!("camera_control.lb.rs");
 const GRID_9X9: LinkageFixed<0, 81> = linkage_fixed!("grid_9x9.lb.rs");
-const VIEW_AND_GRID: LinkageFixed<3, 88> = VIEW_CONTROL.combine(GRID_9X9);
+const CAMERA_AND_GRID: LinkageFixed<3, 88> = CAMERA_CONTROL.combine(GRID_9X9);
 const ARMATRON1: LinkageFixed<6, 25> = linkage_fixed!("armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 45> = ARMATRON1.with_joint_spheres(0.15);
-const LINKAGE0: LinkageFixed<9, 133> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
+const LINKAGE0: LinkageFixed<9, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE: LinkageFixed<15, 159> = LINKAGE0
     .restore("scene origin")
     .combine(ARMATRON1) // Add ghost arm to hold target.
@@ -114,7 +114,7 @@ const LINKAGE: LinkageFixed<15, 159> = LINKAGE0
     .sphere_param("close hand", 0.5, 0.0);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
-const REVERSE_KINEMATICS_LINKAGE: LinkageFixed<9, 32> = VIEW_CONTROL.combine(ARMATRON1);
+const REVERSE_KINEMATICS_LINKAGE: LinkageFixed<9, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 
 const DOF: usize = LINKAGE.dof();
 
@@ -657,7 +657,7 @@ impl CydSim {
         color_raw: Rgb888,
     ) {
         let orient = pose.orientation();
-        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
+        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
         let Vec3([px, py, pz]) = pose.position();
         let scale = self.scale();
         let factor = self.perspective_factor(px);
@@ -709,7 +709,7 @@ impl CydSim {
         color_raw: Rgb888,
     ) {
         let orient = pose.orientation();
-        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
+        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
         let Vec3([px, py, pz]) = pose.position();
         let scale = self.scale();
         let factor = self.perspective_factor(px);
@@ -1061,7 +1061,7 @@ impl CydSim {
         }
     }
 
-    //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
+    //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
     fn pose_to_screen(&self, pose: Pose) -> Point {
         let Vec3([x, y, z]) = pose.position();
         let factor = self.perspective_factor(x);
@@ -1452,7 +1452,7 @@ fn screen_width_pixels(width: f32, scale: f32) -> u32 {
 }
 
 // Robot Ortho projection: +Y → screen left, +Z → screen up, X is depth (dropped).
-//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after view_control is updated
+//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
 
 #[inline]
 fn project_pos(world_y: f32, world_z: f32, scale: f32) -> (i32, i32) {

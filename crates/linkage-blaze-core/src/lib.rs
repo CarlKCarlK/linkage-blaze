@@ -32,7 +32,7 @@ mod math;
 
 pub use math::{Mat3, Vec3};
 
-pub use embedded_graphics::pixelcolor::Rgb888;
+pub use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use math::degrees_to_radians;
 
 /// A step in the robot arm linkage description.
@@ -1027,6 +1027,7 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
 /// # }
 /// ```
+#[derive(Clone)]
 pub struct LinkageBuf<const DOF: usize> {
     params: [Param; DOF],
     param_len: usize,
@@ -1112,6 +1113,34 @@ impl<const DOF: usize> LinkageBuf<DOF> {
     }
 
 
+    /// Insert a sphere at every joint (before and after each `Move`/`Left`/`Up` step).
+    ///
+    /// Mirrors `LinkageFixed::with_joint_spheres`, but operates on growable storage.
+    pub fn with_joint_spheres(self, joint_radius: f32) -> Self {
+        let mut out = Self {
+            params: self.params,
+            param_len: self.param_len,
+            steps: alloc::vec::Vec::with_capacity(self.steps.len() * 3),
+            mark_names: self.mark_names.clone(),
+        };
+        for step in &self.steps {
+            let is_move = matches!(step, Step::Move(_) | Step::Left(_) | Step::Up(_));
+            if is_move {
+                out.steps.push(Step::Sphere(joint_radius));
+            }
+            out.steps.push(*step);
+            if is_move {
+                out.steps.push(Step::Sphere(joint_radius));
+            }
+        }
+        out
+    }
+
+    /// Borrowing variant of `with_joint_spheres` — clones `self` then adds joint spheres.
+    pub fn with_joint_spheres_ref(&self, joint_radius: f32) -> Self {
+        self.clone().with_joint_spheres(joint_radius)
+    }
+
     fn push_step(mut self, step: Step) -> Self {
         self.steps.push(step);
         self
@@ -1163,15 +1192,12 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         }
     }
 
-    /// Append another linkage buffer's steps and parameters, creating a new buffer with combined DOF.
+    /// Combine another owned linkage buffer's steps and parameters into this one.
     ///
-    /// This method consumes both buffers and produces a new one with DOF_OUT = DOF + DOF2.
+    /// Consumes both buffers and produces a new one with DOF_OUT = DOF + DOF2.
     /// Parameters from `other` are concatenated after parameters from `self`.
     /// Steps from `other` (excluding its implicit Start step) are appended after this linkage's steps,
     /// with parameter and mark indices offset appropriately.
-    ///
-    /// The caller must provide the expected output DOF as an explicit type parameter,
-    /// matching `DOF + DOF2`. This mirrors the pattern used in `LinkageFixed::combine`.
     ///
     /// # Panics
     ///
@@ -1191,12 +1217,12 @@ impl<const DOF: usize> LinkageBuf<DOF> {
     ///     .define_param("y", 0.5)
     ///     .left_param("y", 0.0, 5.0);
     ///
-    /// let c: LinkageBuf<2> = a.append::<1, 2>(b);
+    /// let c: LinkageBuf<2> = a.combine(b);
     /// let params = [0.5, 0.5];
     /// let pose = c.view().final_pose(&params);
     /// # }
     /// ```
-    pub fn append<const DOF2: usize, const DOF_OUT: usize>(
+    pub fn combine<const DOF2: usize, const DOF_OUT: usize>(
         self,
         other: LinkageBuf<DOF2>,
     ) -> LinkageBuf<DOF_OUT> {
@@ -1241,16 +1267,17 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         out
     }
 
-    /// Extend this linkage with steps and parameters from a linkage view.
+    /// Produce a new linkage by combining `self` (borrowed) with a `LinkageView` (also borrowed).
     ///
-    /// Similar to `append`, but copies steps and parameters from a `LinkageView` instead.
-    /// This is useful when you have a view of an existing linkage.
+    /// Both inputs are preserved — `self` is not consumed, and `other` is accessed via a
+    /// shared view. The name `combine_ref` signals that neither side is moved.
+    /// Use `combine` when you are done with both inputs and want to avoid the clone.
     ///
     /// # Panics
     ///
     /// Panics if `DOF_OUT != DOF + DOF2`.
-    pub fn extend_view<const DOF2: usize, const DOF_OUT: usize>(
-        self,
+    pub fn combine_ref<const DOF2: usize, const DOF_OUT: usize>(
+        &self,
         other: LinkageView<'_, DOF2>,
     ) -> LinkageBuf<DOF_OUT> {
         assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF + DOF2");
@@ -1289,8 +1316,15 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         }
         out.param_len = self.param_len + DOF2;
 
-        // Copy mark names from self
+        // Copy mark names from self, then add a placeholder for each Mark step in the view.
+        // LinkageView doesn't carry mark names, but we must track the count so that any
+        // future combine/combine_ref calls compute the correct mark_offset.
         out.mark_names.extend_from_slice(&self.mark_names);
+        for step in &view_steps[1..] {
+            if matches!(step, Step::Mark { .. }) {
+                out.mark_names.push("");
+            }
+        }
 
         out
     }
