@@ -800,17 +800,17 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     /// (Move, Left, Up — both fixed and parametric).
     ///
     /// Spheres at adjacent move endpoints overlap and render twice, which is fine.
-    /// `NOUT` must be ≥ `self.len` + (number of move steps × 2).
-    pub const fn with_joint_spheres<const NOUT: usize>(
+    /// `N_OUT` must be ≥ `self.len` + (number of move steps × 2).
+    pub const fn with_joint_spheres<const N_OUT: usize>(
         self,
         joint_radius: f32,
-    ) -> LinkageFixed<DOF, NOUT> {
+    ) -> LinkageFixed<DOF, N_OUT> {
         let mut out = LinkageFixed {
-            steps: [const { Step::Start }; NOUT],
+            steps: [const { Step::Start }; N_OUT],
             len: 0,
             params: [Param::EMPTY; DOF],
             param_len: self.param_len,
-            mark_names: [""; NOUT],
+            mark_names: [""; N_OUT],
             mark_len: self.mark_len,
         };
         let mut i = 0;
@@ -831,15 +831,15 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
                 _ => false,
             };
             if is_move {
-                assert!(out.len < NOUT, "NOUT too small for with_joint_spheres");
+                assert!(out.len < N_OUT, "N_OUT too small for with_joint_spheres");
                 out.steps[out.len] = Step::Sphere(joint_radius);
                 out.len += 1;
             }
-            assert!(out.len < NOUT, "NOUT too small for with_joint_spheres");
+            assert!(out.len < N_OUT, "N_OUT too small for with_joint_spheres");
             out.steps[out.len] = step;
             out.len += 1;
             if is_move {
-                assert!(out.len < NOUT, "NOUT too small for with_joint_spheres");
+                assert!(out.len < N_OUT, "N_OUT too small for with_joint_spheres");
                 out.steps[out.len] = Step::Sphere(joint_radius);
                 out.len += 1;
             }
