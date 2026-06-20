@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+//todo000000 need to update the editor to work with linkage![...], or switch to a simpler pattern of just including the .lb.rs file after LinkageFixed::start() --- IGNORE ---
 
 use core::f32::consts::PI;
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
@@ -525,7 +526,10 @@ fn parse_number_or_constant(
 }
 
 fn looks_like_integer(s: &str) -> bool {
-    let digits = s.strip_prefix('-').or_else(|| s.strip_prefix('+')).unwrap_or(s);
+    let digits = s
+        .strip_prefix('-')
+        .or_else(|| s.strip_prefix('+'))
+        .unwrap_or(s);
     !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
 }
 
@@ -831,24 +835,30 @@ impl Turtle {
             pen: Pen::Down,
             color: Color::new(1.0, 1.0, 1.0),
             width: 0.1,
-            remembered: [(None, TurtleState {
-                pose: Pose::start(),
-                pen: Pen::Down,
-                color: Color::new(1.0, 1.0, 1.0),
-                width: 0.1,
-            }); 16],
+            remembered: [(
+                None,
+                TurtleState {
+                    pose: Pose::start(),
+                    pen: Pen::Down,
+                    color: Color::new(1.0, 1.0, 1.0),
+                    width: 0.1,
+                },
+            ); 16],
             remembered_len: 0,
         }
     }
 
     fn mark(&mut self, name: &'static str) {
         if self.remembered_len < 16 {
-            self.remembered[self.remembered_len] = (Some(name), TurtleState {
-                pose: self.pose,
-                pen: self.pen,
-                color: self.color,
-                width: self.width,
-            });
+            self.remembered[self.remembered_len] = (
+                Some(name),
+                TurtleState {
+                    pose: self.pose,
+                    pen: self.pen,
+                    color: self.color,
+                    width: self.width,
+                },
+            );
             self.remembered_len += 1;
         }
     }
@@ -1148,7 +1158,12 @@ mod tests {
 
     #[test]
     fn rejects_integer_args() {
-        for bad in [".forward(1)", ".yaw(90)", ".up(2)", ".define_param(\"x\", 1)"] {
+        for bad in [
+            ".forward(1)",
+            ".yaw(90)",
+            ".up(2)",
+            ".define_param(\"x\", 1)",
+        ] {
             let program = format!("LinkageFixed::start()\n{bad}\n");
             let result = render_program(&program, &[]);
             assert!(result.is_err(), "`{bad}` should be rejected as integer");

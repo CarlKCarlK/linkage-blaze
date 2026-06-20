@@ -1,15 +1,90 @@
 #![cfg(feature = "alloc")]
 
-use linkage_blaze_core::{LinkageFixed, LinkageBuf, Rgb888};
+use linkage_blaze_core::{LinkageBuf, LinkageFixed, Rgb888};
 
 mod common_linkage_tests;
 use common_linkage_tests::assert_linkages_equivalent;
 
-// Test code uses direct definitions for simplicity. The linkage_fixed! macro pattern
-// is demonstrated in app code (display.rs, lib.rs) where include!() works well at const level.
+/// `.lb.rs` convention:
+///   - A `.lb.rs` file is a complete Rust expression.
+///   - It contains one `linkage![ ... ]` invocation.
+///   - The body is a fluent DSL method-chain suffix with leading-dot methods.
+///   - The including macro (`linkage_fixed!` or `linkage_buf!`) defines
+///     `__linkage_blaze_start!` before `include!`, selecting the storage type.
+///   - The file must not call `start!()` or define any macro itself.
+///   - The outer macros support optional numeric type context: file name first.
 
+/// Defined once at top level so `$($chain:tt)*` is valid here (not inside
+/// any outer macro template). Calls `__linkage_blaze_start!()` which the
+/// including macro defines locally before `include!($path)`.
+macro_rules! linkage {
+    ($($chain:tt)*) => {
+        (__linkage_blaze_start!()) $($chain)*
+    };
+}
 
+macro_rules! linkage_fixed {
+    ($path:literal) => {{
+        macro_rules! __linkage_blaze_start { () => { LinkageFixed::start() } }
+        include!($path)
+    }};
 
+    ($path:literal, $dof:expr, $n:expr) => {{
+        let linkage: LinkageFixed<$dof, $n> = linkage_fixed!($path);
+        linkage
+    }};
+}
+
+macro_rules! linkage_buf {
+    ($path:literal) => {{
+        macro_rules! __linkage_blaze_start { () => { LinkageBuf::start() } }
+        include!($path)
+    }};
+
+    ($path:literal, $dof:expr) => {{
+        let linkage: LinkageBuf<$dof> = linkage_buf!($path);
+        linkage
+    }};
+}
+
+const CLOCK_FIXED: LinkageFixed<2, 128> = linkage_fixed!("linkages/clock.lb.rs");
+const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 128> =
+    linkage_fixed!("linkages/clock.lb.rs", 2, 128);
+
+#[test]
+fn linkage_fixed_include_works_in_function_body() {
+    let clock: LinkageFixed<2, 128> = linkage_fixed!("linkages/clock.lb.rs");
+    let clock_explicit = linkage_fixed!("linkages/clock.lb.rs", 2, 128);
+
+    assert_eq!(clock.view().dof(), 2);
+    assert_eq!(clock_explicit.view().dof(), 2);
+    let params = [0.25_f32, 0.5];
+    let p1 = CLOCK_FIXED.view().final_pose(&params).position();
+    let p2 = clock.view().final_pose(&params).position();
+    assert!(p1.is_close_to(&p2, 1e-5));
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn linkage_buf_include_works() {
+    let clock: LinkageBuf<2> = linkage_buf!("linkages/clock.lb.rs");
+    let clock_explicit = linkage_buf!("linkages/clock.lb.rs", 2);
+
+    assert_eq!(clock.view().dof(), 2);
+    assert_eq!(clock_explicit.view().dof(), 2);
+    let params = [0.25_f32, 0.5];
+    let p_fixed = CLOCK_FIXED.view().final_pose(&params).position();
+    let p_buf = clock.view().final_pose(&params).position();
+    assert!(p_fixed.is_close_to(&p_buf, 1e-5));
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn clock_from_file_both_storage_types() {
+    let buf: LinkageBuf<2> = linkage_buf!("linkages/clock.lb.rs");
+    let params = [0.25, 0.5];
+    assert_linkages_equivalent(&CLOCK_FIXED, &buf, &params);
+}
 
 #[cfg(feature = "alloc")]
 #[test]
@@ -28,7 +103,9 @@ fn conversion_linkage_fixed_to_buf() {
     let buf_result = buf.view().final_pose(&params);
 
     assert!(
-        fixed_result.position().is_close_to(&buf_result.position(), 1e-5),
+        fixed_result
+            .position()
+            .is_close_to(&buf_result.position(), 1e-5),
         "Converted linkage should produce same results"
     );
 }
@@ -45,6 +122,7 @@ fn linkage_buf_append_combines_params_and_steps() {
         .define_param("y", 0.75)
         .left_param("y", 0.0, 5.0);
 
+    // todo0000000 what are these right hand side numbers? needed? in best order?
     // Append them to create a combined linkage with DOF=2
     let c: LinkageBuf<2> = a.append::<1, 2>(b);
 
@@ -55,7 +133,9 @@ fn linkage_buf_append_combines_params_and_steps() {
     // Expected position: forward 5.0 (at x=0.5) then left 3.75 (at y=0.75)
     // Final position should be at approximately (5.0, 3.75, 0.0)
     assert!(
-        final_pose.position().is_close_to(&linkage_blaze_core::Vec3::from([5.0, 3.75, 0.0]), 1e-5),
+        final_pose
+            .position()
+            .is_close_to(&linkage_blaze_core::Vec3::from([5.0, 3.75, 0.0]), 1e-5),
         "Combined linkage should produce correct pose: got {:?}",
         final_pose.position()
     );
@@ -76,6 +156,8 @@ fn linkage_buf_extend_view_combines_from_view() {
     let buf_a: LinkageBuf<1> = LinkageBuf::from(&FIXED_A);
     let view_b = FIXED_B.view();
 
+    // todo0000000 what are these right hand side numbers? needed? in best order?
+
     let combined: LinkageBuf<2> = buf_a.extend_view::<1, 2>(view_b);
 
     // Verify the result
@@ -83,7 +165,8 @@ fn linkage_buf_extend_view_combines_from_view() {
     let pose = combined.view().final_pose(&params);
 
     assert!(
-        pose.position().is_close_to(&linkage_blaze_core::Vec3::from([5.0, 3.75, 0.0]), 1e-5),
+        pose.position()
+            .is_close_to(&linkage_blaze_core::Vec3::from([5.0, 3.75, 0.0]), 1e-5),
         "Extended linkage should produce correct pose"
     );
 }
@@ -146,7 +229,7 @@ fn real_clock_fixed() {
     assert!(LINKAGE.view().len() > 20, "Clock should have many steps");
 }
 
-/// Test clock with LinkageBuf using direct definition (include!() patterns are complex in macro context)
+/// Test clock with LinkageBuf using direct definition
 #[cfg(feature = "alloc")]
 #[test]
 fn real_clock_buf() {
@@ -204,7 +287,6 @@ fn real_clock_buf() {
 }
 
 /// Test that both clock definitions produce identical results
-/// Both use direct definition of the fluent DSL chain
 #[cfg(feature = "alloc")]
 #[test]
 fn real_clock_definition_works_with_both_storage_types() {
@@ -309,8 +391,7 @@ fn real_clock_definition_works_with_both_storage_types() {
     assert_linkages_equivalent(&LINKAGE_FIXED, &linkage_buf, &params);
 }
 
-/// Test armatron with LinkageFixed using direct definition
-#[cfg(feature = "alloc")]
+/// Test armatron with LinkageFixed using direct definition#[cfg(feature = "alloc")]
 #[test]
 fn real_armatron_fixed() {
     const LINKAGE: LinkageFixed<6, 64> = LinkageFixed::start()
@@ -390,7 +471,6 @@ fn real_armatron_buf() {
 }
 
 /// Test that both armatron definitions produce identical results
-/// Both use direct definition of the fluent DSL chain
 #[cfg(feature = "alloc")]
 #[test]
 fn real_armatron_definition_works_with_both_storage_types() {
@@ -482,6 +562,8 @@ fn armatron_buf_append_combines_limbs() {
         .yaw_param("bend elbow", 90.0, -90.0)
         .forward(3.0);
 
+    // todo0000000 what are these right hand side numbers? needed? in best order?
+
     // Combine upper and forearm
     let combined_arm: LinkageBuf<3> = upper_arm.append::<1, 3>(forearm);
 
@@ -494,7 +576,11 @@ fn armatron_buf_append_combines_limbs() {
     let steps = combined_arm.view().len();
     // 1 Start + 1 yaw + 1 pen_color + 1 pen_width + 1 up + 1 pitch + 1 forward (from upper_arm)
     // + 1 yaw + 1 forward (from forearm) = 9 steps
-    assert!(steps >= 9, "Combined arm should have steps from both limbs, got {}", steps);
+    assert!(
+        steps >= 9,
+        "Combined arm should have steps from both limbs, got {}",
+        steps
+    );
 
     // Final pose should exist and be valid
     let final_position = pose.position();

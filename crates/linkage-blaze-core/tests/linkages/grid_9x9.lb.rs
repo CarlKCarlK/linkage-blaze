@@ -1,4 +1,5 @@
-LinkageFixed::start().pen_color(Rgb888::CSS_DARK_SLATE_GRAY)
+linkage![
+    .pen_color(Rgb888::CSS_DARK_SLATE_GRAY)
     .mark("origin")
     // Horizontal lines: snake along forward, step left
     .pen_up().left(-4.0).forward(-4.0)
@@ -26,3 +27,4 @@ LinkageFixed::start().pen_color(Rgb888::CSS_DARK_SLATE_GRAY)
     .pen_up().forward(1.0).pen_down().left(8.0)
     .pen_up()
     .restore("origin")
+]

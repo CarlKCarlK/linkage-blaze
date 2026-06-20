@@ -204,8 +204,16 @@ fn scale_rgb565_channel(value: u8, max: u8) -> u8 {
 
 // ---- Three.js viewer exports ----
 
-const VIEWER_LINKAGE: LinkageFixed<6, 25> =
-    include!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
+macro_rules! linkage {
+    ($($chain:tt)*) => {
+        (__linkage_blaze_start!()) $($chain)*
+    };
+}
+
+const VIEWER_LINKAGE: LinkageFixed<6, 25> = {
+    macro_rules! __linkage_blaze_start { () => { LinkageFixed::start() } }
+    include!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs")
+};
 
 #[wasm_bindgen]
 pub fn dof() -> usize {
@@ -224,7 +232,7 @@ pub fn param_default(index: usize) -> f32 {
 
 #[wasm_bindgen]
 pub fn len() -> usize {
-    VIEWER_LINKAGE.len()
+    VIEWER_LINKAGE.view().len()
 }
 
 #[wasm_bindgen]
@@ -234,6 +242,7 @@ pub fn linkage_points(params: Vec<f32>) -> Vec<f32> {
         .try_into()
         .expect("expected linkage param count");
     VIEWER_LINKAGE
+        .view()
         .poses(params)
         .map(Pose::position)
         .flat_map(Vec3::into_array)
