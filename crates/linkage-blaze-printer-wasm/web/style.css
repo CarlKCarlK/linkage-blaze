@@ -1,0 +1,145 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  background: #f0f2f5;
+  color: #222;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  height: 100dvh;
+}
+
+.viewport {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+#printer-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-left: 1px solid #dee2e6;
+  overflow-y: auto;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+button,
+.file-btn {
+  padding: 6px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+button:hover:not(:disabled),
+.file-btn:hover {
+  background: #e9ecef;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.file-btn input[type="file"] {
+  display: none;
+}
+
+#play-btn.playing {
+  background: #156082;
+  color: #fff;
+  border-color: #0d4a63;
+}
+
+.speed-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.speed-row label {
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+#speed-display {
+  font-size: 12px;
+  color: #6c757d;
+  white-space: nowrap;
+}
+
+.toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toggle-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.status-row .label {
+  color: #6c757d;
+}
+
+#progress-bar {
+  width: 100%;
+  height: 6px;
+  accent-color: #156082;
+}
+
+.hint {
+  margin-top: auto;
+  font-size: 12px;
+  color: #6c757d;
+  line-height: 1.5;
+}

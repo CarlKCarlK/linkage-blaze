@@ -1,0 +1,14 @@
+[package]
+name = "linkage-blaze-printer-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+linkage-blaze-core = { workspace = true, features = ["alloc"] }
+wasm-bindgen = "=0.2.118"
+
+[dev-dependencies]
