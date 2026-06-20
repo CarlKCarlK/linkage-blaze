@@ -46,7 +46,7 @@ fn linkage_fixed_include_works_in_function_body() {
 #[cfg(feature = "alloc")]
 #[test]
 fn linkage_buf_include_works() {
-    let clock: LinkageBuf<2> = linkage_buf!("linkages/clock.lb.rs");
+    let clock = linkage_buf!("linkages/clock.lb.rs", 2);
     let clock_explicit = linkage_buf!("linkages/clock.lb.rs", 2);
 
     assert_eq!(clock.view().dof(), 2);
@@ -60,7 +60,7 @@ fn linkage_buf_include_works() {
 #[cfg(feature = "alloc")]
 #[test]
 fn clock_from_file_both_storage_types() {
-    let buf: LinkageBuf<2> = linkage_buf!("linkages/clock.lb.rs");
+    let buf = linkage_buf!("linkages/clock.lb.rs", 2);
     let params = [0.25, 0.5];
     assert_linkages_equivalent(&CLOCK_FIXED, &buf, &params);
 }
@@ -75,7 +75,7 @@ fn clock_hands_fixed_dims() {
 
 #[test]
 fn clock_hands_fixed_and_buf_equivalent() {
-    let buf: LinkageBuf<2> = LinkageBuf::from(&CLOCK_HANDS);
+    let buf = LinkageBuf::from(&CLOCK_HANDS);
     let params = [0.3_f32, 0.7];
     assert_linkages_equivalent(&CLOCK_HANDS, &buf, &params);
 }
@@ -102,8 +102,8 @@ fn armatron_component_linkages_fixed_dims() {
 
 #[test]
 fn armatron_component_linkages_fixed_and_buf_equivalent() {
-    let camera_control_buf: LinkageBuf<3> = linkage_buf!("linkages/camera_control.lb.rs");
-    let armatron1_buf: LinkageBuf<6> = linkage_buf!("linkages/armatron1.lb.rs");
+    let camera_control_buf = linkage_buf!("linkages/camera_control.lb.rs", 3);
+    let armatron1_buf = linkage_buf!("linkages/armatron1.lb.rs", 6);
 
     let vc_params = [0.5_f32, 0.4, 0.6];
     assert_linkages_equivalent(&CAMERA_CONTROL, &camera_control_buf, &vc_params);
@@ -114,7 +114,7 @@ fn armatron_component_linkages_fixed_and_buf_equivalent() {
 
 #[test]
 fn armatron_grid_fixed_and_buf_equivalent() {
-    let grid_buf: LinkageBuf<0> = linkage_buf!("linkages/grid_9x9.lb.rs");
+    let grid_buf = linkage_buf!("linkages/grid_9x9.lb.rs", 0);
     let params: [f32; 0] = [];
     assert_linkages_equivalent(&GRID_9X9, &grid_buf, &params);
 }
@@ -171,8 +171,7 @@ fn conversion_linkage_fixed_to_buf() {
         .forward_param("x", 0.0, 10.0)
         .left_param("y", 0.0, 5.0);
 
-    // Convert fixed to buf
-    let buf: LinkageBuf<2> = LinkageBuf::from(&FIXED);
+    let buf = LinkageBuf::from(&FIXED);
 
     let params = [0.5, 0.75];
     let fixed_result = FIXED.view().final_pose(&params);
@@ -189,7 +188,6 @@ fn conversion_linkage_fixed_to_buf() {
 #[cfg(feature = "alloc")]
 #[test]
 fn linkage_buf_combine_combines_params_and_steps() {
-    // Create two simple LinkageBuf instances
     let a = LinkageBuf::<1>::start()
         .define_param("x", 0.5)
         .forward_param("x", 0.0, 10.0);
@@ -199,15 +197,11 @@ fn linkage_buf_combine_combines_params_and_steps() {
         .left_param("y", 0.0, 5.0);
 
     // todo0000000 what are these right hand side numbers? needed? in best order?
-    // Combine them to create a combined linkage with DOF=2
-    let c: LinkageBuf<2> = a.combine(b);
+    let c = a.combine(b);
 
-    // Verify combined linkage has correct DOF and evaluation
     let params = [0.5, 0.75];
     let final_pose = c.view().final_pose(&params);
 
-    // Expected position: forward 5.0 (at x=0.5) then left 3.75 (at y=0.75)
-    // Final position should be at approximately (5.0, 3.75, 0.0)
     assert!(
         final_pose
             .position()
@@ -228,15 +222,13 @@ fn linkage_buf_combine_ref_combines_from_view() {
         .define_param("y", 0.75)
         .left_param("y", 0.0, 5.0);
 
-    // Create LinkageBuf from fixed, then combine_ref with a view
-    let buf_a: LinkageBuf<1> = LinkageBuf::from(&FIXED_A);
+    let buf_a = LinkageBuf::from(&FIXED_A);
     let view_b = FIXED_B.view();
 
     // todo0000000 what are these right hand side numbers? needed? in best order?
 
-    let combined: LinkageBuf<2> = buf_a.combine_ref(view_b);
+    let combined = buf_a.combine_ref(view_b);
 
-    // Verify the result
     let params = [0.5, 0.75];
     let pose = combined.view().final_pose(&params);
 
@@ -271,15 +263,11 @@ fn armatron_buf_combine_combines_limbs() {
 
     // todo0000000 what are these right hand side numbers? needed? in best order?
 
-    // Combine upper and forearm
-    let combined_arm: LinkageBuf<3> = upper_arm.combine(forearm);
+    let combined_arm = upper_arm.combine(forearm);
 
-    // Verify the combined arm produces consistent results
     let params = [0.5, 0.5, 0.5]; // spin_whole_arm, lower_arm, bend_elbow
     let pose = combined_arm.view().final_pose(&params);
 
-    // Should have moved forward 3.0 (from upper_arm) + 3.0 (from forearm) = 6.0 along initial direction
-    // Upper arm is at middle position for rotation and pitch
     let steps = combined_arm.view().len();
     // 1 Start + 1 yaw + 1 pen_color + 1 pen_width + 1 up + 1 pitch + 1 forward (from upper_arm)
     // + 1 yaw + 1 forward (from forearm) = 9 steps
@@ -289,7 +277,6 @@ fn armatron_buf_combine_combines_limbs() {
         steps
     );
 
-    // Final pose should exist and be valid
     let final_position = pose.position();
     assert!(
         final_position[2] >= 2.0, // Should be up by at least 2.5
