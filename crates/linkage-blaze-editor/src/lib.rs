@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//todo000000 need to update the editor to work with linkage![...], or switch to a simpler pattern of just including the .lb.rs file after LinkageFixed::start() --- IGNORE ---
+//todo000000 need to update the editor to work with linkage![...], or switch to a simpler pattern of just including the .lb.rs file after LinkageFixed::start() --- IGNORE --- (may no longer apply)
 
 use core::f32::consts::PI;
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
@@ -76,7 +76,7 @@ fn parse_overrides(json: &str) -> Vec<(String, f32)> {
 
 fn parse_method_call(line_number: usize, line: &str) -> Result<Option<MethodCall>, String> {
     let line = strip_rust_comment(line).trim();
-    if line.is_empty() || line == "LinkageFixed::start()" {
+    if line.is_empty() || line == "LinkageFixed::start()" || is_linkage_macro_wrapper(line) {
         return Ok(None);
     }
 
@@ -114,6 +114,11 @@ fn parse_method_call(line_number: usize, line: &str) -> Result<Option<MethodCall
         name: name.to_owned(),
         args,
     }))
+}
+
+fn is_linkage_macro_wrapper(line: &str) -> bool {
+    let line = line.trim_end_matches(';').trim();
+    matches!(line, "linkage![" | "linkage! [" | "]")
 }
 
 fn split_args(line_number: usize, args: &str) -> Result<Vec<String>, String> {
@@ -1153,6 +1158,39 @@ mod tests {
                 &[],
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn accepts_linkage_macro_wrapper() {
+        let result = render_program(
+            r#"linkage! [
+    .define_param("x", 0.5)
+    .forward_param("x", 0.0, 10.0)
+    .pen_color(Rgb888::new(245, 238, 210))
+    .disk(1.0)
+]
+"#,
+            &[],
+        );
+        assert!(
+            result.is_ok(),
+            "linkage macro wrapper should be accepted: {result:?}"
+        );
+    }
+
+    #[test]
+    fn accepts_compact_linkage_macro_wrapper() {
+        let result = render_program(
+            r#"linkage![
+    .forward(1.0)
+]
+"#,
+            &[],
+        );
+        assert!(
+            result.is_ok(),
+            "compact linkage macro wrapper should be accepted: {result:?}"
         );
     }
 

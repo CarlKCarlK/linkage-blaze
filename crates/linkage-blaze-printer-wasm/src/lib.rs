@@ -20,7 +20,9 @@ pub struct PrinterSimWasm {
 impl PrinterSimWasm {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        Self { sim: PrinterSim::new("") }
+        Self {
+            sim: PrinterSim::new(""),
+        }
     }
 
     /// Replace the current G-code and reset playback to the start.
@@ -122,9 +124,9 @@ pub fn printer_draw_items(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
     draw_items_from(x_mm, y_mm, z_mm)
 }
 
-/// Four kinematic poses for the Cartesian printer as a flat `[x,y,z, ...]` array (12 floats).
+/// Kinematic poses for the bed-slinger printer as a flat `[x,y,z, ...]` array.
 ///
-/// pose 0 — frame origin; pose 1 — gantry height; pose 2 — X carriage; pose 3 — nozzle tip.
+/// X and Z move the nozzle; Y moves the bed under the fixed-Y nozzle.
 #[wasm_bindgen(js_name = printerPoints)]
 pub fn printer_points(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
     printer_points_from(x_mm, y_mm, z_mm)

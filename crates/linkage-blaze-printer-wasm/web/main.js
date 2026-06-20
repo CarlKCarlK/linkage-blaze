@@ -4,8 +4,10 @@ import init, { PrinterSimWasm, printerDrawItems } from "../pkg/linkage_blaze_pri
 
 // ── Printer build volume (mm) ─────────────────────────────────────────────────
 const BUILD_X = 220;
-const BUILD_Y = 220;
+const BUILD_Y = 240;
 const BUILD_Z = 250;
+const FRAME_X = 300;
+const FRAME_CENTER_X = FRAME_X / 2;
 
 // Floats per draw item: [type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2]
 const STRIDE = 12;
@@ -51,41 +53,57 @@ controls.mouseButtons = {
 // Ground grid at the build-plate level (Z = 0)
 const grid = new THREE.GridHelper(500, 50, 0xb0b8c4, 0xdde0e6);
 grid.rotation.x = Math.PI / 2;
-grid.position.set(BUILD_X / 2, BUILD_Y / 2, 0);
+grid.position.set(FRAME_CENTER_X, 0, 0);
 scene.add(grid);
 
 // ── Materials ─────────────────────────────────────────────────────────────────
 const extrusionMaterial = new THREE.LineBasicMaterial({ color: 0x156082 });
 const travelMaterial = new THREE.LineBasicMaterial({ color: 0xadb5bd });
 const frameMaterial = new THREE.LineBasicMaterial({ color: 0xced4da });
-const bedMaterial = new THREE.MeshBasicMaterial({ color: 0xdde2e8, side: THREE.DoubleSide });
+
+// ── Helper: cylinder mesh between two 3-D points ──────────────────────────────
+function makeCylinder(x1, y1, z1, x2, y2, z2, radius, color) {
+  const start = new THREE.Vector3(x1, y1, z1);
+  const end   = new THREE.Vector3(x2, y2, z2);
+  const length = start.distanceTo(end);
+  if (length < 0.01) return null;
+  const geo  = new THREE.CylinderGeometry(radius, radius, length, 10);
+  const mat  = new THREE.MeshBasicMaterial({ color });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(start.clone().add(end).multiplyScalar(0.5));
+  mesh.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    end.clone().sub(start).normalize(),
+  );
+  return mesh;
+}
 
 // ── Printer structure group ────────────────────────────────────────────────────
-// Static parts (bed + right Z rail) live here alongside dynamic draw-item objects.
 const printerGroup = new THREE.Group();
 scene.add(printerGroup);
 
-// Build plate — flat slab at Z = 0
-const bedMesh = new THREE.Mesh(new THREE.BoxGeometry(BUILD_X, BUILD_Y, 4), bedMaterial);
-bedMesh.position.set(BUILD_X / 2, BUILD_Y / 2, -2);
-printerGroup.add(bedMesh);
-
+// Static frame: two full-height Z rail pillars + top connecting bar
+const FRAME_COLOR = 0x3a4555;
+const RAIL_H = BUILD_Z + 15;   // rails extend 15 mm above print volume
+[
+  makeCylinder(0,       0, 0, 0,       0, RAIL_H, 4, FRAME_COLOR),  // left Z rail
+  makeCylinder(FRAME_X, 0, 0, FRAME_X, 0, RAIL_H, 4, FRAME_COLOR),  // right Z rail
+  makeCylinder(0, 0, RAIL_H, FRAME_X, 0, RAIL_H,  3, FRAME_COLOR),  // top cross-bar
+].forEach(m => m && printerGroup.add(m));
 
 // Sub-group for dynamic draw items from the linkage (rebuilt every frame)
 const dynamicGroup = new THREE.Group();
 printerGroup.add(dynamicGroup);
 
 // ── G-code path geometry ──────────────────────────────────────────────────────
-// Incremental approach: pre-allocate buffers sized for all segments at load time.
-// Each frame we append only new vertices and update drawRange.count.
-// This avoids O(n) malloc/free on every frame that eventually exhausts the WASM heap.
+// Infrastructure is retained so it can be re-enabled; calls are commented out below.
 let extrusionLines = null;
 let travelLines = null;
-let extrusionBuf = null;   // Float32Array backing extrusionLines geometry
-let travelBuf = null;      // Float32Array backing travelLines geometry
-let extrusionVertCount = 0; // floats written so far
+let extrusionBuf = null;
+let travelBuf = null;
+let extrusionVertCount = 0;
 let travelVertCount = 0;
-let lastGeomIndex = 0;     // sim segment index as of last geometry update
+let lastGeomIndex = 0;
 let frameBox = null;
 
 // ── WASM + simulation ─────────────────────────────────────────────────────────
@@ -93,22 +111,20 @@ await init();
 let sim = new PrinterSimWasm();
 let playing = false;
 let firstFit = true;
-let segAccum = 0.0;  // fractional segment accumulator for sub-1 speeds
-let lastGcode = "";  // kept for sim recovery after a WASM panic
+let segAccum = 0.0;
+let lastGcode = "";
 
 updatePrinterFromDrawItems(0, 0, 0);
 updateSpeedDisplay();
 
 // ── Sim recovery ──────────────────────────────────────────────────────────────
-// wasm-bindgen's RefCell is permanently locked after any Rust panic.
-// Drop the broken object and create a fresh one, re-loading from lastGcode.
 function recoverSim() {
   let fresh = new PrinterSimWasm();
   if (lastGcode) {
     try {
       fresh.load(lastGcode);
       fresh.reset();
-      initGCodeGeometry();
+      // initGCodeGeometry();  // G-code path rendering disabled
       refreshAll();
     } catch (e) {
       console.error("Sim recovery load also failed:", e.message);
@@ -126,8 +142,6 @@ fileInput.addEventListener("change", async () => {
   try {
     sim.load(text);
   } catch (e) {
-    // wasm-bindgen permanently locks the RefCell on any Rust panic.
-    // Recreate the sim object to get a fresh, unlocked RefCell.
     console.error("G-code load failed (recreating sim):", e.message);
     sim = new PrinterSimWasm();
     return;
@@ -140,7 +154,7 @@ fileInput.addEventListener("change", async () => {
   playBtn.disabled = false;
   stepBtn.disabled = false;
   firstFit = true;
-  initGCodeGeometry();
+  // initGCodeGeometry();  // G-code path rendering disabled
   refreshAll();
 });
 
@@ -154,13 +168,15 @@ resetBtn.addEventListener("click", () => {
   playing = false;
   segAccum = 0;
   updatePlayBtn();
-  // Re-init geometry to reset draw ranges back to zero without re-parsing.
-  initGCodeGeometry();
+  // initGCodeGeometry();  // G-code path rendering disabled
   refreshAll();
 });
 
 playBtn.addEventListener("click", () => {
-  if (sim.isDone()) sim.reset();
+  if (sim.isDone()) {
+    sim.reset();
+    // initGCodeGeometry();  // G-code path rendering disabled
+  }
   playing = !playing;
   segAccum = 0;
   updatePlayBtn();
@@ -208,8 +224,6 @@ fitDefault();
   controls.update();
 
   if (playing) {
-    // Slider 1–400 maps to 0.05–20 segs/frame (value/20).
-    // Fractional accumulator lets speed go below 1 seg/frame.
     segAccum += Number(speedSlider.value) / 20;
     const toAdvance = Math.floor(segAccum);
     if (toAdvance > 0) {
@@ -217,7 +231,6 @@ fitDefault();
       try {
         advanceAndRefresh(toAdvance);
       } catch (e) {
-        // WASM RefCell may be permanently locked; stop playback and attempt recovery.
         console.error("WASM advance error:", e.message);
         playing = false;
         updatePlayBtn();
@@ -236,10 +249,10 @@ fitDefault();
 // ── Draw-items printer update ─────────────────────────────────────────────────
 // Calls printerDrawItems() from WASM and rebuilds dynamicGroup each frame.
 // Each draw item is 12 floats: [type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2]
-//   type 0 = Stroke   (x0..z0 = start, x1..z1 = end, size1 = width)
+//   type 0 = Stroke   (x0..z0 = start, x1..z1 = end, size1 = width in mm)
 //   type 1 = Sphere   (x0..z0 = center, size1 = radius)
-//   type 2 = Disk     (x0..z0 = center, size1 = radius)  [unused by printer]
-//   type 3 = Ring     (x0..z0 = center, size1 = radius, size2 = width) [unused]
+//   type 2 = Disk     (x0..z0 = center, size1 = radius) — used for heated bed
+//   type 3 = Ring     (x0..z0 = center, size1 = radius, size2 = width)
 function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
   // Dispose and remove all old dynamic objects
   for (let i = dynamicGroup.children.length - 1; i >= 0; i--) {
@@ -252,42 +265,41 @@ function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
   const items = printerDrawItems(toolX, toolY, toolZ);
 
   for (let i = 0; i + STRIDE <= items.length; i += STRIDE) {
-    const type = items[i];
-    const x0 = items[i + 1], y0 = items[i + 2], z0 = items[i + 3];
-    const x1 = items[i + 4], y1 = items[i + 5], z1 = items[i + 6];
-    const r = items[i + 7] / 255, g = items[i + 8] / 255, b = items[i + 9] / 255;
+    const type  = items[i];
+    const x0    = items[i + 1], y0 = items[i + 2], z0 = items[i + 3];
+    const x1    = items[i + 4], y1 = items[i + 5], z1 = items[i + 6];
+    const r     = items[i + 7] / 255, g = items[i + 8] / 255, b = items[i + 9] / 255;
     const size1 = items[i + 10];
 
     const color = new THREE.Color(r, g, b);
-    const mat = new THREE.MeshBasicMaterial({ color });
 
     if (type === 0) {
-      // Stroke — render as a cylinder tube between the two endpoints
-      const start = new THREE.Vector3(x0, y0, z0);
-      const end   = new THREE.Vector3(x1, y1, z1);
-      const length = start.distanceTo(end);
-      if (length < 0.01) continue;          // skip degenerate zero-length segments
-      const geo = new THREE.CylinderGeometry(2, 2, length, 6);
-      const mesh = new THREE.Mesh(geo, mat);
-      // CylinderGeometry is along Y; orient it along the segment direction
-      const mid = start.clone().add(end).multiplyScalar(0.5);
-      mesh.position.copy(mid);
-      mesh.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        end.clone().sub(start).normalize(),
-      );
-      dynamicGroup.add(mesh);
+      // Stroke — cylinder between two endpoints; radius = half pen-width
+      const radius = Math.max(1.0, size1 / 2);
+      const mesh = makeCylinder(x0, y0, z0, x1, y1, z1, radius, color);
+      if (mesh) dynamicGroup.add(mesh);
     } else if (type === 1) {
       // Sphere
-      const geo = new THREE.SphereGeometry(size1, 10, 7);
+      const geo  = new THREE.SphereGeometry(size1, 12, 8);
+      const mat  = new THREE.MeshBasicMaterial({ color });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x0, y0, z0);
       dynamicGroup.add(mesh);
     } else if (type === 2) {
-      // Disk
-      const geo = new THREE.CircleGeometry(size1, 16);
-      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
-      mesh.position.set(x0, y0, z0);
+      // Disk — flat circle lying in the XY plane (horizontal in our Z-up scene).
+      // CircleGeometry is already in the local XY plane, so no rotation needed.
+      const geo  = new THREE.CircleGeometry(size1, 48);
+      const opacity = color.r > 0.7 && color.g > 0.7 && color.b > 0.7 ? 0.35 : 0.82;
+      const mat  = new THREE.MeshBasicMaterial({
+        color,
+        depthWrite: false,
+        opacity,
+        side: THREE.DoubleSide,
+        transparent: true,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      const floorClearance = z0 <= 0.01 ? 1 : 0;
+      mesh.position.set(x0, y0, z0 + floorClearance);
       dynamicGroup.add(mesh);
     }
   }
@@ -295,7 +307,7 @@ function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
 
 function advanceAndRefresh(count) {
   sim.advance(count);
-  rebuildGCodeGeometry();
+  // rebuildGCodeGeometry();  // G-code path rendering disabled
   const [tx, ty, tz] = currentToolhead();
   updatePrinterFromDrawItems(tx, ty, tz);
   updateStatus();
@@ -309,7 +321,7 @@ function currentToolhead() {
 
 // ── G-code geometry ───────────────────────────────────────────────────────────
 function refreshAll() {
-  rebuildGCodeGeometry();
+  // rebuildGCodeGeometry();  // G-code path rendering disabled
   const [tx, ty, tz] = currentToolhead();
   updatePrinterFromDrawItems(tx, ty, tz);
   updateStatus();
@@ -319,9 +331,7 @@ function refreshAll() {
   }
 }
 
-// Called after sim.load() to create pre-allocated geometry buffers.
 function initGCodeGeometry() {
-  // Tear down any existing geometry
   if (extrusionLines) { scene.remove(extrusionLines); extrusionLines.geometry.dispose(); extrusionLines = null; }
   if (travelLines)    { scene.remove(travelLines);    travelLines.geometry.dispose();    travelLines = null; }
   if (frameBox)       { scene.remove(frameBox);       frameBox.geometry.dispose();       frameBox = null; }
@@ -333,11 +343,10 @@ function initGCodeGeometry() {
   const totalSegs = sim.segmentCount();
   if (totalSegs === 0) return;
 
-  // Worst case: every segment is extrusion or travel (6 floats each).
   extrusionBuf = new Float32Array(totalSegs * 6);
   travelBuf    = new Float32Array(totalSegs * 6);
 
-  const extGeo = new THREE.BufferGeometry();
+  const extGeo  = new THREE.BufferGeometry();
   const extAttr = new THREE.BufferAttribute(extrusionBuf, 3);
   extAttr.setUsage(THREE.DynamicDrawUsage);
   extGeo.setAttribute("position", extAttr);
@@ -345,7 +354,7 @@ function initGCodeGeometry() {
   extrusionLines = new THREE.LineSegments(extGeo, extrusionMaterial);
   scene.add(extrusionLines);
 
-  const trvGeo = new THREE.BufferGeometry();
+  const trvGeo  = new THREE.BufferGeometry();
   const trvAttr = new THREE.BufferAttribute(travelBuf, 3);
   trvAttr.setUsage(THREE.DynamicDrawUsage);
   trvGeo.setAttribute("position", trvAttr);
@@ -357,13 +366,12 @@ function initGCodeGeometry() {
   rebuildFrameBox();
 }
 
-// Called every frame/step to append newly revealed segments.
 function rebuildGCodeGeometry() {
   if (!extrusionLines) return;
   const curIdx = sim.currentIndex();
   if (curIdx === lastGeomIndex) return;
 
-  const newExtru = sim.extrusionSegmentsSince(lastGeomIndex);
+  const newExtru  = sim.extrusionSegmentsSince(lastGeomIndex);
   const newTravel = sim.travelSegmentsSince(lastGeomIndex);
   lastGeomIndex = curIdx;
 
@@ -384,11 +392,7 @@ function rebuildGCodeGeometry() {
 }
 
 function rebuildFrameBox() {
-  if (frameBox) {
-    scene.remove(frameBox);
-    frameBox.geometry.dispose();
-    frameBox = null;
-  }
+  if (frameBox) { scene.remove(frameBox); frameBox.geometry.dispose(); frameBox = null; }
   const bbox = sim.boundingBox();
   if (bbox[0] >= bbox[3]) return;
 
@@ -406,8 +410,8 @@ function rebuildFrameBox() {
 
 // ── Camera helpers ────────────────────────────────────────────────────────────
 function fitDefault() {
-  controls.target.set(BUILD_X / 2, BUILD_Y / 4, BUILD_Z / 4);
-  camera.position.set(BUILD_X * 1.8, -BUILD_Y * 1.2, BUILD_Z * 1.0);
+  controls.target.set(FRAME_CENTER_X, 0, BUILD_Z / 4);
+  camera.position.set(FRAME_CENTER_X + FRAME_X * 1.2, -BUILD_Y * 1.2, BUILD_Z * 1.0);
   camera.near = 1;
   camera.far = 5000;
   controls.minDistance = 30;
@@ -460,9 +464,9 @@ function updatePlayBtn() {
 }
 
 function updateStatus() {
-  const layer = sim.currentLayer();
+  const layer    = sim.currentLayer();
   const progress = sim.progress();
-  layerDisplay.textContent = sim.segmentCount() === 0 ? "—" : String(layer);
+  layerDisplay.textContent    = sim.segmentCount() === 0 ? "—" : String(layer);
   progressDisplay.textContent = sim.segmentCount() === 0 ? "—" : `${(progress * 100).toFixed(1)} %`;
   progressBar.value = progress;
 }

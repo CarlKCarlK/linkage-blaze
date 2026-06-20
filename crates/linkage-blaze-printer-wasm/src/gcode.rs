@@ -29,7 +29,11 @@ impl Default for GCodeState {
 }
 
 fn strip_comment(line: &str) -> &str {
-    if let Some(pos) = line.find(';') { &line[..pos] } else { line }
+    if let Some(pos) = line.find(';') {
+        &line[..pos]
+    } else {
+        line
+    }
 }
 
 fn parse_word(token: &str, letter: char) -> Option<f32> {
@@ -81,7 +85,9 @@ pub fn parse_gcode(text: &str) -> Vec<Segment> {
 
         let mut tokens = code_part.split_whitespace();
         let Some(first) = tokens.next() else { continue };
-        let Some((cmd_letter, cmd_number)) = parse_command(first) else { continue };
+        let Some((cmd_letter, cmd_number)) = parse_command(first) else {
+            continue;
+        };
 
         match (cmd_letter, cmd_number) {
             ('G', 0) | ('G', 1) => {
@@ -99,16 +105,32 @@ pub fn parse_gcode(text: &str) -> Vec<Segment> {
 
                 for token in tokens {
                     if let Some(value) = parse_word(token, 'X') {
-                        new_x = if state.xyz_absolute { value } else { state.x + value };
+                        new_x = if state.xyz_absolute {
+                            value
+                        } else {
+                            state.x + value
+                        };
                         has_xyz = true;
                     } else if let Some(value) = parse_word(token, 'Y') {
-                        new_y = if state.xyz_absolute { value } else { state.y + value };
+                        new_y = if state.xyz_absolute {
+                            value
+                        } else {
+                            state.y + value
+                        };
                         has_xyz = true;
                     } else if let Some(value) = parse_word(token, 'Z') {
-                        new_z = if state.xyz_absolute { value } else { state.z + value };
+                        new_z = if state.xyz_absolute {
+                            value
+                        } else {
+                            state.z + value
+                        };
                         has_xyz = true;
                     } else if let Some(value) = parse_word(token, 'E') {
-                        new_e = if state.e_absolute { value } else { state.e + value };
+                        new_e = if state.e_absolute {
+                            value
+                        } else {
+                            state.e + value
+                        };
                         has_e = true;
                     } else if let Some(value) = parse_word(token, 'F') {
                         state.f = value;
@@ -232,7 +254,11 @@ G1 X10 Y10 E2.0\n\
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/samples/mini_boat.gcode");
         let gcode = std::fs::read_to_string(path).expect("mini_boat.gcode missing");
         let segments = parse_gcode(&gcode);
-        assert!(segments.len() > 10_000, "expected many segments, got {}", segments.len());
+        assert!(
+            segments.len() > 10_000,
+            "expected many segments, got {}",
+            segments.len()
+        );
         // All segment coordinates should be finite (no NaN/inf from parse bugs)
         for seg in &segments {
             assert!(seg.x1.is_finite() && seg.y1.is_finite() && seg.z1.is_finite());

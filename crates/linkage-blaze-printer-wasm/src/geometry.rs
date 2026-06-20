@@ -36,8 +36,9 @@ impl BoundingBox {
         if self.empty {
             [0.0; 6]
         } else {
-            [self.min_x, self.min_y, self.min_z, self.max_x, self.max_y, self.max_z]
+            [
+                self.min_x, self.min_y, self.min_z, self.max_x, self.max_y, self.max_z,
+            ]
         }
     }
-
 }
