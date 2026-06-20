@@ -23,6 +23,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
+    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-printer-wasm --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
 
 # Alias for check-all
 build:
@@ -134,4 +135,25 @@ run-editor port=_editor_port:
     just check-editor
     just build-editor
     just serve-editor {{port}}
+
+# ── linkage-blaze-printer-wasm ────────────────────────────────────────────────
+
+_printer_crate := "crates/linkage-blaze-printer-wasm"
+_printer_www   := "crates/linkage-blaze-printer-wasm/web"
+_printer_port  := "8083"
+
+check-printer-wasm:
+    cargo check -p linkage-blaze-printer-wasm --target wasm32-unknown-unknown
+
+build-printer-wasm:
+    wasm-pack build {{_printer_crate}} --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
+
+serve-printer-wasm port=_printer_port:
+    -lsof -ti:{{port}} | xargs -r kill
+    cd {{_printer_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-printer-wasm port=_printer_port:
+    just check-printer-wasm
+    just build-printer-wasm
+    just serve-printer-wasm {{port}}
 

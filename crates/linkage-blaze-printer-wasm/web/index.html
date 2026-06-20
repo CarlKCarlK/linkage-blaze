@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D Printer Simulator</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="app">
+      <section class="viewport" aria-label="3D printer simulation view">
+        <canvas id="printer-canvas"></canvas>
+      </section>
+      <aside class="controls" aria-label="Printer controls">
+        <div class="toolbar">
+          <label class="file-btn">
+            Load G-code
+            <input id="file-input" type="file" accept=".gcode,.gco,.g,.nc" />
+          </label>
+          <button id="reset-btn" type="button">Reset</button>
+          <button id="play-btn" type="button" disabled>Play</button>
+        </div>
+
+        <div class="speed-row">
+          <label for="speed-slider">Speed</label>
+          <input id="speed-slider" type="range" min="1" max="500" value="20" />
+          <span id="speed-display">20 seg/frame</span>
+        </div>
+
+        <div class="toggle-row">
+          <label>
+            <input id="show-travel" type="checkbox" checked />
+            Show travel moves
+          </label>
+          <label>
+            <input id="show-frame" type="checkbox" checked />
+            Show print frame
+          </label>
+        </div>
+
+        <div class="status">
+          <div class="status-row">
+            <span class="label">Layer</span>
+            <span id="layer-display">—</span>
+          </div>
+          <div class="status-row">
+            <span class="label">Progress</span>
+            <span id="progress-display">—</span>
+          </div>
+          <progress id="progress-bar" value="0" max="1"></progress>
+        </div>
+
+        <p class="hint">
+          Left drag orbits · Right drag pans · Scroll zooms
+        </p>
+      </aside>
+    </main>
+    <script type="module" src="./main.js?v=1"></script>
+  </body>
+</html>
