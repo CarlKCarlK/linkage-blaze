@@ -1,4 +1,3 @@
-LinkageFixed::start()
     .define_param("hour", 0.0)
     .define_param("face spin", 0.5)
     // Common transform for the whole clock face.
@@ -36,7 +35,7 @@ LinkageFixed::start()
     .forward(11.0)
     // Hour hand
     .restore("face")
-    .pen_color(Rgb888::CSS_ANTIQUE_WHITE)
+    .pen_color(Rgb888::new(250, 235, 215))
     .pen_width(16.0)
     .yaw_param("hour", 360.0, 0.0)
     .forward(40.0)
@@ -54,5 +53,5 @@ LinkageFixed::start()
     .forward(60.0)
     // Hub
     .restore("face")
-    .pen_color(Rgb888::CSS_RED)
+    .pen_color(Rgb888::new(255, 0, 0))
     .disk(8.0)

@@ -5,13 +5,15 @@ _c6_args      := "--target riscv32imac-unknown-none-elf --release --no-default-f
 
 # ── Tests / checks ───────────────────────────────────────────────────────────
 
-# Run linkage-blaze-core tests (unit tests + doc tests)
+# Run linkage-blaze-core tests (unit tests + doc tests + alloc integration tests)
 test-core:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
 
 # Check and build all crates
 check-all:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
     env RUSTFLAGS="-D warnings" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="-D warnings" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
     env RUSTFLAGS="-D warnings" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
