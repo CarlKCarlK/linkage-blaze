@@ -68,19 +68,29 @@ impl PrinterSim {
     }
 
     pub fn extrusion_segments_flat(&self) -> Vec<f32> {
-        let mut flat = Vec::new();
-        for seg in self.segments[..self.current_index].iter().filter(|seg| seg.extruding) {
-            flat.extend_from_slice(&[seg.x0, seg.y0, seg.z0, seg.x1, seg.y1, seg.z1]);
-        }
-        flat
+        self.extrusion_segments_flat_since(0)
+    }
+
+    pub fn extrusion_segments_flat_since(&self, from_seg: usize) -> Vec<f32> {
+        let start = from_seg.min(self.current_index);
+        self.segments[start..self.current_index]
+            .iter()
+            .filter(|s| s.extruding)
+            .flat_map(|s| [s.x0, s.y0, s.z0, s.x1, s.y1, s.z1])
+            .collect()
     }
 
     pub fn travel_segments_flat(&self) -> Vec<f32> {
-        let mut flat = Vec::new();
-        for seg in self.segments[..self.current_index].iter().filter(|seg| !seg.extruding) {
-            flat.extend_from_slice(&[seg.x0, seg.y0, seg.z0, seg.x1, seg.y1, seg.z1]);
-        }
-        flat
+        self.travel_segments_flat_since(0)
+    }
+
+    pub fn travel_segments_flat_since(&self, from_seg: usize) -> Vec<f32> {
+        let start = from_seg.min(self.current_index);
+        self.segments[start..self.current_index]
+            .iter()
+            .filter(|s| !s.extruding)
+            .flat_map(|s| [s.x0, s.y0, s.z0, s.x1, s.y1, s.z1])
+            .collect()
     }
 
     pub fn bounding_box(&self) -> BoundingBox {
