@@ -3,7 +3,6 @@
 use core::convert::Infallible;
 
 use embassy_time::Instant;
-use embedded_graphics::prelude::WebColors;
 use embedded_graphics::{
     Pixel,
     pixelcolor::Rgb565,
