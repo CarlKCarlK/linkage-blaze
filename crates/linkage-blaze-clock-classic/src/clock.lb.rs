@@ -1,3 +1,4 @@
+linkage![
     .define_param("hour", 0.0)
     .define_param("face spin", 0.5)
     // Common transform for the whole clock face.
@@ -55,3 +56,4 @@
     .restore("face")
     .pen_color(Rgb888::new(255, 0, 0))
     .disk(8.0)
+]

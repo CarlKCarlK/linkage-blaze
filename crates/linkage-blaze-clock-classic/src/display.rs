@@ -20,13 +20,17 @@ use linkage_blaze_cyd::{
 };
 use static_cell::StaticCell;
 
-/// Simple pattern: just include the file after LinkageFixed::start()
-/// The .lb.rs file contains only method calls (`.define_param(...)`, etc)
-/// The type annotation at the call site determines the final type.
-macro_rules! linkage_fixed {
-    ($path:literal) => {
-        LinkageFixed::start() include!($path)
+macro_rules! linkage {
+    ($($chain:tt)*) => {
+        (__linkage_blaze_start!()) $($chain)*
     };
+}
+
+macro_rules! linkage_fixed {
+    ($path:literal) => {{
+        macro_rules! __linkage_blaze_start { () => { LinkageFixed::start() } }
+        include!($path)
+    }};
 
     ($path:literal, $dof:expr, $n:expr) => {{
         let linkage: LinkageFixed<$dof, $n> = linkage_fixed!($path);

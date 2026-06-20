@@ -1,3 +1,4 @@
+linkage![
     .define_param("raise hand", 0.5)
     .define_param("bend elbow", 0.5)
     .define_param("close hand", 0.0)
@@ -28,3 +29,4 @@
     .pen_up()
     .forward(0.25)
     .pen_down()
+]
