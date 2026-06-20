@@ -1,4 +1,3 @@
-start
     .define_param("hour", 0.0)
     .define_param("face spin", 0.5)
     // Common transform for the whole clock face.

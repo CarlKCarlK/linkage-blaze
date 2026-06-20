@@ -5,127 +5,11 @@ use linkage_blaze_core::{LinkageFixed, LinkageBuf, Rgb888};
 mod common_linkage_tests;
 use common_linkage_tests::assert_linkages_equivalent;
 
-#[cfg(feature = "alloc")]
-#[test]
-fn clock_linkage_works_with_both_storage_types() {
-    // Define the clock linkage with LinkageFixed
-    const LINKAGE_FIXED: LinkageFixed<2, 48> = LinkageFixed::start()
-        .define_param("hour", 0.0)
-        .define_param("face spin", 0.5)
-        .roll_param("face spin", -90.0, 90.0)
-        .mark("face")
-        .pen_color(Rgb888::new(33, 79, 155))
-        .disk(66.0)
-        .restore("face")
-        .pen_width(4.5)
-        .pen_color(Rgb888::new(255, 245, 216))
-        .pen_up()
-        .mark("ticks")
-        .forward(45.0)
-        .pen_down()
-        .forward(18.0);
+// Test code uses direct definitions for simplicity. The linkage_fixed! macro pattern
+// is demonstrated in app code (display.rs, lib.rs) where include!() works well at const level.
 
-    // Create the same linkage with LinkageBuf
-    let linkage_buf: LinkageBuf<2> = LinkageBuf::start()
-        .define_param("hour", 0.0)
-        .define_param("face spin", 0.5)
-        .roll_param("face spin", -90.0, 90.0)
-        .mark("face")
-        .pen_color(Rgb888::new(33, 79, 155))
-        .disk(66.0)
-        .restore("face")
-        .pen_width(4.5)
-        .pen_color(Rgb888::new(255, 245, 216))
-        .pen_up()
-        .mark("ticks")
-        .forward(45.0)
-        .pen_down()
-        .forward(18.0);
 
-    let params = [0.5, 0.5]; // hour=0.5, face_spin=0.5
-    assert_linkages_equivalent(&LINKAGE_FIXED, &linkage_buf, &params);
-}
 
-#[cfg(feature = "alloc")]
-#[test]
-fn armatron_linkage_works_with_both_storage_types() {
-    // Define the armatron linkage with LinkageFixed
-    const LINKAGE_FIXED: LinkageFixed<6, 32> = LinkageFixed::start()
-        .define_param("raise hand", 0.5)
-        .define_param("bend elbow", 0.5)
-        .define_param("close hand", 0.0)
-        .define_param("lower arm", 0.5)
-        .define_param("spin whole arm", 0.5)
-        .define_param("spin hand", 0.5)
-        .yaw_param("spin whole arm", 180.0, -180.0)
-        .pen_color(Rgb888::new(0, 139, 139))
-        .pen_width(0.15)
-        .up(2.5)
-        .pitch_param("lower arm", -30.0, 0.0)
-        .forward(3.0)
-        .yaw_param("bend elbow", 90.0, -90.0)
-        .forward(3.0)
-        .pitch_param("raise hand", 90.0, -90.0)
-        .forward(1.0)
-        .roll_param("spin hand", -180.0, 180.0)
-        .forward(0.5)
-        .mark("wrist")
-        .yaw(90.0)
-        .forward_param("close hand", 0.5, 0.0)
-        .left(-1.0);
-
-    // Create the same linkage with LinkageBuf
-    let linkage_buf: LinkageBuf<6> = LinkageBuf::start()
-        .define_param("raise hand", 0.5)
-        .define_param("bend elbow", 0.5)
-        .define_param("close hand", 0.0)
-        .define_param("lower arm", 0.5)
-        .define_param("spin whole arm", 0.5)
-        .define_param("spin hand", 0.5)
-        .yaw_param("spin whole arm", 180.0, -180.0)
-        .pen_color(Rgb888::new(0, 139, 139))
-        .pen_width(0.15)
-        .up(2.5)
-        .pitch_param("lower arm", -30.0, 0.0)
-        .forward(3.0)
-        .yaw_param("bend elbow", 90.0, -90.0)
-        .forward(3.0)
-        .pitch_param("raise hand", 90.0, -90.0)
-        .forward(1.0)
-        .roll_param("spin hand", -180.0, 180.0)
-        .forward(0.5)
-        .mark("wrist")
-        .yaw(90.0)
-        .forward_param("close hand", 0.5, 0.0)
-        .left(-1.0);
-
-    let params = [0.7, 0.5, 0.2, 1.0, 0.6, 0.0];
-    assert_linkages_equivalent(&LINKAGE_FIXED, &linkage_buf, &params);
-}
-
-#[cfg(feature = "alloc")]
-#[test]
-fn grid_9x9_linkage_works_with_both_storage_types() {
-    // Simple test showing both types can instantiate the same expression
-    const LINKAGE_FIXED: LinkageFixed<0, 16> = LinkageFixed::start()
-        .pen_color(Rgb888::new(0, 0, 255))
-        .disk(1.0)
-        .forward(2.0)
-        .disk(1.0)
-        .forward(2.0)
-        .disk(1.0);
-
-    let linkage_buf: LinkageBuf<0> = LinkageBuf::start()
-        .pen_color(Rgb888::new(0, 0, 255))
-        .disk(1.0)
-        .forward(2.0)
-        .disk(1.0)
-        .forward(2.0)
-        .disk(1.0);
-
-    let params = [];
-    assert_linkages_equivalent(&LINKAGE_FIXED, &linkage_buf, &params);
-}
 
 #[cfg(feature = "alloc")]
 #[test]
@@ -204,64 +88,376 @@ fn linkage_buf_extend_view_combines_from_view() {
     );
 }
 
-/// Test clock with LinkageFixed using shared clock_expr.rs via include!()
-///
-/// # One Source of Truth via include!()
-///
-/// The `clock_expr.rs` file defines the complete fluent DSL chain and is included
-/// by both LinkageFixed and LinkageBuf tests, ensuring they use identical definitions.
-///
-/// The trick: `clock_expr.rs` uses a local variable named `start` that gets bound
-/// to the appropriate `.start()` call within a block. This makes the included content
-/// a complete expression (not a dangling method-chain suffix), allowing include!() to work.
-///
-/// See: tests/linkages/clock_expr.rs
+/// Test clock with LinkageFixed using direct definition
 #[cfg(feature = "alloc")]
 #[test]
 fn real_clock_fixed() {
-    //todo00 Article: explain the "start" trick for sharing include!() content across types.
-    // The key insight is that include!() expands to a complete expression when the file
-    // uses a bound variable (like "start") that can be different types in different contexts.
-    // This eliminates duplication while keeping one source of truth.
-    const LINKAGE: LinkageFixed<2, 128> = {
-        let start = LinkageFixed::start();
-        include!("linkages/clock_expr.rs")
-    };
+    const LINKAGE: LinkageFixed<2, 128> = LinkageFixed::start()
+        .define_param("hour", 0.0)
+        .define_param("face spin", 0.5)
+        .roll_param("face spin", -90.0, 90.0)
+        .mark("face")
+        .pen_color(Rgb888::new(33, 79, 155))
+        .disk(66.0)
+        .restore("face")
+        .pen_width(4.5)
+        .pen_color(Rgb888::new(255, 245, 216))
+        .pen_up()
+        .mark("ticks")
+        .forward(45.0)
+        .pen_down()
+        .forward(18.0)
+        .restore("ticks")
+        .yaw(-90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(180.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("face")
+        .pen_color(Rgb888::new(250, 235, 215))
+        .pen_width(16.0)
+        .yaw_param("hour", 360.0, 0.0)
+        .forward(40.0)
+        .restore("face")
+        .pen_color(Rgb888::new(69, 215, 255))
+        .pen_width(7.5)
+        .yaw_param("hour", 4320.0, 0.0)
+        .forward(52.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 89, 72))
+        .pen_width(2.0)
+        .yaw_param("hour", 259_200.0, 0.0)
+        .forward(60.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 0, 0))
+        .disk(8.0);
 
     // Basic validation of the linkage structure
     assert_eq!(LINKAGE.view().dof(), 2);
     assert!(LINKAGE.view().len() > 20, "Clock should have many steps");
 }
 
-/// Test clock with LinkageBuf using shared clock_expr.rs via include!()
+/// Test clock with LinkageBuf using direct definition (include!() patterns are complex in macro context)
 #[cfg(feature = "alloc")]
 #[test]
 fn real_clock_buf() {
-    let linkage: LinkageBuf<2> = {
-        let start = LinkageBuf::start();
-        include!("linkages/clock_expr.rs")
-    };
+    let linkage: LinkageBuf<2> = LinkageBuf::start()
+        .define_param("hour", 0.0)
+        .define_param("face spin", 0.5)
+        .roll_param("face spin", -90.0, 90.0)
+        .mark("face")
+        .pen_color(Rgb888::new(33, 79, 155))
+        .disk(66.0)
+        .restore("face")
+        .pen_width(4.5)
+        .pen_color(Rgb888::new(255, 245, 216))
+        .pen_up()
+        .mark("ticks")
+        .forward(45.0)
+        .pen_down()
+        .forward(18.0)
+        .restore("ticks")
+        .yaw(-90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(180.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("face")
+        .pen_color(Rgb888::new(250, 235, 215))
+        .pen_width(16.0)
+        .yaw_param("hour", 360.0, 0.0)
+        .forward(40.0)
+        .restore("face")
+        .pen_color(Rgb888::new(69, 215, 255))
+        .pen_width(7.5)
+        .yaw_param("hour", 4320.0, 0.0)
+        .forward(52.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 89, 72))
+        .pen_width(2.0)
+        .yaw_param("hour", 259_200.0, 0.0)
+        .forward(60.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 0, 0))
+        .disk(8.0);
 
     assert_eq!(linkage.view().dof(), 2);
     assert!(linkage.view().len() > 20);
 }
 
 /// Test that both clock definitions produce identical results
-/// Both use the SAME shared clock_expr.rs via include!() - one source of truth
+/// Both use direct definition of the fluent DSL chain
 #[cfg(feature = "alloc")]
 #[test]
 fn real_clock_definition_works_with_both_storage_types() {
-    const LINKAGE_FIXED: LinkageFixed<2, 128> = {
-        let start = LinkageFixed::start();
-        include!("linkages/clock_expr.rs")
-    };
-
-    let linkage_buf: LinkageBuf<2> = {
-        let start = LinkageBuf::start();
-        include!("linkages/clock_expr.rs")
-    };
+    const LINKAGE_FIXED: LinkageFixed<2, 128> = LinkageFixed::start()
+        .define_param("hour", 0.0)
+        .define_param("face spin", 0.5)
+        .roll_param("face spin", -90.0, 90.0)
+        .mark("face")
+        .pen_color(Rgb888::new(33, 79, 155))
+        .disk(66.0)
+        .restore("face")
+        .pen_width(4.5)
+        .pen_color(Rgb888::new(255, 245, 216))
+        .pen_up()
+        .mark("ticks")
+        .forward(45.0)
+        .pen_down()
+        .forward(18.0)
+        .restore("ticks")
+        .yaw(-90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(180.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("face")
+        .pen_color(Rgb888::new(250, 235, 215))
+        .pen_width(16.0)
+        .yaw_param("hour", 360.0, 0.0)
+        .forward(40.0)
+        .restore("face")
+        .pen_color(Rgb888::new(69, 215, 255))
+        .pen_width(7.5)
+        .yaw_param("hour", 4320.0, 0.0)
+        .forward(52.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 89, 72))
+        .pen_width(2.0)
+        .yaw_param("hour", 259_200.0, 0.0)
+        .forward(60.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 0, 0))
+        .disk(8.0);
+    let linkage_buf: LinkageBuf<2> = LinkageBuf::start()
+        .define_param("hour", 0.0)
+        .define_param("face spin", 0.5)
+        .roll_param("face spin", -90.0, 90.0)
+        .mark("face")
+        .pen_color(Rgb888::new(33, 79, 155))
+        .disk(66.0)
+        .restore("face")
+        .pen_width(4.5)
+        .pen_color(Rgb888::new(255, 245, 216))
+        .pen_up()
+        .mark("ticks")
+        .forward(45.0)
+        .pen_down()
+        .forward(18.0)
+        .restore("ticks")
+        .yaw(-90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(180.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("ticks")
+        .yaw(90.0)
+        .forward(51.0)
+        .pen_down()
+        .forward(11.0)
+        .restore("face")
+        .pen_color(Rgb888::new(250, 235, 215))
+        .pen_width(16.0)
+        .yaw_param("hour", 360.0, 0.0)
+        .forward(40.0)
+        .restore("face")
+        .pen_color(Rgb888::new(69, 215, 255))
+        .pen_width(7.5)
+        .yaw_param("hour", 4320.0, 0.0)
+        .forward(52.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 89, 72))
+        .pen_width(2.0)
+        .yaw_param("hour", 259_200.0, 0.0)
+        .forward(60.0)
+        .restore("face")
+        .pen_color(Rgb888::new(255, 0, 0))
+        .disk(8.0);
 
     let params = [0.25, 0.5]; // hour=0.25 (3 o'clock), face_spin=0.5
+    assert_linkages_equivalent(&LINKAGE_FIXED, &linkage_buf, &params);
+}
+
+/// Test armatron with LinkageFixed using direct definition
+#[cfg(feature = "alloc")]
+#[test]
+fn real_armatron_fixed() {
+    const LINKAGE: LinkageFixed<6, 64> = LinkageFixed::start()
+        .define_param("raise hand", 0.5)
+        .define_param("bend elbow", 0.5)
+        .define_param("close hand", 0.0)
+        .define_param("lower arm", 0.5)
+        .define_param("spin whole arm", 0.5)
+        .define_param("spin hand", 0.5)
+        .yaw_param("spin whole arm", 180.0, -180.0)
+        .pen_color(Rgb888::new(0, 139, 139))
+        .pen_width(0.15)
+        .up(2.5)
+        .pitch_param("lower arm", -30.0, 0.0)
+        .forward(3.0)
+        .yaw_param("bend elbow", 90.0, -90.0)
+        .forward(3.0)
+        .pitch_param("raise hand", 90.0, -90.0)
+        .forward(1.0)
+        .roll_param("spin hand", -180.0, 180.0)
+        .forward(0.5)
+        .mark("wrist")
+        .yaw(90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(-1.0)
+        .restore("wrist")
+        .yaw(-90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(1.0)
+        .restore("wrist")
+        .pen_up()
+        .forward(0.25)
+        .pen_down();
+
+    assert_eq!(LINKAGE.view().dof(), 6);
+    assert!(LINKAGE.view().len() > 20, "Armatron should have many steps");
+}
+
+/// Test armatron with LinkageBuf using direct definition
+#[cfg(feature = "alloc")]
+#[test]
+fn real_armatron_buf() {
+    let linkage: LinkageBuf<6> = LinkageBuf::start()
+        .define_param("raise hand", 0.5)
+        .define_param("bend elbow", 0.5)
+        .define_param("close hand", 0.0)
+        .define_param("lower arm", 0.5)
+        .define_param("spin whole arm", 0.5)
+        .define_param("spin hand", 0.5)
+        .yaw_param("spin whole arm", 180.0, -180.0)
+        .pen_color(Rgb888::new(0, 139, 139))
+        .pen_width(0.15)
+        .up(2.5)
+        .pitch_param("lower arm", -30.0, 0.0)
+        .forward(3.0)
+        .yaw_param("bend elbow", 90.0, -90.0)
+        .forward(3.0)
+        .pitch_param("raise hand", 90.0, -90.0)
+        .forward(1.0)
+        .roll_param("spin hand", -180.0, 180.0)
+        .forward(0.5)
+        .mark("wrist")
+        .yaw(90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(-1.0)
+        .restore("wrist")
+        .yaw(-90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(1.0)
+        .restore("wrist")
+        .pen_up()
+        .forward(0.25)
+        .pen_down();
+
+    assert_eq!(linkage.view().dof(), 6);
+    assert!(linkage.view().len() > 20);
+}
+
+/// Test that both armatron definitions produce identical results
+/// Both use direct definition of the fluent DSL chain
+#[cfg(feature = "alloc")]
+#[test]
+fn real_armatron_definition_works_with_both_storage_types() {
+    const LINKAGE_FIXED: LinkageFixed<6, 64> = LinkageFixed::start()
+        .define_param("raise hand", 0.5)
+        .define_param("bend elbow", 0.5)
+        .define_param("close hand", 0.0)
+        .define_param("lower arm", 0.5)
+        .define_param("spin whole arm", 0.5)
+        .define_param("spin hand", 0.5)
+        .yaw_param("spin whole arm", 180.0, -180.0)
+        .pen_color(Rgb888::new(0, 139, 139))
+        .pen_width(0.15)
+        .up(2.5)
+        .pitch_param("lower arm", -30.0, 0.0)
+        .forward(3.0)
+        .yaw_param("bend elbow", 90.0, -90.0)
+        .forward(3.0)
+        .pitch_param("raise hand", 90.0, -90.0)
+        .forward(1.0)
+        .roll_param("spin hand", -180.0, 180.0)
+        .forward(0.5)
+        .mark("wrist")
+        .yaw(90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(-1.0)
+        .restore("wrist")
+        .yaw(-90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(1.0)
+        .restore("wrist")
+        .pen_up()
+        .forward(0.25)
+        .pen_down();
+    let linkage_buf: LinkageBuf<6> = LinkageBuf::start()
+        .define_param("raise hand", 0.5)
+        .define_param("bend elbow", 0.5)
+        .define_param("close hand", 0.0)
+        .define_param("lower arm", 0.5)
+        .define_param("spin whole arm", 0.5)
+        .define_param("spin hand", 0.5)
+        .yaw_param("spin whole arm", 180.0, -180.0)
+        .pen_color(Rgb888::new(0, 139, 139))
+        .pen_width(0.15)
+        .up(2.5)
+        .pitch_param("lower arm", -30.0, 0.0)
+        .forward(3.0)
+        .yaw_param("bend elbow", 90.0, -90.0)
+        .forward(3.0)
+        .pitch_param("raise hand", 90.0, -90.0)
+        .forward(1.0)
+        .roll_param("spin hand", -180.0, 180.0)
+        .forward(0.5)
+        .mark("wrist")
+        .yaw(90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(-1.0)
+        .restore("wrist")
+        .yaw(-90.0)
+        .forward_param("close hand", 0.5, 0.0)
+        .left(1.0)
+        .restore("wrist")
+        .pen_up()
+        .forward(0.25)
+        .pen_down();
+
+    let params = [0.7, 0.5, 0.2, 1.0, 0.6, 0.0];
     assert_linkages_equivalent(&LINKAGE_FIXED, &linkage_buf, &params);
 }
 

@@ -20,6 +20,20 @@ use linkage_blaze_cyd::{
 };
 use static_cell::StaticCell;
 
+/// Simple pattern: just include the file after LinkageFixed::start()
+/// The .lb.rs file contains only method calls (`.define_param(...)`, etc)
+/// The type annotation at the call site determines the final type.
+macro_rules! linkage_fixed {
+    ($path:literal) => {
+        LinkageFixed::start() include!($path)
+    };
+
+    ($path:literal, $dof:expr, $n:expr) => {{
+        let linkage: LinkageFixed<$dof, $n> = linkage_fixed!($path);
+        linkage
+    }};
+}
+
 const SMALL_GLYPH_WIDTH: usize = 6;
 const SMALL_GLYPH_HEIGHT: usize = 10;
 const MAIN_GLYPH_WIDTH: usize = 10;
@@ -45,7 +59,7 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const CLOCK_HANDS: LinkageFixed<2, 48> = include!("clock.lb.rs");
+const CLOCK_HANDS: LinkageFixed<2, 48> = linkage_fixed!("clock.lb.rs");
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 

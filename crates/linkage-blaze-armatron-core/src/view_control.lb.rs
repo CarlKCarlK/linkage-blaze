@@ -1,4 +1,3 @@
-LinkageFixed::start()
     .define_param("x/y view", 0.58333)
     .define_param("z", 0.39)
     .define_param("zoom", 0.5)
@@ -9,4 +8,3 @@ LinkageFixed::start()
     .yaw_param("x/y view", 180.0, -180.0)
     .mark("scene origin")
     .pen_down()
-    

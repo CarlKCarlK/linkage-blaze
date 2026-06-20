@@ -17,6 +17,20 @@ use static_cell::StaticCell;
 
 use linkage_blaze_core::{DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, Vec3};
 
+/// Simple pattern: just include the file after LinkageFixed::start()
+/// The .lb.rs file contains only method calls (`.define_param(...)`, etc)
+/// The type annotation at the call site determines the final type.
+macro_rules! linkage_fixed {
+    ($path:literal) => {
+        LinkageFixed::start() include!($path)
+    };
+
+    ($path:literal, $dof:expr, $n:expr) => {{
+        let linkage: LinkageFixed<$dof, $n> = linkage_fixed!($path);
+        linkage
+    }};
+}
+
 // todo00 I hate all these constants.
 pub const SCREEN_WIDTH: usize = 320;
 pub const SCREEN_HEIGHT: usize = 240;
@@ -101,10 +115,10 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo0000000 can we use functions to avoid double allocation?
-const VIEW_CONTROL: LinkageFixed<3, 8> = include!("view_control.lb.rs");
-const GRID_9X9: LinkageFixed<0, 81> = include!("grid_9x9.lb.rs");
+const VIEW_CONTROL: LinkageFixed<3, 8> = linkage_fixed!("view_control.lb.rs");
+const GRID_9X9: LinkageFixed<0, 81> = linkage_fixed!("grid_9x9.lb.rs");
 const VIEW_AND_GRID: LinkageFixed<3, 88> = VIEW_CONTROL.combine(GRID_9X9);
-const ARMATRON1: LinkageFixed<6, 25> = include!("armatron1.lb.rs");
+const ARMATRON1: LinkageFixed<6, 25> = linkage_fixed!("armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 45> = ARMATRON1.with_joint_spheres(0.15);
 const LINKAGE0: LinkageFixed<9, 133> = VIEW_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE: LinkageFixed<15, 159> = LINKAGE0
