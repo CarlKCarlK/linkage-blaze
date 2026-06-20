@@ -19,7 +19,9 @@
       <section class="viewport" aria-label="3D printer simulation view">
         <canvas id="printer-canvas"></canvas>
       </section>
+
       <aside class="controls" aria-label="Printer controls">
+
         <div class="toolbar">
           <label class="file-btn">
             Load G-code
@@ -27,23 +29,15 @@
           </label>
           <button id="reset-btn" type="button">Reset</button>
           <button id="play-btn" type="button" disabled>Play</button>
+          <button id="step-btn" type="button" disabled>Step</button>
         </div>
 
-        <div class="speed-row">
+        <div class="section-label">Playback</div>
+
+        <div class="row-2col">
           <label for="speed-slider">Speed</label>
-          <input id="speed-slider" type="range" min="1" max="500" value="20" />
-          <span id="speed-display">20 seg/frame</span>
-        </div>
-
-        <div class="toggle-row">
-          <label>
-            <input id="show-travel" type="checkbox" checked />
-            Show travel moves
-          </label>
-          <label>
-            <input id="show-frame" type="checkbox" checked />
-            Show print frame
-          </label>
+          <span id="speed-display" class="value-display">1 seg/frame</span>
+          <input id="speed-slider" class="full-width" type="range" min="1" max="400" value="20" />
         </div>
 
         <div class="status">
@@ -58,11 +52,29 @@
           <progress id="progress-bar" value="0" max="1"></progress>
         </div>
 
+        <div class="section-label">Visibility</div>
+
+        <div class="toggle-group">
+          <label>
+            <input id="show-travel" type="checkbox" checked />
+            Travel moves
+          </label>
+          <label>
+            <input id="show-printer" type="checkbox" checked />
+            Printer structure
+          </label>
+          <label>
+            <input id="show-frame" type="checkbox" checked />
+            Print frame
+          </label>
+        </div>
+
         <p class="hint">
           Left drag orbits · Right drag pans · Scroll zooms
         </p>
+
       </aside>
     </main>
-    <script type="module" src="./main.js?v=1"></script>
+    <script type="module" src="./main.js?v=7"></script>
   </body>
 </html>

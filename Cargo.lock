@@ -1525,6 +1525,7 @@ dependencies = [
 name = "linkage-blaze-printer-wasm"
 version = "0.1.4"
 dependencies = [
+ "embedded-graphics-core",
  "linkage-blaze-core",
  "wasm-bindgen",
 ]

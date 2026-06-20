@@ -225,4 +225,17 @@ G1 X10 Y10 E2.0\n\
         assert_eq!(segments[0].layer, 0);
         assert_eq!(segments[1].layer, 1);
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn parses_mini_boat_sample() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/samples/mini_boat.gcode");
+        let gcode = std::fs::read_to_string(path).expect("mini_boat.gcode missing");
+        let segments = parse_gcode(&gcode);
+        assert!(segments.len() > 10_000, "expected many segments, got {}", segments.len());
+        // All segment coordinates should be finite (no NaN/inf from parse bugs)
+        for seg in &segments {
+            assert!(seg.x1.is_finite() && seg.y1.is_finite() && seg.z1.is_finite());
+        }
+    }
 }

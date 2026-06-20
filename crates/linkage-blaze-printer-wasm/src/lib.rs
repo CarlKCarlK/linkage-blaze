@@ -7,7 +7,7 @@ mod geometry;
 mod linkage;
 mod printer;
 
-use linkage::toolhead_points;
+use linkage::{draw_items_from, printer_points_from};
 use printer::PrinterSim;
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -65,16 +65,36 @@ impl PrinterSimWasm {
         alloc::vec![x, y, z]
     }
 
-    /// Flat `[x0,y0,z0, x1,y1,z1, ...]` array for all extrusion segments played so far.
+    /// Current playback index (number of segments that have been played).
+    #[wasm_bindgen(js_name = currentIndex)]
+    pub fn current_index(&self) -> usize {
+        self.sim.current_index
+    }
+
+    /// Flat `[x0,y0,z0, x1,y1,z1, ...]` for ALL extrusion segments played so far.
     #[wasm_bindgen(js_name = extrusionSegments)]
     pub fn extrusion_segments(&self) -> Vec<f32> {
         self.sim.extrusion_segments_flat()
     }
 
-    /// Flat `[x0,y0,z0, x1,y1,z1, ...]` array for all travel segments played so far.
+    /// Flat `[x0,y0,z0, x1,y1,z1, ...]` for extrusion segments in `[from_seg, current_index)`.
+    ///
+    /// Use this for incremental updates: pass the last `currentIndex()` value to get only new data.
+    #[wasm_bindgen(js_name = extrusionSegmentsSince)]
+    pub fn extrusion_segments_since(&self, from_seg: usize) -> Vec<f32> {
+        self.sim.extrusion_segments_flat_since(from_seg)
+    }
+
+    /// Flat `[x0,y0,z0, x1,y1,z1, ...]` for ALL travel segments played so far.
     #[wasm_bindgen(js_name = travelSegments)]
     pub fn travel_segments(&self) -> Vec<f32> {
         self.sim.travel_segments_flat()
+    }
+
+    /// Flat `[x0,y0,z0, x1,y1,z1, ...]` for travel segments in `[from_seg, current_index)`.
+    #[wasm_bindgen(js_name = travelSegmentsSince)]
+    pub fn travel_segments_since(&self, from_seg: usize) -> Vec<f32> {
+        self.sim.travel_segments_flat_since(from_seg)
     }
 
     /// Bounding box of the entire G-code path as `[min_x, min_y, min_z, max_x, max_y, max_z]`.
@@ -90,10 +110,22 @@ impl Default for PrinterSimWasm {
     }
 }
 
-/// Flat `[x,y,z, ...]` pose points for the printer toolhead at the given G-code position.
+/// Draw items for the Cartesian printer as a flat array (12 floats per item).
 ///
-/// Useful for overlaying the kinematic chain on the Three.js scene.
-#[wasm_bindgen(js_name = printerToolheadPoints)]
-pub fn printer_toolhead_points(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
-    toolhead_points(x_mm, y_mm, z_mm)
+/// Each record: `[type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2]`
+/// - type 0 = Stroke (x0..z0 = start, x1..z1 = end, size1 = width)
+/// - type 1 = Sphere (x0..z0 = center, size1 = radius)
+/// - type 2 = Disk   (x0..z0 = center, size1 = radius)
+/// - type 3 = Ring   (x0..z0 = center, size1 = radius, size2 = width)
+#[wasm_bindgen(js_name = printerDrawItems)]
+pub fn printer_draw_items(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
+    draw_items_from(x_mm, y_mm, z_mm)
+}
+
+/// Four kinematic poses for the Cartesian printer as a flat `[x,y,z, ...]` array (12 floats).
+///
+/// pose 0 — frame origin; pose 1 — gantry height; pose 2 — X carriage; pose 3 — nozzle tip.
+#[wasm_bindgen(js_name = printerPoints)]
+pub fn printer_points(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
+    printer_points_from(x_mm, y_mm, z_mm)
 }
