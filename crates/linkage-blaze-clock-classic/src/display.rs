@@ -20,23 +20,7 @@ use linkage_blaze_cyd::{
 };
 use static_cell::StaticCell;
 
-macro_rules! linkage {
-    ($($chain:tt)*) => {
-        (__linkage_blaze_start!()) $($chain)*
-    };
-}
-
-macro_rules! linkage_fixed {
-    ($path:literal) => {{
-        macro_rules! __linkage_blaze_start { () => { LinkageFixed::start() } }
-        include!($path)
-    }};
-
-    ($path:literal, $dof:expr, $n:expr) => {{
-        let linkage: LinkageFixed<$dof, $n> = linkage_fixed!($path);
-        linkage
-    }};
-}
+use linkage_blaze_core::{linkage, linkage_fixed};
 
 const SMALL_GLYPH_WIDTH: usize = 6;
 const SMALL_GLYPH_HEIGHT: usize = 10;

@@ -1933,6 +1933,131 @@ pub enum DrawItem {
     Sphere(SphereItem),
 }
 
+// ── .lb.rs include macros ────────────────────────────────────────────────────
+//
+// A `.lb.rs` file is a complete Rust expression.
+// It contains one `linkage![ ... ]` invocation.
+// The body is a fluent DSL chain of leading-dot method calls.
+// The including macro (`linkage_fixed!` or `linkage_buf!`) defines the local
+// `__linkage_blaze_start!` macro that selects the storage type.
+// The file must not call `start!()` and must not define `macro_rules! linkage`.
+
+/// Callback macro used inside `.lb.rs` linkage files.
+///
+/// A `.lb.rs` file is a complete Rust expression that contains exactly one
+/// `linkage![ ... ]` invocation.  The body is a fluent DSL chain of
+/// leading-dot method calls (e.g. `.define_param(...)`, `.forward(...)`,
+/// `.mark(...)`).
+///
+/// `linkage!` is a *callback* macro: it does not know the storage type on its
+/// own.  The including macro ([`linkage_fixed!`] or [`linkage_buf!`]) defines
+/// the local helper `__linkage_blaze_start!` immediately before the
+/// `include!`, which `linkage!` calls to obtain the correctly-typed builder.
+///
+/// ## `.lb.rs` convention
+///
+/// - The file contains one `linkage![ ... ]` invocation and nothing else.
+/// - The body begins with leading-dot methods (no explicit `start()` call).
+/// - The file must **not** call `start!()`.
+/// - The file must **not** define `macro_rules! linkage`.
+/// - Use [`linkage_fixed!`] or [`linkage_buf!`] to include the file.
+///
+/// ## Example `.lb.rs` file
+///
+/// ```rust,ignore
+/// linkage![
+///     .define_param("hour", 0.0)
+///     .define_param("face spin", 0.5)
+///     .roll_param("face spin", -90.0, 90.0)
+///     .mark("face")
+///     .pen_color(Rgb888::new(33, 79, 155))
+///     .disk(66.0)
+/// ]
+/// ```
+#[macro_export]
+macro_rules! linkage {
+    ($($chain:tt)*) => {
+        (__linkage_blaze_start!()) $($chain)*
+    };
+}
+
+/// Include a `.lb.rs` linkage file as a [`LinkageFixed`] expression.
+///
+/// The path is relative to the source file containing the macro invocation
+/// (same rules as `include!`).  The file must contain exactly one
+/// `linkage![ ... ]` invocation using the fluent DSL — see [`linkage!`] for
+/// the full `.lb.rs` convention.
+///
+/// ## Forms
+///
+/// Prefer the one-argument form with an explicit type annotation:
+///
+/// ```rust,ignore
+/// const CLOCK: LinkageFixed<2, 48> =
+///     linkage_fixed!("clock.lb.rs");
+///
+/// // Inside a function body:
+/// let clock: LinkageFixed<2, 48> =
+///     linkage_fixed!("clock.lb.rs");
+/// ```
+///
+/// Use the explicit-number form only when the surrounding type cannot be
+/// inferred:
+///
+/// ```rust,ignore
+/// const CLOCK: LinkageFixed<2, 48> =
+///     linkage_fixed!("clock.lb.rs", 2, 48);
+/// ```
+#[macro_export]
+macro_rules! linkage_fixed {
+    ($path:literal) => {{
+        macro_rules! __linkage_blaze_start {
+            () => { $crate::LinkageFixed::start() }
+        }
+        include!($path)
+    }};
+    ($path:literal, $dof:expr, $n:expr) => {{
+        let linkage: $crate::LinkageFixed<$dof, $n> = $crate::linkage_fixed!($path);
+        linkage
+    }};
+}
+
+/// Include a `.lb.rs` linkage file as a [`LinkageBuf`] expression.
+///
+/// Requires the `alloc` feature.  The path follows the same rules as
+/// `include!`.  The file must contain exactly one `linkage![ ... ]`
+/// invocation — see [`linkage!`] for the full `.lb.rs` convention.
+///
+/// ## Forms
+///
+/// Prefer the one-argument form with an explicit type annotation:
+///
+/// ```rust,ignore
+/// let clock: LinkageBuf<2> =
+///     linkage_buf!("clock.lb.rs");
+/// ```
+///
+/// Use the explicit-number form only when the surrounding type cannot be
+/// inferred:
+///
+/// ```rust,ignore
+/// let clock = linkage_buf!("clock.lb.rs", 2);
+/// ```
+#[cfg(feature = "alloc")]
+#[macro_export]
+macro_rules! linkage_buf {
+    ($path:literal) => {{
+        macro_rules! __linkage_blaze_start {
+            () => { $crate::LinkageBuf::start() }
+        }
+        include!($path)
+    }};
+    ($path:literal, $dof:expr) => {{
+        let linkage: $crate::LinkageBuf<$dof> = $crate::linkage_buf!($path);
+        linkage
+    }};
+}
+
 #[cfg(test)]
 mod test_helpers;
 
