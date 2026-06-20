@@ -15,25 +15,7 @@ use embedded_graphics::{
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use linkage_blaze_core::{DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, Vec3};
-
-macro_rules! linkage {
-    ($($chain:tt)*) => {
-        (__linkage_blaze_start!()) $($chain)*
-    };
-}
-
-macro_rules! linkage_fixed {
-    ($path:literal) => {{
-        macro_rules! __linkage_blaze_start { () => { LinkageFixed::start() } }
-        include!($path)
-    }};
-
-    ($path:literal, $dof:expr, $n:expr) => {{
-        let linkage: LinkageFixed<$dof, $n> = linkage_fixed!($path);
-        linkage
-    }};
-}
+use linkage_blaze_core::{linkage, linkage_fixed, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, Vec3};
 
 // todo00 I hate all these constants.
 pub const SCREEN_WIDTH: usize = 320;

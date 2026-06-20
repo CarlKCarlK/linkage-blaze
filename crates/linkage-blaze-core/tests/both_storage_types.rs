@@ -1,51 +1,9 @@
 #![cfg(feature = "alloc")]
 
-use linkage_blaze_core::{LinkageBuf, LinkageFixed, Rgb888};
+use linkage_blaze_core::{linkage, linkage_buf, linkage_fixed, LinkageBuf, LinkageFixed, Rgb888};
 
 mod common_linkage_tests;
 use common_linkage_tests::assert_linkages_equivalent;
-
-/// `.lb.rs` convention:
-///   - A `.lb.rs` file is a complete Rust expression.
-///   - It contains one `linkage![ ... ]` invocation.
-///   - The body is a fluent DSL method-chain suffix with leading-dot methods.
-///   - The including macro (`linkage_fixed!` or `linkage_buf!`) defines
-///     `__linkage_blaze_start!` before `include!`, selecting the storage type.
-///   - The file must not call `start!()` or define any macro itself.
-///   - The outer macros support optional numeric type context: file name first.
-
-/// Defined once at top level so `$($chain:tt)*` is valid here (not inside
-/// any outer macro template). Calls `__linkage_blaze_start!()` which the
-/// including macro defines locally before `include!($path)`.
-macro_rules! linkage {
-    ($($chain:tt)*) => {
-        (__linkage_blaze_start!()) $($chain)*
-    };
-}
-
-macro_rules! linkage_fixed {
-    ($path:literal) => {{
-        macro_rules! __linkage_blaze_start { () => { LinkageFixed::start() } }
-        include!($path)
-    }};
-
-    ($path:literal, $dof:expr, $n:expr) => {{
-        let linkage: LinkageFixed<$dof, $n> = linkage_fixed!($path);
-        linkage
-    }};
-}
-
-macro_rules! linkage_buf {
-    ($path:literal) => {{
-        macro_rules! __linkage_blaze_start { () => { LinkageBuf::start() } }
-        include!($path)
-    }};
-
-    ($path:literal, $dof:expr) => {{
-        let linkage: LinkageBuf<$dof> = linkage_buf!($path);
-        linkage
-    }};
-}
 
 const CLOCK_FIXED: LinkageFixed<2, 128> = linkage_fixed!("linkages/clock.lb.rs");
 const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 128> =
@@ -59,9 +17,11 @@ fn linkage_fixed_include_works_in_function_body() {
     assert_eq!(clock.view().dof(), 2);
     assert_eq!(clock_explicit.view().dof(), 2);
     let params = [0.25_f32, 0.5];
-    let p1 = CLOCK_FIXED.view().final_pose(&params).position();
-    let p2 = clock.view().final_pose(&params).position();
-    assert!(p1.is_close_to(&p2, 1e-5));
+    let p_ref = CLOCK_FIXED.view().final_pose(&params).position();
+    let p_const_explicit = CLOCK_FIXED_EXPLICIT.view().final_pose(&params).position();
+    let p_local = clock.view().final_pose(&params).position();
+    assert!(p_ref.is_close_to(&p_const_explicit, 1e-5));
+    assert!(p_ref.is_close_to(&p_local, 1e-5));
 }
 
 #[cfg(feature = "alloc")]

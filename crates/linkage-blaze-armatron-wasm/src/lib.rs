@@ -10,7 +10,7 @@ use embedded_graphics::{
     prelude::{DrawTarget, Drawable, OriginDimensions, Size},
 };
 use linkage_blaze_armatron_core::{CydSim as CoreCydSim, FrameBuffer, TickOut};
-use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3};
+use linkage_blaze_core::{linkage, linkage_fixed, LinkageFixed, Pose, Rgb888, Vec3};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
@@ -204,16 +204,8 @@ fn scale_rgb565_channel(value: u8, max: u8) -> u8 {
 
 // ---- Three.js viewer exports ----
 
-macro_rules! linkage {
-    ($($chain:tt)*) => {
-        (__linkage_blaze_start!()) $($chain)*
-    };
-}
-
-const VIEWER_LINKAGE: LinkageFixed<6, 25> = {
-    macro_rules! __linkage_blaze_start { () => { LinkageFixed::start() } }
-    include!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs")
-};
+const VIEWER_LINKAGE: LinkageFixed<6, 25> =
+    linkage_fixed!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
 
 #[wasm_bindgen]
 pub fn dof() -> usize {
