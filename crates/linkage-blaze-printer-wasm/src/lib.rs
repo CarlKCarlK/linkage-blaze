@@ -73,6 +73,24 @@ impl PrinterSimWasm {
         self.sim.current_index
     }
 
+    /// Current number of draw items produced by the Rust-owned print linkage.
+    #[wasm_bindgen(js_name = printDrawItemCount)]
+    pub fn print_draw_item_count(&self) -> usize {
+        self.sim.print_draw_item_count()
+    }
+
+    /// Current number of steps in the Rust-owned print linkage.
+    #[wasm_bindgen(js_name = printLinkageStepCount)]
+    pub fn print_linkage_step_count(&self) -> usize {
+        self.sim.print_linkage_step_count()
+    }
+
+    /// Flat draw-item records produced by the print linkage since `from_item`.
+    #[wasm_bindgen(js_name = printDrawItemsSince)]
+    pub fn print_draw_items_since(&self, from_item: usize) -> Vec<f32> {
+        self.sim.print_draw_items_flat_since(from_item)
+    }
+
     /// Flat `[x0,y0,z0, x1,y1,z1, ...]` for ALL extrusion segments played so far.
     #[wasm_bindgen(js_name = extrusionSegments)]
     pub fn extrusion_segments(&self) -> Vec<f32> {
