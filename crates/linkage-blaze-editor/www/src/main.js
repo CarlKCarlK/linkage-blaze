@@ -80,8 +80,8 @@ canvas.parentElement.appendChild(labelRenderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0d1118);
 
-const perspectiveCamera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
-const orthographicCamera = new THREE.OrthographicCamera(-8, 8, 8, -8, 0.01, 1000);
+const perspectiveCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+const orthographicCamera = new THREE.OrthographicCamera(-8, 8, 8, -8, 0.1, 1000);
 let camera = perspectiveCamera;
 camera.up.set(0, 0, 1); // Z is up
 
@@ -324,8 +324,8 @@ function fitView() {
     const len = dir.length();
     if (len < 0.01) dir.set(-1, -1, 0.6);
     camera.position.copy(center).addScaledVector(dir.normalize(), distance);
-    camera.near = 0.001;
-    camera.far = Math.max(1000, radius * 100);
+    camera.near = Math.max(0.1, distance - radius * 3);
+    camera.far = distance + radius * 3;
   } else {
     const visH = orthographicCamera.top - orthographicCamera.bottom;
     const visW = orthographicCamera.right - orthographicCamera.left;
@@ -354,7 +354,7 @@ function fitView() {
     // Place camera outside the bounding sphere so tilting geometry never clips
     const safeDistance = radius + 1;
     camera.position.copy(center).addScaledVector(camFwd, -safeDistance);
-    camera.near = 0.001;
+    camera.near = 0.1;
     camera.far = safeDistance * 2 + (maxF - minF) + 1;
   }
 
