@@ -1,10 +1,8 @@
 # Motion Capture Samples
 
-Expected CMU ASF/AMC sample filenames:
+Expected BVH sample filenames:
 
-- `cmu_01.asf` from CMU subject `01`, skeleton `01.asf`
-- `cmu_01_01.amc` from CMU subject `01`, trial `01_01.amc`
+- `pirouette.bvh` from the Three.js BVH loader sample data
 
-These are intentionally gitignored for now. Download the ASF skeleton and AMC
-motion from the CMU Motion Capture Database, then place them here with the names
-above.
+These are intentionally gitignored for now. Download or copy the BVH sample,
+then place it here with the name above.

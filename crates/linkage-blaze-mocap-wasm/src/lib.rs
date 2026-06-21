@@ -7,9 +7,8 @@ use alloc::{string::String, vec::Vec};
 use embedded_graphics_core::pixelcolor::RgbColor;
 use linkage_blaze_core::{DrawItem, LinkageBuf};
 use linkage_blaze_mocap::{
-    AmcFrame, AsfParameterLayout, BvhFrame, BvhParameterLayout, amc_frame_params,
-    build_asf_linkage_buf, build_bvh_linkage_buf, bvh_frame_params, discover_asf_parameters,
-    discover_bvh_parameters, parse_amc, parse_bvh,
+    BvhFrame, BvhParameterLayout, build_bvh_linkage_buf, bvh_frame_params, discover_bvh_parameters,
+    parse_bvh,
 };
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
@@ -19,66 +18,33 @@ const STRIDE: usize = 12;
 #[wasm_bindgen]
 pub struct MocapClipWasm {
     linkage: LinkageBuf<DOF>,
-    frames: MocapFrames,
-}
-
-enum MocapFrames {
-    Asf {
-        layout: AsfParameterLayout,
-        frames: Vec<AmcFrame>,
-    },
-    Bvh {
-        layout: BvhParameterLayout,
-        frames: Vec<BvhFrame>,
-    },
+    layout: BvhParameterLayout,
+    frames: Vec<BvhFrame>,
 }
 
 #[wasm_bindgen]
 impl MocapClipWasm {
     #[wasm_bindgen(constructor)]
-    pub fn new(asf_source: &str, amc_source: &str) -> Result<Self, JsValue> {
-        let layout = discover_asf_parameters(asf_source).map_err(to_js_error)?;
-        let linkage = build_asf_linkage_buf::<DOF>(asf_source, &layout).map_err(to_js_error)?;
-        let motion = parse_amc(amc_source).map_err(to_js_error)?;
-
-        Ok(Self {
-            linkage,
-            frames: MocapFrames::Asf {
-                layout,
-                frames: motion.frames,
-            },
-        })
-    }
-
-    #[wasm_bindgen(js_name = fromBvh)]
-    pub fn from_bvh(bvh_source: &str) -> Result<Self, JsValue> {
+    pub fn new(bvh_source: &str) -> Result<Self, JsValue> {
         let clip = parse_bvh(bvh_source).map_err(to_js_error)?;
         let layout = discover_bvh_parameters(&clip).map_err(to_js_error)?;
         let linkage = build_bvh_linkage_buf::<DOF>(&clip, &layout).map_err(to_js_error)?;
 
         Ok(Self {
             linkage,
-            frames: MocapFrames::Bvh {
-                layout,
-                frames: clip.frames,
-            },
+            layout,
+            frames: clip.frames,
         })
     }
 
     #[wasm_bindgen(js_name = frameCount)]
     pub fn frame_count(&self) -> usize {
-        match &self.frames {
-            MocapFrames::Asf { frames, .. } => frames.len(),
-            MocapFrames::Bvh { frames, .. } => frames.len(),
-        }
+        self.frames.len()
     }
 
     #[wasm_bindgen(js_name = parameterCount)]
     pub fn parameter_count(&self) -> usize {
-        match &self.frames {
-            MocapFrames::Asf { layout, .. } => layout.len(),
-            MocapFrames::Bvh { layout, .. } => layout.len(),
-        }
+        self.layout.len()
     }
 
     #[wasm_bindgen(js_name = renderFrame)]
@@ -103,20 +69,11 @@ impl MocapClipWasm {
 
 impl MocapClipWasm {
     fn params_for_frame(&self, frame_index: usize) -> Result<[f32; DOF], JsValue> {
-        match &self.frames {
-            MocapFrames::Asf { layout, frames } => {
-                let frame = frames
-                    .get(frame_index)
-                    .ok_or_else(|| JsValue::from_str("frame index out of range"))?;
-                amc_frame_params::<DOF>(layout, frame).map_err(to_js_error)
-            }
-            MocapFrames::Bvh { layout, frames } => {
-                let frame = frames
-                    .get(frame_index)
-                    .ok_or_else(|| JsValue::from_str("frame index out of range"))?;
-                bvh_frame_params::<DOF>(layout, frame).map_err(to_js_error)
-            }
-        }
+        let frame = self
+            .frames
+            .get(frame_index)
+            .ok_or_else(|| JsValue::from_str("frame index out of range"))?;
+        bvh_frame_params::<DOF>(&self.layout, frame).map_err(to_js_error)
     }
 }
 
