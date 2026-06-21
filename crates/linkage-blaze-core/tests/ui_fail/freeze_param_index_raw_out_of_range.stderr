@@ -1,0 +1,65 @@
+error[E0080]: evaluation panicked: raw freeze value out of range
+ --> tests/ui_fail/freeze_param_index_raw_out_of_range.rs:7:36
+  |
+7 | const BAD: LinkageFixed<0, 0, 4> = LINKAGE.freeze_param_index(0, 999.0);
+  |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `BAD` failed inside this call
+  |
+note: inside `LinkageFixed::<1, 0, 4>::freeze_param_index::<0>`
+ --> src/lib.rs
+  |
+  |         self.freeze_with_map(is_frozen, frozen_at_default, frozen_raw)
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: inside `LinkageFixed::<1, 0, 4>::freeze_with_map::<0>`
+ --> src/lib.rs
+  |
+  |               out.steps[step_index] = rewrite_step_for_freeze(
+  |  _____________________________________^
+  | |                 self.steps[step_index],
+  | |                 &is_frozen,
+  | |                 &frozen_at_default,
+... |
+  | |                 &new_param_index,
+  | |             );
+  | |_____________^
+note: inside `linkage_blaze_core::rewrite_step_for_freeze`
+ --> src/lib.rs
+  |
+  |           Step::Yaw(arg) => Step::Yaw(rewrite_arg_for_freeze(
+  |  _____________________________________^
+  | |             arg,
+  | |             is_frozen,
+  | |             frozen_at_default,
+... |
+  | |             true,
+  | |         )),
+  | |_________^
+note: inside `linkage_blaze_core::rewrite_arg_for_freeze`
+ --> src/lib.rs
+  |
+  |                   let physical = frozen_physical_value(
+  |  ________________________________^
+  | |                     variable_arg,
+  | |                     frozen_at_default,
+  | |                     frozen_raw,
+  | |                     params,
+  | |                     is_rotation,
+  | |                 );
+  | |_________________^
+note: inside `linkage_blaze_core::frozen_physical_value`
+ --> src/lib.rs
+  |
+  |         assert_raw_value_in_range(variable_arg, physical);
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: inside `linkage_blaze_core::assert_raw_value_in_range`
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
+  |
+ ::: src/lib.rs
+  |
+  | /     assert!(
+  | |         physical >= min && physical <= max,
+  | |         "raw freeze value out of range"
+  | |     );
+  | |_____- in this macro invocation
