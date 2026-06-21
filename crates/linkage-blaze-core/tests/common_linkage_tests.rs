@@ -25,14 +25,18 @@ pub fn assert_linkages_equivalent<const DOF: usize>(
     let buf_final = linkage_buf.view().final_pose(params);
 
     assert!(
-        fixed_final.position().is_close_to(&buf_final.position(), 1e-5),
+        fixed_final
+            .position()
+            .is_close_to(&buf_final.position(), 1e-5),
         "Final pose position should match: fixed={:?}, buf={:?}",
         fixed_final.position(),
         buf_final.position()
     );
 
     assert!(
-        fixed_final.orientation().is_close_to(&buf_final.orientation(), 1e-5),
+        fixed_final
+            .orientation()
+            .is_close_to(&buf_final.orientation(), 1e-5),
         "Final pose orientation should match"
     );
 

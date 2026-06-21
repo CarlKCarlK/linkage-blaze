@@ -12,7 +12,7 @@ const BUILD_Z_MM: f32 = 250.0;
 
 // Bed-slinger printer kinematic chain: Z (gantry rise) -> X (carriage) -> Y (bed).
 // Fixed capacity for the printer linkage steps plus the implicit Start step.
-const PRINTER: LinkageFixed<3, 120> = linkage_fixed!("linkages/printer.lb.rs");
+const PRINTER: LinkageFixed<3, 180> = linkage_fixed!("linkages/printer.lb.rs");
 
 /// Returns printer draw items encoded as flat `[type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2, ...]`.
 ///

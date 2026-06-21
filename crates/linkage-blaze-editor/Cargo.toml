@@ -8,4 +8,5 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+linkage-blaze-core = { workspace = true, features = ["alloc"] }
 wasm-bindgen = "=0.2.118"

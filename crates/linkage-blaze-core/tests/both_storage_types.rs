@@ -239,7 +239,6 @@ fn linkage_buf_combine_ref_combines_from_view() {
     );
 }
 
-
 #[cfg(feature = "alloc")]
 #[test]
 fn armatron_buf_combine_combines_limbs() {

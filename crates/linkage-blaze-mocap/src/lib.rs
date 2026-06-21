@@ -47,14 +47,7 @@ impl AsfSkeleton {
                 let Some(child_mark_name) = static_mark_name(child_index) else {
                     continue;
                 };
-                let [direction_x, direction_y, direction_z] = child_bone.direction;
-                linkage = linkage
-                    .pen_down()
-                    .forward(direction_x * child_bone.length)
-                    .left(direction_y * child_bone.length)
-                    .up(direction_z * child_bone.length)
-                    .pen_up()
-                    .mark(child_mark_name);
+                linkage = append_bone_segment(linkage, child_bone, child_mark_name);
             }
         }
         linkage
@@ -239,18 +232,22 @@ pub fn build_asf_linkage_buf<const DOF: usize>(
             let Some(child_mark_name) = static_mark_name(child_index) else {
                 continue;
             };
-            let [direction_x, direction_y, direction_z] = child_bone.direction;
-            linkage = linkage
-                .pen_down()
-                .forward(direction_x * child_bone.length)
-                .left(direction_y * child_bone.length)
-                .up(direction_z * child_bone.length)
-                .pen_up()
-                .mark(child_mark_name);
+            linkage = append_bone_segment(linkage, child_bone, child_mark_name);
         }
     }
 
     Ok(linkage)
+}
+
+/// Convert ASF skeleton text into generated `.lb.rs` source.
+///
+/// This performs the intended multi-pass flow: first discover parameters, then
+/// reread the ASF to build a parameterized linkage, then serialize it as
+/// `linkage![ ... ]` source.
+pub fn asf_to_lb_rs<const DOF: usize>(source: &str) -> Result<String, MocapParseError> {
+    let layout = discover_asf_parameters(source)?;
+    let linkage = build_asf_linkage_buf::<DOF>(source, &layout)?;
+    Ok(linkage.view().to_lb_rs())
 }
 
 /// Parse CMU ASF skeleton text.
@@ -379,6 +376,27 @@ fn apply_joint_parameters<const DOF: usize>(
         };
     }
     linkage
+}
+
+fn append_bone_segment<const DOF: usize>(
+    linkage: LinkageBuf<DOF>,
+    bone: &AsfBone,
+    mark_name: &'static str,
+) -> LinkageBuf<DOF> {
+    let [direction_x, direction_y, direction_z] = bone.direction;
+    let horizontal_length = direction_x.hypot(direction_y);
+    let yaw_degrees = direction_y.atan2(direction_x).to_degrees();
+    let pitch_degrees = -direction_z.atan2(horizontal_length).to_degrees();
+
+    linkage
+        .yaw(yaw_degrees)
+        .pitch(pitch_degrees)
+        .pen_down()
+        .forward(bone.length)
+        .pen_up()
+        .pitch(-pitch_degrees)
+        .yaw(-yaw_degrees)
+        .mark(mark_name)
 }
 
 fn parse_root<'a, I>(
@@ -890,6 +908,16 @@ upperback 10 11 12
     }
 
     #[test]
+    fn converts_asf_to_lb_rs_source() {
+        let source = asf_to_lb_rs::<6>(ASF).expect("ASF should serialize");
+
+        assert!(source.starts_with("linkage![\n"));
+        assert!(source.trim_end().ends_with(']'));
+        assert!(source.contains(".define_param(\"mocap_000\", 0.5)"));
+        assert!(source.contains(".roll_param(\"mocap_000\", -180.0, 180.0)"));
+    }
+
+    #[test]
     fn parses_real_cmu_subject_01_trial_01_when_present() {
         let Ok(asf) = std::fs::read_to_string("samples/cmu_01.asf") else {
             return;
@@ -919,5 +947,18 @@ upperback 10 11 12
 
         assert!(layout.len() > 50);
         assert!(linkage.view().poses(&[0.5; 128]).count() > 20);
+    }
+
+    #[test]
+    fn converts_real_cmu_asf_to_lb_rs_when_present() {
+        let Ok(asf) = std::fs::read_to_string("samples/cmu_01.asf") else {
+            return;
+        };
+
+        let source = asf_to_lb_rs::<128>(&asf).expect("real CMU ASF should serialize");
+
+        assert!(source.starts_with("linkage![\n"));
+        assert!(source.trim_end().ends_with(']'));
+        assert!(source.contains(".define_param(\"mocap_000\", 0.5)"));
     }
 }
