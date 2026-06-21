@@ -2580,6 +2580,22 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
         }
         self.freeze_params_normalized(&freezes)
     }
+
+    /// Remove steps that are provably identity operations under any input.
+    ///
+    /// A fixed-value rotation or translation of exactly `0.0` has no effect on
+    /// the pose. These accumulate after [`freeze_params_normalized`](Self::freeze_params_normalized)
+    /// freezes channels whose physical value at the default is zero (e.g. a
+    /// symmetric BVH channel frozen at `0.5`). Stripping them makes the output
+    /// of [`to_lb_rs`](crate::LinkageView::to_lb_rs) more readable.
+    ///
+    /// Only unconditionally-zero fixed steps are removed; variable-arg steps and
+    /// non-motion steps (`Mark`, `Restore`, `PenUp`, `PenDown`, `Disk`, etc.)
+    /// are left untouched.
+    pub fn strip_fixed_noops(mut self) -> Self {
+        self.steps.retain(|&step| !is_fixed_noop(step));
+        self
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -2665,6 +2681,20 @@ const fn str_eq(left: &str, right: &str) -> bool {
     }
 
     true
+}
+
+#[cfg(feature = "alloc")]
+fn is_fixed_noop(step: Step) -> bool {
+    matches!(
+        step,
+        Step::Yaw(Arg::Fixed(v))
+        | Step::Pitch(Arg::Fixed(v))
+        | Step::Roll(Arg::Fixed(v))
+        | Step::Move(Arg::Fixed(v))
+        | Step::Left(Arg::Fixed(v))
+        | Step::Up(Arg::Fixed(v))
+        if v == 0.0
+    )
 }
 
 const fn rewrite_arg_for_freeze(

@@ -5,19 +5,20 @@ use linkage_blaze_core::{LinkageFixed, linkage, linkage_fixed};
 const PIROUETTE: LinkageFixed<132, 4, 537> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs", 132, 4, 537);
 
-// Retain only the four joints of interest; freeze everything else at its default.
-// OUT_DOF = 4 is checked at const-eval time by the assert inside retain_params.
-// Order follows the original linkage (not the order of the retain list):
+// Freeze l_shin_yrotation first (DOF 132 → 131), then retain the four joints
+// of interest (DOF 131 → 4).  Retained param order follows the original linkage:
 //   0: abdomen_xrotation  (defined first among the four)
 //   1: head_yrotation
 //   2: r_shldr_zrotation
 //   3: l_shldr_zrotation
-const PIROUETTE_BODY: LinkageFixed<4, 4, 537> = PIROUETTE.retain_params(&[
-    "head_yrotation",
-    "abdomen_xrotation",
-    "l_shldr_zrotation",
-    "r_shldr_zrotation",
-]);
+const PIROUETTE_BODY: LinkageFixed<4, 4, 537> = PIROUETTE
+    .freeze_param_normalized::<131>("l_shin_yrotation", 0.54)
+    .retain_params(&[
+        "head_yrotation",
+        "abdomen_xrotation",
+        "l_shldr_zrotation",
+        "r_shldr_zrotation",
+    ]);
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
