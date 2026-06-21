@@ -13,11 +13,12 @@ use linkage_blaze_mocap::{
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 const DOF: usize = 256;
+const MARKS: usize = 64;
 const STRIDE: usize = 12;
 
 #[wasm_bindgen]
 pub struct MocapClipWasm {
-    linkage: LinkageBuf<DOF>,
+    linkage: LinkageBuf<DOF, MARKS>,
     layout: BvhParameterLayout,
     frames: Vec<BvhFrame>,
 }
@@ -28,7 +29,7 @@ impl MocapClipWasm {
     pub fn new(bvh_source: &str) -> Result<Self, JsValue> {
         let clip = parse_bvh(bvh_source).map_err(to_js_error)?;
         let layout = discover_bvh_parameters(&clip).map_err(to_js_error)?;
-        let linkage = build_bvh_linkage_buf::<DOF>(&clip, &layout).map_err(to_js_error)?;
+        let linkage = build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout).map_err(to_js_error)?;
 
         Ok(Self {
             linkage,

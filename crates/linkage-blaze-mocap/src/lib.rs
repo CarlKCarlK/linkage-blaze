@@ -78,10 +78,10 @@ pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, Moc
 }
 
 /// Create a parameterized LinkageBuf from a BVH clip.
-pub fn build_bvh_linkage_buf<const DOF: usize>(
+pub fn build_bvh_linkage_buf<const DOF: usize, const MARKS: usize>(
     clip: &BvhClip,
     layout: &BvhParameterLayout,
-) -> Result<LinkageBuf<DOF>, MocapParseError> {
+) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     let defaults = clip.frames.first().map_or_else(
         || Ok(Vec::new()),
         |frame| bvh_parameter_defaults(layout, frame),
@@ -89,11 +89,11 @@ pub fn build_bvh_linkage_buf<const DOF: usize>(
     build_bvh_linkage_buf_with_defaults(clip, layout, &defaults)
 }
 
-fn build_bvh_linkage_buf_with_defaults<const DOF: usize>(
+fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
     clip: &BvhClip,
     layout: &BvhParameterLayout,
     defaults: &[f32],
-) -> Result<LinkageBuf<DOF>, MocapParseError> {
+) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     if layout.len() > DOF {
         return Err(MocapParseError::new(format!(
             "BVH parameter layout has {} parameter(s), but LinkageBuf DOF is {DOF}",
@@ -112,9 +112,10 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize>(
         .iter()
         .filter(|joint_children| !joint_children.is_empty())
         .count();
-    if marked_joint_count >= 64 {
+    let needed_mark_count = marked_joint_count + 1;
+    if needed_mark_count > MARKS {
         return Err(MocapParseError::new(format!(
-            "BVH needs {marked_joint_count} marked joints, but LinkageBuf views currently support 63"
+            "BVH needs {needed_mark_count} mark slot(s), but LinkageBuf MARKS is {MARKS}"
         )));
     }
 
@@ -157,10 +158,12 @@ pub fn bvh_frame_params<const DOF: usize>(
 ///
 /// The generated linkage uses defaults from the first BVH motion frame, so
 /// loading the generated file starts in a captured pose.
-pub fn bvh_to_lb_rs<const DOF: usize>(source: &str) -> Result<String, MocapParseError> {
+pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
+    source: &str,
+) -> Result<String, MocapParseError> {
     let clip = parse_bvh(source)?;
     let layout = discover_bvh_parameters(&clip)?;
-    let linkage = build_bvh_linkage_buf::<DOF>(&clip, &layout)?;
+    let linkage = build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout)?;
 
     Ok(linkage.view().to_lb_rs())
 }
@@ -272,11 +275,11 @@ fn bvh_channel_name(channel: BvhChannel) -> &'static str {
     }
 }
 
-fn apply_bvh_joint_parameters<const DOF: usize>(
-    mut linkage: LinkageBuf<DOF>,
+fn apply_bvh_joint_parameters<const DOF: usize, const MARKS: usize>(
+    mut linkage: LinkageBuf<DOF, MARKS>,
     layout: &BvhParameterLayout,
     joint_index: usize,
-) -> LinkageBuf<DOF> {
+) -> LinkageBuf<DOF, MARKS> {
     for parameter in layout
         .parameters
         .iter()
@@ -358,13 +361,13 @@ fn bvh_children(clip: &BvhClip) -> Vec<Vec<usize>> {
     children
 }
 
-fn append_bvh_joint<const DOF: usize>(
-    mut linkage: LinkageBuf<DOF>,
+fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
+    mut linkage: LinkageBuf<DOF, MARKS>,
     clip: &BvhClip,
     layout: &BvhParameterLayout,
     children: &[Vec<usize>],
     joint_index: usize,
-) -> Result<LinkageBuf<DOF>, MocapParseError> {
+) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     linkage = apply_bvh_joint_parameters(linkage, layout, joint_index);
 
     if children[joint_index].is_empty() {
@@ -542,10 +545,10 @@ impl BvhParser {
     }
 }
 
-fn append_offset_segment<const DOF: usize>(
-    mut linkage: LinkageBuf<DOF>,
+fn append_offset_segment<const DOF: usize, const MARKS: usize>(
+    mut linkage: LinkageBuf<DOF, MARKS>,
     offset: [f32; 3],
-) -> LinkageBuf<DOF> {
+) -> LinkageBuf<DOF, MARKS> {
     let [bvh_x, bvh_y, bvh_z] = offset;
     let direction_x = bvh_z;
     let direction_y = bvh_x;
@@ -693,7 +696,7 @@ Frame Time: 0.0333333
         let clip = parse_bvh(BVH).expect("BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
-            build_bvh_linkage_buf::<32>(&clip, &layout).expect("BVH linkage should build");
+            build_bvh_linkage_buf::<32, 8>(&clip, &layout).expect("BVH linkage should build");
         let params = bvh_frame_params::<32>(&layout, &clip.frames[1]).expect("params should build");
 
         assert_eq!(layout.len(), 15);
@@ -706,8 +709,9 @@ Frame Time: 0.0333333
 
     #[test]
     fn converts_bvh_to_lb_rs_source() {
-        let source = bvh_to_lb_rs::<32>(BVH).expect("BVH should serialize");
-        let linkage = LinkageBuf::<32>::from_lb_rs(&source).expect("generated source should parse");
+        let source = bvh_to_lb_rs::<32, 8>(BVH).expect("BVH should serialize");
+        let linkage =
+            LinkageBuf::<32, 8>::from_lb_rs(&source).expect("generated source should parse");
 
         assert!(source.starts_with("linkage![\n"));
         assert!(source.trim_end().ends_with(']'));
@@ -741,7 +745,8 @@ Frame Time: 0.0333333
     fn bvh_rotation_axes_are_remapped_to_linkage_axes() {
         let clip = parse_bvh(BVH_X_ROTATION).expect("BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
-        let linkage = build_bvh_linkage_buf::<1>(&clip, &layout).expect("BVH linkage should build");
+        let linkage =
+            build_bvh_linkage_buf::<1, 4>(&clip, &layout).expect("BVH linkage should build");
         let params = bvh_frame_params::<1>(&layout, &clip.frames[0]).expect("params should build");
         let stroke = linkage
             .view()
@@ -768,8 +773,8 @@ Frame Time: 0.0333333
 
         let clip = parse_bvh(&bvh).expect("real BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("real BVH layout should parse");
-        let linkage =
-            build_bvh_linkage_buf::<256>(&clip, &layout).expect("real BVH linkage should build");
+        let linkage = build_bvh_linkage_buf::<256, 64>(&clip, &layout)
+            .expect("real BVH linkage should build");
         let params =
             bvh_frame_params::<256>(&layout, &clip.frames[0]).expect("real params should build");
 
@@ -785,9 +790,9 @@ Frame Time: 0.0333333
             return;
         };
 
-        let source = bvh_to_lb_rs::<256>(&bvh).expect("real BVH should serialize");
+        let source = bvh_to_lb_rs::<256, 64>(&bvh).expect("real BVH should serialize");
         let linkage =
-            LinkageBuf::<256>::from_lb_rs(&source).expect("real generated source should parse");
+            LinkageBuf::<256, 64>::from_lb_rs(&source).expect("real generated source should parse");
 
         assert!(source.starts_with("linkage![\n"));
         assert!(source.trim_end().ends_with(']'));

@@ -2,7 +2,7 @@
 /// Accessing a parameter by index validates it was defined.
 use linkage_blaze_core::LinkageFixed;
 
-const LINKAGE: LinkageFixed<3, 16> = LinkageFixed::start()
+const LINKAGE: LinkageFixed<3, 0, 16> = LinkageFixed::start()
     .define_param("x", 0.5)
     .define_param("y", 0.5)
     .define_param("z", 0.5)

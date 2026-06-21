@@ -15,7 +15,9 @@ use embedded_graphics::{
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use linkage_blaze_core::{linkage, linkage_fixed, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, Vec3};
+use linkage_blaze_core::{
+    DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, Vec3, linkage, linkage_fixed,
+};
 
 // todo00 I hate all these constants.
 pub const SCREEN_WIDTH: usize = 320;
@@ -101,20 +103,20 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 2: arm.  Pen down for strokes.
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo0000000 can we use functions to avoid double allocation?
-const CAMERA_CONTROL: LinkageFixed<3, 8> = linkage_fixed!("camera_control.lb.rs");
-const GRID_9X9: LinkageFixed<0, 81> = linkage_fixed!("grid_9x9.lb.rs");
-const CAMERA_AND_GRID: LinkageFixed<3, 88> = CAMERA_CONTROL.combine(GRID_9X9);
-const ARMATRON1: LinkageFixed<6, 25> = linkage_fixed!("armatron1.lb.rs");
-const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 45> = ARMATRON1.with_joint_spheres(0.15);
-const LINKAGE0: LinkageFixed<9, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
-const LINKAGE: LinkageFixed<15, 159> = LINKAGE0
+const CAMERA_CONTROL: LinkageFixed<3, 1, 8> = linkage_fixed!("camera_control.lb.rs");
+const GRID_9X9: LinkageFixed<0, 1, 81> = linkage_fixed!("grid_9x9.lb.rs");
+const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);
+const ARMATRON1: LinkageFixed<6, 1, 25> = linkage_fixed!("armatron1.lb.rs");
+const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
+const LINKAGE0: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
+const LINKAGE: LinkageFixed<15, 4, 159> = LINKAGE0
     .restore("scene origin")
     .combine(ARMATRON1) // Add ghost arm to hold target.
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
 
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
-const REVERSE_KINEMATICS_LINKAGE: LinkageFixed<9, 32> = CAMERA_CONTROL.combine(ARMATRON1);
+const REVERSE_KINEMATICS_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 
 const DOF: usize = LINKAGE.dof();
 
@@ -565,7 +567,11 @@ impl CydSim {
     }
 
     pub fn target_distance(&self) -> f32 {
-        compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), &self.params)
+        compute_target_distance(
+            REVERSE_KINEMATICS_LINKAGE.view(),
+            LINKAGE.view(),
+            &self.params,
+        )
     }
 
     fn update_touch(&mut self, x: f32, y: f32) {
@@ -604,7 +610,7 @@ impl CydSim {
 
     fn draw_linkage(
         &self,
-        linkage: LinkageView<'_, 15>,
+        linkage: LinkageView<'_, 15, 4>,
         buffer: &mut impl DrawTarget<Color = Rgb565>,
     ) {
         for draw_item in linkage.draw_items(&self.params) {
@@ -1131,7 +1137,11 @@ impl ReverseKinematicsRun {
         Self {
             search_params: *params,
             best_params: *params,
-            best_distance: compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params),
+            best_distance: compute_target_distance(
+                REVERSE_KINEMATICS_LINKAGE.view(),
+                LINKAGE.view(),
+                params,
+            ),
             step: RK_INITIAL_STEP,
             candidate_index: 0,
             sweep_improved: false,
@@ -1254,7 +1264,11 @@ impl ReverseKinematicsRun {
     }
 
     fn keep_if_improved(&mut self) -> bool {
-        let distance = compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), &self.search_params);
+        let distance = compute_target_distance(
+            REVERSE_KINEMATICS_LINKAGE.view(),
+            LINKAGE.view(),
+            &self.search_params,
+        );
         if distance < self.best_distance {
             self.best_distance = distance;
             self.best_params = self.search_params;
@@ -1307,26 +1321,27 @@ fn apply_paired_candidate(params: &mut [f32; DOF], pair_index: usize, step: f32)
     params[BEND_ELBOW_PARAM] != bend_original || params[SPIN_WHOLE_ARM_PARAM] != spin_original
 }
 
-fn arm_tip(rk_linkage: LinkageView<'_, 9>, params: &[f32; DOF]) -> Vec3 {
+fn arm_tip(rk_linkage: LinkageView<'_, 9, 2>, params: &[f32; DOF]) -> Vec3 {
     let mut arm_params = [0.0f32; 9];
     arm_params.copy_from_slice(&params[..9]);
     rk_linkage.final_pose(&arm_params).position()
 }
 
-fn target_center(linkage: LinkageView<'_, 15>, params: &[f32; DOF]) -> Vec3 {
+fn target_center(linkage: LinkageView<'_, 15, 4>, params: &[f32; DOF]) -> Vec3 {
     linkage.final_pose(params).position()
 }
 
 fn compute_target_distance(
-    rk_linkage: LinkageView<'_, 9>,
-    linkage: LinkageView<'_, 15>,
+    rk_linkage: LinkageView<'_, 9, 2>,
+    linkage: LinkageView<'_, 15, 4>,
     params: &[f32; DOF],
 ) -> f32 {
     distance(arm_tip(rk_linkage, params), target_center(linkage, params))
 }
 
 fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
-    let mut best_distance = compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
+    let mut best_distance =
+        compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
     let mut step = RK_INITIAL_STEP;
 
     while step >= RK_MIN_STEP {
@@ -1339,7 +1354,11 @@ fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
             let high = (original + step).min(1.0);
             if high != original {
                 params[param_index] = high;
-                let distance = compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
+                let distance = compute_target_distance(
+                    REVERSE_KINEMATICS_LINKAGE.view(),
+                    LINKAGE.view(),
+                    params,
+                );
                 if distance < best_distance {
                     best_distance = distance;
                     improved = true;
@@ -1350,7 +1369,11 @@ fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
             let low = (original - step).max(0.0);
             if low != original {
                 params[param_index] = low;
-                let distance = compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
+                let distance = compute_target_distance(
+                    REVERSE_KINEMATICS_LINKAGE.view(),
+                    LINKAGE.view(),
+                    params,
+                );
                 if distance < best_distance {
                     best_distance = distance;
                     improved = true;
@@ -1368,7 +1391,8 @@ fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
                 continue;
             }
 
-            let distance = compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
+            let distance =
+                compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
             if distance < best_distance {
                 best_distance = distance;
                 improved = true;

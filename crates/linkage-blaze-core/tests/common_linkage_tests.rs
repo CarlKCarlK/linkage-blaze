@@ -3,9 +3,9 @@
 
 use linkage_blaze_core::Linkage;
 
-pub fn assert_linkages_equivalent<const DOF: usize>(
-    linkage_fixed: &impl Linkage<DOF>,
-    linkage_buf: &impl Linkage<DOF>,
+pub fn assert_linkages_equivalent<const DOF: usize, const MARKS: usize>(
+    linkage_fixed: &impl Linkage<DOF, MARKS>,
+    linkage_buf: &impl Linkage<DOF, MARKS>,
     params: &[f32; DOF],
 ) {
     // Compare basic properties

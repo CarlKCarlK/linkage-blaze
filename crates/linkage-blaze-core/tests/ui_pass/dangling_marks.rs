@@ -2,7 +2,7 @@
 /// A mark that is never restored is valid - marks are optional restore points.
 use linkage_blaze_core::LinkageFixed;
 
-const DANGLING_MARKS: LinkageFixed<0, 10> = LinkageFixed::start()
+const DANGLING_MARKS: LinkageFixed<0, 2, 10> = LinkageFixed::start()
     .mark("checkpoint1")
     .forward(1.0)
     .mark("checkpoint2")
