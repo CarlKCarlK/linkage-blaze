@@ -9,8 +9,8 @@ const BUILD_Y_MM: f32 = 240.0;
 const BUILD_Z_MM: f32 = 250.0;
 
 // Bed-slinger printer kinematic chain: Z (gantry rise) -> X (carriage) -> Y (bed).
-// Steps: 53 linkage steps + implicit Start = N = 54.
-const PRINTER: LinkageFixed<3, 54> = linkage_fixed!("linkages/printer.lb.rs");
+// Steps: 76 linkage steps + implicit Start = N = 77.
+const PRINTER: LinkageFixed<3, 77> = linkage_fixed!("linkages/printer.lb.rs");
 
 /// Returns printer draw items encoded as flat `[type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2, ...]`.
 ///
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn mini_boat_extents_are_inside_printer_model_range() {
-        let items = draw_items_from(89.755, 240.0, 50.0);
+        let items = draw_items_from(158.0, 215.28, 65.0);
         assert!(!items.is_empty());
     }
 }

@@ -25,7 +25,7 @@ const editorSetup = [
     indentWithTab,
   ]),
 ];
-import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze.js?v=builder-chain-11";
+import init, { default_program, render_program_with_params_json } from "../pkg/linkage_blaze_editor.js?v=linkage-macro-1";
 
 const error = document.querySelector("#error");
 const canvas = document.querySelector("#view");
@@ -222,8 +222,7 @@ function addSegmentCap(position, radius, material) {
 }
 
 function addDisk(p) {
-  const geom = new THREE.CylinderGeometry(p.radius, p.radius, 0.001, 64, 1);
-  geom.rotateX(Math.PI / 2);
+  const geom = new THREE.CircleGeometry(p.radius, 64);
   const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color), side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(...p.center);
