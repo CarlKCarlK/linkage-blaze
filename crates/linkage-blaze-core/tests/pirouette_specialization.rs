@@ -169,6 +169,37 @@ fn pirouette_body_const_opt_matches_buf_opt() {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[test]
+fn pirouette_fixed_and_buf_freeze_retain_produce_same_result() {
+    // Load the full pirouette as a LinkageBuf, apply the same freeze+retain
+    // pipeline as the const PIROUETTE_BODY, and verify the two paths agree.
+    let buf_body = LinkageBuf::<132, 4>::from(&PIROUETTE)
+        .freeze_param_name::<131>("l_shin_yrotation", 57.6)
+        .retain_param_names::<4>(&[
+            "head_yrotation",
+            "abdomen_xrotation",
+            "l_shldr_zrotation",
+            "r_shldr_zrotation",
+        ]);
+
+    assert_eq!(buf_body.view().dof(), PIROUETTE_BODY.view().dof());
+    assert_eq!(buf_body.view().len(), PIROUETTE_BODY.view().len());
+
+    for params in [
+        [0.0, 0.0, 0.0, 0.0_f32],
+        [0.5, 0.5, 0.5, 0.5],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.62, 0.37, 0.81, 0.18],
+    ] {
+        assert_pose_close(
+            PIROUETTE_BODY.view().final_pose(&params),
+            buf_body.view().final_pose(&params),
+            1e-4,
+        );
+    }
+}
+
 fn full_pirouette_defaults() -> [f32; 132] {
     let view = PIROUETTE.view();
     let params = view.params();
