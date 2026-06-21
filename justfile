@@ -174,7 +174,8 @@ serve-mocap-wasm port=_mocap_wasm_port:
     -lsof -ti:{{port}} | xargs -r kill
     cd {{_mocap_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
 
-run-mocap-wasm port=_mocap_wasm_port:
+run-mocap-bvh port=_mocap_wasm_port:
+    @echo "Open http://127.0.0.1:{{port}}/ and click Load sample."
     just check-mocap-wasm
     just build-mocap-wasm
     just serve-mocap-wasm {{port}}

@@ -2362,6 +2362,8 @@ struct MarkedState {
     pen_style: PenStyle,
 }
 
+const MAX_MARKED_STATES: usize = 64;
+
 /// Iterator over styled poses from a LinkageView (does not require const N).
 struct StyledPosesView<'a, const DOF: usize> {
     steps: &'a [Step],
@@ -2369,7 +2371,7 @@ struct StyledPosesView<'a, const DOF: usize> {
     index: usize,
     pose: Pose,
     pen_style: PenStyle,
-    marked: [MarkedState; 32],
+    marked: [MarkedState; MAX_MARKED_STATES],
     marked_len: usize,
 }
 
@@ -2385,7 +2387,7 @@ impl<'a, const DOF: usize> StyledPosesView<'a, DOF> {
             marked: [MarkedState {
                 pose: Pose::start(),
                 pen_style: PenStyle::new(),
-            }; 32],
+            }; MAX_MARKED_STATES],
             marked_len: 0,
         }
     }
@@ -2404,7 +2406,10 @@ impl<const DOF: usize> Iterator for StyledPosesView<'_, DOF> {
 
             match step {
                 Step::Mark { name: _ } => {
-                    assert!(self.marked_len < 32, "too many marked states");
+                    assert!(
+                        self.marked_len < MAX_MARKED_STATES,
+                        "too many marked states"
+                    );
                     self.marked[self.marked_len] = MarkedState {
                         pose: self.pose,
                         pen_style: self.pen_style,
@@ -2437,7 +2442,7 @@ struct DrawItemsView<'a, const DOF: usize> {
     index: usize,
     pose: Pose,
     pen_style: PenStyle,
-    marked: [MarkedState; 32],
+    marked: [MarkedState; MAX_MARKED_STATES],
     marked_len: usize,
 }
 
@@ -2453,7 +2458,7 @@ impl<'a, const DOF: usize> DrawItemsView<'a, DOF> {
             marked: [MarkedState {
                 pose: Pose::start(),
                 pen_style: PenStyle::new(),
-            }; 32],
+            }; MAX_MARKED_STATES],
             marked_len: 0,
         }
     }
@@ -2469,7 +2474,10 @@ impl<const DOF: usize> Iterator for DrawItemsView<'_, DOF> {
 
             match step {
                 Step::Mark { name: _ } => {
-                    assert!(self.marked_len < 32, "too many marked states");
+                    assert!(
+                        self.marked_len < MAX_MARKED_STATES,
+                        "too many marked states"
+                    );
                     self.marked[self.marked_len] = MarkedState {
                         pose: self.pose,
                         pen_style: self.pen_style,
