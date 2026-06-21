@@ -1379,58 +1379,10 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         )
     }
 
-    /// Return a parameter definition by index (const accessor for internal use).
-    #[must_use]
-    pub const fn param(&self, index: usize) -> Param {
-        assert!(index < self.param_len, "parameter index must be defined");
-        self.params[index]
-    }
-
     /// Return the number of runtime parameters this linkage expects.
     #[must_use]
     pub const fn dof(&self) -> usize {
         DOF
-    }
-
-    /// Return the index of the `n`th parameter (0-based) with the given name (const accessor for internal use).
-    #[must_use]
-    pub const fn param_index(&self, name: &str, n: usize) -> usize {
-        let mut found = 0;
-        let mut slot = 0;
-        while slot < self.param_len {
-            if str_eq(self.params[slot].name, name) {
-                if found == n {
-                    return slot;
-                }
-                found += 1;
-            }
-            slot += 1;
-        }
-        panic!("parameter name not found or occurrence index out of range")
-    }
-
-    /// Return a parameter's name by index.
-    #[must_use]
-    pub const fn param_name(&self, index: usize) -> &'static str {
-        self.param(index).name()
-    }
-
-    /// Return a parameter's default value by index.
-    #[must_use]
-    pub const fn param_default(&self, index: usize) -> f32 {
-        self.param(index).default()
-    }
-
-    /// Return this linkage's normalized parameter defaults.
-    #[must_use]
-    pub const fn param_defaults(&self) -> [f32; DOF] {
-        let mut params = [0.0; DOF];
-        let mut param_index = 0;
-        while param_index < self.param_len {
-            params[param_index] = self.params[param_index].default;
-            param_index += 1;
-        }
-        params
     }
 
     /// Define a named runtime parameter.
@@ -1838,7 +1790,30 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         }
         out.len = self.len;
 
-        out
+        out.strip_fixed_noops_same_capacity()
+            .merge_adjacent_fixed_same_capacity()
+            .strip_fixed_noops_same_capacity()
+    }
+
+    /// Remove steps that are provably identity operations under any input.
+    ///
+    /// See [`LinkageBuf::strip_fixed_noops`] for semantics. `OUT_N` must equal
+    /// the number of steps remaining after no-op removal; the function asserts
+    /// this at const-eval time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const L: LinkageFixed<0, 0, 3> = LinkageFixed::start()
+    ///     .yaw(0.0)
+    ///     .forward(1.0);
+    ///
+    /// const STRIPPED: LinkageFixed<0, 0, 2> = L.strip_fixed_noops();
+    /// ```
+    pub const fn strip_fixed_noops<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
+        let stripped = self.strip_fixed_noops_same_capacity();
+        stripped.resize_steps()
     }
 
     /// Merge runs of consecutive fixed-value steps of the same motion type.
@@ -1860,7 +1835,52 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// const M: LinkageFixed<0, 0, 2> = L.merge_adjacent_fixed();
     /// ```
     pub const fn merge_adjacent_fixed<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
+        let merged = self.merge_adjacent_fixed_same_capacity();
+        merged.resize_steps()
+    }
+
+    const fn resize_steps<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
         let mut out_steps = [const { Step::Start }; OUT_N];
+        let mut step_index = 0;
+        while step_index < self.len {
+            out_steps[step_index] = self.steps[step_index];
+            step_index += 1;
+        }
+        assert!(self.len == OUT_N, "OUT_N does not match actual step count");
+        LinkageFixed {
+            steps: out_steps,
+            len: self.len,
+            params: self.params,
+            param_len: self.param_len,
+            mark_names: self.mark_names,
+            mark_len: self.mark_len,
+        }
+    }
+
+    const fn strip_fixed_noops_same_capacity(self) -> Self {
+        let mut out_steps = [const { Step::Start }; N];
+        let mut out_len = 0usize;
+        let mut step_index = 0;
+        while step_index < self.len {
+            let step = self.steps[step_index];
+            if !is_fixed_noop(step) {
+                out_steps[out_len] = step;
+                out_len += 1;
+            }
+            step_index += 1;
+        }
+        Self {
+            steps: out_steps,
+            len: out_len,
+            params: self.params,
+            param_len: self.param_len,
+            mark_names: self.mark_names,
+            mark_len: self.mark_len,
+        }
+    }
+
+    const fn merge_adjacent_fixed_same_capacity(self) -> Self {
+        let mut out_steps = [const { Step::Start }; N];
         let mut out_len = 0usize;
         let mut i = 0;
         while i < self.len {
@@ -1944,11 +1964,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             out_steps[out_len] = merged;
             out_len += 1;
         }
-        assert!(
-            out_len == OUT_N,
-            "OUT_N does not match actual step count after merging"
-        );
-        LinkageFixed {
+        Self {
             steps: out_steps,
             len: out_len,
             params: self.params,
@@ -2733,7 +2749,9 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             })
             .collect();
 
-        out
+        out.strip_fixed_noops()
+            .merge_adjacent_fixed()
+            .strip_fixed_noops()
     }
 
     /// Remove steps that are provably identity operations under any input.
@@ -2942,8 +2960,7 @@ const fn str_eq(left: &str, right: &str) -> bool {
     true
 }
 
-#[cfg(feature = "alloc")]
-fn is_fixed_noop(step: Step) -> bool {
+const fn is_fixed_noop(step: Step) -> bool {
     matches!(
         step,
         Step::Yaw(Arg::Fixed(v))
@@ -3754,7 +3771,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, LinkageFixed, Pose, Vec3};
+    use super::{Arg, DrawItem, LinkageFixed, Pose, Step, Vec3};
     #[cfg(feature = "alloc")]
     use super::{LinkageBuf, Rgb888};
     use crate::test_helpers::{
@@ -4528,6 +4545,70 @@ mod tests {
         assert!(pos.is_close_to(&Vec3::from([5.0, 10.0, 0.0]), 1e-4));
     }
 
+    #[test]
+    fn linkage_fixed_strip_fixed_noops_removes_identity_motion_steps() {
+        const BASE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
+            .yaw(0.0)
+            .forward(2.0)
+            .left(0.0)
+            .up(1.0);
+
+        const STRIPPED: LinkageFixed<0, 0, 3> = BASE.strip_fixed_noops();
+
+        let steps = STRIPPED.view().steps();
+        assert_eq!(steps.len(), 3);
+        assert!(matches!(steps[0], Step::Start));
+        assert_fixed_move(steps[1], 2.0);
+        assert_fixed_up(steps[2], 1.0);
+    }
+
+    #[test]
+    fn linkage_fixed_freeze_runs_cleanup_passes() {
+        const BASE: LinkageFixed<1, 0, 6> = LinkageFixed::start()
+            .define_param("t", 0.5)
+            .yaw_param("t", -90.0, 90.0)
+            .forward_param("t", 0.0, 4.0)
+            .forward(6.0)
+            .left_param("t", -2.0, 2.0)
+            .up(1.0);
+
+        const FROZEN: LinkageFixed<0, 0, 6> = BASE.freeze_param_at_default("t");
+
+        let steps = FROZEN.view().steps();
+        assert_eq!(steps.len(), 3);
+        assert!(matches!(steps[0], Step::Start));
+        assert_fixed_move(steps[1], 8.0);
+        assert_fixed_up(steps[2], 1.0);
+
+        let original_pose = BASE.view().final_pose(&[0.5]);
+        let frozen_pose = FROZEN.view().final_pose(&[]);
+        assert_pose_close(original_pose, frozen_pose, 1e-5);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn linkage_buf_freeze_runs_cleanup_passes() {
+        let base: LinkageBuf<1, 0> = LinkageBuf::start()
+            .define_param("t", 0.5)
+            .yaw_param("t", -90.0, 90.0)
+            .forward_param("t", 0.0, 4.0)
+            .forward(6.0)
+            .left_param("t", -2.0, 2.0)
+            .up(1.0);
+
+        let frozen: LinkageBuf<0, 0> = base.clone().freeze_param_at_default("t");
+
+        let steps = frozen.view().steps();
+        assert_eq!(steps.len(), 3);
+        assert!(matches!(steps[0], Step::Start));
+        assert_fixed_move(steps[1], 8.0);
+        assert_fixed_up(steps[2], 1.0);
+
+        let original_pose = base.view().final_pose(&[0.5]);
+        let frozen_pose = frozen.view().final_pose(&[]);
+        assert_pose_close(original_pose, frozen_pose, 1e-5);
+    }
+
     #[cfg(feature = "alloc")]
     #[test]
     #[should_panic(expected = "freeze name not found in params")]
@@ -4658,5 +4739,19 @@ mod tests {
             left.orientation()
                 .is_close_to(&right.orientation(), tolerance)
         );
+    }
+
+    fn assert_fixed_move(step: Step, expected: f32) {
+        match step {
+            Step::Move(Arg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
+            _ => panic!("expected fixed move step"),
+        }
+    }
+
+    fn assert_fixed_up(step: Step, expected: f32) {
+        match step {
+            Step::Up(Arg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
+            _ => panic!("expected fixed up step"),
+        }
     }
 }
