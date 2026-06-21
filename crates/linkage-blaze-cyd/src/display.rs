@@ -111,8 +111,8 @@ impl PreparedPrimitive {
                 let end_y = seg.end.y as i32;
                 let segment_x = end_x - start_x;
                 let segment_y = end_y - start_y;
-                let segment_len_squared =
-                    (segment_x as i64) * (segment_x as i64) + (segment_y as i64) * (segment_y as i64);
+                let segment_len_squared = (segment_x as i64) * (segment_x as i64)
+                    + (segment_y as i64) * (segment_y as i64);
                 let radius = ((seg.width as i64) + 1) / 2;
                 let radius_squared = radius * radius;
 
@@ -157,7 +157,10 @@ impl PreparedPrimitive {
                     let half_w = ell.stroke_width as f32 * 0.5;
                     let outer_scale = (r + half_w) / r;
                     let inner_scale = if r > half_w { (r - half_w) / r } else { 0.0 };
-                    (det_sq * outer_scale * outer_scale, det_sq * inner_scale * inner_scale)
+                    (
+                        det_sq * outer_scale * outer_scale,
+                        det_sq * inner_scale * inner_scale,
+                    )
                 };
 
                 let bounds = Rectangle::new(
@@ -295,8 +298,17 @@ impl Iterator for PrimitivePixels<'_> {
                     ..
                 } => {
                     if point_covered_by_prepared_ellipse(
-                        point_x, point_y, center_x, center_y, ax, ay, bx, by,
-                        outer_limit, inner_limit, filled,
+                        point_x,
+                        point_y,
+                        center_x,
+                        center_y,
+                        ax,
+                        ay,
+                        bx,
+                        by,
+                        outer_limit,
+                        inner_limit,
+                        filled,
                     ) {
                         color = prim_color;
                     }
@@ -516,7 +528,8 @@ fn point_covered_by_prepared_segment(
     const PROJECTION_SCALE: i64 = 1024;
     let point_from_start_x = (point_x - start_x) as i64;
     let point_from_start_y = (point_y - start_y) as i64;
-    let projection = (point_from_start_x * (segment_x as i64) + point_from_start_y * (segment_y as i64))
+    let projection = (point_from_start_x * (segment_x as i64)
+        + point_from_start_y * (segment_y as i64))
         * PROJECTION_SCALE
         / segment_len_squared;
     let projection = projection.clamp(0, PROJECTION_SCALE);
@@ -597,4 +610,3 @@ fn point_covered_by_segment(point_x: i32, point_y: i32, segment: LineSegment) ->
 
     distance_x * distance_x + distance_y * distance_y <= radius_squared
 }
-

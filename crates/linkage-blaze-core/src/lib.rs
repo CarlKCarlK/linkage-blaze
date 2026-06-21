@@ -1556,11 +1556,12 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         }
     }
 
-    /// Freeze a single named parameter at a normalized value, reducing the DOF by one.
+    /// Freeze all parameter slots with `name` at a normalized value, reducing the DOF.
     ///
-    /// The `name` must match an existing parameter. Every step that references the
-    /// named parameter is rewritten with its physical value (`low + t * span`), and
-    /// the parameter is removed from the output linkage.
+    /// The `name` must match at least one existing parameter slot. Every step that
+    /// references a matching parameter is rewritten with its physical value
+    /// (`low + t * span`), and matching parameter slots are removed from the output
+    /// linkage.
     ///
     /// `OUT_DOF` must equal `DOF - 1` (or the number of remaining free parameters
     /// after freezing all parameters with that name).
@@ -1577,7 +1578,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///
     /// const FROZEN: LinkageFixed<1, 0, 6> = LINKAGE.freeze_param_normalized("angle", 0.5);
     /// ```
-    // TODO(0000) revisit name
+    // TODO0000 revisit name
     pub const fn freeze_param_normalized<const OUT_DOF: usize>(
         self,
         name: &'static str,
@@ -1586,10 +1587,11 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         self.freeze_params_normalized(&[(name, normalized_value)])
     }
 
-    /// Freeze a single named parameter at its default normalized value.
+    /// Freeze all parameter slots with `name` at their own default normalized values.
     ///
-    /// Equivalent to calling [`freeze_param_normalized`](LinkageFixed::freeze_param_normalized)
-    /// with the parameter's defined default.
+    /// Each matching parameter slot uses its own declared default. This matters when
+    /// a parameter name is shadowed by a later `define_param` with a different
+    /// default.
     ///
     /// # Examples
     ///
@@ -1603,14 +1605,27 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///
     /// const FROZEN: LinkageFixed<1, 0, 6> = LINKAGE.freeze_param_at_default("angle");
     /// ```
-    // TODO(0000) revisit name
+    // TODO0000 revisit name
     pub const fn freeze_param_at_default<const OUT_DOF: usize>(
         self,
         name: &'static str,
     ) -> LinkageFixed<OUT_DOF, MARKS, N> {
-        let param_index = self.expect_param_index(name);
-        let default_value = self.params[param_index].default;
-        self.freeze_param_normalized(name, default_value)
+        let mut is_frozen = [false; DOF];
+        let mut frozen_normalized = [0.0f32; DOF];
+
+        let mut found = false;
+        let mut param_index = 0;
+        while param_index < self.param_len {
+            if str_eq(self.params[param_index].name, name) {
+                found = true;
+                is_frozen[param_index] = true;
+                frozen_normalized[param_index] = self.params[param_index].default;
+            }
+            param_index += 1;
+        }
+        assert!(found, "freeze name not found in params");
+
+        self.freeze_with_map(is_frozen, frozen_normalized)
     }
 
     /// Freeze multiple named parameters at given normalized values.
@@ -1635,13 +1650,10 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// const FROZEN: LinkageFixed<1, 0, 8> =
     ///     LINKAGE.freeze_params_normalized(&[("angle", 0.5), ("pitch", 0.5)]);
     /// ```
-    // TODO(0000) revisit name
-    // TODO(0000) think through shadowing semantics: if a name is defined twice
-    // (shadowing), freeze currently freezes ALL slots with that name and requires
-    // OUT_DOF to reflect all of them.  Should it instead freeze only the active
-    // (last-defined) slot?  What should retain_params do with a shadowed name?
-    // What does freeze_param_at_default use as the default for each shadowed slot?
-    // Need tests that define_param("x") twice and then freeze/retain "x".
+    // TODO0000 revisit name
+    // TODO0000 may no longer apply: name-based freeze/retain intentionally affects
+    // all slots with that name, and freeze_param_at_default uses each slot's own
+    // default. Keep expanding tests around shadowed parameters as the API settles.
     pub const fn freeze_params_normalized<const OUT_DOF: usize>(
         self,
         freezes: &[(&'static str, f32)],
@@ -1715,7 +1727,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///
     /// const RETAINED: LinkageFixed<1, 0, 8> = LINKAGE.retain_params(&["distance"]);
     /// ```
-    // TODO(0000) revisit name
+    // TODO0000 revisit name
     pub const fn retain_params<const OUT_DOF: usize>(
         self,
         names: &[&'static str],
@@ -1932,7 +1944,10 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             out_steps[out_len] = merged;
             out_len += 1;
         }
-        assert!(out_len == OUT_N, "OUT_N does not match actual step count after merging");
+        assert!(
+            out_len == OUT_N,
+            "OUT_N does not match actual step count after merging"
+        );
         LinkageFixed {
             steps: out_steps,
             len: out_len,
@@ -2439,10 +2454,11 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
 
 #[cfg(feature = "alloc")]
 impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
-    /// Freeze a single named parameter at a normalized value, reducing the DOF by one.
+    /// Freeze all parameter slots with `name` at a normalized value, reducing the DOF.
     ///
-    /// Every step that references the named parameter is rewritten with its physical
-    /// value (`low + t * span`), and the parameter is removed from the output linkage.
+    /// Every step that references a matching parameter is rewritten with its physical
+    /// value (`low + t * span`), and matching parameter slots are removed from the
+    /// output linkage.
     ///
     /// `OUT_DOF` must equal the number of parameters remaining after the freeze.
     ///
@@ -2461,7 +2477,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// let frozen: LinkageBuf<1, 0> = linkage.freeze_param_normalized("angle", 0.5);
     /// # }
     /// ```
-    // TODO(0000) revisit name
+    // TODO0000 revisit name
     pub fn freeze_param_normalized<const OUT_DOF: usize>(
         self,
         name: &'static str,
@@ -2470,10 +2486,11 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
         self.freeze_params_normalized(&[(name, normalized_value)])
     }
 
-    /// Freeze a single named parameter at its default normalized value.
+    /// Freeze all parameter slots with `name` at their own default normalized values.
     ///
-    /// Equivalent to calling [`freeze_param_normalized`](LinkageBuf::freeze_param_normalized)
-    /// with the parameter's defined default.
+    /// Each matching parameter slot uses its own declared default. This matters when
+    /// a parameter name is shadowed by a later `define_param` with a different
+    /// default.
     ///
     /// # Examples
     ///
@@ -2490,17 +2507,27 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// let frozen: LinkageBuf<1, 0> = linkage.freeze_param_at_default("angle");
     /// # }
     /// ```
-    // TODO(0000) revisit name
+    // TODO0000 revisit name
     pub fn freeze_param_at_default<const OUT_DOF: usize>(
         self,
         name: &'static str,
     ) -> LinkageBuf<OUT_DOF, MARKS> {
-        let param_index = match self.last_param_index(name) {
-            Some(index) => index,
-            None => panic!("unknown parameter name"),
-        };
-        let default_value = self.params[param_index].default;
-        self.freeze_param_normalized(name, default_value)
+        let mut is_frozen = [false; DOF];
+        let mut frozen_normalized = [0.0f32; DOF];
+
+        let mut found = false;
+        let mut param_index = 0;
+        while param_index < self.param_len {
+            if str_eq(self.params[param_index].name, name) {
+                found = true;
+                is_frozen[param_index] = true;
+                frozen_normalized[param_index] = self.params[param_index].default;
+            }
+            param_index += 1;
+        }
+        assert!(found, "freeze name not found in params");
+
+        self.freeze_with_map(is_frozen, frozen_normalized)
     }
 
     /// Freeze multiple named parameters at given normalized values.
@@ -2527,7 +2554,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     ///     linkage.freeze_params_normalized(&[("angle", 0.5), ("pitch", 0.5)]);
     /// # }
     /// ```
-    // TODO(0000) revisit name
+    // TODO0000 revisit name
     pub fn freeze_params_normalized<const OUT_DOF: usize>(
         self,
         freezes: &[(&'static str, f32)],
@@ -2575,6 +2602,90 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             }
         }
 
+        self.freeze_with_map(is_frozen, frozen_normalized)
+    }
+
+    /// Remove all parameters not listed in `names`, freezing the unlisted ones at their defaults.
+    ///
+    /// Parameters whose names appear in `names` are kept as free degrees of freedom.
+    /// All others are frozen at their defined default values. `OUT_DOF` must equal
+    /// the number of parameters whose names appear in `names`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # #[cfg(feature = "alloc")]
+    /// # {
+    /// # use linkage_blaze_core::{LinkageBuf, Vec3};
+    /// let linkage: LinkageBuf<3, 0> = LinkageBuf::start()
+    ///     .define_param("angle", 0.5)
+    ///     .define_param("pitch", 0.5)
+    ///     .define_param("distance", 0.5)
+    ///     .yaw_param("angle", -180.0, 180.0)
+    ///     .pitch_param("pitch", -90.0, 90.0)
+    ///     .forward_param("distance", 0.0, 10.0);
+    ///
+    /// let retained: LinkageBuf<1, 0> = linkage.retain_params(&["distance"]);
+    /// # }
+    /// ```
+    // TODO0000 revisit name
+    pub fn retain_params<const OUT_DOF: usize>(
+        self,
+        names: &[&'static str],
+    ) -> LinkageBuf<OUT_DOF, MARKS> {
+        let mut ni = 0;
+        while ni < names.len() {
+            let retain_name = names[ni];
+            let mut ni2 = 0;
+            while ni2 < ni {
+                assert!(
+                    !str_eq(names[ni2], retain_name),
+                    "duplicate name in retain list"
+                );
+                ni2 += 1;
+            }
+            let mut found = false;
+            let mut pi = 0;
+            while pi < self.param_len {
+                if str_eq(self.params[pi].name, retain_name) {
+                    found = true;
+                    break;
+                }
+                pi += 1;
+            }
+            assert!(found, "retain name not found in params");
+            ni += 1;
+        }
+
+        let mut is_frozen = [false; DOF];
+        let mut frozen_normalized = [0.0f32; DOF];
+
+        let mut param_index = 0;
+        while param_index < self.param_len {
+            let mut found = false;
+            let mut name_index = 0;
+            while name_index < names.len() {
+                if str_eq(self.params[param_index].name, names[name_index]) {
+                    found = true;
+                    break;
+                }
+                name_index += 1;
+            }
+            if !found {
+                is_frozen[param_index] = true;
+                frozen_normalized[param_index] = self.params[param_index].default;
+            }
+            param_index += 1;
+        }
+
+        self.freeze_with_map(is_frozen, frozen_normalized)
+    }
+
+    fn freeze_with_map<const OUT_DOF: usize>(
+        self,
+        is_frozen: [bool; DOF],
+        frozen_normalized: [f32; DOF],
+    ) -> LinkageBuf<OUT_DOF, MARKS> {
         let mut new_param_index = [0usize; DOF];
         let mut new_param_len = 0usize;
         let mut param_index = 0;
@@ -2623,76 +2734,6 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             .collect();
 
         out
-    }
-
-    /// Remove all parameters not listed in `names`, freezing the unlisted ones at their defaults.
-    ///
-    /// Parameters whose names appear in `names` are kept as free degrees of freedom.
-    /// All others are frozen at their defined default values. `OUT_DOF` must equal
-    /// the number of parameters whose names appear in `names`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// # #[cfg(feature = "alloc")]
-    /// # {
-    /// # use linkage_blaze_core::{LinkageBuf, Vec3};
-    /// let linkage: LinkageBuf<3, 0> = LinkageBuf::start()
-    ///     .define_param("angle", 0.5)
-    ///     .define_param("pitch", 0.5)
-    ///     .define_param("distance", 0.5)
-    ///     .yaw_param("angle", -180.0, 180.0)
-    ///     .pitch_param("pitch", -90.0, 90.0)
-    ///     .forward_param("distance", 0.0, 10.0);
-    ///
-    /// let retained: LinkageBuf<1, 0> = linkage.retain_params(&["distance"]);
-    /// # }
-    /// ```
-    // TODO(0000) revisit name
-    pub fn retain_params<const OUT_DOF: usize>(
-        self,
-        names: &[&'static str],
-    ) -> LinkageBuf<OUT_DOF, MARKS> {
-        let mut ni = 0;
-        while ni < names.len() {
-            let retain_name = names[ni];
-            let mut ni2 = 0;
-            while ni2 < ni {
-                assert!(
-                    !str_eq(names[ni2], retain_name),
-                    "duplicate name in retain list"
-                );
-                ni2 += 1;
-            }
-            let mut found = false;
-            let mut pi = 0;
-            while pi < self.param_len {
-                if str_eq(self.params[pi].name, retain_name) {
-                    found = true;
-                    break;
-                }
-                pi += 1;
-            }
-            assert!(found, "retain name not found in params");
-            ni += 1;
-        }
-
-        let mut freezes = Vec::new();
-        let mut param_index = 0;
-        while param_index < self.param_len {
-            let mut found = false;
-            for name in names {
-                if str_eq(self.params[param_index].name, name) {
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                freezes.push((self.params[param_index].name, self.params[param_index].default));
-            }
-            param_index += 1;
-        }
-        self.freeze_params_normalized(&freezes)
     }
 
     /// Remove steps that are provably identity operations under any input.
@@ -4148,6 +4189,164 @@ mod tests {
         assert!(pos.is_close_to(&Vec3::from([4.0, 0.0, 0.0]), 1e-4));
     }
 
+    #[test]
+    fn freeze_param_at_default_uses_each_shadowed_slots_own_default() {
+        const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
+            .define_param("x", 0.25)
+            .forward_param("x", 0.0, 10.0)
+            .define_param("y", 0.5)
+            .left_param("y", 0.0, 10.0)
+            .define_param("x", 0.75)
+            .up_param("x", 0.0, 10.0);
+
+        const FROZEN: LinkageFixed<1, 0, 5> = BASE.freeze_param_at_default("x");
+
+        let pos = FROZEN.view().final_pose(&[1.0]).position();
+        assert!(pos.is_close_to(&Vec3::from([2.5, 10.0, 7.5]), 1e-4));
+    }
+
+    #[test]
+    fn freeze_param_normalized_freezes_every_shadowed_slot_to_explicit_value() {
+        const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
+            .define_param("x", 0.25)
+            .forward_param("x", 0.0, 10.0)
+            .define_param("y", 0.5)
+            .left_param("y", 0.0, 10.0)
+            .define_param("x", 0.75)
+            .up_param("x", 0.0, 10.0);
+
+        const FROZEN: LinkageFixed<1, 0, 5> = BASE.freeze_param_normalized("x", 0.5);
+
+        let pos = FROZEN.view().final_pose(&[1.0]).position();
+        assert!(pos.is_close_to(&Vec3::from([5.0, 10.0, 5.0]), 1e-4));
+    }
+
+    #[test]
+    fn retain_params_retains_every_shadowed_slot_in_original_order() {
+        const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
+            .define_param("x", 0.25)
+            .forward_param("x", 0.0, 10.0)
+            .define_param("y", 0.5)
+            .left_param("y", 0.0, 10.0)
+            .define_param("x", 0.75)
+            .up_param("x", 0.0, 10.0);
+
+        const RETAINED: LinkageFixed<2, 0, 5> = BASE.retain_params(&["x"]);
+        let params = RETAINED.view().params();
+        assert_eq!(params[0].name(), "x");
+        assert_eq!(params[0].default(), 0.25);
+        assert_eq!(params[1].name(), "x");
+        assert_eq!(params[1].default(), 0.75);
+
+        let pos = RETAINED.view().final_pose(&[1.0, 0.0]).position();
+        assert!(pos.is_close_to(&Vec3::from([10.0, 5.0, 0.0]), 1e-4));
+    }
+
+    #[test]
+    fn retain_params_freezes_non_retained_shadowed_slots_at_their_own_defaults() {
+        const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
+            .define_param("x", 0.25)
+            .forward_param("x", 0.0, 10.0)
+            .define_param("y", 0.5)
+            .left_param("y", 0.0, 10.0)
+            .define_param("x", 0.75)
+            .up_param("x", 0.0, 10.0);
+
+        const RETAINED: LinkageFixed<1, 0, 5> = BASE.retain_params(&["y"]);
+
+        let pos = RETAINED.view().final_pose(&[1.0]).position();
+        assert!(pos.is_close_to(&Vec3::from([2.5, 10.0, 7.5]), 1e-4));
+    }
+
+    #[test]
+    fn specialization_matches_original_for_shadowed_params() {
+        const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
+            .define_param("x", 0.25)
+            .forward_param("x", 0.0, 10.0)
+            .define_param("y", 0.5)
+            .left_param("y", 0.0, 10.0)
+            .define_param("x", 0.75)
+            .up_param("x", 0.0, 10.0);
+
+        const SPECIALIZED: LinkageFixed<1, 0, 5> = BASE
+            .freeze_param_normalized::<1>("x", 0.4)
+            .retain_params(&["y"]);
+
+        let original_pos = BASE.view().final_pose(&[0.4, 0.8, 0.4]).position();
+        let specialized_pos = SPECIALIZED.view().final_pose(&[0.8]).position();
+        assert!(original_pos.is_close_to(&specialized_pos, 1e-5));
+    }
+
+    const BRUCE: LinkageFixed<4, 0, 8> = LinkageFixed::start()
+        .define_param("Bruce", 0.10)
+        .pen_down()
+        .forward_param("Bruce", 0.0, 100.0)
+        .define_param("Bruce", 0.20)
+        .left_param("Bruce", 0.0, 100.0)
+        .define_param("Bruce", 0.30)
+        .up_param("Bruce", 0.0, 100.0)
+        .define_param("Bruce", 0.40)
+        .yaw_param("Bruce", -180.0, 180.0);
+
+    #[test]
+    fn bruce_full_evaluation_uses_each_slot_bound_at_step_creation() {
+        let pose = BRUCE.view().final_pose(&[0.11, 0.22, 0.33, 0.44]);
+
+        assert_pose_close(
+            pose,
+            Pose::new(pose.orientation(), Vec3::from([11.0, 22.0, 33.0])),
+            1e-4,
+        );
+    }
+
+    #[test]
+    fn bruce_freeze_param_normalized_freezes_all_slots_to_explicit_value() {
+        const FROZEN: LinkageFixed<0, 0, 8> = BRUCE.freeze_param_normalized("Bruce", 0.5);
+
+        assert_specialized_matches_original(BRUCE, &[0.5, 0.5, 0.5, 0.5], FROZEN, &[]);
+    }
+
+    #[test]
+    fn bruce_freeze_param_at_default_freezes_each_slot_to_its_own_default() {
+        const FROZEN: LinkageFixed<0, 0, 8> = BRUCE.freeze_param_at_default("Bruce");
+
+        assert_specialized_matches_original(BRUCE, &[0.10, 0.20, 0.30, 0.40], FROZEN, &[]);
+    }
+
+    #[test]
+    fn bruce_retain_params_retains_all_slots_named_bruce() {
+        const RETAINED: LinkageFixed<4, 0, 8> = BRUCE.retain_params(&["Bruce"]);
+
+        let params = RETAINED.view().params();
+        assert_eq!(params[0].name(), "Bruce");
+        assert_eq!(params[1].name(), "Bruce");
+        assert_eq!(params[2].name(), "Bruce");
+        assert_eq!(params[3].name(), "Bruce");
+
+        assert_specialized_matches_original(
+            BRUCE,
+            &[0.11, 0.22, 0.33, 0.44],
+            RETAINED,
+            &[0.11, 0.22, 0.33, 0.44],
+        );
+    }
+
+    #[test]
+    fn bruce_retain_params_freezes_non_bruce_at_own_default() {
+        const BASE: LinkageFixed<3, 0, 7> = LinkageFixed::start()
+            .define_param("Bruce", 0.10)
+            .pen_down()
+            .forward_param("Bruce", 0.0, 100.0)
+            .define_param("Terry", 0.77)
+            .left_param("Terry", 0.0, 100.0)
+            .define_param("Bruce", 0.30)
+            .up_param("Bruce", 0.0, 100.0);
+
+        const RETAINED: LinkageFixed<2, 0, 7> = BASE.retain_params(&["Bruce"]);
+
+        assert_specialized_matches_original(BASE, &[0.11, 0.77, 0.33], RETAINED, &[0.11, 0.33]);
+    }
+
     #[cfg(feature = "alloc")]
     #[test]
     fn linkage_buf_freeze_params_normalized_drops_multiple_params() {
@@ -4167,6 +4366,40 @@ mod tests {
         assert!(pos.is_close_to(&Vec3::from([6.0, 0.0, 0.0]), 1e-4));
     }
 
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn linkage_buf_retain_params_handles_shadowed_non_retained_params_by_slot() {
+        let base: LinkageBuf<3, 0> = LinkageBuf::start()
+            .define_param("x", 0.25)
+            .forward_param("x", 0.0, 10.0)
+            .define_param("y", 0.5)
+            .left_param("y", 0.0, 10.0)
+            .define_param("x", 0.75)
+            .up_param("x", 0.0, 10.0);
+
+        let retained: LinkageBuf<1, 0> = base.retain_params(&["y"]);
+
+        let pos = retained.view().final_pose(&[1.0]).position();
+        assert!(pos.is_close_to(&Vec3::from([2.5, 10.0, 7.5]), 1e-4));
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn linkage_buf_freeze_param_at_default_uses_each_shadowed_slots_own_default() {
+        let base: LinkageBuf<3, 0> = LinkageBuf::start()
+            .define_param("x", 0.25)
+            .forward_param("x", 0.0, 10.0)
+            .define_param("y", 0.5)
+            .left_param("y", 0.0, 10.0)
+            .define_param("x", 0.75)
+            .up_param("x", 0.0, 10.0);
+
+        let frozen: LinkageBuf<1, 0> = base.freeze_param_at_default("x");
+
+        let pos = frozen.view().final_pose(&[1.0]).position();
+        assert!(pos.is_close_to(&Vec3::from([2.5, 10.0, 7.5]), 1e-4));
+    }
+
     // ── freeze/retain validation: unknown names, duplicates, out-of-range ─────
 
     #[test]
@@ -4176,6 +4409,15 @@ mod tests {
             .define_param("angle", 0.5)
             .yaw_param("angle", -90.0, 90.0);
         let _: LinkageFixed<0, 0, 4> = linkage.freeze_params_normalized(&[("typo", 0.5)]);
+    }
+
+    #[test]
+    #[should_panic(expected = "freeze name not found in params")]
+    fn freeze_param_at_default_rejects_unknown_name() {
+        let linkage: LinkageFixed<1, 0, 4> = LinkageFixed::start()
+            .define_param("angle", 0.5)
+            .yaw_param("angle", -90.0, 90.0);
+        let _: LinkageFixed<0, 0, 4> = linkage.freeze_param_at_default("typo");
     }
 
     #[test]
@@ -4257,12 +4499,12 @@ mod tests {
         // Frozen at 1.0 so each step picks up its high endpoint.
         const BASE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
             .define_param("t", 0.5)
-            .forward_param("t", 0.0, 1.0)   // Move: high = 1.0
-            .left_param("t", 0.0, 2.0)      // Left: high = 2.0
-            .up_param("t", 0.0, 3.0)        // Up:   high = 3.0
-            .yaw_param("t", 0.0, 0.0)       // Yaw:  high = 0.0  (no rotation)
-            .pitch_param("t", 0.0, 0.0)     // Pitch: high = 0.0
-            .roll_param("t", 0.0, 0.0);     // Roll:  high = 0.0
+            .forward_param("t", 0.0, 1.0) // Move: high = 1.0
+            .left_param("t", 0.0, 2.0) // Left: high = 2.0
+            .up_param("t", 0.0, 3.0) // Up:   high = 3.0
+            .yaw_param("t", 0.0, 0.0) // Yaw:  high = 0.0  (no rotation)
+            .pitch_param("t", 0.0, 0.0) // Pitch: high = 0.0
+            .roll_param("t", 0.0, 0.0); // Roll:  high = 0.0
 
         const FROZEN: LinkageFixed<0, 0, 8> = BASE.freeze_param_normalized("t", 1.0);
 
@@ -4277,8 +4519,8 @@ mod tests {
         // Frozen at 0.5 must use each step's own span, not a shared physical value.
         const BASE: LinkageFixed<1, 0, 4> = LinkageFixed::start()
             .define_param("t", 0.5)
-            .forward_param("t", 0.0, 10.0)  // at 0.5 → 5.0 units
-            .left_param("t", 0.0, 20.0);    // at 0.5 → 10.0 units
+            .forward_param("t", 0.0, 10.0) // at 0.5 → 5.0 units
+            .left_param("t", 0.0, 20.0); // at 0.5 → 10.0 units
 
         const FROZEN: LinkageFixed<0, 0, 4> = BASE.freeze_param_normalized("t", 0.5);
 
@@ -4310,6 +4552,18 @@ mod tests {
 
     #[cfg(feature = "alloc")]
     #[test]
+    #[should_panic(expected = "duplicate name in retain list")]
+    fn linkage_buf_retain_params_rejects_duplicate_name() {
+        let linkage: LinkageBuf<2, 0> = LinkageBuf::start()
+            .define_param("angle", 0.5)
+            .define_param("dist", 0.5)
+            .yaw_param("angle", -90.0, 90.0)
+            .forward_param("dist", 0.0, 10.0);
+        let _: LinkageBuf<2, 0> = linkage.retain_params(&["angle", "angle"]);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
     fn linkage_buf_freeze_output_matches_linkage_fixed_freeze_output() {
         // Verify LinkageBuf::freeze_params_normalized produces identical poses
         // to the equivalent LinkageFixed specialization.
@@ -4334,5 +4588,75 @@ mod tests {
             let pos_buf = buf_frozen.view().final_pose(&[t]).position();
             assert!(pos_fixed.is_close_to(&pos_buf, 1e-5));
         }
+    }
+
+    fn assert_specialized_matches_original<
+        const DOF: usize,
+        const OUT_DOF: usize,
+        const MARKS: usize,
+        const N: usize,
+    >(
+        original: LinkageFixed<DOF, MARKS, N>,
+        original_params: &[f32; DOF],
+        specialized: LinkageFixed<OUT_DOF, MARKS, N>,
+        specialized_params: &[f32; OUT_DOF],
+    ) {
+        assert_pose_close(
+            original.view().final_pose(original_params),
+            specialized.view().final_pose(specialized_params),
+            1e-4,
+        );
+        assert_draw_items_close(
+            original.view().draw_items(original_params),
+            specialized.view().draw_items(specialized_params),
+            1e-4,
+        );
+    }
+
+    fn assert_draw_items_close(
+        mut left: impl Iterator<Item = DrawItem>,
+        mut right: impl Iterator<Item = DrawItem>,
+        tolerance: f32,
+    ) {
+        loop {
+            match (left.next(), right.next()) {
+                (Some(left), Some(right)) => assert_draw_item_close(left, right, tolerance),
+                (None, None) => break,
+                (Some(_), None) => panic!("specialized linkage emitted fewer draw items"),
+                (None, Some(_)) => panic!("specialized linkage emitted more draw items"),
+            }
+        }
+    }
+
+    fn assert_draw_item_close(left: DrawItem, right: DrawItem, tolerance: f32) {
+        match (left, right) {
+            (DrawItem::Stroke(left), DrawItem::Stroke(right)) => {
+                assert_pose_close(left.start(), right.start(), tolerance);
+                assert_pose_close(left.end(), right.end(), tolerance);
+                assert!((left.width() - right.width()).abs() <= tolerance);
+            }
+            (DrawItem::Disk(left), DrawItem::Disk(right)) => {
+                assert_pose_close(left.pose(), right.pose(), tolerance);
+                assert!((left.radius() - right.radius()).abs() <= tolerance);
+            }
+            (DrawItem::Ring(left), DrawItem::Ring(right)) => {
+                assert_pose_close(left.pose(), right.pose(), tolerance);
+                assert!((left.radius() - right.radius()).abs() <= tolerance);
+                assert!((left.width() - right.width()).abs() <= tolerance);
+            }
+            (DrawItem::Sphere(left), DrawItem::Sphere(right)) => {
+                assert_pose_close(left.pose(), right.pose(), tolerance);
+                assert!((left.radius() - right.radius()).abs() <= tolerance);
+            }
+            _ => panic!("draw item variants differ"),
+        }
+    }
+
+    fn assert_pose_close(left: Pose, right: Pose, tolerance: f32) {
+        assert!(left.position().is_close_to(&right.position(), tolerance));
+        assert!(
+            left.orientation()
+                .is_close_to(&right.orientation(), tolerance)
+        );
     }
 }

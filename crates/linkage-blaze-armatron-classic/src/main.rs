@@ -21,11 +21,11 @@ use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
 use static_cell::StaticCell;
 
+use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
     CalibratedCyd, CalibrationConfig, Cyd, CydError, RawPoint, RawTouchEvent, RectBuffer,
     SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
 };
-use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -86,7 +86,9 @@ impl From<CydError> for MainError {
                 linkage_blaze_cyd::CydDisplayInitError::InitDisplay => MainError::InitDisplay,
             },
             CydError::TouchInit(error) => match error {
-                linkage_blaze_cyd::CydTouchInitError::ConfigureTouchSpi => MainError::ConfigureTouchSpi,
+                linkage_blaze_cyd::CydTouchInitError::ConfigureTouchSpi => {
+                    MainError::ConfigureTouchSpi
+                }
                 linkage_blaze_cyd::CydTouchInitError::CreateTouchSpiDevice => {
                     MainError::CreateTouchSpiDevice
                 }
