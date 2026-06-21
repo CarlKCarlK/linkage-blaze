@@ -5,8 +5,8 @@ use linkage_blaze_core::{LinkageFixed, linkage, linkage_fixed};
 const FULL: LinkageFixed<132, 4, 537> = linkage_fixed!("../samples/pirouette.lb.rs", 132, 4, 537);
 
 const BODY: LinkageFixed<4, 4, 537> = FULL
-    .freeze_param_normalized::<131>("l_shin_yrotation", 0.54)
-    .retain_params(&[
+    .freeze_param_name::<131>("l_shin_yrotation", 57.6)
+    .retain_param_names(&[
         "head_yrotation",
         "abdomen_xrotation",
         "l_shldr_zrotation",

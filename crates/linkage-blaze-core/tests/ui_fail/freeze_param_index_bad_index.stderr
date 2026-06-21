@@ -1,0 +1,19 @@
+error[E0080]: evaluation panicked: freeze param index out of bounds
+ --> tests/ui_fail/freeze_param_index_bad_index.rs:7:36
+  |
+7 | const BAD: LinkageFixed<0, 0, 4> = LINKAGE.freeze_param_index(9, 0.0);
+  |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `BAD` failed inside this call
+  |
+note: inside `LinkageFixed::<1, 0, 4>::freeze_param_index::<0>`
+ --> $RUST/core/src/panic.rs
+  |
+  |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
+  |
+ ::: src/lib.rs
+  |
+  | /         assert!(
+  | |             param_index < self.param_len,
+  | |             "freeze param index out of bounds"
+  | |         );
+  | |_________- in this macro invocation

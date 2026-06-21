@@ -370,7 +370,7 @@ linkage![
     .forward(36.827168)
     .pen_up()
     .pitch(-88.861824)
-    .yaw(-114.26988)
+    .yaw(-114.26991)
     .pitch(83.458694)
     .pen_down()
     .forward(45.405994)

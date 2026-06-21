@@ -1,4 +1,6 @@
 use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Vec3, linkage, linkage_fixed};
+#[cfg(feature = "alloc")]
+use linkage_blaze_core::LinkageBuf;
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 4 mark slots,
 // 537 steps.  The path crosses into the mocap crate's samples directory.
@@ -16,13 +18,21 @@ const PIROUETTE: LinkageFixed<132, 4, 537> = linkage_fixed!(
 //   2: r_shldr_zrotation
 //   3: l_shldr_zrotation
 const PIROUETTE_BODY: LinkageFixed<4, 4, 537> = PIROUETTE
-    .freeze_param_normalized::<131>("l_shin_yrotation", 0.54)
-    .retain_params(&[
+    .freeze_param_name::<131>("l_shin_yrotation", 57.6)
+    .retain_param_names(&[
         "head_yrotation",
         "abdomen_xrotation",
         "l_shldr_zrotation",
         "r_shldr_zrotation",
     ]);
+
+// Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
+// steps.  N shrinks from 537 → 381; merge is a no-op here (no adjacent same-type
+// fixed steps remain after stripping), but is included to demonstrate the pipeline.
+// This must evaluate identically to PIROUETTE_BODY at every parameter value.
+const PIROUETTE_BODY_OPT: LinkageFixed<4, 4, 381> = PIROUETTE_BODY
+    .strip_fixed_noops::<381>()
+    .merge_adjacent_fixed::<381>();
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
@@ -106,6 +116,57 @@ fn pirouette_body_matches_full_linkage_with_frozen_defaults() {
     }
 
     assert!(item_count > 0);
+}
+
+#[test]
+fn pirouette_body_optimized_matches_original() {
+    // PIROUETTE_BODY_OPT has fewer steps but must evaluate identically to
+    // PIROUETTE_BODY at every input.
+    let full = PIROUETTE_BODY.view();
+    let opt = PIROUETTE_BODY_OPT.view();
+
+    assert_eq!(opt.dof(), full.dof());
+
+    for params in [
+        [0.0, 0.0, 0.0, 0.0_f32],
+        [0.5, 0.5, 0.5, 0.5],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.25, 0.75, 0.1, 0.9],
+    ] {
+        assert_pose_close(full.final_pose(&params), opt.final_pose(&params), 1e-4);
+
+        let mut n = 0;
+        for (u, o) in full.draw_items(&params).zip(opt.draw_items(&params)) {
+            assert_draw_item_close(u, o, 1e-4);
+            n += 1;
+        }
+        assert!(n > 0);
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn pirouette_body_const_opt_matches_buf_opt() {
+    // Build the same pipeline through LinkageBuf and verify identical evaluation.
+    let buf_result = LinkageBuf::<4, 4>::from(&PIROUETTE_BODY)
+        .strip_fixed_noops()
+        .merge_adjacent_fixed()
+        .strip_fixed_noops();
+
+    assert_eq!(buf_result.view().len(), PIROUETTE_BODY_OPT.view().len());
+
+    for params in [
+        [0.0, 0.0, 0.0, 0.0_f32],
+        [0.5, 0.5, 0.5, 0.5],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.62, 0.37, 0.81, 0.18],
+    ] {
+        assert_pose_close(
+            PIROUETTE_BODY_OPT.view().final_pose(&params),
+            buf_result.view().final_pose(&params),
+            1e-4,
+        );
+    }
 }
 
 fn full_pirouette_defaults() -> [f32; 132] {
