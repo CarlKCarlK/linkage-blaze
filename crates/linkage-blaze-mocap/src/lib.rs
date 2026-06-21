@@ -101,13 +101,16 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
         )));
     }
 
-    let mut linkage = LinkageBuf::start().pen_up().pen_width(1.5).mark("origin");
-    for (parameter_index, parameter) in layout.parameters.iter().enumerate() {
-        let default = defaults.get(parameter_index).copied().unwrap_or(0.5);
-        linkage = linkage.define_param(parameter.linkage_name, default);
-    }
-
     let children = bvh_children(clip);
+    let root_indices: Vec<usize> = clip
+        .joints
+        .iter()
+        .enumerate()
+        .filter(|(_, joint)| joint.parent.is_none())
+        .map(|(joint_index, _)| joint_index)
+        .collect();
+    let multiple_roots = root_indices.len() >= 2;
+
     let needed_mark_count = bvh_needed_mark_count(clip, &children);
     if needed_mark_count > MARKS {
         return Err(MocapParseError::new(format!(
@@ -115,45 +118,48 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
         )));
     }
 
-    let mut root_count = 0;
-    for (joint_index, joint) in clip.joints.iter().enumerate() {
-        if joint.parent.is_none() {
-            if root_count > 0 {
-                linkage = linkage.restore("origin");
-            }
-            root_count += 1;
-            linkage = append_bvh_joint(linkage, clip, layout, &children, joint_index, 0)?;
+    let mut linkage = LinkageBuf::start().pen_up().pen_width(1.5);
+    if multiple_roots {
+        linkage = linkage.mark("origin");
+    }
+    for (parameter_index, parameter) in layout.parameters.iter().enumerate() {
+        let default = defaults.get(parameter_index).copied().unwrap_or(0.5);
+        linkage = linkage.define_param(parameter.linkage_name, default);
+    }
+
+    for (root_ordinal, joint_index) in root_indices.iter().enumerate() {
+        if root_ordinal > 0 {
+            linkage = linkage.restore("origin");
         }
+        linkage = append_bvh_joint(linkage, clip, layout, &children, *joint_index, 0)?;
     }
 
     Ok(linkage)
 }
 
 fn bvh_needed_mark_count(clip: &BvhClip, children: &[Vec<usize>]) -> usize {
-    if !children.iter().any(|c| !c.is_empty()) {
-        return 1; // only "origin" needed
+    let root_count = clip.joints.iter().filter(|j| j.parent.is_none()).count();
+    let origin_slots = usize::from(root_count >= 2);
+
+    let joint_depths = bvh_joint_depths(clip);
+    let mut branching_depths = std::collections::BTreeSet::new();
+    for (joint_index, _) in clip.joints.iter().enumerate() {
+        if children[joint_index].len() >= 2 {
+            branching_depths.insert(joint_depths[joint_index]);
+        }
     }
-    let max_depth = clip
-        .joints
-        .iter()
-        .enumerate()
-        .filter(|(_, joint)| joint.parent.is_none())
-        .map(|(joint_index, _)| bvh_max_mark_depth(children, joint_index, 0))
-        .max()
-        .unwrap_or(0);
-    max_depth + 2 // "origin" + "depth 0" through "depth {max_depth}"
+
+    origin_slots + branching_depths.len()
 }
 
-fn bvh_max_mark_depth(children: &[Vec<usize>], joint_index: usize, depth: usize) -> usize {
-    if children[joint_index].is_empty() {
-        return 0;
+fn bvh_joint_depths(clip: &BvhClip) -> Vec<usize> {
+    let mut depths = vec![0usize; clip.joints.len()];
+    for (joint_index, joint) in clip.joints.iter().enumerate() {
+        if let Some(parent) = joint.parent {
+            depths[joint_index] = depths[parent] + 1;
+        }
     }
-    children[joint_index]
-        .iter()
-        .map(|&child| bvh_max_mark_depth(children, child, depth + 1))
-        .max()
-        .unwrap_or(0)
-        .max(depth)
+    depths
 }
 
 fn bvh_annotations(clip: &BvhClip, children: &[Vec<usize>]) -> (Vec<String>, Vec<String>) {
@@ -180,11 +186,14 @@ fn collect_annotations(
     mark_annotations: &mut Vec<String>,
     restore_annotations: &mut Vec<String>,
 ) {
-    if children[joint_index].is_empty() {
+    let joint_children = &children[joint_index];
+    if joint_children.is_empty() {
         return;
     }
-    mark_annotations.push(clip.joints[joint_index].name.clone());
-    for (child_ordinal, &child_index) in children[joint_index].iter().enumerate() {
+    if joint_children.len() >= 2 {
+        mark_annotations.push(clip.joints[joint_index].name.clone());
+    }
+    for (child_ordinal, &child_index) in joint_children.iter().enumerate() {
         if child_ordinal > 0 {
             restore_annotations.push(clip.joints[joint_index].name.clone());
         }
@@ -472,16 +481,19 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
 ) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     linkage = apply_bvh_joint_parameters(linkage, layout, joint_index);
 
-    if children[joint_index].is_empty() {
+    let joint_children = &children[joint_index];
+    if joint_children.is_empty() {
         return Ok(linkage);
     }
 
-    let mark_name = depth_mark_name(depth);
-    linkage = linkage.mark(mark_name);
+    let branching = joint_children.len() >= 2;
+    if branching {
+        linkage = linkage.mark(depth_mark_name(depth));
+    }
 
-    for (child_ordinal, &child_index) in children[joint_index].iter().enumerate() {
+    for (child_ordinal, &child_index) in joint_children.iter().enumerate() {
         if child_ordinal > 0 {
-            linkage = linkage.restore(mark_name);
+            linkage = linkage.restore(depth_mark_name(depth));
         }
         linkage = append_offset_segment(linkage, clip.joints[child_index].offset);
         linkage = append_bvh_joint(linkage, clip, layout, children, child_index, depth + 1)?;
@@ -819,7 +831,7 @@ Frame Time: 0.0333333
         assert!(source.trim_end().ends_with(']'));
         assert!(source.contains(".define_param(\"hip_xposition\""));
         assert!(source.contains(".define_param(\"chest_zrotation\""));
-        assert!(source.contains(".mark(\"depth 0\") // hip"));
+        assert!(!source.contains(".mark(\"depth 0\""), "single-child hip should not be marked");
         assert!(source.contains(".mark(\"depth 1\") // chest"));
         assert!(source.contains(".restore(\"depth 1\") // chest"));
         assert!(linkage.view().draw_items(&[0.5; 32]).count() >= 5);
