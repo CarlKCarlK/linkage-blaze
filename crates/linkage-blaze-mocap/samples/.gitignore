@@ -1,4 +1,4 @@
-# TODO00 Decide whether to vendor small CMU samples, fetch them in tests, or keep them local-only.
+# TODO00 Decide whether to vendor small BVH samples, fetch them in tests, or keep them local-only.
 /cmu_01.asf
 /cmu_01_01.amc
 /cmu_01.lb.rs

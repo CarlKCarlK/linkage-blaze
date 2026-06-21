@@ -87,7 +87,7 @@ async function loadSample() {
     const bvh = await fetch("./samples/pirouette.bvh")
       .then(requireOk)
       .then((response) => response.text());
-    clip = MocapClipWasm.fromBvh(bvh);
+    clip = new MocapClipWasm(bvh);
     frameIndex = 0;
     frameSlider.max = String(Math.max(clip.frameCount() - 1, 0));
     frameSlider.disabled = clip.frameCount() === 0;
