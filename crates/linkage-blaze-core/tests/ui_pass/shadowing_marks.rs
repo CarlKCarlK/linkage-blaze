@@ -2,7 +2,7 @@
 /// Redefining a mark updates which position .restore() uses (last-definition-wins).
 use linkage_blaze_core::LinkageFixed;
 
-const SHADOWING_MARKS: LinkageFixed<0, 10> = LinkageFixed::start()
+const SHADOWING_MARKS: LinkageFixed<0, 1, 10> = LinkageFixed::start()
     .mark("wrist")
     .forward(1.0)
     .mark("wrist") // allowed: redefine the mark

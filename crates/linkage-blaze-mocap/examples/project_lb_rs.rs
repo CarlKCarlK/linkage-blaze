@@ -21,7 +21,7 @@ fn run() -> Result<(), String> {
 
     let source = fs::read_to_string(&input_path)
         .map_err(|error| format!("failed to read `{input_path}`: {error}"))?;
-    let linkage = LinkageBuf::<256>::from_lb_rs(&source)
+    let linkage = LinkageBuf::<256, 64>::from_lb_rs(&source)
         .map_err(|error| format!("failed to parse `{input_path}`: {error}"))?;
     let mut params = [0.5; 256];
     for (param_index, param) in linkage.view().params().iter().enumerate() {

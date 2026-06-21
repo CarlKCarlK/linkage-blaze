@@ -47,7 +47,7 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
     CLOCK_TOP_LEFT,
     embedded_graphics::prelude::Size::new(CLOCK_BUFFER_WIDTH as u32, CLOCK_BUFFER_HEIGHT as u32),
 );
-const CLOCK_HANDS: LinkageFixed<2, 48> = linkage_fixed!("clock.lb.rs");
+const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 
@@ -233,7 +233,7 @@ impl CydClockDisplay {
 
     fn show_clock(
         &mut self,
-        linkage: LinkageView<'_, 2>,
+        linkage: LinkageView<'_, 2, 2>,
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         let params = clock_time.map_or([0.0; 2], |t| t.params());

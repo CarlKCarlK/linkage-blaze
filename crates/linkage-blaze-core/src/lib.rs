@@ -93,8 +93,8 @@ pub enum Step {
     Sphere(f32),
     /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
     SphereParam(VariableArg),
-    /// Save the current pose and pen state under a name for later recall.
-    Mark { name: &'static str },
+    /// Save the current pose and pen state into a resolved mark slot.
+    Mark { index: usize },
     /// Restore a previously marked pose and pen state (index resolved at build time).
     Restore { index: usize },
 }
@@ -213,20 +213,20 @@ impl VariableArg {
 ///
 /// ```rust
 /// # use linkage_blaze_core::{Linkage, LinkageFixed};
-/// const LINKAGE: LinkageFixed<1, 8> = LinkageFixed::start()
+/// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
 /// // Get a view and evaluate
 /// let pose = LINKAGE.view().final_pose(&[0.5]);
 /// ```
-pub trait Linkage<const DOF: usize> {
+pub trait Linkage<const DOF: usize, const MARKS: usize> {
     /// Create a borrowed view for evaluation and rendering.
     ///
     /// All evaluation methods (final_pose, poses, draw_items, etc.) are available on the returned
     /// [`LinkageView`]. This keeps the conceptual model clean: storage types (LinkageFixed, LinkageBuf)
     /// define expressions; views evaluate them.
-    fn view(&self) -> LinkageView<'_, DOF>;
+    fn view(&self) -> LinkageView<'_, DOF, MARKS>;
 
     /// Return the number of runtime parameters (degrees of freedom).
     ///
@@ -266,7 +266,7 @@ pub trait Linkage<const DOF: usize> {
 ///
 /// ```rust
 /// # use linkage_blaze_core::{LinkageFixed, Vec3};
-/// const LINKAGE: LinkageFixed<1, 8> = LinkageFixed::start()
+/// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
@@ -281,19 +281,31 @@ pub trait Linkage<const DOF: usize> {
 ///
 /// Create a view via [`LinkageFixed::view()`] or convert from `&LinkageFixed` with `From`.
 #[derive(Clone, Copy)]
-pub struct LinkageView<'a, const DOF: usize> {
+pub struct LinkageView<'a, const DOF: usize, const MARKS: usize> {
     params: &'a [Param; DOF],
     steps: &'a [Step],
+    mark_names: &'a [&'static str; MARKS],
+    mark_len: usize,
 }
 
-impl<'a, const DOF: usize> LinkageView<'a, DOF> {
+impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// The number of runtime parameters (degrees of freedom).
     pub const DOF: usize = DOF;
 
     /// Create a new linkage view from parameter and step arrays.
     #[must_use]
-    pub(crate) const fn new(params: &'a [Param; DOF], steps: &'a [Step]) -> Self {
-        Self { params, steps }
+    pub(crate) const fn new(
+        params: &'a [Param; DOF],
+        steps: &'a [Step],
+        mark_names: &'a [&'static str; MARKS],
+        mark_len: usize,
+    ) -> Self {
+        Self {
+            params,
+            steps,
+            mark_names,
+            mark_len,
+        }
     }
 
     /// Return the number of runtime parameters (degrees of freedom).
@@ -318,7 +330,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::{LinkageFixed, Vec3};
-    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+    /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("yaw", 0.5)
     ///     .define_param("distance", 0.75);
     ///
@@ -338,7 +350,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::LinkageFixed;
-    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+    /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.0)
     ///     .define_param("y", 0.5);
     ///
@@ -355,6 +367,18 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     #[must_use]
     pub const fn steps(&self) -> &'a [Step] {
         self.steps
+    }
+
+    /// Return the active mark-name slots.
+    #[must_use]
+    pub const fn mark_names(&self) -> &'a [&'static str; MARKS] {
+        self.mark_names
+    }
+
+    /// Return the number of distinct mark slots used by this linkage.
+    #[must_use]
+    pub const fn mark_len(&self) -> usize {
+        self.mark_len
     }
 
     /// Serialize this linkage view as `.lb.rs` source using the `linkage![ ... ]` format.
@@ -375,7 +399,6 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
             }
         }
 
-        let mut mark_names: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
         for &step in self.steps {
             match step {
                 Step::Start => {}
@@ -413,14 +436,14 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
                 Step::SphereParam(arg) => {
                     push_variable_step(self, &mut source, "sphere_param", arg);
                 }
-                Step::Mark { name } => {
-                    mark_names.push(name);
+                Step::Mark { index } => {
+                    let name = self.mark_names[index];
                     source.push_str("    .mark(\"");
                     source.push_str(name);
                     source.push_str("\")\n");
                 }
                 Step::Restore { index } => {
-                    let name = mark_names.get(index).copied().unwrap_or("");
+                    let name = self.mark_names[index];
                     source.push_str("    .restore(\"");
                     source.push_str(name);
                     source.push_str("\")\n");
@@ -441,7 +464,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::LinkageFixed;
-    /// const LINKAGE: LinkageFixed<3, 8> = LinkageFixed::start()
+    /// const LINKAGE: LinkageFixed<3, 0, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.0)
     ///     .define_param("y", 0.5)
     ///     .define_param("x", 0.8);
@@ -470,7 +493,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::{LinkageFixed, Vec3};
-    /// const LINKAGE: LinkageFixed<2, 8> = LinkageFixed::start()
+    /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("yaw", 0.5)
     ///     .define_param("distance", 0.5)
     ///     .yaw_param("yaw", -90.0, 90.0)
@@ -492,7 +515,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::{LinkageFixed, Vec3};
-    /// const LINKAGE: LinkageFixed<1, 8> = LinkageFixed::start()
+    /// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
     ///     .define_param("distance", 0.5)
     ///     .forward_param("distance", 1.0, 5.0);
     ///
@@ -513,7 +536,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::{LinkageFixed, Vec3, PenState};
-    /// const LINKAGE: LinkageFixed<0, 8> = LinkageFixed::start()
+    /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
@@ -530,7 +553,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
         &'b self,
         params: &'b [f32; DOF],
     ) -> impl Iterator<Item = StyledPose> + 'b {
-        StyledPosesView::new(self.steps, params)
+        StyledPosesView::<DOF, MARKS>::new(self.steps, params)
     }
 
     /// Iterate over all draw items produced by this linkage.
@@ -539,7 +562,7 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     ///
     /// ```rust
     /// # use linkage_blaze_core::{LinkageFixed, DrawItem};
-    /// const LINKAGE: LinkageFixed<0, 8> = LinkageFixed::start()
+    /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
@@ -549,19 +572,21 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
     /// assert!(has_stroke);
     /// ```
     pub fn draw_items<'b>(&'b self, params: &'b [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'b {
-        DrawItemsView::new(self.steps, params)
+        DrawItemsView::<DOF, MARKS>::new(self.steps, params)
     }
 }
 
-impl<'a, const DOF: usize, const N: usize> From<&'a LinkageFixed<DOF, N>> for LinkageView<'a, DOF> {
-    fn from(linkage: &'a LinkageFixed<DOF, N>) -> Self {
+impl<'a, const DOF: usize, const MARKS: usize, const N: usize> From<&'a LinkageFixed<DOF, MARKS, N>>
+    for LinkageView<'a, DOF, MARKS>
+{
+    fn from(linkage: &'a LinkageFixed<DOF, MARKS, N>) -> Self {
         linkage.view()
     }
 }
 
 #[cfg(feature = "alloc")]
-fn push_arg_step<const DOF: usize>(
-    linkage_view: &LinkageView<'_, DOF>,
+fn push_arg_step<const DOF: usize, const MARKS: usize>(
+    linkage_view: &LinkageView<'_, DOF, MARKS>,
     source: &mut String,
     fixed_method: &str,
     variable_method: &str,
@@ -607,8 +632,8 @@ fn push_fixed_step(source: &mut String, method: &str, value: f32) {
 }
 
 #[cfg(feature = "alloc")]
-fn push_variable_step<const DOF: usize>(
-    linkage_view: &LinkageView<'_, DOF>,
+fn push_variable_step<const DOF: usize, const MARKS: usize>(
+    linkage_view: &LinkageView<'_, DOF, MARKS>,
     source: &mut String,
     method: &str,
     variable_arg: VariableArg,
@@ -630,7 +655,9 @@ fn push_f32(source: &mut String, value: f32) {
 }
 
 #[cfg(feature = "alloc")]
-fn parse_lb_rs<const DOF: usize>(source: &str) -> Result<LinkageBuf<DOF>, String> {
+fn parse_lb_rs<const DOF: usize, const MARKS: usize>(
+    source: &str,
+) -> Result<LinkageBuf<DOF, MARKS>, String> {
     let mut linkage = LinkageBuf::start();
 
     for (line_index, line) in source.lines().enumerate() {
@@ -751,11 +778,11 @@ fn split_args(line_number: usize, args: &str) -> Result<Vec<String>, String> {
 }
 
 #[cfg(feature = "alloc")]
-fn apply_parsed_method<const DOF: usize>(
+fn apply_parsed_method<const DOF: usize, const MARKS: usize>(
     line_number: usize,
-    linkage: LinkageBuf<DOF>,
+    linkage: LinkageBuf<DOF, MARKS>,
     method_call: &ParsedMethodCall,
-) -> Result<LinkageBuf<DOF>, String> {
+) -> Result<LinkageBuf<DOF, MARKS>, String> {
     match method_call.name.as_str() {
         "define_param" => {
             expect_arg_count(line_number, method_call, 2)?;
@@ -851,12 +878,12 @@ fn apply_parsed_method<const DOF: usize>(
 }
 
 #[cfg(feature = "alloc")]
-fn apply_translation_param<const DOF: usize>(
+fn apply_translation_param<const DOF: usize, const MARKS: usize>(
     line_number: usize,
-    linkage: LinkageBuf<DOF>,
+    linkage: LinkageBuf<DOF, MARKS>,
     method_call: &ParsedMethodCall,
     axis: &str,
-) -> Result<LinkageBuf<DOF>, String> {
+) -> Result<LinkageBuf<DOF, MARKS>, String> {
     expect_arg_count(line_number, method_call, 3)?;
     let name = parse_string_arg(line_number, method_call, 0)?;
     let low = parse_number_arg(line_number, method_call, 1)?;
@@ -870,12 +897,12 @@ fn apply_translation_param<const DOF: usize>(
 }
 
 #[cfg(feature = "alloc")]
-fn apply_rotation_param<const DOF: usize>(
+fn apply_rotation_param<const DOF: usize, const MARKS: usize>(
     line_number: usize,
-    linkage: LinkageBuf<DOF>,
+    linkage: LinkageBuf<DOF, MARKS>,
     method_call: &ParsedMethodCall,
     axis: &str,
-) -> Result<LinkageBuf<DOF>, String> {
+) -> Result<LinkageBuf<DOF, MARKS>, String> {
     expect_arg_count(line_number, method_call, 3)?;
     let name = parse_string_arg(line_number, method_call, 0)?;
     let low = parse_number_arg(line_number, method_call, 1)?;
@@ -889,12 +916,12 @@ fn apply_rotation_param<const DOF: usize>(
 }
 
 #[cfg(feature = "alloc")]
-fn apply_radius_param<const DOF: usize>(
+fn apply_radius_param<const DOF: usize, const MARKS: usize>(
     line_number: usize,
-    linkage: LinkageBuf<DOF>,
+    linkage: LinkageBuf<DOF, MARKS>,
     method_call: &ParsedMethodCall,
     shape: &str,
-) -> Result<LinkageBuf<DOF>, String> {
+) -> Result<LinkageBuf<DOF, MARKS>, String> {
     expect_arg_count(line_number, method_call, 3)?;
     let name = parse_string_arg(line_number, method_call, 0)?;
     let low = parse_number_arg(line_number, method_call, 1)?;
@@ -1190,20 +1217,11 @@ macro_rules! emit_fixed_step_methods {
 
         // Restore methods
         pub const fn restore(self, name: &'static str) -> Self {
-            let index = match self.last_mark_index(name) {
+            let index = match self.mark_index(name) {
                 Some(i) => i,
                 None => {
                     panic!("restore: no mark found with name (mark must be defined before restore)")
                 }
-            };
-            self.push(Step::Restore { index })
-        }
-        pub const fn restore_nth(self, name: &'static str, n: usize) -> Self {
-            let index = match self.mark_index_nth(name, n) {
-                Some(i) => i,
-                None => panic!(
-                    "restore_nth: no matching mark found (must define mark before restoring nth)"
-                ),
             };
             self.push(Step::Restore { index })
         }
@@ -1314,15 +1332,16 @@ macro_rules! emit_buf_step_methods {
 /// `LinkageFixed` stores linkage steps and parameters in fixed-size arrays, enabling
 /// `const` construction and evaluation without allocation. Use the fluent DSL methods
 /// to extend the linkage expression and define complex arm kinematics at compile time.
-pub struct LinkageFixed<const DOF: usize, const N: usize> {
+pub struct LinkageFixed<const DOF: usize, const MARKS: usize, const N: usize> {
     steps: [Step; N],
     len: usize,
     params: [Param; DOF],
     param_len: usize,
+    mark_names: [&'static str; MARKS],
     mark_len: usize,
 }
 
-impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
+impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MARKS, N> {
     /// Start a fixed-size linkage with an implicit origin row.
     pub const fn start() -> Self {
         assert!(N > 0, "linkage must have room for the implicit start step");
@@ -1331,6 +1350,7 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
             len: 1,
             params: [Param::EMPTY; DOF],
             param_len: 0,
+            mark_names: [""; MARKS],
             mark_len: 0,
         }
     }
@@ -1341,14 +1361,22 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     /// Step-slot capacity of this linkage.
     pub const N: usize = N;
 
+    /// Mark-slot capacity of this linkage.
+    pub const MARKS: usize = MARKS;
+
     /// Create a borrowed view for evaluation and rendering.
     ///
     /// The view erases the step capacity `N` while preserving the degree-of-freedom `DOF`.
     /// All evaluation methods (poses, draw_items, etc.) operate on the view.
     #[must_use]
     #[inline]
-    pub fn view(&self) -> LinkageView<'_, DOF> {
-        LinkageView::new(&self.params, &self.steps[..self.len])
+    pub fn view(&self) -> LinkageView<'_, DOF, MARKS> {
+        LinkageView::new(
+            &self.params,
+            &self.steps[..self.len],
+            &self.mark_names,
+            self.mark_len,
+        )
     }
 
     /// Return a parameter definition by index (const accessor for internal use).
@@ -1424,40 +1452,26 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
 
     /// Save the current pose and pen state under a name for later recall.
     pub const fn mark(mut self, name: &'static str) -> Self {
-        self.mark_len += 1;
-        self.push(Step::Mark { name })
-    }
-
-    const fn last_mark_index(&self, name: &str) -> Option<usize> {
-        let mut step_index = self.len;
-        let mut mark_index = self.mark_len;
-        while step_index > 0 {
-            step_index -= 1;
-            if let Step::Mark { name: mark_name } = self.steps[step_index] {
-                mark_index -= 1;
-                if str_eq(mark_name, name) {
-                    return Some(mark_index);
-                }
+        let index = match self.mark_index(name) {
+            Some(index) => index,
+            None => {
+                assert!(self.mark_len < MARKS, "linkage has more marks than MARKS");
+                let index = self.mark_len;
+                self.mark_names[index] = name;
+                self.mark_len += 1;
+                index
             }
-        }
-        None
+        };
+        self.push(Step::Mark { index })
     }
 
-    const fn mark_index_nth(&self, name: &str, n: usize) -> Option<usize> {
-        let mut count = 0;
+    const fn mark_index(&self, name: &str) -> Option<usize> {
         let mut mark_index = 0;
-        let mut step_index = 0;
-        while step_index < self.len {
-            if let Step::Mark { name: mark_name } = self.steps[step_index] {
-                if str_eq(mark_name, name) {
-                    if count == n {
-                        return Some(mark_index);
-                    }
-                    count += 1;
-                }
-                mark_index += 1;
+        while mark_index < self.mark_len {
+            if str_eq(self.mark_names[mark_index], name) {
+                return Some(mark_index);
             }
-            step_index += 1;
+            mark_index += 1;
         }
         None
     }
@@ -1470,17 +1484,23 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     pub const fn with_joint_spheres<const N_OUT: usize>(
         self,
         joint_radius: f32,
-    ) -> LinkageFixed<DOF, N_OUT> {
+    ) -> LinkageFixed<DOF, MARKS, N_OUT> {
         let mut out = LinkageFixed {
             steps: [const { Step::Start }; N_OUT],
             len: 0,
             params: [Param::EMPTY; DOF],
             param_len: self.param_len,
+            mark_names: [""; MARKS],
             mark_len: self.mark_len,
         };
         let mut i = 0;
         while i < self.param_len {
             out.params[i] = self.params[i];
+            i += 1;
+        }
+        let mut i = 0;
+        while i < self.mark_len {
+            out.mark_names[i] = self.mark_names[i];
             i += 1;
         }
         let mut i = 0;
@@ -1546,14 +1566,20 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
     /// from wherever `self` ends rather than resetting to the origin.
     pub const fn combine<
         const DOF2: usize,
+        const MARKS2: usize,
         const N2: usize,
         const DOF_OUT: usize,
+        const MARKS_OUT: usize,
         const N_OUT: usize,
     >(
         self,
-        other: LinkageFixed<DOF2, N2>,
-    ) -> LinkageFixed<DOF_OUT, N_OUT> {
+        other: LinkageFixed<DOF2, MARKS2, N2>,
+    ) -> LinkageFixed<DOF_OUT, MARKS_OUT, N_OUT> {
         assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF1 + DOF2");
+        assert!(
+            MARKS_OUT >= self.mark_len + other.mark_len,
+            "MARKS_OUT must fit all marks from both linkages"
+        );
         let other_steps = other.len - 1; // skip the implicit Start step
         assert!(
             N_OUT >= self.len + other_steps,
@@ -1565,6 +1591,7 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
             len: 0,
             params: [Param::EMPTY; DOF_OUT],
             param_len: 0,
+            mark_names: [""; MARKS_OUT],
             mark_len: 0,
         };
 
@@ -1599,15 +1626,32 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         }
         out.param_len = self.param_len + other.param_len;
 
+        let mut i = 0;
+        while i < self.mark_len {
+            out.mark_names[i] = self.mark_names[i];
+            i += 1;
+        }
+        let mut i = 0;
+        while i < other.mark_len {
+            out.mark_names[self.mark_len + i] = other.mark_names[i];
+            i += 1;
+        }
         out.mark_len = self.mark_len + other.mark_len;
 
         out
     }
 }
 
-impl<const DOF: usize, const N: usize> Linkage<DOF> for LinkageFixed<DOF, N> {
-    fn view(&self) -> LinkageView<'_, DOF> {
-        LinkageView::new(&self.params, &self.steps[..self.len])
+impl<const DOF: usize, const MARKS: usize, const N: usize> Linkage<DOF, MARKS>
+    for LinkageFixed<DOF, MARKS, N>
+{
+    fn view(&self) -> LinkageView<'_, DOF, MARKS> {
+        LinkageView::new(
+            &self.params,
+            &self.steps[..self.len],
+            &self.mark_names,
+            self.mark_len,
+        )
     }
 
     fn len(&self) -> usize {
@@ -1623,8 +1667,8 @@ impl<const DOF: usize, const N: usize> Linkage<DOF> for LinkageFixed<DOF, N> {
     }
 }
 
-impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
-    fn view(&self) -> LinkageView<'_, DOF> {
+impl<'a, const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageView<'a, DOF, MARKS> {
+    fn view(&self) -> LinkageView<'_, DOF, MARKS> {
         *self
     }
 }
@@ -1632,7 +1676,7 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
 #[cfg(feature = "alloc")]
 /// A growable linkage expression/storage type.
 ///
-/// `LinkageBuf` stores linkage steps in a [`Vec`](alloc::vec::Vec) and parameters in an array,
+/// `LinkageBuf` stores linkage steps in a [`Vec`] and parameters in an array,
 /// allowing dynamic growth at runtime. Unlike [`LinkageFixed`], construction is not `const`,
 /// but the fluent DSL methods and evaluation interface are identical.
 ///
@@ -1650,7 +1694,7 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
 /// # #[cfg(feature = "alloc")]
 /// # {
 /// # use linkage_blaze_core::{LinkageBuf, Vec3};
-/// let linkage = LinkageBuf::start()
+/// let linkage: LinkageBuf<1, 0> = LinkageBuf::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
@@ -1665,7 +1709,7 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
 /// # #[cfg(feature = "alloc")]
 /// # {
 /// # use linkage_blaze_core::{LinkageFixed, LinkageBuf, Vec3};
-/// const FIXED: LinkageFixed<1, 8> = LinkageFixed::start()
+/// const FIXED: LinkageFixed<1, 0, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
@@ -1675,14 +1719,16 @@ impl<'a, const DOF: usize> Linkage<DOF> for LinkageView<'a, DOF> {
 /// # }
 /// ```
 #[derive(Clone)]
-pub struct LinkageBuf<const DOF: usize> {
+pub struct LinkageBuf<const DOF: usize, const MARKS: usize> {
     params: [Param; DOF],
     param_len: usize,
     steps: alloc::vec::Vec<Step>,
+    mark_names: [&'static str; MARKS],
+    mark_len: usize,
 }
 
 #[cfg(feature = "alloc")]
-impl<const DOF: usize> LinkageBuf<DOF> {
+impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// Start a growable linkage with an implicit origin.
     pub fn start() -> Self {
         Self {
@@ -1693,6 +1739,8 @@ impl<const DOF: usize> LinkageBuf<DOF> {
                 v.push(Step::Start);
                 v
             },
+            mark_names: [""; MARKS],
+            mark_len: 0,
         }
     }
 
@@ -1708,14 +1756,17 @@ impl<const DOF: usize> LinkageBuf<DOF> {
     /// Number of runtime parameters this linkage expects.
     pub const DOF: usize = DOF;
 
+    /// Mark-slot capacity of this linkage.
+    pub const MARKS: usize = MARKS;
+
     /// Create a borrowed view for evaluation and rendering.
     ///
     /// The view erases the step capacity while preserving the degree-of-freedom `DOF`.
     /// All evaluation methods (poses, draw_items, etc.) operate on the view.
     #[must_use]
     #[inline]
-    pub fn view(&self) -> LinkageView<'_, DOF> {
-        LinkageView::new(&self.params, &self.steps)
+    pub fn view(&self) -> LinkageView<'_, DOF, MARKS> {
+        LinkageView::new(&self.params, &self.steps, &self.mark_names, self.mark_len)
     }
 
     /// Define a named runtime parameter, extending the linkage expression.
@@ -1737,30 +1788,28 @@ impl<const DOF: usize> LinkageBuf<DOF> {
 
     /// Save the current pose and pen state under a name for later recall.
     pub fn mark(mut self, name: &'static str) -> Self {
-        self.push_step_internal(Step::Mark { name });
+        let index = match self.mark_index(name) {
+            Some(index) => index,
+            None => {
+                assert!(self.mark_len < MARKS, "linkage has more marks than MARKS");
+                let index = self.mark_len;
+                self.mark_names[index] = name;
+                self.mark_len += 1;
+                index
+            }
+        };
+        self.push_step_internal(Step::Mark { index });
         self
     }
 
     /// Restore a previously marked pose and pen state.
     /// Resolves `name` at build time using last-definition-wins (shadowing) semantics.
     pub fn restore(self, name: &'static str) -> Self {
-        let index = match self.last_mark_index(name) {
+        let index = match self.mark_index(name) {
             Some(i) => i,
             None => {
                 panic!("restore: no mark found with name (mark must be defined before restore)")
             }
-        };
-        self.push_step(Step::Restore { index })
-    }
-
-    /// Restore the `n`th marked pose with the given name (0 = first definition).
-    /// Resolves at build time.
-    pub fn restore_nth(self, name: &'static str, n: usize) -> Self {
-        let index = match self.mark_index_nth(name, n) {
-            Some(i) => i,
-            None => panic!(
-                "restore_nth: no matching mark found (must define mark before restoring nth)"
-            ),
         };
         self.push_step(Step::Restore { index })
     }
@@ -1773,6 +1822,8 @@ impl<const DOF: usize> LinkageBuf<DOF> {
             params: self.params,
             param_len: self.param_len,
             steps: alloc::vec::Vec::with_capacity(self.steps.len() * 3),
+            mark_names: self.mark_names,
+            mark_len: self.mark_len,
         };
         for step in &self.steps {
             let is_move = matches!(step, Step::Move(_) | Step::Left(_) | Step::Up(_));
@@ -1801,34 +1852,13 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         self.steps.push(step);
     }
 
-    fn last_mark_index(&self, name: &str) -> Option<usize> {
-        let mut step_index = self.steps.len();
-        let mut mark_index = step_mark_count(&self.steps);
-        while step_index > 0 {
-            step_index -= 1;
-            if let Step::Mark { name: mark_name } = self.steps[step_index] {
-                mark_index -= 1;
-                if str_eq(mark_name, name) {
-                    return Some(mark_index);
-                }
-            }
-        }
-        None
-    }
-
-    fn mark_index_nth(&self, name: &str, n: usize) -> Option<usize> {
-        let mut count = 0;
+    fn mark_index(&self, name: &str) -> Option<usize> {
         let mut mark_index = 0;
-        for &step in &self.steps {
-            if let Step::Mark { name: mark_name } = step {
-                if str_eq(mark_name, name) {
-                    if count == n {
-                        return Some(mark_index);
-                    }
-                    count += 1;
-                }
-                mark_index += 1;
+        while mark_index < self.mark_len {
+            if str_eq(self.mark_names[mark_index], name) {
+                return Some(mark_index);
             }
+            mark_index += 1;
         }
         None
     }
@@ -1868,36 +1898,47 @@ impl<const DOF: usize> LinkageBuf<DOF> {
     /// # #[cfg(feature = "alloc")]
     /// # {
     /// # use linkage_blaze_core::{LinkageBuf, Vec3};
-    /// let a = LinkageBuf::<1>::start()
+    /// let a = LinkageBuf::<1, 0>::start()
     ///     .define_param("x", 0.5)
     ///     .forward_param("x", 0.0, 10.0);
     ///
-    /// let b = LinkageBuf::<1>::start()
+    /// let b = LinkageBuf::<1, 0>::start()
     ///     .define_param("y", 0.5)
     ///     .left_param("y", 0.0, 5.0);
     ///
-    /// let c: LinkageBuf<2> = a.combine(b);
+    /// let c: LinkageBuf<2, 0> = a.combine(b);
     /// let params = [0.5, 0.5];
     /// let pose = c.view().final_pose(&params);
     /// # }
     /// ```
-    pub fn combine<const DOF2: usize, const DOF_OUT: usize>(
+    pub fn combine<
+        const DOF2: usize,
+        const MARKS2: usize,
+        const DOF_OUT: usize,
+        const MARKS_OUT: usize,
+    >(
         self,
-        other: LinkageBuf<DOF2>,
-    ) -> LinkageBuf<DOF_OUT> {
+        other: LinkageBuf<DOF2, MARKS2>,
+    ) -> LinkageBuf<DOF_OUT, MARKS_OUT> {
         assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF + DOF2");
+        assert!(
+            MARKS_OUT >= self.mark_len + other.mark_len,
+            "MARKS_OUT must fit all marks from both linkages"
+        );
 
         let mut out = LinkageBuf {
             params: [Param::EMPTY; DOF_OUT],
             param_len: 0,
             steps: alloc::vec::Vec::new(),
+            mark_names: [""; MARKS_OUT],
+            mark_len: 0,
         };
 
         // Copy self's steps (including Start)
         out.steps.extend_from_slice(&self.steps);
 
         // Append other's steps (skip Start), offsetting param and mark indices
-        let mark_offset = step_mark_count(&self.steps);
+        let mark_offset = self.mark_len;
         for i in 1..other.steps.len() {
             let step = other.steps[i].offset_params(DOF, mark_offset);
             out.steps.push(step);
@@ -1918,6 +1959,18 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         }
         out.param_len = self.param_len + other.param_len;
 
+        let mut i = 0;
+        while i < self.mark_len {
+            out.mark_names[i] = self.mark_names[i];
+            i += 1;
+        }
+        let mut i = 0;
+        while i < other.mark_len {
+            out.mark_names[self.mark_len + i] = other.mark_names[i];
+            i += 1;
+        }
+        out.mark_len = self.mark_len + other.mark_len;
+
         out
     }
 
@@ -1930,23 +1983,34 @@ impl<const DOF: usize> LinkageBuf<DOF> {
     /// # Panics
     ///
     /// Panics if `DOF_OUT != DOF + DOF2`.
-    pub fn combine_ref<const DOF2: usize, const DOF_OUT: usize>(
+    pub fn combine_ref<
+        const DOF2: usize,
+        const MARKS2: usize,
+        const DOF_OUT: usize,
+        const MARKS_OUT: usize,
+    >(
         &self,
-        other: LinkageView<'_, DOF2>,
-    ) -> LinkageBuf<DOF_OUT> {
+        other: LinkageView<'_, DOF2, MARKS2>,
+    ) -> LinkageBuf<DOF_OUT, MARKS_OUT> {
         assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF + DOF2");
+        assert!(
+            MARKS_OUT >= self.mark_len + other.mark_len(),
+            "MARKS_OUT must fit all marks from both linkages"
+        );
 
         let mut out = LinkageBuf {
             params: [Param::EMPTY; DOF_OUT],
             param_len: 0,
             steps: alloc::vec::Vec::new(),
+            mark_names: [""; MARKS_OUT],
+            mark_len: 0,
         };
 
         // Copy self's steps (including Start)
         out.steps.extend_from_slice(&self.steps);
 
         // Append steps from the view (skip Start)
-        let mark_offset = step_mark_count(&self.steps);
+        let mark_offset = self.mark_len;
         let view_steps = other.steps();
         for i in 1..view_steps.len() {
             let step = view_steps[i].offset_params(DOF, mark_offset);
@@ -1969,13 +2033,26 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         }
         out.param_len = self.param_len + DOF2;
 
+        let mut i = 0;
+        while i < self.mark_len {
+            out.mark_names[i] = self.mark_names[i];
+            i += 1;
+        }
+        let other_mark_names = other.mark_names();
+        let mut i = 0;
+        while i < other.mark_len() {
+            out.mark_names[self.mark_len + i] = other_mark_names[i];
+            i += 1;
+        }
+        out.mark_len = self.mark_len + other.mark_len();
+
         out
     }
 }
 
 #[cfg(feature = "alloc")]
-impl<const DOF: usize> Linkage<DOF> for LinkageBuf<DOF> {
-    fn view(&self) -> LinkageView<'_, DOF> {
+impl<const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageBuf<DOF, MARKS> {
+    fn view(&self) -> LinkageView<'_, DOF, MARKS> {
         self.view()
     }
 
@@ -1993,19 +2070,25 @@ impl<const DOF: usize> Linkage<DOF> for LinkageBuf<DOF> {
 }
 
 #[cfg(feature = "alloc")]
-impl<const DOF: usize, const N: usize> From<&LinkageFixed<DOF, N>> for LinkageBuf<DOF> {
-    fn from(linkage: &LinkageFixed<DOF, N>) -> Self {
+impl<const DOF: usize, const MARKS: usize, const N: usize> From<&LinkageFixed<DOF, MARKS, N>>
+    for LinkageBuf<DOF, MARKS>
+{
+    fn from(linkage: &LinkageFixed<DOF, MARKS, N>) -> Self {
         Self {
             params: linkage.params,
             param_len: linkage.param_len,
             steps: linkage.steps[..linkage.len].to_vec(),
+            mark_names: linkage.mark_names,
+            mark_len: linkage.mark_len,
         }
     }
 }
 
 #[cfg(feature = "alloc")]
-impl<'a, const DOF: usize> From<&'a LinkageBuf<DOF>> for LinkageView<'a, DOF> {
-    fn from(linkage: &'a LinkageBuf<DOF>) -> Self {
+impl<'a, const DOF: usize, const MARKS: usize> From<&'a LinkageBuf<DOF, MARKS>>
+    for LinkageView<'a, DOF, MARKS>
+{
+    fn from(linkage: &'a LinkageBuf<DOF, MARKS>) -> Self {
         linkage.view()
     }
 }
@@ -2022,6 +2105,9 @@ impl Step {
             Self::DiskParam(v) => Self::DiskParam(v.offset(param_offset)),
             Self::RingParam(v) => Self::RingParam(v.offset(param_offset)),
             Self::SphereParam(v) => Self::SphereParam(v.offset(param_offset)),
+            Self::Mark { index } => Self::Mark {
+                index: index + remember_offset,
+            },
             Self::Restore { index } => Self::Restore {
                 index: index + remember_offset,
             },
@@ -2047,14 +2133,6 @@ const fn str_eq(left: &str, right: &str) -> bool {
     }
 
     true
-}
-
-#[cfg(feature = "alloc")]
-fn step_mark_count(steps: &[Step]) -> usize {
-    steps
-        .iter()
-        .filter(|step| matches!(step, Step::Mark { .. }))
-        .count()
 }
 
 fn validate_params<const DOF: usize>(params: &[f32; DOF]) {
@@ -2344,15 +2422,16 @@ struct MarkedState {
 }
 
 /// Iterator over styled poses from a LinkageView (does not require const N).
-struct StyledPosesView<'a, const DOF: usize> {
+struct StyledPosesView<'a, const DOF: usize, const MARKS: usize> {
     steps: &'a [Step],
     params: &'a [f32; DOF],
     index: usize,
     pose: Pose,
     pen_style: PenStyle,
+    marked: [MarkedState; MARKS],
 }
 
-impl<'a, const DOF: usize> StyledPosesView<'a, DOF> {
+impl<'a, const DOF: usize, const MARKS: usize> StyledPosesView<'a, DOF, MARKS> {
     fn new(steps: &'a [Step], params_values: &'a [f32; DOF]) -> Self {
         validate_params(params_values);
         Self {
@@ -2361,11 +2440,15 @@ impl<'a, const DOF: usize> StyledPosesView<'a, DOF> {
             index: 0,
             pose: Pose::start(),
             pen_style: PenStyle::new(),
+            marked: [MarkedState {
+                pose: Pose::start(),
+                pen_style: PenStyle::new(),
+            }; MARKS],
         }
     }
 }
 
-impl<const DOF: usize> Iterator for StyledPosesView<'_, DOF> {
+impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF, MARKS> {
     type Item = StyledPose;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2377,11 +2460,15 @@ impl<const DOF: usize> Iterator for StyledPosesView<'_, DOF> {
             self.index += 1;
 
             match step {
-                Step::Mark { name: _ } => {
+                Step::Mark { index } => {
+                    self.marked[*index] = MarkedState {
+                        pose: self.pose,
+                        pen_style: self.pen_style,
+                    };
                     continue;
                 }
                 Step::Restore { index } => {
-                    let marked_state = marked_state_at(self.steps, self.params, *index);
+                    let marked_state = self.marked[*index];
                     self.pose = marked_state.pose;
                     self.pen_style = marked_state.pen_style;
                     continue;
@@ -2400,15 +2487,16 @@ impl<const DOF: usize> Iterator for StyledPosesView<'_, DOF> {
 }
 
 /// Iterator over draw items from a LinkageView (does not require const N).
-struct DrawItemsView<'a, const DOF: usize> {
+struct DrawItemsView<'a, const DOF: usize, const MARKS: usize> {
     steps: &'a [Step],
     params: &'a [f32; DOF],
     index: usize,
     pose: Pose,
     pen_style: PenStyle,
+    marked: [MarkedState; MARKS],
 }
 
-impl<'a, const DOF: usize> DrawItemsView<'a, DOF> {
+impl<'a, const DOF: usize, const MARKS: usize> DrawItemsView<'a, DOF, MARKS> {
     fn new(steps: &'a [Step], params_values: &'a [f32; DOF]) -> Self {
         validate_params(params_values);
         Self {
@@ -2417,11 +2505,15 @@ impl<'a, const DOF: usize> DrawItemsView<'a, DOF> {
             index: 0,
             pose: Pose::start(),
             pen_style: PenStyle::new(),
+            marked: [MarkedState {
+                pose: Pose::start(),
+                pen_style: PenStyle::new(),
+            }; MARKS],
         }
     }
 }
 
-impl<const DOF: usize> Iterator for DrawItemsView<'_, DOF> {
+impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemsView<'_, DOF, MARKS> {
     type Item = DrawItem;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2430,11 +2522,15 @@ impl<const DOF: usize> Iterator for DrawItemsView<'_, DOF> {
             self.index += 1;
 
             match step {
-                Step::Mark { name: _ } => {
+                Step::Mark { index } => {
+                    self.marked[*index] = MarkedState {
+                        pose: self.pose,
+                        pen_style: self.pen_style,
+                    };
                     continue;
                 }
                 Step::Restore { index } => {
-                    let marked_state = marked_state_at(self.steps, self.params, *index);
+                    let marked_state = self.marked[*index];
                     self.pose = marked_state.pose;
                     self.pen_style = marked_state.pen_style;
                     continue;
@@ -2508,18 +2604,6 @@ impl<const DOF: usize> Iterator for DrawItemsView<'_, DOF> {
 
         None
     }
-}
-
-fn marked_state_at<const DOF: usize>(
-    _steps: &[Step],
-    _params: &[f32; DOF],
-    _target_mark_index: usize,
-) -> MarkedState {
-    // TODO0000 This replay-based restore path is not acceptable for real evaluation.
-    // Restore should use evaluator-local mark storage sized from a type-level mark count.
-    todo!(
-        "restore evaluation needs evaluator-local mark storage sized from a type-level mark count"
-    )
 }
 
 /// A disk shape yielded by a linkage at the current pose.
@@ -2665,11 +2749,11 @@ macro_rules! linkage {
 /// Prefer the one-argument form with an explicit type annotation:
 ///
 /// ```rust,ignore
-/// const CLOCK: LinkageFixed<2, 48> =
+/// const CLOCK: LinkageFixed<2, 4, 48> =
 ///     linkage_fixed!("clock.lb.rs");
 ///
 /// // Inside a function body:
-/// let clock: LinkageFixed<2, 48> =
+/// let clock: LinkageFixed<2, 4, 48> =
 ///     linkage_fixed!("clock.lb.rs");
 /// ```
 ///
@@ -2677,8 +2761,8 @@ macro_rules! linkage {
 /// inferred:
 ///
 /// ```rust,ignore
-/// const CLOCK: LinkageFixed<2, 48> =
-///     linkage_fixed!("clock.lb.rs", 2, 48);
+/// const CLOCK: LinkageFixed<2, 4, 48> =
+///     linkage_fixed!("clock.lb.rs", 2, 4, 48);
 /// ```
 #[macro_export]
 macro_rules! linkage_fixed {
@@ -2690,8 +2774,8 @@ macro_rules! linkage_fixed {
         }
         include!($path)
     }};
-    ($path:literal, $dof:expr, $n:expr) => {{
-        let linkage: $crate::LinkageFixed<$dof, $n> = $crate::linkage_fixed!($path);
+    ($path:literal, $dof:expr, $marks:expr, $n:expr) => {{
+        let linkage: $crate::LinkageFixed<$dof, $marks, $n> = $crate::linkage_fixed!($path);
         linkage
     }};
 }
@@ -2707,7 +2791,7 @@ macro_rules! linkage_fixed {
 /// Prefer the one-argument form with an explicit type annotation:
 ///
 /// ```rust,ignore
-/// let clock: LinkageBuf<2> =
+/// let clock: LinkageBuf<2, 4> =
 ///     linkage_buf!("clock.lb.rs");
 /// ```
 ///
@@ -2715,7 +2799,7 @@ macro_rules! linkage_fixed {
 /// inferred:
 ///
 /// ```rust,ignore
-/// let clock = linkage_buf!("clock.lb.rs", 2);
+/// let clock = linkage_buf!("clock.lb.rs", 2, 4);
 /// ```
 #[cfg(feature = "alloc")]
 #[macro_export]
@@ -2728,8 +2812,8 @@ macro_rules! linkage_buf {
         }
         include!($path)
     }};
-    ($path:literal, $dof:expr) => {{
-        let linkage: $crate::LinkageBuf<$dof> = $crate::linkage_buf!($path);
+    ($path:literal, $dof:expr, $marks:expr) => {{
+        let linkage: $crate::LinkageBuf<$dof, $marks> = $crate::linkage_buf!($path);
         linkage
     }};
 }
@@ -2747,7 +2831,7 @@ mod tests {
     use std::{boxed::Box, error::Error};
 
     //todo000 *_param might not be a good suffix.
-    const LINKAGE0: LinkageFixed<6, 24> = LinkageFixed::start()
+    const LINKAGE0: LinkageFixed<6, 0, 24> = LinkageFixed::start()
         .define_param("raise hand", 0.5)
         .define_param("bend elbow", 0.5)
         .define_param("close hand", 0.5)
@@ -2779,7 +2863,7 @@ mod tests {
         .forward(1.0);
 
     // todo0000 kill 2nd one
-    const LINKAGE1: LinkageFixed<3, 16> = LinkageFixed::start()
+    const LINKAGE1: LinkageFixed<3, 0, 16> = LinkageFixed::start()
         .define_param("spin whole arm", 0.5)
         .define_param("bend elbow", 0.5)
         .define_param("close hand", 0.5)
@@ -2801,7 +2885,7 @@ mod tests {
 
     #[test]
     fn zero_pen_width_still_draws() {
-        const LINKAGE: LinkageFixed<0, 4> = LinkageFixed::start().pen_width(0.0).forward(1.0);
+        const LINKAGE: LinkageFixed<0, 0, 4> = LinkageFixed::start().pen_width(0.0).forward(1.0);
 
         let params = [];
         let draw_item = LINKAGE
@@ -2821,7 +2905,7 @@ mod tests {
     #[cfg(feature = "alloc")]
     #[test]
     fn serializes_linkage_view_to_lb_rs() {
-        const LINKAGE: LinkageFixed<1, 10> = LinkageFixed::start()
+        const LINKAGE: LinkageFixed<1, 1, 10> = LinkageFixed::start()
             .define_param("distance", 0.5)
             .pen_up()
             .mark("origin")
@@ -2850,7 +2934,7 @@ mod tests {
     .forward_param("distance", 1.0, 5.0)
 ]"#;
 
-        let linkage = LinkageBuf::<1>::from_lb_rs(source).expect("source should parse");
+        let linkage = LinkageBuf::<1, 0>::from_lb_rs(source).expect("source should parse");
         let pose = linkage.view().final_pose(&[0.5]);
 
         assert!(
@@ -2862,7 +2946,7 @@ mod tests {
     #[cfg(feature = "alloc")]
     #[test]
     fn lb_rs_parser_rejects_integer_arguments() {
-        let error = match LinkageBuf::<0>::from_lb_rs("linkage![\n.forward(1)\n]") {
+        let error = match LinkageBuf::<0, 0>::from_lb_rs("linkage![\n.forward(1)\n]") {
             Ok(_) => panic!("integer argument should fail"),
             Err(error) => error,
         };
@@ -2872,7 +2956,7 @@ mod tests {
 
     #[test]
     fn forward_moves_along_positive_x() {
-        const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().forward(10.0);
+        const LINKAGE: LinkageFixed<0, 0, 2> = LinkageFixed::start().forward(10.0);
 
         let params = [];
         let actual = LINKAGE.view().final_pose(&params).position();
@@ -2882,7 +2966,7 @@ mod tests {
 
     #[test]
     fn yaw_then_forward_moves_along_positive_y() {
-        const LINKAGE: LinkageFixed<0, 3> = LinkageFixed::start().yaw(90.0).forward(10.0);
+        const LINKAGE: LinkageFixed<0, 0, 3> = LinkageFixed::start().yaw(90.0).forward(10.0);
 
         let params = [];
         let actual = LINKAGE.view().final_pose(&params).position();
@@ -2892,7 +2976,7 @@ mod tests {
 
     #[test]
     fn left_moves_along_positive_y() {
-        const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().left(10.0);
+        const LINKAGE: LinkageFixed<0, 0, 2> = LinkageFixed::start().left(10.0);
 
         let params = [];
         let actual = LINKAGE.view().final_pose(&params).position();
@@ -2902,7 +2986,7 @@ mod tests {
 
     #[test]
     fn up_moves_along_positive_z() {
-        const LINKAGE: LinkageFixed<0, 2> = LinkageFixed::start().up(10.0);
+        const LINKAGE: LinkageFixed<0, 0, 2> = LinkageFixed::start().up(10.0);
 
         let params = [];
         let actual = LINKAGE.view().final_pose(&params).position();
@@ -2912,7 +2996,7 @@ mod tests {
 
     #[test]
     fn translation_params_move_along_named_axes() {
-        const LINKAGE: LinkageFixed<3, 7> = LinkageFixed::start()
+        const LINKAGE: LinkageFixed<3, 0, 7> = LinkageFixed::start()
             .define_param("forward", 0.5)
             .define_param("left", 0.5)
             .define_param("up", 0.5)
@@ -2928,7 +3012,7 @@ mod tests {
 
     #[test]
     fn planar_two_link_arm_uses_yaw_then_forward() {
-        const LINKAGE: LinkageFixed<0, 5> = LinkageFixed::start()
+        const LINKAGE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
             .yaw(0.0)
             .forward(10.0)
             .yaw(90.0)
@@ -3075,7 +3159,7 @@ mod tests {
     fn duplicate_define_param_does_not_panic() {
         // Simply building a linkage with a duplicate name must succeed.
         // (Previously this would panic with "duplicate parameter name".)
-        const _: LinkageFixed<2, 2> = LinkageFixed::start()
+        const _: LinkageFixed<2, 0, 2> = LinkageFixed::start()
             .define_param("angle", 0.25) // index 0
             .define_param("angle", 0.75); // index 1 — shadows index 0
     }
@@ -3088,7 +3172,7 @@ mod tests {
         // We verify this by setting params = [1.0, 0.0]:
         //   - if bound to index 0 → yaw 90° → forward lands at ~(0, 10, 0)
         //   - if bound to index 1 → yaw  0° → forward lands at (10, 0, 0)  ✓
-        const LINKAGE: LinkageFixed<2, 5> = LinkageFixed::start()
+        const LINKAGE: LinkageFixed<2, 0, 5> = LinkageFixed::start()
             .define_param("angle", 0.0) // index 0, default 0.0
             .define_param("angle", 1.0) // index 1, default 1.0 — shadows index 0
             .yaw_param("angle", 0.0, 90.0) // binds to index 1 (most recent)

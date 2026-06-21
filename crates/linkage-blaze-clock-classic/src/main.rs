@@ -11,7 +11,6 @@
 
 use core::{cell::RefCell, convert::Infallible, fmt};
 
-use linkage_blaze_cyd::Cyd;
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -26,6 +25,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
 use esp_backtrace as _;
+use linkage_blaze_cyd::Cyd;
 use log::info;
 use static_cell::StaticCell;
 

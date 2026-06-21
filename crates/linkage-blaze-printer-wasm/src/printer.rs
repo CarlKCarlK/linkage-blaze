@@ -28,7 +28,7 @@ pub struct Segment {
 pub struct PrinterSim {
     pub segments: Vec<Segment>,
     pub current_index: usize,
-    print_linkage: LinkageBuf<0>,
+    print_linkage: LinkageBuf<0, 0>,
     print_position: (f32, f32, f32),
     print_draw_items: Vec<f32>,
 }
