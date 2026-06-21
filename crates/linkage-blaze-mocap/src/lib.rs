@@ -70,7 +70,7 @@ pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, Moc
 
     for (joint_index, joint) in clip.joints.iter().enumerate() {
         for &channel in &joint.channels {
-            push_bvh_parameter(&mut parameters, joint_index, channel)?;
+            push_bvh_parameter(&mut parameters, joint_index, &joint.name, channel);
         }
     }
 
@@ -101,7 +101,7 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize>(
         )));
     }
 
-    let mut linkage = LinkageBuf::start().pen_up().mark("origin");
+    let mut linkage = LinkageBuf::start().pen_up().pen_width(1.5).mark("origin");
     for (parameter_index, parameter) in layout.parameters.iter().enumerate() {
         let default = defaults.get(parameter_index).copied().unwrap_or(0.5);
         linkage = linkage.define_param(parameter.linkage_name, default);
@@ -149,6 +149,18 @@ pub fn bvh_frame_params<const DOF: usize>(
     Ok(params)
 }
 
+/// Convert BVH motion text into generated `.lb.rs` source.
+///
+/// The generated linkage uses defaults from the first BVH motion frame, so
+/// loading the generated file starts in a captured pose.
+pub fn bvh_to_lb_rs<const DOF: usize>(source: &str) -> Result<String, MocapParseError> {
+    let clip = parse_bvh(source)?;
+    let layout = discover_bvh_parameters(&clip)?;
+    let linkage = build_bvh_linkage_buf::<DOF>(&clip, &layout)?;
+
+    Ok(linkage.view().to_lb_rs())
+}
+
 /// Parse BVH hierarchy and motion text.
 pub fn parse_bvh(source: &str) -> Result<BvhClip, MocapParseError> {
     let mut parser = BvhParser::new(source);
@@ -191,22 +203,62 @@ pub fn parse_bvh(source: &str) -> Result<BvhClip, MocapParseError> {
 fn push_bvh_parameter(
     parameters: &mut Vec<BvhParameter>,
     joint_index: usize,
+    joint_name: &str,
     channel: BvhChannel,
-) -> Result<(), MocapParseError> {
+) {
     let index = parameters.len();
-    let Some(linkage_name) = static_parameter_name(index) else {
-        return Err(MocapParseError::new(format!(
-            "too many BVH parameters; supported maximum is {}",
-            STATIC_PARAMETER_NAMES.len()
-        )));
-    };
+    let linkage_name = bvh_linkage_name(joint_name, channel);
     parameters.push(BvhParameter {
         index,
         linkage_name,
         joint_index,
         channel,
     });
-    Ok(())
+}
+
+fn bvh_linkage_name(joint_name: &str, channel: BvhChannel) -> &'static str {
+    let mut name = String::with_capacity(joint_name.len() + 1 + bvh_channel_name(channel).len());
+    push_sanitized_name_part(&mut name, joint_name);
+    name.push('_');
+    name.push_str(bvh_channel_name(channel));
+    Box::leak(name.into_boxed_str())
+}
+
+fn push_sanitized_name_part(name: &mut String, value: &str) {
+    let mut previous_was_underscore = false;
+    let mut previous_was_lowercase_or_digit = false;
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            if character.is_ascii_uppercase()
+                && previous_was_lowercase_or_digit
+                && !previous_was_underscore
+            {
+                name.push('_');
+            }
+            name.push(character.to_ascii_lowercase());
+            previous_was_underscore = false;
+            previous_was_lowercase_or_digit =
+                character.is_ascii_lowercase() || character.is_ascii_digit();
+        } else if !previous_was_underscore {
+            name.push('_');
+            previous_was_underscore = true;
+            previous_was_lowercase_or_digit = false;
+        }
+    }
+    while name.ends_with('_') {
+        name.pop();
+    }
+}
+
+fn bvh_channel_name(channel: BvhChannel) -> &'static str {
+    match channel {
+        BvhChannel::Xposition => "xposition",
+        BvhChannel::Yposition => "yposition",
+        BvhChannel::Zposition => "zposition",
+        BvhChannel::Xrotation => "xrotation",
+        BvhChannel::Yrotation => "yrotation",
+        BvhChannel::Zrotation => "zrotation",
+    }
 }
 
 fn apply_bvh_joint_parameters<const DOF: usize>(
@@ -254,7 +306,7 @@ fn normalize_bvh_parameter_default(
     value: f32,
 ) -> Result<f32, MocapParseError> {
     let (low, high) = bvh_parameter_range(parameter.channel);
-    let default = (value - low) / (high - low);
+    let default = snap_centered_default((value - low) / (high - low));
 
     if !(0.0..=1.0).contains(&default) {
         return Err(MocapParseError::new(format!(
@@ -264,6 +316,17 @@ fn normalize_bvh_parameter_default(
     }
 
     Ok(default)
+}
+
+fn snap_centered_default(default: f32) -> f32 {
+    const CENTER_DEFAULT: f32 = 0.5;
+    const CENTER_DEFAULT_EPSILON: f32 = 0.01;
+
+    if (default - CENTER_DEFAULT).abs() <= CENTER_DEFAULT_EPSILON {
+        CENTER_DEFAULT
+    } else {
+        default
+    }
 }
 
 fn bvh_parameter_range(channel: BvhChannel) -> (f32, f32) {
@@ -491,7 +554,7 @@ fn append_offset_segment<const DOF: usize>(
         linkage = linkage.pitch(pitch_degrees);
     }
 
-    linkage = linkage.pen_width(1.5).pen_down().forward(length).pen_up();
+    linkage = linkage.pen_down().forward(length).pen_up();
 
     if !is_nearly_zero_degrees(pitch_degrees) {
         linkage = linkage.pitch(-pitch_degrees);
@@ -507,269 +570,6 @@ fn is_nearly_zero_degrees(degrees: f32) -> bool {
     const ANGLE_EPSILON_DEGREES: f32 = 0.0001;
 
     degrees.abs() < ANGLE_EPSILON_DEGREES
-}
-
-const STATIC_PARAMETER_NAMES: [&str; 256] = [
-    "mocap_000",
-    "mocap_001",
-    "mocap_002",
-    "mocap_003",
-    "mocap_004",
-    "mocap_005",
-    "mocap_006",
-    "mocap_007",
-    "mocap_008",
-    "mocap_009",
-    "mocap_010",
-    "mocap_011",
-    "mocap_012",
-    "mocap_013",
-    "mocap_014",
-    "mocap_015",
-    "mocap_016",
-    "mocap_017",
-    "mocap_018",
-    "mocap_019",
-    "mocap_020",
-    "mocap_021",
-    "mocap_022",
-    "mocap_023",
-    "mocap_024",
-    "mocap_025",
-    "mocap_026",
-    "mocap_027",
-    "mocap_028",
-    "mocap_029",
-    "mocap_030",
-    "mocap_031",
-    "mocap_032",
-    "mocap_033",
-    "mocap_034",
-    "mocap_035",
-    "mocap_036",
-    "mocap_037",
-    "mocap_038",
-    "mocap_039",
-    "mocap_040",
-    "mocap_041",
-    "mocap_042",
-    "mocap_043",
-    "mocap_044",
-    "mocap_045",
-    "mocap_046",
-    "mocap_047",
-    "mocap_048",
-    "mocap_049",
-    "mocap_050",
-    "mocap_051",
-    "mocap_052",
-    "mocap_053",
-    "mocap_054",
-    "mocap_055",
-    "mocap_056",
-    "mocap_057",
-    "mocap_058",
-    "mocap_059",
-    "mocap_060",
-    "mocap_061",
-    "mocap_062",
-    "mocap_063",
-    "mocap_064",
-    "mocap_065",
-    "mocap_066",
-    "mocap_067",
-    "mocap_068",
-    "mocap_069",
-    "mocap_070",
-    "mocap_071",
-    "mocap_072",
-    "mocap_073",
-    "mocap_074",
-    "mocap_075",
-    "mocap_076",
-    "mocap_077",
-    "mocap_078",
-    "mocap_079",
-    "mocap_080",
-    "mocap_081",
-    "mocap_082",
-    "mocap_083",
-    "mocap_084",
-    "mocap_085",
-    "mocap_086",
-    "mocap_087",
-    "mocap_088",
-    "mocap_089",
-    "mocap_090",
-    "mocap_091",
-    "mocap_092",
-    "mocap_093",
-    "mocap_094",
-    "mocap_095",
-    "mocap_096",
-    "mocap_097",
-    "mocap_098",
-    "mocap_099",
-    "mocap_100",
-    "mocap_101",
-    "mocap_102",
-    "mocap_103",
-    "mocap_104",
-    "mocap_105",
-    "mocap_106",
-    "mocap_107",
-    "mocap_108",
-    "mocap_109",
-    "mocap_110",
-    "mocap_111",
-    "mocap_112",
-    "mocap_113",
-    "mocap_114",
-    "mocap_115",
-    "mocap_116",
-    "mocap_117",
-    "mocap_118",
-    "mocap_119",
-    "mocap_120",
-    "mocap_121",
-    "mocap_122",
-    "mocap_123",
-    "mocap_124",
-    "mocap_125",
-    "mocap_126",
-    "mocap_127",
-    "mocap_128",
-    "mocap_129",
-    "mocap_130",
-    "mocap_131",
-    "mocap_132",
-    "mocap_133",
-    "mocap_134",
-    "mocap_135",
-    "mocap_136",
-    "mocap_137",
-    "mocap_138",
-    "mocap_139",
-    "mocap_140",
-    "mocap_141",
-    "mocap_142",
-    "mocap_143",
-    "mocap_144",
-    "mocap_145",
-    "mocap_146",
-    "mocap_147",
-    "mocap_148",
-    "mocap_149",
-    "mocap_150",
-    "mocap_151",
-    "mocap_152",
-    "mocap_153",
-    "mocap_154",
-    "mocap_155",
-    "mocap_156",
-    "mocap_157",
-    "mocap_158",
-    "mocap_159",
-    "mocap_160",
-    "mocap_161",
-    "mocap_162",
-    "mocap_163",
-    "mocap_164",
-    "mocap_165",
-    "mocap_166",
-    "mocap_167",
-    "mocap_168",
-    "mocap_169",
-    "mocap_170",
-    "mocap_171",
-    "mocap_172",
-    "mocap_173",
-    "mocap_174",
-    "mocap_175",
-    "mocap_176",
-    "mocap_177",
-    "mocap_178",
-    "mocap_179",
-    "mocap_180",
-    "mocap_181",
-    "mocap_182",
-    "mocap_183",
-    "mocap_184",
-    "mocap_185",
-    "mocap_186",
-    "mocap_187",
-    "mocap_188",
-    "mocap_189",
-    "mocap_190",
-    "mocap_191",
-    "mocap_192",
-    "mocap_193",
-    "mocap_194",
-    "mocap_195",
-    "mocap_196",
-    "mocap_197",
-    "mocap_198",
-    "mocap_199",
-    "mocap_200",
-    "mocap_201",
-    "mocap_202",
-    "mocap_203",
-    "mocap_204",
-    "mocap_205",
-    "mocap_206",
-    "mocap_207",
-    "mocap_208",
-    "mocap_209",
-    "mocap_210",
-    "mocap_211",
-    "mocap_212",
-    "mocap_213",
-    "mocap_214",
-    "mocap_215",
-    "mocap_216",
-    "mocap_217",
-    "mocap_218",
-    "mocap_219",
-    "mocap_220",
-    "mocap_221",
-    "mocap_222",
-    "mocap_223",
-    "mocap_224",
-    "mocap_225",
-    "mocap_226",
-    "mocap_227",
-    "mocap_228",
-    "mocap_229",
-    "mocap_230",
-    "mocap_231",
-    "mocap_232",
-    "mocap_233",
-    "mocap_234",
-    "mocap_235",
-    "mocap_236",
-    "mocap_237",
-    "mocap_238",
-    "mocap_239",
-    "mocap_240",
-    "mocap_241",
-    "mocap_242",
-    "mocap_243",
-    "mocap_244",
-    "mocap_245",
-    "mocap_246",
-    "mocap_247",
-    "mocap_248",
-    "mocap_249",
-    "mocap_250",
-    "mocap_251",
-    "mocap_252",
-    "mocap_253",
-    "mocap_254",
-    "mocap_255",
-];
-
-fn static_parameter_name(index: usize) -> Option<&'static str> {
-    STATIC_PARAMETER_NAMES.get(index).copied()
 }
 
 fn static_mark_name(index: usize) -> Option<&'static str> {
@@ -899,8 +699,43 @@ Frame Time: 0.0333333
         let params = bvh_frame_params::<32>(&layout, &clip.frames[1]).expect("params should build");
 
         assert_eq!(layout.len(), 15);
-        assert!(params[0] > 0.5);
+        assert_eq!(params[0], 0.5);
+        assert_eq!(params[1], 0.5);
+        assert_eq!(params[2], 0.5);
+        assert!(params[6] > 0.5);
         assert!(linkage.view().draw_items(&params).count() >= 5);
+    }
+
+    #[test]
+    fn converts_bvh_to_lb_rs_source() {
+        let source = bvh_to_lb_rs::<32>(BVH).expect("BVH should serialize");
+        let linkage = LinkageBuf::<32>::from_lb_rs(&source).expect("generated source should parse");
+
+        assert!(source.starts_with("linkage![\n"));
+        assert!(source.trim_end().ends_with(']'));
+        assert!(source.contains(".define_param(\"hip_xposition\""));
+        assert!(source.contains(".define_param(\"chest_zrotation\""));
+        assert!(linkage.view().draw_items(&[0.5; 32]).count() >= 5);
+    }
+
+    #[test]
+    fn snaps_near_centered_bvh_defaults_to_half() {
+        assert_eq!(snap_centered_default(0.5006703), 0.5);
+        assert_eq!(snap_centered_default(0.4979823), 0.5);
+        assert_eq!(snap_centered_default(0.5101), 0.5101);
+        assert_eq!(snap_centered_default(0.4899), 0.4899);
+    }
+
+    #[test]
+    fn bvh_parameter_names_use_joint_and_channel_names() {
+        assert_eq!(
+            bvh_linkage_name("rThumb1", BvhChannel::Zrotation),
+            "r_thumb1_zrotation"
+        );
+        assert_eq!(
+            bvh_linkage_name("leftEye", BvhChannel::Xposition),
+            "left_eye_xposition"
+        );
     }
 
     #[test]
@@ -943,5 +778,20 @@ Frame Time: 0.0333333
         assert!(clip.frames.len() > 500);
         assert!(layout.len() > 120);
         assert!(linkage.view().draw_items(&params).count() > 40);
+    }
+
+    #[test]
+    fn converts_real_bvh_to_lb_rs_when_present() {
+        let Ok(bvh) = std::fs::read_to_string("samples/pirouette.bvh") else {
+            return;
+        };
+
+        let source = bvh_to_lb_rs::<256>(&bvh).expect("real BVH should serialize");
+        let linkage =
+            LinkageBuf::<256>::from_lb_rs(&source).expect("real generated source should parse");
+
+        assert!(source.starts_with("linkage![\n"));
+        assert!(source.trim_end().ends_with(']'));
+        assert!(linkage.view().draw_items(&[0.5; 256]).count() > 40);
     }
 }
