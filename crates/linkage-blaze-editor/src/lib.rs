@@ -29,7 +29,7 @@ pub fn render_program_with_params_json(
 }
 
 fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, String> {
-    let linkage = LinkageBuf::<256>::from_lb_rs(source)?;
+    let linkage = LinkageBuf::<256, 64>::from_lb_rs(source)?;
     let view = linkage.view();
     let mut params = [0.0; 256];
     let mut editor_params = Vec::new();

@@ -2823,7 +2823,9 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, LinkageBuf, LinkageFixed, Pose, Rgb888, Vec3};
+    use super::{DrawItem, LinkageFixed, Pose, Vec3};
+    #[cfg(feature = "alloc")]
+    use super::{LinkageBuf, Rgb888};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
