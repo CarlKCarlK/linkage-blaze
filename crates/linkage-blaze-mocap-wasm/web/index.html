@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Linkage Blaze MoCap</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="app">
+      <section class="viewport" aria-label="Motion capture playback">
+        <canvas id="mocap-canvas"></canvas>
+      </section>
+      <aside class="panel" aria-label="Motion capture controls">
+        <div class="toolbar">
+          <button id="load-sample" type="button">Load Sample</button>
+          <button id="play" type="button" disabled>Play</button>
+          <button id="step" type="button" disabled>Step</button>
+        </div>
+
+        <div class="section-label">Playback</div>
+        <label class="control-row">
+          <span>Frame</span>
+          <span id="frame-label" class="value">0 / 0</span>
+          <input id="frame" type="range" min="0" max="0" value="0" disabled />
+        </label>
+        <label class="control-row">
+          <span>Speed</span>
+          <span id="speed-label" class="value">30 fps</span>
+          <input id="speed" type="range" min="1" max="120" value="30" />
+        </label>
+
+        <div class="section-label">View</div>
+        <div class="segmented">
+          <button class="view-btn active" type="button" data-view="perspective">Perspective</button>
+          <button class="view-btn" type="button" data-view="top">Top</button>
+          <button class="view-btn" type="button" data-view="front">Front</button>
+          <button class="view-btn" type="button" data-view="side">Side</button>
+        </div>
+
+        <div class="section-label">Status</div>
+        <div class="status-row">
+          <span>Frames</span>
+          <span id="frame-count">-</span>
+        </div>
+        <div class="status-row">
+          <span>Parameters</span>
+          <span id="param-count">-</span>
+        </div>
+        <div id="error" role="status"></div>
+      </aside>
+    </main>
+    <script type="module" src="./main.js?v=1"></script>
+  </body>
+</html>

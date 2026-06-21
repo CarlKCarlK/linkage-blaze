@@ -1,0 +1,4 @@
+# TODO00 Keep real CMU ASF/AMC sample data out of git until the license/data
+# packaging story is settled.
+*
+!.gitignore

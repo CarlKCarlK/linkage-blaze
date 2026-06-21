@@ -1530,6 +1530,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "linkage-blaze-mocap-wasm"
+version = "0.1.4"
+dependencies = [
+ "embedded-graphics-core",
+ "linkage-blaze-core",
+ "linkage-blaze-mocap",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "linkage-blaze-printer-wasm"
 version = "0.1.4"
 dependencies = [

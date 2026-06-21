@@ -24,6 +24,7 @@ check-all:
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-printer-wasm --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
+    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-mocap-wasm --target web --out-dir web/pkg --out-name linkage_blaze_mocap_wasm
 
 # Alias for check-all
 build:
@@ -157,3 +158,23 @@ run-printer-wasm port=_printer_port:
     just build-printer-wasm
     just serve-printer-wasm {{port}}
 
+# ── linkage-blaze-mocap-wasm ─────────────────────────────────────────────────
+
+_mocap_wasm_crate := "crates/linkage-blaze-mocap-wasm"
+_mocap_wasm_www   := "crates/linkage-blaze-mocap-wasm/web"
+_mocap_wasm_port  := "8084"
+
+check-mocap-wasm:
+    cargo check -p linkage-blaze-mocap-wasm --target wasm32-unknown-unknown
+
+build-mocap-wasm:
+    wasm-pack build {{_mocap_wasm_crate}} --target web --out-dir web/pkg --out-name linkage_blaze_mocap_wasm
+
+serve-mocap-wasm port=_mocap_wasm_port:
+    -lsof -ti:{{port}} | xargs -r kill
+    cd {{_mocap_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-mocap-wasm port=_mocap_wasm_port:
+    just check-mocap-wasm
+    just build-mocap-wasm
+    just serve-mocap-wasm {{port}}
