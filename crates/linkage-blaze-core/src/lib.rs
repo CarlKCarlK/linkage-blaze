@@ -1426,6 +1426,9 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
 
     /// Save the current pose and pen state under a name for later recall.
     pub const fn mark(mut self, name: &'static str) -> Self {
+        // TODO0000 Do not size mark storage from total step capacity N. LinkageFixed should
+        // derive the mark count (or distinct mark count) with const evaluation so evaluators
+        // can allocate exactly the mark state storage they need.
         assert!(self.mark_len < N, "linkage has more marks than N");
         self.mark_names[self.mark_len] = name;
         self.mark_len += 1;

@@ -118,9 +118,13 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize>(
         )));
     }
 
+    let mut root_count = 0;
     for (joint_index, joint) in clip.joints.iter().enumerate() {
         if joint.parent.is_none() {
-            linkage = linkage.restore("origin");
+            if root_count > 0 {
+                linkage = linkage.restore("origin");
+            }
+            root_count += 1;
             linkage = append_bvh_joint(linkage, clip, layout, &children, joint_index)?;
         }
     }
@@ -221,6 +225,13 @@ fn bvh_linkage_name(joint_name: &str, channel: BvhChannel) -> &'static str {
     push_sanitized_name_part(&mut name, joint_name);
     name.push('_');
     name.push_str(bvh_channel_name(channel));
+    Box::leak(name.into_boxed_str())
+}
+
+fn bvh_mark_name(joint_name: &str) -> &'static str {
+    let mut name = String::with_capacity(joint_name.len() + "joint_".len());
+    name.push_str("joint_");
+    push_sanitized_name_part(&mut name, joint_name);
     Box::leak(name.into_boxed_str())
 }
 
@@ -360,12 +371,13 @@ fn append_bvh_joint<const DOF: usize>(
         return Ok(linkage);
     }
 
-    let mark_name = static_mark_name(joint_index)
-        .ok_or_else(|| MocapParseError::new(format!("BVH joint {joint_index} cannot be marked")))?;
+    let mark_name = bvh_mark_name(&clip.joints[joint_index].name);
     linkage = linkage.mark(mark_name);
 
-    for &child_index in &children[joint_index] {
-        linkage = linkage.restore(mark_name);
+    for (child_ordinal, &child_index) in children[joint_index].iter().enumerate() {
+        if child_ordinal > 0 {
+            linkage = linkage.restore(mark_name);
+        }
         linkage = append_offset_segment(linkage, clip.joints[child_index].offset);
         linkage = append_bvh_joint(linkage, clip, layout, children, child_index)?;
     }
@@ -572,20 +584,6 @@ fn is_nearly_zero_degrees(degrees: f32) -> bool {
     degrees.abs() < ANGLE_EPSILON_DEGREES
 }
 
-fn static_mark_name(index: usize) -> Option<&'static str> {
-    const MARK_NAMES: [&str; 64] = [
-        "bone_00", "bone_01", "bone_02", "bone_03", "bone_04", "bone_05", "bone_06", "bone_07",
-        "bone_08", "bone_09", "bone_10", "bone_11", "bone_12", "bone_13", "bone_14", "bone_15",
-        "bone_16", "bone_17", "bone_18", "bone_19", "bone_20", "bone_21", "bone_22", "bone_23",
-        "bone_24", "bone_25", "bone_26", "bone_27", "bone_28", "bone_29", "bone_30", "bone_31",
-        "bone_32", "bone_33", "bone_34", "bone_35", "bone_36", "bone_37", "bone_38", "bone_39",
-        "bone_40", "bone_41", "bone_42", "bone_43", "bone_44", "bone_45", "bone_46", "bone_47",
-        "bone_48", "bone_49", "bone_50", "bone_51", "bone_52", "bone_53", "bone_54", "bone_55",
-        "bone_56", "bone_57", "bone_58", "bone_59", "bone_60", "bone_61", "bone_62", "bone_63",
-    ];
-    MARK_NAMES.get(index).copied()
-}
-
 /// BVH parser error.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MocapParseError {
@@ -736,6 +734,7 @@ Frame Time: 0.0333333
             bvh_linkage_name("leftEye", BvhChannel::Xposition),
             "left_eye_xposition"
         );
+        assert_eq!(bvh_mark_name("rThumb1"), "joint_r_thumb1");
     }
 
     #[test]
