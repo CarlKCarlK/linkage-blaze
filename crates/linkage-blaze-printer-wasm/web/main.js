@@ -8,6 +8,9 @@ const BUILD_Y = 240;
 const BUILD_Z = 250;
 const FRAME_X = 300;
 const FRAME_CENTER_X = FRAME_X / 2;
+const BED_CENTER_X = 150;
+const BED_CENTER_Y = 120;
+const BED_SURFACE_Z = 8;
 
 // Floats per draw item: [type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2]
 const STRIDE = 12;
@@ -34,6 +37,14 @@ renderer.setPixelRatio(window.devicePixelRatio || 1);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xffffff);
+window.__linkageBlazePrinterDebug = {
+  printGeometryCounts: () => ({
+    extrusionVertices: extrusionVertCount / 3,
+    printDrawItems: sim.printDrawItemCount(),
+    printLinkageSteps: sim.printLinkageStepCount(),
+    travelVertices: travelVertCount / 3,
+  }),
+};
 
 // G-code (x, y, z) → Three.js (x, y, z): Z is visually up.
 const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 10000);
@@ -81,6 +92,8 @@ function makeCylinder(x1, y1, z1, x2, y2, z2, radius, color) {
 // ── Printer structure group ────────────────────────────────────────────────────
 const printerGroup = new THREE.Group();
 scene.add(printerGroup);
+const printGroup = new THREE.Group();
+scene.add(printGroup);
 
 // Static frame: two full-height Z rail pillars + top connecting bar
 const FRAME_COLOR = 0x3a4555;
@@ -96,14 +109,13 @@ const dynamicGroup = new THREE.Group();
 printerGroup.add(dynamicGroup);
 
 // ── G-code path geometry ──────────────────────────────────────────────────────
-// Infrastructure is retained so it can be re-enabled; calls are commented out below.
 let extrusionLines = null;
 let travelLines = null;
 let extrusionBuf = null;
 let travelBuf = null;
 let extrusionVertCount = 0;
 let travelVertCount = 0;
-let lastGeomIndex = 0;
+let lastPrintItemIndex = 0;
 let frameBox = null;
 
 // ── WASM + simulation ─────────────────────────────────────────────────────────
@@ -124,7 +136,7 @@ function recoverSim() {
     try {
       fresh.load(lastGcode);
       fresh.reset();
-      // initGCodeGeometry();  // G-code path rendering disabled
+      initGCodeGeometry();
       refreshAll();
     } catch (e) {
       console.error("Sim recovery load also failed:", e.message);
@@ -154,7 +166,7 @@ fileInput.addEventListener("change", async () => {
   playBtn.disabled = false;
   stepBtn.disabled = false;
   firstFit = true;
-  // initGCodeGeometry();  // G-code path rendering disabled
+  initGCodeGeometry();
   refreshAll();
 });
 
@@ -168,14 +180,14 @@ resetBtn.addEventListener("click", () => {
   playing = false;
   segAccum = 0;
   updatePlayBtn();
-  // initGCodeGeometry();  // G-code path rendering disabled
+  initGCodeGeometry();
   refreshAll();
 });
 
 playBtn.addEventListener("click", () => {
   if (sim.isDone()) {
     sim.reset();
-    // initGCodeGeometry();  // G-code path rendering disabled
+    initGCodeGeometry();
   }
   playing = !playing;
   segAccum = 0;
@@ -307,8 +319,9 @@ function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
 
 function advanceAndRefresh(count) {
   sim.advance(count);
-  // rebuildGCodeGeometry();  // G-code path rendering disabled
+  rebuildGCodeGeometry();
   const [tx, ty, tz] = currentToolhead();
+  updatePrintGroupTransform(ty);
   updatePrinterFromDrawItems(tx, ty, tz);
   updateStatus();
 }
@@ -321,8 +334,9 @@ function currentToolhead() {
 
 // ── G-code geometry ───────────────────────────────────────────────────────────
 function refreshAll() {
-  // rebuildGCodeGeometry();  // G-code path rendering disabled
+  rebuildGCodeGeometry();
   const [tx, ty, tz] = currentToolhead();
+  updatePrintGroupTransform(ty);
   updatePrinterFromDrawItems(tx, ty, tz);
   updateStatus();
   if (firstFit && sim.segmentCount() > 0) {
@@ -332,13 +346,13 @@ function refreshAll() {
 }
 
 function initGCodeGeometry() {
-  if (extrusionLines) { scene.remove(extrusionLines); extrusionLines.geometry.dispose(); extrusionLines = null; }
-  if (travelLines)    { scene.remove(travelLines);    travelLines.geometry.dispose();    travelLines = null; }
-  if (frameBox)       { scene.remove(frameBox);       frameBox.geometry.dispose();       frameBox = null; }
+  if (extrusionLines) { printGroup.remove(extrusionLines); extrusionLines.geometry.dispose(); extrusionLines = null; }
+  if (travelLines)    { printGroup.remove(travelLines);    travelLines.geometry.dispose();    travelLines = null; }
+  if (frameBox)       { printGroup.remove(frameBox);       frameBox.geometry.dispose();       frameBox = null; }
 
   extrusionVertCount = 0;
   travelVertCount = 0;
-  lastGeomIndex = 0;
+  lastPrintItemIndex = 0;
 
   const totalSegs = sim.segmentCount();
   if (totalSegs === 0) return;
@@ -352,7 +366,7 @@ function initGCodeGeometry() {
   extGeo.setAttribute("position", extAttr);
   extGeo.setDrawRange(0, 0);
   extrusionLines = new THREE.LineSegments(extGeo, extrusionMaterial);
-  scene.add(extrusionLines);
+  printGroup.add(extrusionLines);
 
   const trvGeo  = new THREE.BufferGeometry();
   const trvAttr = new THREE.BufferAttribute(travelBuf, 3);
@@ -361,30 +375,46 @@ function initGCodeGeometry() {
   trvGeo.setDrawRange(0, 0);
   travelLines = new THREE.LineSegments(trvGeo, travelMaterial);
   travelLines.visible = showTravelCheck.checked;
-  scene.add(travelLines);
+  printGroup.add(travelLines);
 
   rebuildFrameBox();
 }
 
 function rebuildGCodeGeometry() {
   if (!extrusionLines) return;
-  const curIdx = sim.currentIndex();
-  if (curIdx === lastGeomIndex) return;
+  const currentPrintItemIndex = sim.printDrawItemCount();
+  if (currentPrintItemIndex === lastPrintItemIndex) return;
 
-  const newExtru  = sim.extrusionSegmentsSince(lastGeomIndex);
-  const newTravel = sim.travelSegmentsSince(lastGeomIndex);
-  lastGeomIndex = curIdx;
+  const items = sim.printDrawItemsSince(lastPrintItemIndex);
+  lastPrintItemIndex = currentPrintItemIndex;
 
-  if (newExtru.length > 0) {
-    extrusionBuf.set(newExtru, extrusionVertCount);
-    extrusionVertCount += newExtru.length;
+  for (let itemIndex = 0; itemIndex + STRIDE <= items.length; itemIndex += STRIDE) {
+    const type = items[itemIndex];
+    if (type !== 0) continue;
+    const width = items[itemIndex + 10];
+    const targetBuf = width >= 0.8 ? extrusionBuf : travelBuf;
+    const targetOffset = width >= 0.8 ? extrusionVertCount : travelVertCount;
+    targetBuf.set([
+      items[itemIndex + 1] - BED_CENTER_X + 40,
+      items[itemIndex + 2] - BED_CENTER_Y,
+      items[itemIndex + 3],
+      items[itemIndex + 4] - BED_CENTER_X + 40,
+      items[itemIndex + 5] - BED_CENTER_Y,
+      items[itemIndex + 6],
+    ], targetOffset);
+    if (width >= 0.8) {
+      extrusionVertCount += 6;
+    } else {
+      travelVertCount += 6;
+    }
+  }
+
+  if (extrusionVertCount > 0) {
     const attr = extrusionLines.geometry.getAttribute("position");
     attr.needsUpdate = true;
     extrusionLines.geometry.setDrawRange(0, extrusionVertCount / 3);
   }
-  if (newTravel.length > 0) {
-    travelBuf.set(newTravel, travelVertCount);
-    travelVertCount += newTravel.length;
+  if (travelVertCount > 0) {
     const attr = travelLines.geometry.getAttribute("position");
     attr.needsUpdate = true;
     travelLines.geometry.setDrawRange(0, travelVertCount / 3);
@@ -392,20 +422,24 @@ function rebuildGCodeGeometry() {
 }
 
 function rebuildFrameBox() {
-  if (frameBox) { scene.remove(frameBox); frameBox.geometry.dispose(); frameBox = null; }
+  if (frameBox) { printGroup.remove(frameBox); frameBox.geometry.dispose(); frameBox = null; }
   const bbox = sim.boundingBox();
   if (bbox[0] >= bbox[3]) return;
 
   const inner = new THREE.BoxGeometry(bbox[3] - bbox[0], bbox[4] - bbox[1], bbox[5] - bbox[2]);
   frameBox = new THREE.LineSegments(new THREE.EdgesGeometry(inner), frameMaterial);
   frameBox.position.set(
-    (bbox[0] + bbox[3]) / 2,
-    (bbox[1] + bbox[4]) / 2,
+    (bbox[0] + bbox[3]) / 2 - BED_CENTER_X + 40,
+    (bbox[1] + bbox[4]) / 2 - BED_CENTER_Y,
     (bbox[2] + bbox[5]) / 2,
   );
   frameBox.visible = showFrameCheck.checked;
-  scene.add(frameBox);
+  printGroup.add(frameBox);
   inner.dispose();
+}
+
+function updatePrintGroupTransform(toolY) {
+  printGroup.position.set(BED_CENTER_X, BED_CENTER_Y - toolY, BED_SURFACE_Z);
 }
 
 // ── Camera helpers ────────────────────────────────────────────────────────────
