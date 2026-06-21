@@ -388,10 +388,11 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     #[cfg(feature = "alloc")]
     #[must_use]
     pub fn to_lb_rs(&self) -> String {
+        let named_params = self.params.iter().filter(|p| !p.name().is_empty()).count();
         let mut source = format!(
             "// DOF={} MARKS={} STEPS={}\n",
-            self.dof(),
-            MARKS,
+            named_params,
+            self.mark_len,
             self.len()
         );
         source.push_str("linkage![\n");
