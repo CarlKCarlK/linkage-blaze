@@ -6,9 +6,9 @@ import init, { PrinterSimWasm, printerDrawItems } from "../pkg/linkage_blaze_pri
 const BUILD_X = 220;
 const BUILD_Y = 240;
 const BUILD_Z = 250;
-const FRAME_X = 300;
+const FRAME_X = 400;
 const FRAME_CENTER_X = FRAME_X / 2;
-const BED_CENTER_X = 150;
+const BED_CENTER_X = 200;
 const BED_CENTER_Y = 120;
 const BED_SURFACE_Z = 8;
 
@@ -38,6 +38,10 @@ renderer.setPixelRatio(window.devicePixelRatio || 1);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xffffff);
 window.__linkageBlazePrinterDebug = {
+  finishPrint: () => {
+    advanceAndRefresh(sim.segmentCount());
+    return window.__linkageBlazePrinterDebug.printGeometryCounts();
+  },
   printGeometryCounts: () => ({
     extrusionVertices: extrusionVertCount / 3,
     printDrawItems: sim.printDrawItemCount(),
@@ -94,15 +98,6 @@ const printerGroup = new THREE.Group();
 scene.add(printerGroup);
 const printGroup = new THREE.Group();
 scene.add(printGroup);
-
-// Static frame: two full-height Z rail pillars + top connecting bar
-const FRAME_COLOR = 0x3a4555;
-const RAIL_H = BUILD_Z + 15;   // rails extend 15 mm above print volume
-[
-  makeCylinder(0,       0, 0, 0,       0, RAIL_H, 4, FRAME_COLOR),  // left Z rail
-  makeCylinder(FRAME_X, 0, 0, FRAME_X, 0, RAIL_H, 4, FRAME_COLOR),  // right Z rail
-  makeCylinder(0, 0, RAIL_H, FRAME_X, 0, RAIL_H,  3, FRAME_COLOR),  // top cross-bar
-].forEach(m => m && printerGroup.add(m));
 
 // Sub-group for dynamic draw items from the linkage (rebuilt every frame)
 const dynamicGroup = new THREE.Group();
@@ -301,7 +296,7 @@ function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
       // Disk — flat circle lying in the XY plane (horizontal in our Z-up scene).
       // CircleGeometry is already in the local XY plane, so no rotation needed.
       const geo  = new THREE.CircleGeometry(size1, 48);
-      const opacity = color.r > 0.7 && color.g > 0.7 && color.b > 0.7 ? 0.35 : 0.82;
+      const opacity = color.r > 0.7 && color.g > 0.7 && color.b > 0.7 ? 0.5 : 0.62;
       const mat  = new THREE.MeshBasicMaterial({
         color,
         depthWrite: false,
@@ -312,6 +307,13 @@ function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
       const mesh = new THREE.Mesh(geo, mat);
       const floorClearance = z0 <= 0.01 ? 1 : 0;
       mesh.position.set(x0, y0, z0 + floorClearance);
+      dynamicGroup.add(mesh);
+    } else if (type === 3) {
+      const width = items[i + 11];
+      const geo = new THREE.TorusGeometry(size1, Math.max(0.5, width / 2), 8, 96);
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x0, y0, z0 + 1.5);
       dynamicGroup.add(mesh);
     }
   }
@@ -395,11 +397,11 @@ function rebuildGCodeGeometry() {
     const targetBuf = width >= 0.8 ? extrusionBuf : travelBuf;
     const targetOffset = width >= 0.8 ? extrusionVertCount : travelVertCount;
     targetBuf.set([
-      items[itemIndex + 1] - BED_CENTER_X + 40,
-      items[itemIndex + 2] - BED_CENTER_Y,
+      items[itemIndex + 1] - BUILD_X / 2,
+      items[itemIndex + 2] - BUILD_Y / 2,
       items[itemIndex + 3],
-      items[itemIndex + 4] - BED_CENTER_X + 40,
-      items[itemIndex + 5] - BED_CENTER_Y,
+      items[itemIndex + 4] - BUILD_X / 2,
+      items[itemIndex + 5] - BUILD_Y / 2,
       items[itemIndex + 6],
     ], targetOffset);
     if (width >= 0.8) {
@@ -429,8 +431,8 @@ function rebuildFrameBox() {
   const inner = new THREE.BoxGeometry(bbox[3] - bbox[0], bbox[4] - bbox[1], bbox[5] - bbox[2]);
   frameBox = new THREE.LineSegments(new THREE.EdgesGeometry(inner), frameMaterial);
   frameBox.position.set(
-    (bbox[0] + bbox[3]) / 2 - BED_CENTER_X + 40,
-    (bbox[1] + bbox[4]) / 2 - BED_CENTER_Y,
+    (bbox[0] + bbox[3]) / 2 - BUILD_X / 2,
+    (bbox[1] + bbox[4]) / 2 - BUILD_Y / 2,
     (bbox[2] + bbox[5]) / 2,
   );
   frameBox.visible = showFrameCheck.checked;
