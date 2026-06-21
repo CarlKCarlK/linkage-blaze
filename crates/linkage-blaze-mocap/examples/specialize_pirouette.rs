@@ -16,13 +16,19 @@ const BODY: LinkageFixed<4, 4, 537> = FULL
 
 fn main() {
     let out_path = concat!(env!("CARGO_MANIFEST_DIR"), "/samples/pirouette_body.lb.rs");
-    let lb_rs = linkage_blaze_core::LinkageBuf::<4, 4>::from(&BODY)
+    // strip → merge → strip: stripping zeros first exposes new adjacencies for merging.
+    let result = linkage_blaze_core::LinkageBuf::<4, 4>::from(&BODY)
         .strip_fixed_noops()
-        .view()
-        .to_lb_rs();
+        .merge_adjacent_fixed()
+        .strip_fixed_noops();
+    let lb_rs = result.view().to_lb_rs();
     if let Err(error) = fs::write(out_path, &lb_rs) {
         eprintln!("failed to write `{out_path}`: {error}");
         process::exit(1);
     }
-    println!("wrote {out_path} ({} DOF)", BODY.view().dof());
+    println!(
+        "wrote {out_path} ({} DOF, {} steps)",
+        BODY.view().dof(),
+        result.view().len(),
+    );
 }
