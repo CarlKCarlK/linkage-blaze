@@ -34,6 +34,69 @@ build:
 docs:
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc --open
 
+# Show generated docs
+show-docs:
+    just docs
+
+# Bundle docs/context for an outside AI
+bundle-docs:
+    just _bundle-docs
+
+# Generate rustdoc and bundle repo docs/context for an outside AI
+_bundle-docs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out_dir="target/ai-docs"
+    rustdoc_dir="$out_dir/rustdoc"
+    bundle="$out_dir/linkage-blaze-ai-docs.md"
+    archive="target/linkage-blaze-ai-docs.tar"
+
+    rm -rf "$out_dir" "$archive"
+    mkdir -p "$rustdoc_dir"
+
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-mocap --no-deps
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-armatron-core --no-deps
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-printer-wasm --no-deps
+
+    cp -R target/doc/linkage_blaze_core "$rustdoc_dir/"
+    cp -R target/doc/linkage_blaze_mocap "$rustdoc_dir/"
+    cp -R target/doc/linkage_blaze_armatron_core "$rustdoc_dir/"
+    cp -R target/doc/linkage_blaze_printer_wasm "$rustdoc_dir/"
+    cp target/doc/crates.js target/doc/help.html target/doc/search-index.js target/doc/settings.html target/doc/src-files.js "$rustdoc_dir/" 2>/dev/null || true
+
+    {
+        printf -- '# linkage-blaze AI docs bundle\n\n'
+        printf -- 'Generated: %s UTC\n\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        printf -- 'This bundle is intended for an outside AI reviewer. It includes repository guidance, Markdown docs, Cargo manifests, and generated rustdoc HTML copied under `rustdoc/`.\n\n'
+        printf -- '## Rustdoc entry points\n\n'
+        printf -- '%s\n' '- `rustdoc/linkage_blaze_core/index.html`'
+        printf -- '%s\n' '- `rustdoc/linkage_blaze_mocap/index.html`'
+        printf -- '%s\n' '- `rustdoc/linkage_blaze_armatron_core/index.html`'
+        printf -- '%s\n\n' '- `rustdoc/linkage_blaze_printer_wasm/index.html`'
+        printf -- '## Repository docs and manifests\n\n'
+    } > "$bundle"
+
+    find . \
+        -path './.git' -prune -o \
+        -path './target' -prune -o \
+        -path './node_modules' -prune -o \
+        -type f \( -name '*.md' -o -name 'Cargo.toml' \) -print \
+        | sort \
+        | while read -r path; do
+            clean_path="${path#./}"
+            {
+                printf -- '\n## `%s`\n\n' "$clean_path"
+                printf -- '```text\n'
+                sed 's/```/` ` `/g' "$path"
+                printf -- '\n```\n'
+            } >> "$bundle"
+        done
+
+    tar -cf "$archive" -C target ai-docs
+    printf -- 'Wrote %s\n' "$bundle"
+    printf -- 'Wrote %s\n' "$archive"
+
 # ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
 
 check-cyd:

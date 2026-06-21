@@ -120,12 +120,12 @@ const REVERSE_KINEMATICS_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combin
 
 const DOF: usize = LINKAGE.dof();
 
-const BASE_YAW_PARAM: usize = LINKAGE.param_index("x/y view", 0);
-const BASE_PITCH_PARAM: usize = LINKAGE.param_index("z", 0);
-const DOLLY_PARAM: usize = LINKAGE.param_index("zoom", 0);
-const BEND_ELBOW_PARAM: usize = LINKAGE.param_index("bend elbow", 0);
-const LOWER_ARM_PARAM: usize = LINKAGE.param_index("lower arm", 0);
-const SPIN_WHOLE_ARM_PARAM: usize = LINKAGE.param_index("spin whole arm", 0);
+const BASE_YAW_PARAM: usize = 0;
+const BASE_PITCH_PARAM: usize = 1;
+const DOLLY_PARAM: usize = 2;
+const BEND_ELBOW_PARAM: usize = 4;
+const LOWER_ARM_PARAM: usize = 6;
+const SPIN_WHOLE_ARM_PARAM: usize = 7;
 
 pub struct CydSim {
     params: [f32; DOF],
@@ -187,12 +187,12 @@ impl CydSim {
 
     #[must_use]
     pub fn param_name(index: usize) -> &'static str {
-        LINKAGE.param_name(index)
+        LINKAGE.view().param(index).name()
     }
 
     #[must_use]
     pub fn param_default(index: usize) -> f32 {
-        LINKAGE.param_default(index)
+        LINKAGE.view().param(index).default()
     }
 
     #[must_use]
@@ -226,7 +226,7 @@ impl CydSim {
     }
 
     fn new_inner(show_fps: bool) -> Self {
-        let mut params = LINKAGE.param_defaults();
+        let mut params = default_params(LINKAGE.view());
         randomize_target_params(&mut params, 0);
 
         Self {
@@ -888,7 +888,7 @@ impl CydSim {
             let value = self.params[param_index];
 
             Text::with_baseline(
-                LINKAGE.param_name(param_index),
+                LINKAGE.view().param(param_index).name(),
                 Point::new(SLIDER_LEFT, slider_y - 12),
                 text_style,
                 Baseline::Top,
@@ -1415,6 +1415,19 @@ fn randomize_target_params(params: &mut [f32; DOF], seed: u8) {
     for param in params[TARGET_PARAM_START..].iter_mut() {
         *param = random_fraction(&mut rng);
     }
+}
+
+fn default_params<const DOF_IN: usize, const MARKS: usize>(
+    linkage_view: LinkageView<'_, DOF_IN, MARKS>,
+) -> [f32; DOF_IN] {
+    let params = linkage_view.params();
+    let mut values = [0.0; DOF_IN];
+    let mut param_index = 0;
+    while param_index < DOF_IN {
+        values[param_index] = params[param_index].default();
+        param_index += 1;
+    }
+    values
 }
 
 fn control_at(x: f32, y: f32) -> Option<ActiveControl> {

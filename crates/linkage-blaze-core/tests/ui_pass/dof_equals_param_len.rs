@@ -11,9 +11,10 @@ const LINKAGE: LinkageFixed<3, 0, 16> = LinkageFixed::start()
 #[test]
 fn dof_parameter_count() {
     assert_eq!(LINKAGE.dof(), 3);
-    assert_eq!(LINKAGE.param_name(0), "x");
-    assert_eq!(LINKAGE.param_name(1), "y");
-    assert_eq!(LINKAGE.param_name(2), "z");
+    let view = LINKAGE.view();
+    assert_eq!(view.param(0).name(), "x");
+    assert_eq!(view.param(1).name(), "y");
+    assert_eq!(view.param(2).name(), "z");
 }
 
 fn main() {}

@@ -1,15 +1,29 @@
-error[E0308]: mismatched types
-  --> tests/ui_fail/dof_mismatch_param_lookup.rs:5:40
-   |
- 5 |   const LINKAGE: LinkageFixed<3, 0, 8> = LinkageFixed::start()
-   |  ________________---------------------___^
-   | |                |
-   | |                expected because of the type of the constant
- 6 | |     .define_param("x", 0.5)
- 7 | |     .define_param("y", 0.5)
-...  |
-10 | |     .param(2);  // error: parameter index must be defined
-   | |_____________^ expected `LinkageFixed<3, 0, 8>`, found `Param`
-   |
-   = note: expected struct `LinkageFixed<3, 0, 8>`
-              found struct `Param`
+error[E0080]: evaluation panicked: unknown parameter name
+ --> tests/ui_fail/dof_mismatch_param_lookup.rs:5:40
+  |
+5 |   const LINKAGE: LinkageFixed<3, 0, 8> = LinkageFixed::start()
+  |  ________________________________________^
+6 | |     .define_param("x", 0.5)
+7 | |     .define_param("y", 0.5)
+8 | |     // Missing third parameter definition
+9 | |     .forward_param("z", 0.0, 1.0);  // error: unknown parameter name
+  | |_________________________________^ evaluation of `LINKAGE` failed inside this call
+  |
+note: inside `LinkageFixed::<3, 0, 8>::forward_param`
+ --> src/lib.rs
+  |
+  |             let index = self.expect_param_index(name);
+  |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+  |     emit_fixed_step_methods!();
+  |     -------------------------- in this macro invocation
+note: inside `LinkageFixed::<3, 0, 8>::expect_param_index`
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
+  |
+ ::: src/lib.rs
+  |
+  |             None => panic!("unknown parameter name"),
+  |                     -------------------------------- in this macro invocation

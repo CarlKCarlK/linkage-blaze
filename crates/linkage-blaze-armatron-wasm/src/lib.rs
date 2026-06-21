@@ -213,12 +213,12 @@ pub fn dof() -> usize {
 
 #[wasm_bindgen]
 pub fn param_name(index: usize) -> String {
-    VIEWER_LINKAGE.param_name(index).to_owned()
+    VIEWER_LINKAGE.view().param(index).name().to_owned()
 }
 
 #[wasm_bindgen]
 pub fn param_default(index: usize) -> f32 {
-    VIEWER_LINKAGE.param_default(index)
+    VIEWER_LINKAGE.view().param(index).default()
 }
 
 #[wasm_bindgen]
