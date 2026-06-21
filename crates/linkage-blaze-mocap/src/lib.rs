@@ -8,6 +8,11 @@ use std::str::FromStr;
 
 use linkage_blaze_core::LinkageBuf;
 
+type Matrix3 = [[f32; 3]; 3];
+type Vector3 = [f32; 3];
+
+const MATRIX3_IDENTITY: Matrix3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
 /// Parsed CMU ASF skeleton data.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AsfSkeleton {
@@ -149,6 +154,13 @@ pub struct AmcJointFrame {
     pub values: Vec<f32>,
 }
 
+/// One posed motion-capture bone segment.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MocapSegment {
+    pub start: [f32; 3],
+    pub end: [f32; 3],
+}
+
 /// Parameter layout discovered from an ASF skeleton.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AsfParameterLayout {
@@ -280,6 +292,93 @@ pub fn asf_and_amc_to_lb_rs<const DOF: usize>(
     let linkage = build_asf_linkage_buf_with_defaults::<DOF>(asf_source, &layout, &defaults)?;
 
     Ok(linkage.view().to_lb_rs())
+}
+
+/// Return normalized Linkage parameter values for one AMC frame.
+///
+/// `DOF` must be at least `layout.len()`. Unused trailing values are set to
+/// `0.5`.
+pub fn amc_frame_params<const DOF: usize>(
+    layout: &AsfParameterLayout,
+    frame: &AmcFrame,
+) -> Result<[f32; DOF], MocapParseError> {
+    if layout.len() > DOF {
+        return Err(MocapParseError::new(format!(
+            "ASF parameter layout has {} parameter(s), but parameter array DOF is {DOF}",
+            layout.len()
+        )));
+    }
+
+    let defaults = parameter_defaults_from_frame(layout, frame)?;
+    let mut params = [0.5; DOF];
+    for (parameter_index, default) in defaults.into_iter().enumerate() {
+        params[parameter_index] = default;
+    }
+
+    Ok(params)
+}
+
+/// Evaluate one AMC frame against an ASF skeleton and return posed bone segments.
+pub fn pose_amc_frame_segments(
+    skeleton: &AsfSkeleton,
+    frame: &AmcFrame,
+) -> Result<Vec<MocapSegment>, MocapParseError> {
+    let root_joint = frame
+        .joints
+        .iter()
+        .find(|joint_frame| joint_frame.name == "root")
+        .ok_or_else(|| MocapParseError::new(format!("AMC frame {} missing root", frame.index)))?;
+    let root_position = root_position(skeleton, root_joint)?;
+    let root_rotation = root_rotation(skeleton, root_joint)?;
+    let mut states = vec![
+        BoneState {
+            position: root_position,
+            rotation: root_rotation,
+            set: false,
+        };
+        skeleton.bones.len()
+    ];
+    let mut segments = Vec::new();
+
+    for edge in &skeleton.hierarchy {
+        let (parent_position, parent_rotation) = if edge.parent == "root" {
+            (root_position, root_rotation)
+        } else {
+            let Some(parent_index) = skeleton.bone_index(&edge.parent) else {
+                continue;
+            };
+            let state = states[parent_index];
+            if !state.set {
+                continue;
+            }
+            (state.position, state.rotation)
+        };
+
+        let Some(child_index) = skeleton.bone_index(&edge.child) else {
+            continue;
+        };
+        let child_bone = &skeleton.bones[child_index];
+        let child_rotation = mat3_mul(parent_rotation, bone_frame_rotation(child_bone, frame)?);
+        let end_position = add_vec3(
+            parent_position,
+            mat3_mul_vec3(
+                child_rotation,
+                scale_vec3(child_bone.direction, child_bone.length),
+            ),
+        );
+
+        segments.push(MocapSegment {
+            start: asf_to_linkage_position(parent_position),
+            end: asf_to_linkage_position(end_position),
+        });
+        states[child_index] = BoneState {
+            position: end_position,
+            rotation: child_rotation,
+            set: true,
+        };
+    }
+
+    Ok(segments)
 }
 
 /// Parse CMU ASF skeleton text.
@@ -472,6 +571,178 @@ fn parameter_range(dof: Dof) -> (f32, f32) {
         Dof::Tx | Dof::Ty | Dof::Tz => (-100.0, 100.0),
         Dof::L => (0.0, 100.0),
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct BoneState {
+    position: Vector3,
+    rotation: Matrix3,
+    set: bool,
+}
+
+fn root_position(
+    skeleton: &AsfSkeleton,
+    root_joint: &AmcJointFrame,
+) -> Result<Vector3, MocapParseError> {
+    let mut position = skeleton.root.position;
+
+    for (value_index, dof) in skeleton.root.order.iter().copied().enumerate() {
+        let value = root_joint.values.get(value_index).copied().ok_or_else(|| {
+            MocapParseError::new(format!("AMC root missing value {value_index}"))
+        })?;
+        match dof {
+            Dof::Tx => position[0] += value,
+            Dof::Ty => position[1] += value,
+            Dof::Tz => position[2] += value,
+            Dof::Rx | Dof::Ry | Dof::Rz | Dof::L => {}
+        }
+    }
+
+    Ok(position)
+}
+
+fn root_rotation(
+    skeleton: &AsfSkeleton,
+    root_joint: &AmcJointFrame,
+) -> Result<Matrix3, MocapParseError> {
+    let mut rotation = euler_degrees(
+        skeleton.root.axis_order.as_deref().unwrap_or("XYZ"),
+        skeleton.root.orientation,
+    )?;
+
+    for (value_index, dof) in skeleton.root.order.iter().copied().enumerate() {
+        let value = root_joint.values.get(value_index).copied().ok_or_else(|| {
+            MocapParseError::new(format!("AMC root missing value {value_index}"))
+        })?;
+        if matches!(dof, Dof::Rx | Dof::Ry | Dof::Rz) {
+            rotation = mat3_mul(rotation, dof_rotation(dof, value)?);
+        }
+    }
+
+    Ok(rotation)
+}
+
+fn bone_frame_rotation(bone: &AsfBone, frame: &AmcFrame) -> Result<Matrix3, MocapParseError> {
+    let axis = euler_degrees(bone.axis_order.as_deref().unwrap_or("XYZ"), bone.axis)?;
+    let axis_inverse = mat3_transpose(axis);
+    let mut motion = MATRIX3_IDENTITY;
+
+    if let Some(joint_frame) = frame
+        .joints
+        .iter()
+        .find(|joint_frame| joint_frame.name == bone.name)
+    {
+        for (value_index, dof) in bone.dof.iter().copied().enumerate() {
+            let value = joint_frame.values.get(value_index).copied().ok_or_else(|| {
+                MocapParseError::new(format!(
+                    "AMC frame {} joint `{}` missing value {}",
+                    frame.index, bone.name, value_index
+                ))
+            })?;
+            motion = mat3_mul(motion, dof_rotation(dof, value)?);
+        }
+    }
+
+    Ok(mat3_mul(mat3_mul(axis, motion), axis_inverse))
+}
+
+fn euler_degrees(order: &str, values: Vector3) -> Result<Matrix3, MocapParseError> {
+    let mut rotation = MATRIX3_IDENTITY;
+
+    for axis in order.chars() {
+        let step = match axis {
+            'X' | 'x' => rotation_x(values[0]),
+            'Y' | 'y' => rotation_y(values[1]),
+            'Z' | 'z' => rotation_z(values[2]),
+            _ => {
+                return Err(MocapParseError::new(format!(
+                    "unsupported rotation axis `{axis}` in order `{order}`"
+                )));
+            }
+        };
+        rotation = mat3_mul(rotation, step);
+    }
+
+    Ok(rotation)
+}
+
+fn dof_rotation(dof: Dof, degrees: f32) -> Result<Matrix3, MocapParseError> {
+    match dof {
+        Dof::Rx => Ok(rotation_x(degrees)),
+        Dof::Ry => Ok(rotation_y(degrees)),
+        Dof::Rz => Ok(rotation_z(degrees)),
+        Dof::Tx | Dof::Ty | Dof::Tz | Dof::L => Err(MocapParseError::new(format!(
+            "DOF {:?} is not a rotation",
+            dof
+        ))),
+    }
+}
+
+fn rotation_x(degrees: f32) -> Matrix3 {
+    let radians = degrees.to_radians();
+    let cos = radians.cos();
+    let sin = radians.sin();
+
+    [[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]]
+}
+
+fn rotation_y(degrees: f32) -> Matrix3 {
+    let radians = degrees.to_radians();
+    let cos = radians.cos();
+    let sin = radians.sin();
+
+    [[cos, 0.0, sin], [0.0, 1.0, 0.0], [-sin, 0.0, cos]]
+}
+
+fn rotation_z(degrees: f32) -> Matrix3 {
+    let radians = degrees.to_radians();
+    let cos = radians.cos();
+    let sin = radians.sin();
+
+    [[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]]
+}
+
+fn mat3_mul(left: Matrix3, right: Matrix3) -> Matrix3 {
+    let mut out = [[0.0; 3]; 3];
+
+    for row_index in 0..3 {
+        for column_index in 0..3 {
+            for component_index in 0..3 {
+                out[row_index][column_index] +=
+                    left[row_index][component_index] * right[component_index][column_index];
+            }
+        }
+    }
+
+    out
+}
+
+fn mat3_mul_vec3(matrix: Matrix3, vector: Vector3) -> Vector3 {
+    [
+        matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
+        matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
+        matrix[2][0] * vector[0] + matrix[2][1] * vector[1] + matrix[2][2] * vector[2],
+    ]
+}
+
+fn mat3_transpose(matrix: Matrix3) -> Matrix3 {
+    [
+        [matrix[0][0], matrix[1][0], matrix[2][0]],
+        [matrix[0][1], matrix[1][1], matrix[2][1]],
+        [matrix[0][2], matrix[1][2], matrix[2][2]],
+    ]
+}
+
+fn add_vec3(left: Vector3, right: Vector3) -> Vector3 {
+    [left[0] + right[0], left[1] + right[1], left[2] + right[2]]
+}
+
+fn scale_vec3(vector: Vector3, scale: f32) -> Vector3 {
+    [vector[0] * scale, vector[1] * scale, vector[2] * scale]
+}
+
+fn asf_to_linkage_position(position: Vector3) -> Vector3 {
+    [position[2], position[0], position[1]]
 }
 
 fn append_bone_segment<const DOF: usize>(

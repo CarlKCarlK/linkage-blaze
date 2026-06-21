@@ -10,6 +10,7 @@ members = [
     "crates/linkage-blaze-clock-classic",
     "crates/linkage-blaze-printer-wasm",
     "crates/linkage-blaze-mocap",
+    "crates/linkage-blaze-mocap-wasm",
 ]
 resolver = "3"
 
@@ -20,6 +21,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 linkage-blaze-core = { path = "crates/linkage-blaze-core" }
+linkage-blaze-mocap = { path = "crates/linkage-blaze-mocap" }
 
 [profile.dev]
 panic = "abort"

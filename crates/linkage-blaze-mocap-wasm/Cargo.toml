@@ -1,0 +1,17 @@
+[package]
+name = "linkage-blaze-mocap-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[dependencies]
+embedded-graphics-core = { version = "0.4", default-features = false }
+linkage-blaze-core = { workspace = true, features = ["alloc"] }
+linkage-blaze-mocap = { workspace = true }
+wasm-bindgen = "=0.2.118"
