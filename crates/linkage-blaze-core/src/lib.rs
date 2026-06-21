@@ -30,9 +30,21 @@ extern crate alloc;
 
 mod math;
 
+#[cfg(feature = "alloc")]
+use alloc::borrow::ToOwned;
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+#[cfg(feature = "alloc")]
+use alloc::format;
+#[cfg(feature = "alloc")]
+use alloc::string::String;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
 pub use math::{Mat3, Vec3};
 
 pub use embedded_graphics::pixelcolor::{Rgb888, WebColors};
+pub use embedded_graphics::prelude::RgbColor;
 use math::degrees_to_radians;
 
 /// A step in the robot arm linkage description.
@@ -170,6 +182,24 @@ impl VariableArg {
     fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
         let param = params[self.index];
         self.low + param * self.span
+    }
+
+    /// Return the degree-of-freedom parameter index.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self.index
+    }
+
+    /// Return the low end of the parameter range.
+    #[must_use]
+    pub const fn low(self) -> f32 {
+        self.low
+    }
+
+    /// Return the high end of the parameter range.
+    #[must_use]
+    pub const fn high(self) -> f32 {
+        self.low + self.span
     }
 }
 
@@ -327,6 +357,80 @@ impl<'a, const DOF: usize> LinkageView<'a, DOF> {
         self.steps
     }
 
+    /// Serialize this linkage view as `.lb.rs` source using the `linkage![ ... ]` format.
+    ///
+    /// The output is intended for editor interchange and generated linkage files.
+    /// Color values are emitted as `Rgb888::new(r, g, b)` calls.
+    #[cfg(feature = "alloc")]
+    #[must_use]
+    pub fn to_lb_rs(&self) -> String {
+        let mut source = String::from("linkage![\n");
+        for param in self.params {
+            if !param.name().is_empty() {
+                source.push_str("    .define_param(\"");
+                source.push_str(param.name());
+                source.push_str("\", ");
+                push_f32(&mut source, param.default());
+                source.push_str(")\n");
+            }
+        }
+
+        let mut mark_names: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
+        for &step in self.steps {
+            match step {
+                Step::Start => {}
+                Step::Yaw(arg) => push_arg_step(self, &mut source, "yaw", "yaw_param", arg, true),
+                Step::Pitch(arg) => {
+                    push_arg_step(self, &mut source, "pitch", "pitch_param", arg, true);
+                }
+                Step::Roll(arg) => {
+                    push_arg_step(self, &mut source, "roll", "roll_param", arg, true);
+                }
+                Step::Move(arg) => {
+                    push_arg_step(self, &mut source, "forward", "forward_param", arg, false);
+                }
+                Step::Left(arg) => {
+                    push_arg_step(self, &mut source, "left", "left_param", arg, false);
+                }
+                Step::Up(arg) => push_arg_step(self, &mut source, "up", "up_param", arg, false),
+                Step::PenUp => source.push_str("    .pen_up()\n"),
+                Step::PenDown => source.push_str("    .pen_down()\n"),
+                Step::PenColor(color) => {
+                    source.push_str("    .pen_color(Rgb888::new(");
+                    source.push_str(&format!("{}, {}, {}", color.r(), color.g(), color.b()));
+                    source.push_str("))\n");
+                }
+                Step::PenWidth(width) => {
+                    source.push_str("    .pen_width(");
+                    push_f32(&mut source, width);
+                    source.push_str(")\n");
+                }
+                Step::Disk(radius) => push_fixed_step(&mut source, "disk", radius),
+                Step::DiskParam(arg) => push_variable_step(self, &mut source, "disk_param", arg),
+                Step::Ring(radius) => push_fixed_step(&mut source, "ring", radius),
+                Step::RingParam(arg) => push_variable_step(self, &mut source, "ring_param", arg),
+                Step::Sphere(radius) => push_fixed_step(&mut source, "sphere", radius),
+                Step::SphereParam(arg) => {
+                    push_variable_step(self, &mut source, "sphere_param", arg);
+                }
+                Step::Mark { name } => {
+                    mark_names.push(name);
+                    source.push_str("    .mark(\"");
+                    source.push_str(name);
+                    source.push_str("\")\n");
+                }
+                Step::Restore { index } => {
+                    let name = mark_names.get(index).copied().unwrap_or("");
+                    source.push_str("    .restore(\"");
+                    source.push_str(name);
+                    source.push_str("\")\n");
+                }
+            }
+        }
+        source.push_str("]\n");
+        source
+    }
+
     /// Return the index of the `n`th parameter (0-based) with the given name.
     ///
     /// # Panics
@@ -455,6 +559,540 @@ impl<'a, const DOF: usize, const N: usize> From<&'a LinkageFixed<DOF, N>> for Li
     }
 }
 
+#[cfg(feature = "alloc")]
+fn push_arg_step<const DOF: usize>(
+    linkage_view: &LinkageView<'_, DOF>,
+    source: &mut String,
+    fixed_method: &str,
+    variable_method: &str,
+    arg: Arg,
+    degrees: bool,
+) {
+    match arg {
+        Arg::Fixed(value) => {
+            let value = if degrees { value.to_degrees() } else { value };
+            push_fixed_step(source, fixed_method, value);
+        }
+        Arg::Variable(variable_arg) => {
+            let low = if degrees {
+                variable_arg.low().to_degrees()
+            } else {
+                variable_arg.low()
+            };
+            let high = if degrees {
+                variable_arg.high().to_degrees()
+            } else {
+                variable_arg.high()
+            };
+            source.push_str("    .");
+            source.push_str(variable_method);
+            source.push_str("(\"");
+            source.push_str(linkage_view.param(variable_arg.index()).name());
+            source.push_str("\", ");
+            push_f32(source, low);
+            source.push_str(", ");
+            push_f32(source, high);
+            source.push_str(")\n");
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn push_fixed_step(source: &mut String, method: &str, value: f32) {
+    source.push_str("    .");
+    source.push_str(method);
+    source.push('(');
+    push_f32(source, value);
+    source.push_str(")\n");
+}
+
+#[cfg(feature = "alloc")]
+fn push_variable_step<const DOF: usize>(
+    linkage_view: &LinkageView<'_, DOF>,
+    source: &mut String,
+    method: &str,
+    variable_arg: VariableArg,
+) {
+    source.push_str("    .");
+    source.push_str(method);
+    source.push_str("(\"");
+    source.push_str(linkage_view.param(variable_arg.index()).name());
+    source.push_str("\", ");
+    push_f32(source, variable_arg.low());
+    source.push_str(", ");
+    push_f32(source, variable_arg.high());
+    source.push_str(")\n");
+}
+
+#[cfg(feature = "alloc")]
+fn push_f32(source: &mut String, value: f32) {
+    source.push_str(&format!("{value:?}"));
+}
+
+#[cfg(feature = "alloc")]
+fn parse_lb_rs<const DOF: usize>(source: &str) -> Result<LinkageBuf<DOF>, String> {
+    let mut linkage = LinkageBuf::start();
+
+    for (line_index, line) in source.lines().enumerate() {
+        let line_number = line_index + 1;
+        let Some(method_call) = parse_method_call(line_number, line)? else {
+            continue;
+        };
+        linkage = apply_parsed_method(line_number, linkage, &method_call)?;
+    }
+
+    Ok(linkage)
+}
+
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug)]
+struct ParsedMethodCall {
+    name: String,
+    args: Vec<String>,
+}
+
+#[cfg(feature = "alloc")]
+fn parse_method_call(line_number: usize, line: &str) -> Result<Option<ParsedMethodCall>, String> {
+    let line = strip_rust_comment(line).trim();
+    if line.is_empty() || line == "LinkageFixed::start()" || is_linkage_macro_wrapper(line) {
+        return Ok(None);
+    }
+
+    if line.contains("LinkageFixed::start()") {
+        return Ok(None);
+    }
+
+    let line = line.trim_end_matches(';').trim_end_matches(',').trim();
+    let line = line.strip_prefix('.').unwrap_or(line);
+
+    let open = line
+        .find('(')
+        .ok_or_else(|| format!("line {line_number}: expected `(`"))?;
+    let close = line
+        .rfind(')')
+        .ok_or_else(|| format!("line {line_number}: expected `)`"))?;
+    if close < open {
+        return Err(format!("line {line_number}: `)` appears before `(`"));
+    }
+    let trailing = line[close + 1..].trim();
+    if !trailing.is_empty() {
+        return Err(format!(
+            "line {line_number}: unexpected text after method call `{trailing}`"
+        ));
+    }
+
+    let name = line[..open].trim();
+    if name.is_empty() {
+        return Err(format!("line {line_number}: method name is empty"));
+    }
+
+    Ok(Some(ParsedMethodCall {
+        name: name.to_owned(),
+        args: split_args(line_number, &line[open + 1..close])?,
+    }))
+}
+
+#[cfg(feature = "alloc")]
+fn is_linkage_macro_wrapper(line: &str) -> bool {
+    let line = line.trim_end_matches(';').trim();
+    matches!(line, "linkage![" | "linkage! [" | "]")
+}
+
+#[cfg(feature = "alloc")]
+fn split_args(line_number: usize, args: &str) -> Result<Vec<String>, String> {
+    let mut split_args = Vec::new();
+    let mut current_arg = String::new();
+    let mut parenthesis_depth = 0;
+    let mut in_string = false;
+
+    for character in args.chars() {
+        match character {
+            '"' => {
+                in_string = !in_string;
+                current_arg.push(character);
+            }
+            '(' if !in_string => {
+                parenthesis_depth += 1;
+                current_arg.push(character);
+            }
+            ')' if !in_string => {
+                if parenthesis_depth == 0 {
+                    return Err(format!(
+                        "line {line_number}: unexpected `)` in argument list"
+                    ));
+                }
+                parenthesis_depth -= 1;
+                current_arg.push(character);
+            }
+            ',' if !in_string && parenthesis_depth == 0 => {
+                let trimmed_arg = current_arg.trim();
+                if !trimmed_arg.is_empty() {
+                    split_args.push(trimmed_arg.to_owned());
+                }
+                current_arg = String::new();
+            }
+            _ => current_arg.push(character),
+        }
+    }
+
+    if in_string {
+        return Err(format!("line {line_number}: unterminated string literal"));
+    }
+    if parenthesis_depth != 0 {
+        return Err(format!("line {line_number}: unterminated nested argument"));
+    }
+
+    let current_arg = current_arg.trim();
+    if !current_arg.is_empty() {
+        split_args.push(current_arg.to_owned());
+    }
+
+    Ok(split_args)
+}
+
+#[cfg(feature = "alloc")]
+fn apply_parsed_method<const DOF: usize>(
+    line_number: usize,
+    linkage: LinkageBuf<DOF>,
+    method_call: &ParsedMethodCall,
+) -> Result<LinkageBuf<DOF>, String> {
+    match method_call.name.as_str() {
+        "define_param" => {
+            expect_arg_count(line_number, method_call, 2)?;
+            let name = parse_static_string_arg(line_number, method_call, 0)?;
+            let default = parse_number_arg(line_number, method_call, 1)?;
+            if !(0.0..=1.0).contains(&default) {
+                return Err(format!(
+                    "line {line_number}: define_param default must be between 0.0 and 1.0"
+                ));
+            }
+            Ok(linkage.define_param(name, default))
+        }
+        "forward" | "move" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.forward(parse_number_arg(line_number, method_call, 0)?))
+        }
+        "forward_param" => apply_translation_param(line_number, linkage, method_call, "forward"),
+        "left" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.left(parse_number_arg(line_number, method_call, 0)?))
+        }
+        "left_param" => apply_translation_param(line_number, linkage, method_call, "left"),
+        "up" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.up(parse_number_arg(line_number, method_call, 0)?))
+        }
+        "up_param" => apply_translation_param(line_number, linkage, method_call, "up"),
+        "yaw" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.yaw(parse_number_arg(line_number, method_call, 0)?))
+        }
+        "yaw_param" => apply_rotation_param(line_number, linkage, method_call, "yaw"),
+        "pitch" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.pitch(parse_number_arg(line_number, method_call, 0)?))
+        }
+        "pitch_param" => apply_rotation_param(line_number, linkage, method_call, "pitch"),
+        "roll" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.roll(parse_number_arg(line_number, method_call, 0)?))
+        }
+        "roll_param" => apply_rotation_param(line_number, linkage, method_call, "roll"),
+        "pen_up" => {
+            expect_arg_count(line_number, method_call, 0)?;
+            Ok(linkage.pen_up())
+        }
+        "pen_down" => {
+            expect_arg_count(line_number, method_call, 0)?;
+            Ok(linkage.pen_down())
+        }
+        "pen_color" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.pen_color(parse_color_arg(line_number, method_call)?))
+        }
+        "pen_width" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            let width = parse_number_arg(line_number, method_call, 0)?;
+            if width < 0.0 {
+                return Err(format!(
+                    "line {line_number}: pen_width must be non-negative"
+                ));
+            }
+            Ok(linkage.pen_width(width))
+        }
+        "mark" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.mark(parse_static_string_arg(line_number, method_call, 0)?))
+        }
+        "restore" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.restore(parse_static_string_arg(line_number, method_call, 0)?))
+        }
+        "disk" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.disk(parse_radius(line_number, method_call, 0)?))
+        }
+        "disk_param" => apply_radius_param(line_number, linkage, method_call, "disk"),
+        "ring" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.ring(parse_radius(line_number, method_call, 0)?))
+        }
+        "ring_param" => apply_radius_param(line_number, linkage, method_call, "ring"),
+        "sphere" => {
+            expect_arg_count(line_number, method_call, 1)?;
+            Ok(linkage.sphere(parse_radius(line_number, method_call, 0)?))
+        }
+        "sphere_param" => apply_radius_param(line_number, linkage, method_call, "sphere"),
+        _ => Err(format!(
+            "line {line_number}: unknown method `{}`",
+            method_call.name
+        )),
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn apply_translation_param<const DOF: usize>(
+    line_number: usize,
+    linkage: LinkageBuf<DOF>,
+    method_call: &ParsedMethodCall,
+    axis: &str,
+) -> Result<LinkageBuf<DOF>, String> {
+    expect_arg_count(line_number, method_call, 3)?;
+    let name = parse_string_arg(line_number, method_call, 0)?;
+    let low = parse_number_arg(line_number, method_call, 1)?;
+    let high = parse_number_arg(line_number, method_call, 2)?;
+    match axis {
+        "forward" => Ok(linkage.forward_param(name, low, high)),
+        "left" => Ok(linkage.left_param(name, low, high)),
+        "up" => Ok(linkage.up_param(name, low, high)),
+        _ => unreachable!(),
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn apply_rotation_param<const DOF: usize>(
+    line_number: usize,
+    linkage: LinkageBuf<DOF>,
+    method_call: &ParsedMethodCall,
+    axis: &str,
+) -> Result<LinkageBuf<DOF>, String> {
+    expect_arg_count(line_number, method_call, 3)?;
+    let name = parse_string_arg(line_number, method_call, 0)?;
+    let low = parse_number_arg(line_number, method_call, 1)?;
+    let high = parse_number_arg(line_number, method_call, 2)?;
+    match axis {
+        "yaw" => Ok(linkage.yaw_param(name, low, high)),
+        "pitch" => Ok(linkage.pitch_param(name, low, high)),
+        "roll" => Ok(linkage.roll_param(name, low, high)),
+        _ => unreachable!(),
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn apply_radius_param<const DOF: usize>(
+    line_number: usize,
+    linkage: LinkageBuf<DOF>,
+    method_call: &ParsedMethodCall,
+    shape: &str,
+) -> Result<LinkageBuf<DOF>, String> {
+    expect_arg_count(line_number, method_call, 3)?;
+    let name = parse_string_arg(line_number, method_call, 0)?;
+    let low = parse_number_arg(line_number, method_call, 1)?;
+    let high = parse_number_arg(line_number, method_call, 2)?;
+    if low < 0.0 || high < 0.0 {
+        return Err(format!(
+            "line {line_number}: `{}` radius range must be non-negative",
+            method_call.name
+        ));
+    }
+    match shape {
+        "disk" => Ok(linkage.disk_param(name, low, high)),
+        "ring" => Ok(linkage.ring_param(name, low, high)),
+        "sphere" => Ok(linkage.sphere_param(name, low, high)),
+        _ => unreachable!(),
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn strip_rust_comment(line: &str) -> &str {
+    line.split_once("//")
+        .map_or(line, |(before_comment, _)| before_comment)
+}
+
+#[cfg(feature = "alloc")]
+fn expect_arg_count(
+    line_number: usize,
+    method_call: &ParsedMethodCall,
+    expected: usize,
+) -> Result<(), String> {
+    if method_call.args.len() == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "line {line_number}: `{}` expects {expected} argument(s), got {}",
+            method_call.name,
+            method_call.args.len()
+        ))
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn parse_number_arg(
+    line_number: usize,
+    method_call: &ParsedMethodCall,
+    arg_index: usize,
+) -> Result<f32, String> {
+    let value = &method_call.args[arg_index];
+    parse_number_or_constant(line_number, method_call.name.as_str(), value)
+}
+
+#[cfg(feature = "alloc")]
+fn parse_static_string_arg(
+    line_number: usize,
+    method_call: &ParsedMethodCall,
+    arg_index: usize,
+) -> Result<&'static str, String> {
+    let value = parse_string_arg(line_number, method_call, arg_index)?;
+    Ok(Box::leak(value.to_owned().into_boxed_str()))
+}
+
+#[cfg(feature = "alloc")]
+fn parse_string_arg(
+    line_number: usize,
+    method_call: &ParsedMethodCall,
+    arg_index: usize,
+) -> Result<&str, String> {
+    let value = method_call.args[arg_index].as_str();
+    value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .ok_or_else(|| {
+            format!(
+                "line {line_number}: `{}` argument `{value}` must be a string literal",
+                method_call.name
+            )
+        })
+}
+
+#[cfg(feature = "alloc")]
+fn parse_number_or_constant(
+    line_number: usize,
+    method_name: &str,
+    value: &str,
+) -> Result<f32, String> {
+    let numeric_value: String = value
+        .chars()
+        .filter(|character| *character != '_')
+        .collect();
+
+    if let Ok(parsed) = numeric_value.parse::<f32>() {
+        if looks_like_integer(&numeric_value) {
+            return Err(format!(
+                "line {line_number}: `{method_name}` argument `{value}` is an integer; use `{value}.0`"
+            ));
+        }
+        return Ok(parsed);
+    }
+
+    number_constant(value).ok_or_else(|| {
+        format!(
+            "line {line_number}: `{method_name}` argument `{value}` is not a number or known constant"
+        )
+    })
+}
+
+#[cfg(feature = "alloc")]
+fn looks_like_integer(s: &str) -> bool {
+    let digits = s
+        .strip_prefix('-')
+        .or_else(|| s.strip_prefix('+'))
+        .unwrap_or(s);
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+#[cfg(feature = "alloc")]
+fn parse_radius(
+    line_number: usize,
+    method_call: &ParsedMethodCall,
+    arg_index: usize,
+) -> Result<f32, String> {
+    let radius = parse_number_arg(line_number, method_call, arg_index)?;
+    if radius < 0.0 {
+        Err(format!(
+            "line {line_number}: `{}` radius must be non-negative",
+            method_call.name
+        ))
+    } else {
+        Ok(radius)
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn number_constant(name: &str) -> Option<f32> {
+    match name {
+        "ARM_WIDTH" => Some(3.0),
+        "AXIS_WIDTH" => Some(1.0),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn parse_color_arg(line_number: usize, method_call: &ParsedMethodCall) -> Result<Rgb888, String> {
+    let value = method_call.args[0].as_str();
+
+    if let Some(color_args) = value
+        .strip_prefix("Rgb888::new(")
+        .and_then(|value| value.strip_suffix(')'))
+    {
+        return parse_rgb888_new_color(line_number, color_args);
+    }
+
+    match value {
+        "Rgb888::CSS_BLACK" => Ok(Rgb888::CSS_BLACK),
+        "Rgb888::CSS_BLUE" => Ok(Rgb888::CSS_BLUE),
+        "Rgb888::CSS_CRIMSON" => Ok(Rgb888::CSS_CRIMSON),
+        "Rgb888::CSS_DARK_SLATE_GRAY" => Ok(Rgb888::CSS_DARK_SLATE_GRAY),
+        "Rgb888::CSS_DIM_GRAY" => Ok(Rgb888::CSS_DIM_GRAY),
+        "Rgb888::CSS_GRAY" => Ok(Rgb888::CSS_GRAY),
+        "Rgb888::CSS_LIGHT_GRAY" => Ok(Rgb888::CSS_LIGHT_GRAY),
+        "Rgb888::CSS_LIGHT_SLATE_GRAY" => Ok(Rgb888::CSS_LIGHT_SLATE_GRAY),
+        "Rgb888::CSS_RED" => Ok(Rgb888::CSS_RED),
+        "Rgb888::CSS_SLATE_GRAY" => Ok(Rgb888::CSS_SLATE_GRAY),
+        "Rgb888::CSS_STEEL_BLUE" => Ok(Rgb888::CSS_STEEL_BLUE),
+        "Rgb888::CSS_WHITE" => Ok(Rgb888::CSS_WHITE),
+        _ => Err(format!(
+            "line {line_number}: unknown color `{value}`; use `Rgb888::CSS_*` or `Rgb888::new(r, g, b)`"
+        )),
+    }
+}
+
+#[cfg(feature = "alloc")]
+fn parse_rgb888_new_color(line_number: usize, args: &str) -> Result<Rgb888, String> {
+    let args = split_args(line_number, args)?;
+    if args.len() != 3 {
+        return Err(format!(
+            "line {line_number}: `Rgb888::new` expects 3 argument(s), got {}",
+            args.len()
+        ));
+    }
+
+    Ok(Rgb888::new(
+        parse_u8_arg(line_number, "Rgb888::new", &args[0])?,
+        parse_u8_arg(line_number, "Rgb888::new", &args[1])?,
+        parse_u8_arg(line_number, "Rgb888::new", &args[2])?,
+    ))
+}
+
+#[cfg(feature = "alloc")]
+fn parse_u8_arg(line_number: usize, method_name: &str, value: &str) -> Result<u8, String> {
+    let numeric_value: String = value
+        .chars()
+        .filter(|character| *character != '_')
+        .collect();
+    numeric_value
+        .parse::<u8>()
+        .map_err(|_| format!("line {line_number}: `{method_name}` argument `{value}` is not a u8"))
+}
 
 /// Emit const fn fluent DSL methods for LinkageFixed.
 /// These are the simple one-step methods that work the same way for both storage types.
@@ -505,23 +1143,33 @@ macro_rules! emit_fixed_step_methods {
         // Parameterized methods (yaw_param, pitch_param, etc.)
         pub const fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Yaw(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+            self.push(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
+                index, low, high,
+            ))))
         }
         pub const fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Pitch(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+            self.push(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
+                index, low, high,
+            ))))
         }
         pub const fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Roll(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+            self.push(Step::Roll(Arg::Variable(VariableArg::from_degrees(
+                index, low, high,
+            ))))
         }
         pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Move(Arg::Variable(VariableArg::new(index, low, high))))
+            self.push(Step::Move(Arg::Variable(VariableArg::new(
+                index, low, high,
+            ))))
         }
         pub const fn left_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Left(Arg::Variable(VariableArg::new(index, low, high))))
+            self.push(Step::Left(Arg::Variable(VariableArg::new(
+                index, low, high,
+            ))))
         }
         pub const fn up_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
@@ -544,14 +1192,18 @@ macro_rules! emit_fixed_step_methods {
         pub const fn restore(self, name: &'static str) -> Self {
             let index = match self.last_mark_index(name) {
                 Some(i) => i,
-                None => panic!("restore: no mark found with name (mark must be defined before restore)"),
+                None => {
+                    panic!("restore: no mark found with name (mark must be defined before restore)")
+                }
             };
             self.push(Step::Restore { index })
         }
         pub const fn restore_nth(self, name: &'static str, n: usize) -> Self {
             let index = match self.mark_index_nth(name, n) {
                 Some(i) => i,
-                None => panic!("restore_nth: no matching mark found (must define mark before restoring nth)"),
+                None => panic!(
+                    "restore_nth: no matching mark found (must define mark before restoring nth)"
+                ),
             };
             self.push(Step::Restore { index })
         }
@@ -608,23 +1260,33 @@ macro_rules! emit_buf_step_methods {
         // Parameterized methods (yaw_param, pitch_param, etc.)
         pub fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Yaw(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+            self.push_step(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
+                index, low, high,
+            ))))
         }
         pub fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Pitch(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+            self.push_step(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
+                index, low, high,
+            ))))
         }
         pub fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Roll(Arg::Variable(VariableArg::from_degrees(index, low, high))))
+            self.push_step(Step::Roll(Arg::Variable(VariableArg::from_degrees(
+                index, low, high,
+            ))))
         }
         pub fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Move(Arg::Variable(VariableArg::new(index, low, high))))
+            self.push_step(Step::Move(Arg::Variable(VariableArg::new(
+                index, low, high,
+            ))))
         }
         pub fn left_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Left(Arg::Variable(VariableArg::new(index, low, high))))
+            self.push_step(Step::Left(Arg::Variable(VariableArg::new(
+                index, low, high,
+            ))))
         }
         pub fn up_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
@@ -876,7 +1538,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         }
     }
 
-
     /// Append another linkage's steps after this one's, merging their parameters.
     ///
     /// The caller must supply the output sizes as const generics since Rust cannot
@@ -1051,6 +1712,15 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         }
     }
 
+    /// Parse `.lb.rs` source into a growable linkage.
+    ///
+    /// Accepts the editor format with a leading `linkage![` or `linkage! [` wrapper
+    /// and a trailing `]`, plus the fluent leading-dot method calls used by the
+    /// linkage DSL.
+    pub fn from_lb_rs(source: &str) -> Result<Self, String> {
+        parse_lb_rs(source)
+    }
+
     /// Number of runtime parameters this linkage expects.
     pub const DOF: usize = DOF;
 
@@ -1111,7 +1781,6 @@ impl<const DOF: usize> LinkageBuf<DOF> {
         };
         self.push_step(Step::Restore { index })
     }
-
 
     /// Insert a sphere at every joint (before and after each `Move`/`Left`/`Up` step).
     ///
@@ -2046,7 +2715,9 @@ macro_rules! linkage {
 macro_rules! linkage_fixed {
     ($path:literal) => {{
         macro_rules! __linkage_blaze_start {
-            () => { $crate::LinkageFixed::start() }
+            () => {
+                $crate::LinkageFixed::start()
+            };
         }
         include!($path)
     }};
@@ -2082,7 +2753,9 @@ macro_rules! linkage_fixed {
 macro_rules! linkage_buf {
     ($path:literal) => {{
         macro_rules! __linkage_blaze_start {
-            () => { $crate::LinkageBuf::start() }
+            () => {
+                $crate::LinkageBuf::start()
+            };
         }
         include!($path)
     }};
@@ -2097,7 +2770,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{DrawItem, LinkageFixed, Pose, Vec3};
+    use super::{DrawItem, LinkageBuf, LinkageFixed, Pose, Rgb888, Vec3};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
@@ -2174,6 +2847,58 @@ mod tests {
             }
             _ => panic!("expected stroke from zero-width pen"),
         }
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn serializes_linkage_view_to_lb_rs() {
+        const LINKAGE: LinkageFixed<1, 10> = LinkageFixed::start()
+            .define_param("distance", 0.5)
+            .pen_up()
+            .mark("origin")
+            .pen_color(Rgb888::new(10, 20, 30))
+            .pen_width(2.0)
+            .pen_down()
+            .forward_param("distance", 1.0, 5.0)
+            .restore("origin");
+
+        let source = LINKAGE.view().to_lb_rs();
+
+        assert!(source.starts_with("linkage![\n"));
+        assert!(source.trim_end().ends_with(']'));
+        assert!(source.contains(".define_param(\"distance\", 0.5)"));
+        assert!(source.contains(".pen_color(Rgb888::new(10, 20, 30))"));
+        assert!(source.contains(".forward_param(\"distance\", 1.0, 5.0)"));
+        assert!(source.contains(".restore(\"origin\")"));
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn parses_lb_rs_into_linkage_buf() {
+        let source = r#"linkage![
+    .define_param("distance", 0.5)
+    .pen_color(Rgb888::new(10, 20, 30))
+    .forward_param("distance", 1.0, 5.0)
+]"#;
+
+        let linkage = LinkageBuf::<1>::from_lb_rs(source).expect("source should parse");
+        let pose = linkage.view().final_pose(&[0.5]);
+
+        assert!(
+            pose.position()
+                .is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5)
+        );
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn lb_rs_parser_rejects_integer_arguments() {
+        let error = match LinkageBuf::<0>::from_lb_rs("linkage![\n.forward(1)\n]") {
+            Ok(_) => panic!("integer argument should fail"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("is an integer"));
     }
 
     #[test]
@@ -2405,5 +3130,4 @@ mod tests {
         // yaw driven by index 1 = 0.0 → 0° → moves along +X
         assert!(pos.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-5));
     }
-
 }

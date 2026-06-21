@@ -1518,6 +1518,7 @@ dependencies = [
 name = "linkage-blaze-editor"
 version = "0.1.4"
 dependencies = [
+ "linkage-blaze-core",
  "wasm-bindgen",
 ]
 
