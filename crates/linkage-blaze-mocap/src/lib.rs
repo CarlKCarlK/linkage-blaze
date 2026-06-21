@@ -200,6 +200,14 @@ pub fn build_asf_linkage_buf<const DOF: usize>(
     source: &str,
     layout: &AsfParameterLayout,
 ) -> Result<LinkageBuf<DOF>, MocapParseError> {
+    build_asf_linkage_buf_with_defaults(source, layout, &[])
+}
+
+fn build_asf_linkage_buf_with_defaults<const DOF: usize>(
+    source: &str,
+    layout: &AsfParameterLayout,
+    defaults: &[f32],
+) -> Result<LinkageBuf<DOF>, MocapParseError> {
     if layout.len() > DOF {
         return Err(MocapParseError::new(format!(
             "ASF parameter layout has {} parameter(s), but LinkageBuf DOF is {DOF}",
@@ -209,8 +217,9 @@ pub fn build_asf_linkage_buf<const DOF: usize>(
 
     let skeleton = parse_asf(source)?;
     let mut linkage = LinkageBuf::start().pen_up().mark("root");
-    for parameter in &layout.parameters {
-        linkage = linkage.define_param(parameter.linkage_name, 0.5);
+    for (parameter_index, parameter) in layout.parameters.iter().enumerate() {
+        let default = defaults.get(parameter_index).copied().unwrap_or(0.5);
+        linkage = linkage.define_param(parameter.linkage_name, default);
     }
 
     for edge in &skeleton.hierarchy {
@@ -247,6 +256,29 @@ pub fn build_asf_linkage_buf<const DOF: usize>(
 pub fn asf_to_lb_rs<const DOF: usize>(source: &str) -> Result<String, MocapParseError> {
     let layout = discover_asf_parameters(source)?;
     let linkage = build_asf_linkage_buf::<DOF>(source, &layout)?;
+    Ok(linkage.view().to_lb_rs())
+}
+
+/// Convert ASF skeleton text and AMC motion text into generated `.lb.rs` source.
+///
+/// The ASF file supplies the skeleton and parameter layout. The AMC file
+/// supplies parameter defaults from `frame_index`, so loading the generated
+/// file starts in a real captured pose rather than the zero/rest pose.
+pub fn asf_and_amc_to_lb_rs<const DOF: usize>(
+    asf_source: &str,
+    amc_source: &str,
+    frame_index: u32,
+) -> Result<String, MocapParseError> {
+    let layout = discover_asf_parameters(asf_source)?;
+    let motion = parse_amc(amc_source)?;
+    let frame = motion
+        .frames
+        .iter()
+        .find(|frame| frame.index == frame_index)
+        .ok_or_else(|| MocapParseError::new(format!("AMC frame {frame_index} not found")))?;
+    let defaults = parameter_defaults_from_frame(&layout, frame)?;
+    let linkage = build_asf_linkage_buf_with_defaults::<DOF>(asf_source, &layout, &defaults)?;
+
     Ok(linkage.view().to_lb_rs())
 }
 
@@ -365,38 +397,119 @@ fn apply_joint_parameters<const DOF: usize>(
         .iter()
         .filter(|parameter| parameter.joint_name == joint_name)
     {
+        let (low, high) = parameter_range(parameter.dof);
         linkage = match parameter.dof {
-            Dof::Rx => linkage.roll_param(parameter.linkage_name, -180.0, 180.0),
-            Dof::Ry => linkage.pitch_param(parameter.linkage_name, -180.0, 180.0),
-            Dof::Rz => linkage.yaw_param(parameter.linkage_name, -180.0, 180.0),
-            Dof::Tx => linkage.forward_param(parameter.linkage_name, -100.0, 100.0),
-            Dof::Ty => linkage.left_param(parameter.linkage_name, -100.0, 100.0),
-            Dof::Tz => linkage.up_param(parameter.linkage_name, -100.0, 100.0),
-            Dof::L => linkage.forward_param(parameter.linkage_name, 0.0, 100.0),
+            Dof::Rx => linkage.roll_param(parameter.linkage_name, low, high),
+            Dof::Ry => linkage.pitch_param(parameter.linkage_name, low, high),
+            Dof::Rz => linkage.yaw_param(parameter.linkage_name, low, high),
+            Dof::Tx => linkage.forward_param(parameter.linkage_name, low, high),
+            Dof::Ty => linkage.left_param(parameter.linkage_name, low, high),
+            Dof::Tz => linkage.up_param(parameter.linkage_name, low, high),
+            Dof::L => linkage.forward_param(parameter.linkage_name, low, high),
         };
     }
     linkage
 }
 
+fn parameter_defaults_from_frame(
+    layout: &AsfParameterLayout,
+    frame: &AmcFrame,
+) -> Result<Vec<f32>, MocapParseError> {
+    let mut defaults = Vec::with_capacity(layout.len());
+
+    for (parameter_index, parameter) in layout.parameters.iter().enumerate() {
+        let joint_value_index = layout.parameters[..parameter_index]
+            .iter()
+            .filter(|candidate| candidate.joint_name == parameter.joint_name)
+            .count();
+        let joint_frame = frame
+            .joints
+            .iter()
+            .find(|joint_frame| joint_frame.name == parameter.joint_name)
+            .ok_or_else(|| {
+                MocapParseError::new(format!(
+                    "AMC frame {} missing joint `{}`",
+                    frame.index, parameter.joint_name
+                ))
+            })?;
+        let value = joint_frame
+            .values
+            .get(joint_value_index)
+            .copied()
+            .ok_or_else(|| {
+                MocapParseError::new(format!(
+                    "AMC frame {} joint `{}` missing value {}",
+                    frame.index, parameter.joint_name, joint_value_index
+                ))
+            })?;
+
+        defaults.push(normalize_parameter_default(parameter, value)?);
+    }
+
+    Ok(defaults)
+}
+
+fn normalize_parameter_default(
+    parameter: &AsfParameter,
+    value: f32,
+) -> Result<f32, MocapParseError> {
+    let (low, high) = parameter_range(parameter.dof);
+    let default = (value - low) / (high - low);
+
+    if !(0.0..=1.0).contains(&default) {
+        return Err(MocapParseError::new(format!(
+            "AMC value {value} for {} {:?} is outside [{low}, {high}]",
+            parameter.joint_name, parameter.dof
+        )));
+    }
+
+    Ok(default)
+}
+
+fn parameter_range(dof: Dof) -> (f32, f32) {
+    match dof {
+        Dof::Rx | Dof::Ry | Dof::Rz => (-180.0, 180.0),
+        Dof::Tx | Dof::Ty | Dof::Tz => (-100.0, 100.0),
+        Dof::L => (0.0, 100.0),
+    }
+}
+
 fn append_bone_segment<const DOF: usize>(
-    linkage: LinkageBuf<DOF>,
+    mut linkage: LinkageBuf<DOF>,
     bone: &AsfBone,
     mark_name: &'static str,
 ) -> LinkageBuf<DOF> {
-    let [direction_x, direction_y, direction_z] = bone.direction;
+    let [asf_x, asf_y, asf_z] = bone.direction;
+    let direction_x = asf_z;
+    let direction_y = asf_x;
+    let direction_z = asf_y;
     let horizontal_length = direction_x.hypot(direction_y);
     let yaw_degrees = direction_y.atan2(direction_x).to_degrees();
     let pitch_degrees = -direction_z.atan2(horizontal_length).to_degrees();
 
-    linkage
-        .yaw(yaw_degrees)
-        .pitch(pitch_degrees)
-        .pen_down()
-        .forward(bone.length)
-        .pen_up()
-        .pitch(-pitch_degrees)
-        .yaw(-yaw_degrees)
-        .mark(mark_name)
+    if !is_nearly_zero_degrees(yaw_degrees) {
+        linkage = linkage.yaw(yaw_degrees);
+    }
+    if !is_nearly_zero_degrees(pitch_degrees) {
+        linkage = linkage.pitch(pitch_degrees);
+    }
+
+    linkage = linkage.pen_down().forward(bone.length).pen_up();
+
+    if !is_nearly_zero_degrees(pitch_degrees) {
+        linkage = linkage.pitch(-pitch_degrees);
+    }
+    if !is_nearly_zero_degrees(yaw_degrees) {
+        linkage = linkage.yaw(-yaw_degrees);
+    }
+
+    linkage.mark(mark_name)
+}
+
+fn is_nearly_zero_degrees(degrees: f32) -> bool {
+    const ANGLE_EPSILON_DEGREES: f32 = 0.0001;
+
+    degrees.abs() < ANGLE_EPSILON_DEGREES
 }
 
 fn parse_root<'a, I>(
@@ -915,6 +1028,16 @@ upperback 10 11 12
         assert!(source.trim_end().ends_with(']'));
         assert!(source.contains(".define_param(\"mocap_000\", 0.5)"));
         assert!(source.contains(".roll_param(\"mocap_000\", -180.0, 180.0)"));
+    }
+
+    #[test]
+    fn converts_asf_and_amc_to_lb_rs_source_with_frame_defaults() {
+        let source = asf_and_amc_to_lb_rs::<6>(ASF, AMC, 1).expect("ASF/AMC should serialize");
+
+        assert!(source.starts_with("linkage![\n"));
+        assert!(source.trim_end().ends_with(']'));
+        assert!(source.contains(".define_param(\"mocap_000\", 0.50277776)"));
+        assert!(source.contains(".define_param(\"mocap_003\", 0.511111"));
     }
 
     #[test]
