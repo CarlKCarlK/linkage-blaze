@@ -1829,6 +1829,120 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         out
     }
 
+    /// Merge runs of consecutive fixed-value steps of the same motion type.
+    ///
+    /// See [`LinkageBuf::merge_adjacent_fixed`] for semantics. `OUT_N` must
+    /// equal the number of steps remaining after all merges; the function
+    /// asserts this at const-eval time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// // Start (1) + Yaw (1) + Yaw (1) = 3 steps.
+    /// const L: LinkageFixed<0, 0, 3> = LinkageFixed::start()
+    ///     .yaw(57.6_f32.to_radians())
+    ///     .yaw((-171.87_f32).to_radians());
+    ///
+    /// // Two consecutive yaws fold into one: Start + Yaw = 2 steps.
+    /// const M: LinkageFixed<0, 0, 2> = L.merge_adjacent_fixed();
+    /// ```
+    pub const fn merge_adjacent_fixed<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
+        let mut out_steps = [const { Step::Start }; OUT_N];
+        let mut out_len = 0usize;
+        let mut i = 0;
+        while i < self.len {
+            let step = self.steps[i];
+            i += 1;
+            let merged = match step {
+                Step::Yaw(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.len {
+                        if let Step::Yaw(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Yaw(Arg::Fixed(total))
+                }
+                Step::Pitch(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.len {
+                        if let Step::Pitch(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Pitch(Arg::Fixed(total))
+                }
+                Step::Roll(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.len {
+                        if let Step::Roll(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Roll(Arg::Fixed(total))
+                }
+                Step::Move(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.len {
+                        if let Step::Move(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Move(Arg::Fixed(total))
+                }
+                Step::Left(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.len {
+                        if let Step::Left(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Left(Arg::Fixed(total))
+                }
+                Step::Up(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.len {
+                        if let Step::Up(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Up(Arg::Fixed(total))
+                }
+                other => other,
+            };
+            out_steps[out_len] = merged;
+            out_len += 1;
+        }
+        assert!(out_len == OUT_N, "OUT_N does not match actual step count after merging");
+        LinkageFixed {
+            steps: out_steps,
+            len: out_len,
+            params: self.params,
+            param_len: self.param_len,
+            mark_names: self.mark_names,
+            mark_len: self.mark_len,
+        }
+    }
+
     /// Append another linkage's steps after this one's, merging their parameters.
     ///
     /// The caller must supply the output sizes as const generics since Rust cannot
@@ -2595,6 +2709,110 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     pub fn strip_fixed_noops(mut self) -> Self {
         self.steps.retain(|&step| !is_fixed_noop(step));
         self
+    }
+
+    /// Merge runs of consecutive fixed-value steps of the same motion type.
+    ///
+    /// For example, `.yaw(57.6).yaw(-171.87)` becomes `.yaw(-114.27)`. Any
+    /// number of consecutive same-type fixed steps are folded into one. The
+    /// merged value is the arithmetic sum of their arguments.
+    ///
+    /// Only `Yaw`, `Pitch`, `Roll`, `Move`, `Left`, and `Up` steps with
+    /// `Fixed` arguments are merged. Variable-arg steps and non-motion steps
+    /// break a run.
+    ///
+    /// Combine with [`strip_fixed_noops`](Self::strip_fixed_noops) afterward
+    /// to also remove any merged steps whose sum is zero.
+    pub fn merge_adjacent_fixed(self) -> Self {
+        let mut out = Vec::with_capacity(self.steps.len());
+        let mut i = 0;
+        while i < self.steps.len() {
+            let step = self.steps[i];
+            i += 1;
+            let merged = match step {
+                Step::Yaw(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.steps.len() {
+                        if let Step::Yaw(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Yaw(Arg::Fixed(total))
+                }
+                Step::Pitch(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.steps.len() {
+                        if let Step::Pitch(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Pitch(Arg::Fixed(total))
+                }
+                Step::Roll(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.steps.len() {
+                        if let Step::Roll(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Roll(Arg::Fixed(total))
+                }
+                Step::Move(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.steps.len() {
+                        if let Step::Move(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Move(Arg::Fixed(total))
+                }
+                Step::Left(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.steps.len() {
+                        if let Step::Left(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Left(Arg::Fixed(total))
+                }
+                Step::Up(Arg::Fixed(v)) => {
+                    let mut total = v;
+                    while i < self.steps.len() {
+                        if let Step::Up(Arg::Fixed(v2)) = self.steps[i] {
+                            total += v2;
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    Step::Up(Arg::Fixed(total))
+                }
+                other => other,
+            };
+            out.push(merged);
+        }
+        Self {
+            steps: out,
+            params: self.params,
+            param_len: self.param_len,
+            mark_names: self.mark_names,
+            mark_len: self.mark_len,
+        }
     }
 }
 
