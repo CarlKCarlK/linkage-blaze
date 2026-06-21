@@ -1,0 +1,8 @@
+[package]
+name = "linkage-blaze-mocap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+linkage-blaze-core = { workspace = true, features = ["alloc"] }

@@ -1522,6 +1522,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "linkage-blaze-mocap"
+version = "0.1.4"
+dependencies = [
+ "linkage-blaze-core",
+]
+
+[[package]]
 name = "linkage-blaze-printer-wasm"
 version = "0.1.4"
 dependencies = [

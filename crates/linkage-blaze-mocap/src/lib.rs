@@ -1,0 +1,566 @@
+//! CMU ASF/AMC motion-capture parsing for Linkage Blaze.
+//!
+//! ASF describes a skeleton: hierarchy, bone lengths, axes, and degrees of
+//! freedom. AMC describes per-frame joint parameters for that skeleton.
+
+use std::fmt;
+use std::str::FromStr;
+
+use linkage_blaze_core::LinkageBuf;
+
+/// Parsed CMU ASF skeleton data.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AsfSkeleton {
+    pub version: Option<String>,
+    pub name: Option<String>,
+    pub bones: Vec<AsfBone>,
+    pub hierarchy: Vec<HierarchyEdge>,
+}
+
+impl AsfSkeleton {
+    /// Return a bone by ASF name.
+    pub fn bone(&self, name: &str) -> Option<&AsfBone> {
+        self.bones.iter().find(|bone| bone.name == name)
+    }
+
+    /// Build a simple static stick-figure linkage from the ASF hierarchy.
+    ///
+    /// This is an MVP skeleton view. It uses bone directions and lengths, but
+    /// does not yet apply ASF axis rotations or AMC frame parameters.
+    pub fn static_linkage(&self) -> LinkageBuf<0> {
+        let mut linkage = LinkageBuf::start().pen_up().mark("root");
+        for edge in &self.hierarchy {
+            if edge.parent == "root" {
+                linkage = linkage.restore("root");
+            } else if let Some(parent_index) = self.bone_index(&edge.parent) {
+                let Some(parent_mark_name) = static_mark_name(parent_index) else {
+                    continue;
+                };
+                linkage = linkage.restore(parent_mark_name);
+            }
+
+            if let Some(child_bone) = self.bone(&edge.child) {
+                let Some(child_index) = self.bone_index(&edge.child) else {
+                    continue;
+                };
+                let Some(child_mark_name) = static_mark_name(child_index) else {
+                    continue;
+                };
+                let [direction_x, direction_y, direction_z] = child_bone.direction;
+                linkage = linkage
+                    .pen_down()
+                    .forward(direction_x * child_bone.length)
+                    .left(direction_y * child_bone.length)
+                    .up(direction_z * child_bone.length)
+                    .pen_up()
+                    .mark(child_mark_name);
+            }
+        }
+        linkage
+    }
+
+    fn bone_index(&self, name: &str) -> Option<usize> {
+        self.bones.iter().position(|bone| bone.name == name)
+    }
+}
+
+/// One ASF bone definition.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AsfBone {
+    pub id: Option<u32>,
+    pub name: String,
+    pub direction: [f32; 3],
+    pub length: f32,
+    pub axis: [f32; 3],
+    pub axis_order: Option<String>,
+    pub dof: Vec<Dof>,
+}
+
+impl Default for AsfBone {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: String::new(),
+            direction: [0.0, 0.0, 0.0],
+            length: 0.0,
+            axis: [0.0, 0.0, 0.0],
+            axis_order: None,
+            dof: Vec::new(),
+        }
+    }
+}
+
+/// Parent-child ASF hierarchy relation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HierarchyEdge {
+    pub parent: String,
+    pub child: String,
+}
+
+/// ASF joint degree of freedom.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Dof {
+    Rx,
+    Ry,
+    Rz,
+    Tx,
+    Ty,
+    Tz,
+    L,
+}
+
+impl FromStr for Dof {
+    type Err = MocapParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "rx" => Ok(Self::Rx),
+            "ry" => Ok(Self::Ry),
+            "rz" => Ok(Self::Rz),
+            "tx" => Ok(Self::Tx),
+            "ty" => Ok(Self::Ty),
+            "tz" => Ok(Self::Tz),
+            "l" => Ok(Self::L),
+            _ => Err(MocapParseError::new(format!("unknown DOF `{value}`"))),
+        }
+    }
+}
+
+/// Parsed CMU AMC motion data.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AmcMotion {
+    pub frames: Vec<AmcFrame>,
+}
+
+/// One AMC frame.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AmcFrame {
+    pub index: u32,
+    pub joints: Vec<AmcJointFrame>,
+}
+
+/// Joint parameters for one AMC frame.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AmcJointFrame {
+    pub name: String,
+    pub values: Vec<f32>,
+}
+
+/// Parse CMU ASF skeleton text.
+pub fn parse_asf(source: &str) -> Result<AsfSkeleton, MocapParseError> {
+    let mut skeleton = AsfSkeleton::default();
+    let mut lines = source.lines().enumerate().peekable();
+
+    while let Some((line_index, line)) = lines.next() {
+        let line = clean_line(line);
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some(value) = line.strip_prefix(":version") {
+            skeleton.version = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix(":name") {
+            skeleton.name = Some(value.trim().to_string());
+        } else if line == ":bonedata" {
+            parse_bonedata(&mut lines, &mut skeleton)?;
+        } else if line == ":hierarchy" {
+            parse_hierarchy(&mut lines, &mut skeleton)?;
+        } else if line.starts_with(':') {
+            skip_asf_section(&mut lines);
+            continue;
+        } else {
+            return Err(MocapParseError::at(
+                line_index + 1,
+                format!("unexpected ASF line `{line}`"),
+            ));
+        }
+    }
+
+    Ok(skeleton)
+}
+
+/// Parse CMU AMC motion text.
+pub fn parse_amc(source: &str) -> Result<AmcMotion, MocapParseError> {
+    let mut motion = AmcMotion::default();
+    let mut current_frame: Option<AmcFrame> = None;
+
+    for (line_index, line) in source.lines().enumerate() {
+        let line = clean_line(line);
+        if line.is_empty() || line.starts_with(':') {
+            continue;
+        }
+
+        if let Ok(index) = line.parse::<u32>() {
+            if let Some(frame) = current_frame.take() {
+                motion.frames.push(frame);
+            }
+            current_frame = Some(AmcFrame {
+                index,
+                joints: Vec::new(),
+            });
+            continue;
+        }
+
+        let frame = current_frame.as_mut().ok_or_else(|| {
+            MocapParseError::at(
+                line_index + 1,
+                "AMC joint line appeared before a frame index",
+            )
+        })?;
+        let mut parts = line.split_whitespace();
+        let name = parts
+            .next()
+            .ok_or_else(|| MocapParseError::at(line_index + 1, "missing AMC joint name"))?;
+        let mut values = Vec::new();
+        for part in parts {
+            values.push(parse_f32(line_index + 1, part)?);
+        }
+        frame.joints.push(AmcJointFrame {
+            name: name.to_string(),
+            values,
+        });
+    }
+
+    if let Some(frame) = current_frame {
+        motion.frames.push(frame);
+    }
+
+    Ok(motion)
+}
+
+fn parse_bonedata<'a, I>(
+    lines: &mut std::iter::Peekable<I>,
+    skeleton: &mut AsfSkeleton,
+) -> Result<(), MocapParseError>
+where
+    I: Iterator<Item = (usize, &'a str)>,
+{
+    while let Some((line_index, line)) = lines.peek().copied() {
+        let line = clean_line(line);
+        if line.is_empty() {
+            lines.next();
+            continue;
+        }
+        if line.starts_with(':') {
+            return Ok(());
+        }
+        lines.next();
+        if line != "begin" {
+            return Err(MocapParseError::at(
+                line_index + 1,
+                format!("expected `begin`, got `{line}`"),
+            ));
+        }
+
+        skeleton.bones.push(parse_bone(lines)?);
+    }
+    Ok(())
+}
+
+fn parse_bone<'a, I>(lines: &mut std::iter::Peekable<I>) -> Result<AsfBone, MocapParseError>
+where
+    I: Iterator<Item = (usize, &'a str)>,
+{
+    let mut bone = AsfBone::default();
+
+    for (line_index, line) in lines.by_ref() {
+        let line = clean_line(line);
+        if line.is_empty() {
+            continue;
+        }
+        if line == "end" {
+            if bone.name.is_empty() {
+                return Err(MocapParseError::at(line_index + 1, "bone missing name"));
+            }
+            return Ok(bone);
+        }
+
+        let mut parts = line.split_whitespace();
+        let key = parts
+            .next()
+            .ok_or_else(|| MocapParseError::at(line_index + 1, "missing bone key"))?;
+
+        match key {
+            "id" => {
+                let value = require_part(line_index + 1, &mut parts, "bone id")?;
+                bone.id = Some(parse_u32(line_index + 1, value)?);
+            }
+            "name" => {
+                bone.name = require_part(line_index + 1, &mut parts, "bone name")?.to_string();
+            }
+            "direction" => {
+                bone.direction = parse_vec3(line_index + 1, &mut parts, "direction")?;
+            }
+            "length" => {
+                let value = require_part(line_index + 1, &mut parts, "bone length")?;
+                bone.length = parse_f32(line_index + 1, value)?;
+            }
+            "axis" => {
+                bone.axis = parse_vec3(line_index + 1, &mut parts, "axis")?;
+                bone.axis_order = parts.next().map(str::to_string);
+            }
+            "dof" => {
+                bone.dof.clear();
+                for value in parts {
+                    bone.dof.push(value.parse()?);
+                }
+            }
+            "limits" => {}
+            _ => {}
+        }
+    }
+
+    Err(MocapParseError::new("unterminated ASF bone"))
+}
+
+fn parse_hierarchy<'a, I>(
+    lines: &mut std::iter::Peekable<I>,
+    skeleton: &mut AsfSkeleton,
+) -> Result<(), MocapParseError>
+where
+    I: Iterator<Item = (usize, &'a str)>,
+{
+    let mut inside = false;
+    for (line_index, line) in lines.by_ref() {
+        let line = clean_line(line);
+        if line.is_empty() {
+            continue;
+        }
+        if line == "begin" {
+            inside = true;
+            continue;
+        }
+        if line == "end" {
+            return Ok(());
+        }
+        if !inside {
+            return Err(MocapParseError::at(
+                line_index + 1,
+                format!("expected hierarchy `begin`, got `{line}`"),
+            ));
+        }
+
+        let mut parts = line.split_whitespace();
+        let parent = require_part(line_index + 1, &mut parts, "hierarchy parent")?;
+        for child in parts {
+            skeleton.hierarchy.push(HierarchyEdge {
+                parent: parent.to_string(),
+                child: child.to_string(),
+            });
+        }
+    }
+
+    Err(MocapParseError::new("unterminated ASF hierarchy"))
+}
+
+fn skip_asf_section<'a, I>(lines: &mut std::iter::Peekable<I>)
+where
+    I: Iterator<Item = (usize, &'a str)>,
+{
+    while let Some((_, line)) = lines.peek() {
+        let line = clean_line(line);
+        if line.starts_with(':') {
+            return;
+        }
+        lines.next();
+    }
+}
+
+fn clean_line(line: &str) -> &str {
+    line.split('#').next().unwrap_or("").trim()
+}
+
+fn parse_vec3<'a>(
+    line_number: usize,
+    parts: &mut impl Iterator<Item = &'a str>,
+    field_name: &str,
+) -> Result<[f32; 3], MocapParseError> {
+    Ok([
+        parse_f32(line_number, require_part(line_number, parts, field_name)?)?,
+        parse_f32(line_number, require_part(line_number, parts, field_name)?)?,
+        parse_f32(line_number, require_part(line_number, parts, field_name)?)?,
+    ])
+}
+
+fn require_part<'a>(
+    line_number: usize,
+    parts: &mut impl Iterator<Item = &'a str>,
+    field_name: &str,
+) -> Result<&'a str, MocapParseError> {
+    parts
+        .next()
+        .ok_or_else(|| MocapParseError::at(line_number, format!("missing {field_name}")))
+}
+
+fn parse_f32(line_number: usize, value: &str) -> Result<f32, MocapParseError> {
+    value
+        .parse::<f32>()
+        .map_err(|_| MocapParseError::at(line_number, format!("expected f32 value, got `{value}`")))
+}
+
+fn parse_u32(line_number: usize, value: &str) -> Result<u32, MocapParseError> {
+    value
+        .parse::<u32>()
+        .map_err(|_| MocapParseError::at(line_number, format!("expected u32 value, got `{value}`")))
+}
+
+fn static_mark_name(index: usize) -> Option<&'static str> {
+    const MARK_NAMES: [&str; 64] = [
+        "bone_00", "bone_01", "bone_02", "bone_03", "bone_04", "bone_05", "bone_06", "bone_07",
+        "bone_08", "bone_09", "bone_10", "bone_11", "bone_12", "bone_13", "bone_14", "bone_15",
+        "bone_16", "bone_17", "bone_18", "bone_19", "bone_20", "bone_21", "bone_22", "bone_23",
+        "bone_24", "bone_25", "bone_26", "bone_27", "bone_28", "bone_29", "bone_30", "bone_31",
+        "bone_32", "bone_33", "bone_34", "bone_35", "bone_36", "bone_37", "bone_38", "bone_39",
+        "bone_40", "bone_41", "bone_42", "bone_43", "bone_44", "bone_45", "bone_46", "bone_47",
+        "bone_48", "bone_49", "bone_50", "bone_51", "bone_52", "bone_53", "bone_54", "bone_55",
+        "bone_56", "bone_57", "bone_58", "bone_59", "bone_60", "bone_61", "bone_62", "bone_63",
+    ];
+    MARK_NAMES.get(index).copied()
+}
+
+/// ASF/AMC parser error.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MocapParseError {
+    line_number: Option<usize>,
+    message: String,
+}
+
+impl MocapParseError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            line_number: None,
+            message: message.into(),
+        }
+    }
+
+    fn at(line_number: usize, message: impl Into<String>) -> Self {
+        Self {
+            line_number: Some(line_number),
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for MocapParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(line_number) = self.line_number {
+            write!(formatter, "line {line_number}: {}", self.message)
+        } else {
+            formatter.write_str(&self.message)
+        }
+    }
+}
+
+impl std::error::Error for MocapParseError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ASF: &str = r#"
+:version 1.10
+:name tiny
+:bonedata
+begin
+id 1
+name lowerback
+direction 0 0 1
+length 2.5
+axis 0 0 0 XYZ
+dof rx ry rz
+end
+begin
+id 2
+name upperback
+direction 1 0 0
+length 3
+axis 0 0 0 XYZ
+dof rx ry rz
+end
+:hierarchy
+begin
+root lowerback
+lowerback upperback
+end
+"#;
+
+    const AMC: &str = r#"
+:FULLY-SPECIFIED
+:DEGREES
+1
+root 0 0 0 0 0 0
+lowerback 1 2 3
+upperback 4 5 6
+2
+root 0 0 0 10 20 30
+lowerback 7 8 9
+upperback 10 11 12
+"#;
+
+    #[test]
+    fn parses_asf_bones_and_hierarchy() {
+        let skeleton = parse_asf(ASF).expect("ASF should parse");
+
+        assert_eq!(skeleton.version.as_deref(), Some("1.10"));
+        assert_eq!(skeleton.name.as_deref(), Some("tiny"));
+        assert_eq!(skeleton.bones.len(), 2);
+        assert_eq!(skeleton.bone("lowerback").unwrap().length, 2.5);
+        assert_eq!(
+            skeleton.bone("upperback").unwrap().dof,
+            [Dof::Rx, Dof::Ry, Dof::Rz]
+        );
+        assert_eq!(
+            skeleton.hierarchy,
+            [
+                HierarchyEdge {
+                    parent: "root".to_string(),
+                    child: "lowerback".to_string(),
+                },
+                HierarchyEdge {
+                    parent: "lowerback".to_string(),
+                    child: "upperback".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_amc_frames() {
+        let motion = parse_amc(AMC).expect("AMC should parse");
+
+        assert_eq!(motion.frames.len(), 2);
+        assert_eq!(motion.frames[0].index, 1);
+        assert_eq!(motion.frames[0].joints[1].name, "lowerback");
+        assert_eq!(motion.frames[0].joints[1].values, [1.0, 2.0, 3.0]);
+        assert_eq!(
+            motion.frames[1].joints[0].values,
+            [0.0, 0.0, 0.0, 10.0, 20.0, 30.0]
+        );
+    }
+
+    #[test]
+    fn builds_static_linkage_from_asf() {
+        let skeleton = parse_asf(ASF).expect("ASF should parse");
+        let linkage = skeleton.static_linkage();
+
+        assert!(linkage.view().poses(&[]).count() > 1);
+    }
+
+    #[test]
+    fn parses_real_cmu_subject_01_trial_01_when_present() {
+        let Ok(asf) = std::fs::read_to_string("samples/cmu_01.asf") else {
+            return;
+        };
+        let Ok(amc) = std::fs::read_to_string("samples/cmu_01_01.amc") else {
+            return;
+        };
+
+        let skeleton = parse_asf(&asf).expect("real CMU ASF should parse");
+        let motion = parse_amc(&amc).expect("real CMU AMC should parse");
+
+        assert!(skeleton.bones.len() > 20);
+        assert!(skeleton.bone("lowerback").is_some());
+        assert!(motion.frames.len() > 100);
+        assert_eq!(motion.frames[0].index, 1);
+    }
+}

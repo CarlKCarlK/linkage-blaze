@@ -2,15 +2,17 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use embedded_graphics_core::pixelcolor::RgbColor;
-use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
+use linkage_blaze_core::{
+    DrawItem, LinkageFixed, Pose, Rgb888, Vec3, WebColors, linkage, linkage_fixed,
+};
 
 const BUILD_X_MM: f32 = 220.0;
 const BUILD_Y_MM: f32 = 240.0;
 const BUILD_Z_MM: f32 = 250.0;
 
 // Bed-slinger printer kinematic chain: Z (gantry rise) -> X (carriage) -> Y (bed).
-// Steps: 76 linkage steps + implicit Start = N = 77.
-const PRINTER: LinkageFixed<3, 77> = linkage_fixed!("linkages/printer.lb.rs");
+// Fixed capacity for the printer linkage steps plus the implicit Start step.
+const PRINTER: LinkageFixed<3, 120> = linkage_fixed!("linkages/printer.lb.rs");
 
 /// Returns printer draw items encoded as flat `[type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2, ...]`.
 ///
