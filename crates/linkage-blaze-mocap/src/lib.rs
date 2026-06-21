@@ -108,11 +108,7 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
     }
 
     let children = bvh_children(clip);
-    let marked_joint_count = children
-        .iter()
-        .filter(|joint_children| !joint_children.is_empty())
-        .count();
-    let needed_mark_count = marked_joint_count + 1;
+    let needed_mark_count = bvh_needed_mark_count(clip, &children);
     if needed_mark_count > MARKS {
         return Err(MocapParseError::new(format!(
             "BVH needs {needed_mark_count} mark slot(s), but LinkageBuf MARKS is {MARKS}"
@@ -126,11 +122,104 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
                 linkage = linkage.restore("origin");
             }
             root_count += 1;
-            linkage = append_bvh_joint(linkage, clip, layout, &children, joint_index)?;
+            linkage = append_bvh_joint(linkage, clip, layout, &children, joint_index, 0)?;
         }
     }
 
     Ok(linkage)
+}
+
+fn bvh_needed_mark_count(clip: &BvhClip, children: &[Vec<usize>]) -> usize {
+    if !children.iter().any(|c| !c.is_empty()) {
+        return 1; // only "origin" needed
+    }
+    let max_depth = clip
+        .joints
+        .iter()
+        .enumerate()
+        .filter(|(_, joint)| joint.parent.is_none())
+        .map(|(joint_index, _)| bvh_max_mark_depth(children, joint_index, 0))
+        .max()
+        .unwrap_or(0);
+    max_depth + 2 // "origin" + "depth 0" through "depth {max_depth}"
+}
+
+fn bvh_max_mark_depth(children: &[Vec<usize>], joint_index: usize, depth: usize) -> usize {
+    if children[joint_index].is_empty() {
+        return 0;
+    }
+    children[joint_index]
+        .iter()
+        .map(|&child| bvh_max_mark_depth(children, child, depth + 1))
+        .max()
+        .unwrap_or(0)
+        .max(depth)
+}
+
+fn bvh_annotations(clip: &BvhClip, children: &[Vec<usize>]) -> (Vec<String>, Vec<String>) {
+    let mut mark_annotations = Vec::new();
+    let mut restore_annotations = Vec::new();
+    for (joint_index, joint) in clip.joints.iter().enumerate() {
+        if joint.parent.is_none() {
+            collect_annotations(
+                clip,
+                children,
+                joint_index,
+                &mut mark_annotations,
+                &mut restore_annotations,
+            );
+        }
+    }
+    (mark_annotations, restore_annotations)
+}
+
+fn collect_annotations(
+    clip: &BvhClip,
+    children: &[Vec<usize>],
+    joint_index: usize,
+    mark_annotations: &mut Vec<String>,
+    restore_annotations: &mut Vec<String>,
+) {
+    if children[joint_index].is_empty() {
+        return;
+    }
+    mark_annotations.push(clip.joints[joint_index].name.clone());
+    for (child_ordinal, &child_index) in children[joint_index].iter().enumerate() {
+        if child_ordinal > 0 {
+            restore_annotations.push(clip.joints[joint_index].name.clone());
+        }
+        collect_annotations(clip, children, child_index, mark_annotations, restore_annotations);
+    }
+}
+
+fn annotate_depth_step_lines(
+    lb_rs: String,
+    mark_annotations: Vec<String>,
+    restore_annotations: Vec<String>,
+) -> String {
+    let mut mark_iter = mark_annotations.into_iter();
+    let mut restore_iter = restore_annotations.into_iter();
+    let mut result = String::with_capacity(lb_rs.len());
+    for line in lb_rs.lines() {
+        let trimmed = line.trim_start();
+        let annotation = if trimmed.starts_with(".mark(\"depth ") {
+            mark_iter.next()
+        } else if trimmed.starts_with(".restore(\"depth ") {
+            restore_iter.next()
+        } else {
+            None
+        };
+        if let Some(joint_name) = annotation {
+            result.push_str(line.trim_end());
+            result.push_str(" // ");
+            result.push_str(&joint_name);
+            result.push('\n');
+        } else {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+    result
 }
 
 /// Return normalized Linkage parameter values for one BVH frame.
@@ -157,15 +246,22 @@ pub fn bvh_frame_params<const DOF: usize>(
 /// Convert BVH motion text into generated `.lb.rs` source.
 ///
 /// The generated linkage uses defaults from the first BVH motion frame, so
-/// loading the generated file starts in a captured pose.
+/// loading the generated file starts in a captured pose. Mark names use
+/// `"depth N"` slots (one per tree level), and each `.restore` line carries
+/// a comment naming the joint being restored.
 pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
     source: &str,
 ) -> Result<String, MocapParseError> {
     let clip = parse_bvh(source)?;
     let layout = discover_bvh_parameters(&clip)?;
     let linkage = build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout)?;
-
-    Ok(linkage.view().to_lb_rs())
+    let children = bvh_children(&clip);
+    let (mark_annotations, restore_annotations) = bvh_annotations(&clip, &children);
+    Ok(annotate_depth_step_lines(
+        linkage.view().to_lb_rs(),
+        mark_annotations,
+        restore_annotations,
+    ))
 }
 
 /// Parse BVH hierarchy and motion text.
@@ -231,11 +327,16 @@ fn bvh_linkage_name(joint_name: &str, channel: BvhChannel) -> &'static str {
     Box::leak(name.into_boxed_str())
 }
 
-fn bvh_mark_name(joint_name: &str) -> &'static str {
-    let mut name = String::with_capacity(joint_name.len() + "joint_".len());
-    name.push_str("joint_");
-    push_sanitized_name_part(&mut name, joint_name);
-    Box::leak(name.into_boxed_str())
+fn depth_mark_name(depth: usize) -> &'static str {
+    const NAMES: &[&str] = &[
+        "depth 0", "depth 1", "depth 2", "depth 3", "depth 4", "depth 5", "depth 6", "depth 7",
+        "depth 8", "depth 9",
+    ];
+    if depth < NAMES.len() {
+        NAMES[depth]
+    } else {
+        Box::leak(format!("depth {depth}").into_boxed_str())
+    }
 }
 
 fn push_sanitized_name_part(name: &mut String, value: &str) {
@@ -367,6 +468,7 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
     layout: &BvhParameterLayout,
     children: &[Vec<usize>],
     joint_index: usize,
+    depth: usize,
 ) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     linkage = apply_bvh_joint_parameters(linkage, layout, joint_index);
 
@@ -374,7 +476,7 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
         return Ok(linkage);
     }
 
-    let mark_name = bvh_mark_name(&clip.joints[joint_index].name);
+    let mark_name = depth_mark_name(depth);
     linkage = linkage.mark(mark_name);
 
     for (child_ordinal, &child_index) in children[joint_index].iter().enumerate() {
@@ -382,7 +484,7 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
             linkage = linkage.restore(mark_name);
         }
         linkage = append_offset_segment(linkage, clip.joints[child_index].offset);
-        linkage = append_bvh_joint(linkage, clip, layout, children, child_index)?;
+        linkage = append_bvh_joint(linkage, clip, layout, children, child_index, depth + 1)?;
     }
 
     Ok(linkage)
@@ -717,6 +819,9 @@ Frame Time: 0.0333333
         assert!(source.trim_end().ends_with(']'));
         assert!(source.contains(".define_param(\"hip_xposition\""));
         assert!(source.contains(".define_param(\"chest_zrotation\""));
+        assert!(source.contains(".mark(\"depth 0\") // hip"));
+        assert!(source.contains(".mark(\"depth 1\") // chest"));
+        assert!(source.contains(".restore(\"depth 1\") // chest"));
         assert!(linkage.view().draw_items(&[0.5; 32]).count() >= 5);
     }
 
@@ -738,7 +843,14 @@ Frame Time: 0.0333333
             bvh_linkage_name("leftEye", BvhChannel::Xposition),
             "left_eye_xposition"
         );
-        assert_eq!(bvh_mark_name("rThumb1"), "joint_r_thumb1");
+    }
+
+    #[test]
+    fn depth_mark_names_are_depth_prefixed() {
+        assert_eq!(depth_mark_name(0), "depth 0");
+        assert_eq!(depth_mark_name(5), "depth 5");
+        assert_eq!(depth_mark_name(9), "depth 9");
+        assert_eq!(depth_mark_name(10), "depth 10");
     }
 
     #[test]
