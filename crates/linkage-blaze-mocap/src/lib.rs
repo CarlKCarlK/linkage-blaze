@@ -13,6 +13,7 @@ use linkage_blaze_core::LinkageBuf;
 pub struct AsfSkeleton {
     pub version: Option<String>,
     pub name: Option<String>,
+    pub root: AsfRoot,
     pub bones: Vec<AsfBone>,
     pub hierarchy: Vec<HierarchyEdge>,
 }
@@ -64,6 +65,15 @@ impl AsfSkeleton {
     }
 }
 
+/// ASF root channel definition.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AsfRoot {
+    pub order: Vec<Dof>,
+    pub axis_order: Option<String>,
+    pub position: [f32; 3],
+    pub orientation: [f32; 3],
+}
+
 /// One ASF bone definition.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AsfBone {
@@ -113,7 +123,7 @@ impl FromStr for Dof {
     type Err = MocapParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
+        match value.to_ascii_lowercase().as_str() {
             "rx" => Ok(Self::Rx),
             "ry" => Ok(Self::Ry),
             "rz" => Ok(Self::Rz),
@@ -146,6 +156,103 @@ pub struct AmcJointFrame {
     pub values: Vec<f32>,
 }
 
+/// Parameter layout discovered from an ASF skeleton.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AsfParameterLayout {
+    pub parameters: Vec<AsfParameter>,
+}
+
+impl AsfParameterLayout {
+    pub fn len(&self) -> usize {
+        self.parameters.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.parameters.is_empty()
+    }
+}
+
+/// One Linkage parameter mapped back to an ASF joint channel.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AsfParameter {
+    pub index: usize,
+    pub linkage_name: &'static str,
+    pub joint_name: String,
+    pub dof: Dof,
+}
+
+/// First ASF pass: discover AMC/Linkage parameter slots from root order and bone DOFs.
+pub fn discover_asf_parameters(source: &str) -> Result<AsfParameterLayout, MocapParseError> {
+    let skeleton = parse_asf(source)?;
+    let mut parameters = Vec::new();
+
+    for &dof in &skeleton.root.order {
+        push_parameter(&mut parameters, "root", dof)?;
+    }
+
+    for bone in &skeleton.bones {
+        for &dof in &bone.dof {
+            push_parameter(&mut parameters, &bone.name, dof)?;
+        }
+    }
+
+    Ok(AsfParameterLayout { parameters })
+}
+
+/// Later ASF pass: create a parameterized LinkageBuf from the skeleton.
+///
+/// `DOF` must be at least `layout.len()`. Parameter names are stable internal
+/// names from [`AsfParameter::linkage_name`], in ASF/AMC channel order.
+pub fn build_asf_linkage_buf<const DOF: usize>(
+    source: &str,
+    layout: &AsfParameterLayout,
+) -> Result<LinkageBuf<DOF>, MocapParseError> {
+    if layout.len() > DOF {
+        return Err(MocapParseError::new(format!(
+            "ASF parameter layout has {} parameter(s), but LinkageBuf DOF is {DOF}",
+            layout.len()
+        )));
+    }
+
+    let skeleton = parse_asf(source)?;
+    let mut linkage = LinkageBuf::start().pen_up().mark("root");
+    for parameter in &layout.parameters {
+        linkage = linkage.define_param(parameter.linkage_name, 0.5);
+    }
+
+    for edge in &skeleton.hierarchy {
+        if edge.parent == "root" {
+            linkage = linkage.restore("root");
+            linkage = apply_joint_parameters(linkage, layout, "root");
+        } else if let Some(parent_index) = skeleton.bone_index(&edge.parent) {
+            let Some(parent_mark_name) = static_mark_name(parent_index) else {
+                continue;
+            };
+            linkage = linkage.restore(parent_mark_name);
+            linkage = apply_joint_parameters(linkage, layout, &edge.parent);
+        }
+
+        if let Some(child_bone) = skeleton.bone(&edge.child) {
+            let Some(child_index) = skeleton.bone_index(&edge.child) else {
+                continue;
+            };
+            let Some(child_mark_name) = static_mark_name(child_index) else {
+                continue;
+            };
+            let [direction_x, direction_y, direction_z] = child_bone.direction;
+            linkage = linkage
+                .pen_down()
+                .forward(direction_x * child_bone.length)
+                .left(direction_y * child_bone.length)
+                .up(direction_z * child_bone.length)
+                .pen_up()
+                .mark(child_mark_name);
+        }
+    }
+
+    Ok(linkage)
+}
+
 /// Parse CMU ASF skeleton text.
 pub fn parse_asf(source: &str) -> Result<AsfSkeleton, MocapParseError> {
     let mut skeleton = AsfSkeleton::default();
@@ -161,6 +268,8 @@ pub fn parse_asf(source: &str) -> Result<AsfSkeleton, MocapParseError> {
             skeleton.version = Some(value.trim().to_string());
         } else if let Some(value) = line.strip_prefix(":name") {
             skeleton.name = Some(value.trim().to_string());
+        } else if line == ":root" {
+            parse_root(&mut lines, &mut skeleton)?;
         } else if line == ":bonedata" {
             parse_bonedata(&mut lines, &mut skeleton)?;
         } else if line == ":hierarchy" {
@@ -226,6 +335,92 @@ pub fn parse_amc(source: &str) -> Result<AmcMotion, MocapParseError> {
     }
 
     Ok(motion)
+}
+
+fn push_parameter(
+    parameters: &mut Vec<AsfParameter>,
+    joint_name: &str,
+    dof: Dof,
+) -> Result<(), MocapParseError> {
+    let index = parameters.len();
+    let Some(linkage_name) = static_parameter_name(index) else {
+        return Err(MocapParseError::new(format!(
+            "too many ASF parameters; supported maximum is {}",
+            STATIC_PARAMETER_NAMES.len()
+        )));
+    };
+    parameters.push(AsfParameter {
+        index,
+        linkage_name,
+        joint_name: joint_name.to_string(),
+        dof,
+    });
+    Ok(())
+}
+
+fn apply_joint_parameters<const DOF: usize>(
+    mut linkage: LinkageBuf<DOF>,
+    layout: &AsfParameterLayout,
+    joint_name: &str,
+) -> LinkageBuf<DOF> {
+    for parameter in layout
+        .parameters
+        .iter()
+        .filter(|parameter| parameter.joint_name == joint_name)
+    {
+        linkage = match parameter.dof {
+            Dof::Rx => linkage.roll_param(parameter.linkage_name, -180.0, 180.0),
+            Dof::Ry => linkage.pitch_param(parameter.linkage_name, -180.0, 180.0),
+            Dof::Rz => linkage.yaw_param(parameter.linkage_name, -180.0, 180.0),
+            Dof::Tx => linkage.forward_param(parameter.linkage_name, -100.0, 100.0),
+            Dof::Ty => linkage.left_param(parameter.linkage_name, -100.0, 100.0),
+            Dof::Tz => linkage.up_param(parameter.linkage_name, -100.0, 100.0),
+            Dof::L => linkage.forward_param(parameter.linkage_name, 0.0, 100.0),
+        };
+    }
+    linkage
+}
+
+fn parse_root<'a, I>(
+    lines: &mut std::iter::Peekable<I>,
+    skeleton: &mut AsfSkeleton,
+) -> Result<(), MocapParseError>
+where
+    I: Iterator<Item = (usize, &'a str)>,
+{
+    while let Some((line_index, line)) = lines.peek().copied() {
+        let line = clean_line(line);
+        if line.is_empty() {
+            lines.next();
+            continue;
+        }
+        if line.starts_with(':') {
+            return Ok(());
+        }
+        lines.next();
+
+        let mut parts = line.split_whitespace();
+        let key = parts
+            .next()
+            .ok_or_else(|| MocapParseError::at(line_index + 1, "missing root key"))?;
+        match key {
+            "order" => {
+                skeleton.root.order.clear();
+                for value in parts {
+                    skeleton.root.order.push(value.parse()?);
+                }
+            }
+            "axis" => skeleton.root.axis_order = parts.next().map(str::to_string),
+            "position" => {
+                skeleton.root.position = parse_vec3(line_index + 1, &mut parts, "position")?;
+            }
+            "orientation" => {
+                skeleton.root.orientation = parse_vec3(line_index + 1, &mut parts, "orientation")?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn parse_bonedata<'a, I>(
@@ -404,6 +599,141 @@ fn parse_u32(line_number: usize, value: &str) -> Result<u32, MocapParseError> {
         .map_err(|_| MocapParseError::at(line_number, format!("expected u32 value, got `{value}`")))
 }
 
+const STATIC_PARAMETER_NAMES: [&str; 128] = [
+    "mocap_000",
+    "mocap_001",
+    "mocap_002",
+    "mocap_003",
+    "mocap_004",
+    "mocap_005",
+    "mocap_006",
+    "mocap_007",
+    "mocap_008",
+    "mocap_009",
+    "mocap_010",
+    "mocap_011",
+    "mocap_012",
+    "mocap_013",
+    "mocap_014",
+    "mocap_015",
+    "mocap_016",
+    "mocap_017",
+    "mocap_018",
+    "mocap_019",
+    "mocap_020",
+    "mocap_021",
+    "mocap_022",
+    "mocap_023",
+    "mocap_024",
+    "mocap_025",
+    "mocap_026",
+    "mocap_027",
+    "mocap_028",
+    "mocap_029",
+    "mocap_030",
+    "mocap_031",
+    "mocap_032",
+    "mocap_033",
+    "mocap_034",
+    "mocap_035",
+    "mocap_036",
+    "mocap_037",
+    "mocap_038",
+    "mocap_039",
+    "mocap_040",
+    "mocap_041",
+    "mocap_042",
+    "mocap_043",
+    "mocap_044",
+    "mocap_045",
+    "mocap_046",
+    "mocap_047",
+    "mocap_048",
+    "mocap_049",
+    "mocap_050",
+    "mocap_051",
+    "mocap_052",
+    "mocap_053",
+    "mocap_054",
+    "mocap_055",
+    "mocap_056",
+    "mocap_057",
+    "mocap_058",
+    "mocap_059",
+    "mocap_060",
+    "mocap_061",
+    "mocap_062",
+    "mocap_063",
+    "mocap_064",
+    "mocap_065",
+    "mocap_066",
+    "mocap_067",
+    "mocap_068",
+    "mocap_069",
+    "mocap_070",
+    "mocap_071",
+    "mocap_072",
+    "mocap_073",
+    "mocap_074",
+    "mocap_075",
+    "mocap_076",
+    "mocap_077",
+    "mocap_078",
+    "mocap_079",
+    "mocap_080",
+    "mocap_081",
+    "mocap_082",
+    "mocap_083",
+    "mocap_084",
+    "mocap_085",
+    "mocap_086",
+    "mocap_087",
+    "mocap_088",
+    "mocap_089",
+    "mocap_090",
+    "mocap_091",
+    "mocap_092",
+    "mocap_093",
+    "mocap_094",
+    "mocap_095",
+    "mocap_096",
+    "mocap_097",
+    "mocap_098",
+    "mocap_099",
+    "mocap_100",
+    "mocap_101",
+    "mocap_102",
+    "mocap_103",
+    "mocap_104",
+    "mocap_105",
+    "mocap_106",
+    "mocap_107",
+    "mocap_108",
+    "mocap_109",
+    "mocap_110",
+    "mocap_111",
+    "mocap_112",
+    "mocap_113",
+    "mocap_114",
+    "mocap_115",
+    "mocap_116",
+    "mocap_117",
+    "mocap_118",
+    "mocap_119",
+    "mocap_120",
+    "mocap_121",
+    "mocap_122",
+    "mocap_123",
+    "mocap_124",
+    "mocap_125",
+    "mocap_126",
+    "mocap_127",
+];
+
+fn static_parameter_name(index: usize) -> Option<&'static str> {
+    STATIC_PARAMETER_NAMES.get(index).copied()
+}
+
 fn static_mark_name(index: usize) -> Option<&'static str> {
     const MARK_NAMES: [&str; 64] = [
         "bone_00", "bone_01", "bone_02", "bone_03", "bone_04", "bone_05", "bone_06", "bone_07",
@@ -547,6 +877,19 @@ upperback 10 11 12
     }
 
     #[test]
+    fn discovers_parameters_then_builds_linkage_from_second_asf_pass() {
+        let layout = discover_asf_parameters(ASF).expect("layout should parse");
+
+        assert_eq!(layout.len(), 6);
+        assert_eq!(layout.parameters[0].joint_name, "lowerback");
+        assert_eq!(layout.parameters[0].dof, Dof::Rx);
+        assert_eq!(layout.parameters[0].linkage_name, "mocap_000");
+
+        let linkage = build_asf_linkage_buf::<6>(ASF, &layout).expect("linkage should build");
+        assert!(linkage.view().poses(&[0.5; 6]).count() > 1);
+    }
+
+    #[test]
     fn parses_real_cmu_subject_01_trial_01_when_present() {
         let Ok(asf) = std::fs::read_to_string("samples/cmu_01.asf") else {
             return;
@@ -562,5 +905,19 @@ upperback 10 11 12
         assert!(skeleton.bone("lowerback").is_some());
         assert!(motion.frames.len() > 100);
         assert_eq!(motion.frames[0].index, 1);
+    }
+
+    #[test]
+    fn builds_real_cmu_parameterized_linkage_when_present() {
+        let Ok(asf) = std::fs::read_to_string("samples/cmu_01.asf") else {
+            return;
+        };
+
+        let layout = discover_asf_parameters(&asf).expect("real CMU layout should parse");
+        let linkage =
+            build_asf_linkage_buf::<128>(&asf, &layout).expect("real CMU linkage should build");
+
+        assert!(layout.len() > 50);
+        assert!(linkage.view().poses(&[0.5; 128]).count() > 20);
     }
 }
