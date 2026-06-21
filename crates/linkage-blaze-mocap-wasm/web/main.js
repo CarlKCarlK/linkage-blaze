@@ -84,11 +84,10 @@ requestAnimationFrame(loop);
 async function loadSample() {
   try {
     error.textContent = "";
-    const [asf, amc] = await Promise.all([
-      fetch("./samples/cmu_01.asf").then(requireOk).then((response) => response.text()),
-      fetch("./samples/cmu_01_01.amc").then(requireOk).then((response) => response.text()),
-    ]);
-    clip = new MocapClipWasm(asf, amc);
+    const bvh = await fetch("./samples/pirouette.bvh")
+      .then(requireOk)
+      .then((response) => response.text());
+    clip = MocapClipWasm.fromBvh(bvh);
     frameIndex = 0;
     frameSlider.max = String(Math.max(clip.frameCount() - 1, 0));
     frameSlider.disabled = clip.frameCount() === 0;
