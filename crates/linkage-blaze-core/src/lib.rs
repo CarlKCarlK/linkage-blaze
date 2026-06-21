@@ -1319,7 +1319,6 @@ pub struct LinkageFixed<const DOF: usize, const N: usize> {
     len: usize,
     params: [Param; DOF],
     param_len: usize,
-    mark_names: [&'static str; N],
     mark_len: usize,
 }
 
@@ -1332,7 +1331,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
             len: 1,
             params: [Param::EMPTY; DOF],
             param_len: 0,
-            mark_names: [""; N],
             mark_len: 0,
         }
     }
@@ -1426,21 +1424,20 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
 
     /// Save the current pose and pen state under a name for later recall.
     pub const fn mark(mut self, name: &'static str) -> Self {
-        // TODO0000 Do not size mark storage from total step capacity N. LinkageFixed should
-        // derive the mark count (or distinct mark count) with const evaluation so evaluators
-        // can allocate exactly the mark state storage they need.
-        assert!(self.mark_len < N, "linkage has more marks than N");
-        self.mark_names[self.mark_len] = name;
         self.mark_len += 1;
         self.push(Step::Mark { name })
     }
 
     const fn last_mark_index(&self, name: &str) -> Option<usize> {
-        let mut i = self.mark_len;
-        while i > 0 {
-            i -= 1;
-            if str_eq(self.mark_names[i], name) {
-                return Some(i);
+        let mut step_index = self.len;
+        let mut mark_index = self.mark_len;
+        while step_index > 0 {
+            step_index -= 1;
+            if let Step::Mark { name: mark_name } = self.steps[step_index] {
+                mark_index -= 1;
+                if str_eq(mark_name, name) {
+                    return Some(mark_index);
+                }
             }
         }
         None
@@ -1448,15 +1445,19 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
 
     const fn mark_index_nth(&self, name: &str, n: usize) -> Option<usize> {
         let mut count = 0;
-        let mut i = 0;
-        while i < self.mark_len {
-            if str_eq(self.mark_names[i], name) {
-                if count == n {
-                    return Some(i);
+        let mut mark_index = 0;
+        let mut step_index = 0;
+        while step_index < self.len {
+            if let Step::Mark { name: mark_name } = self.steps[step_index] {
+                if str_eq(mark_name, name) {
+                    if count == n {
+                        return Some(mark_index);
+                    }
+                    count += 1;
                 }
-                count += 1;
+                mark_index += 1;
             }
-            i += 1;
+            step_index += 1;
         }
         None
     }
@@ -1475,17 +1476,11 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
             len: 0,
             params: [Param::EMPTY; DOF],
             param_len: self.param_len,
-            mark_names: [""; N_OUT],
             mark_len: self.mark_len,
         };
         let mut i = 0;
         while i < self.param_len {
             out.params[i] = self.params[i];
-            i += 1;
-        }
-        let mut i = 0;
-        while i < self.mark_len {
-            out.mark_names[i] = self.mark_names[i];
             i += 1;
         }
         let mut i = 0;
@@ -1570,7 +1565,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
             len: 0,
             params: [Param::EMPTY; DOF_OUT],
             param_len: 0,
-            mark_names: [""; N_OUT],
             mark_len: 0,
         };
 
@@ -1605,17 +1599,6 @@ impl<const DOF: usize, const N: usize> LinkageFixed<DOF, N> {
         }
         out.param_len = self.param_len + other.param_len;
 
-        // Copy remember names from both
-        let mut i = 0;
-        while i < self.mark_len {
-            out.mark_names[i] = self.mark_names[i];
-            i += 1;
-        }
-        let mut i = 0;
-        while i < other.mark_len {
-            out.mark_names[self.mark_len + i] = other.mark_names[i];
-            i += 1;
-        }
         out.mark_len = self.mark_len + other.mark_len;
 
         out
@@ -1696,7 +1679,6 @@ pub struct LinkageBuf<const DOF: usize> {
     params: [Param; DOF],
     param_len: usize,
     steps: alloc::vec::Vec<Step>,
-    mark_names: alloc::vec::Vec<&'static str>,
 }
 
 #[cfg(feature = "alloc")]
@@ -1711,7 +1693,6 @@ impl<const DOF: usize> LinkageBuf<DOF> {
                 v.push(Step::Start);
                 v
             },
-            mark_names: alloc::vec::Vec::new(),
         }
     }
 
@@ -1756,7 +1737,6 @@ impl<const DOF: usize> LinkageBuf<DOF> {
 
     /// Save the current pose and pen state under a name for later recall.
     pub fn mark(mut self, name: &'static str) -> Self {
-        self.mark_names.push(name);
         self.push_step_internal(Step::Mark { name });
         self
     }
@@ -1793,7 +1773,6 @@ impl<const DOF: usize> LinkageBuf<DOF> {
             params: self.params,
             param_len: self.param_len,
             steps: alloc::vec::Vec::with_capacity(self.steps.len() * 3),
-            mark_names: self.mark_names.clone(),
         };
         for step in &self.steps {
             let is_move = matches!(step, Step::Move(_) | Step::Left(_) | Step::Up(_));
@@ -1823,11 +1802,15 @@ impl<const DOF: usize> LinkageBuf<DOF> {
     }
 
     fn last_mark_index(&self, name: &str) -> Option<usize> {
-        let mut i = self.mark_names.len();
-        while i > 0 {
-            i -= 1;
-            if str_eq(self.mark_names[i], name) {
-                return Some(i);
+        let mut step_index = self.steps.len();
+        let mut mark_index = step_mark_count(&self.steps);
+        while step_index > 0 {
+            step_index -= 1;
+            if let Step::Mark { name: mark_name } = self.steps[step_index] {
+                mark_index -= 1;
+                if str_eq(mark_name, name) {
+                    return Some(mark_index);
+                }
             }
         }
         None
@@ -1835,12 +1818,16 @@ impl<const DOF: usize> LinkageBuf<DOF> {
 
     fn mark_index_nth(&self, name: &str, n: usize) -> Option<usize> {
         let mut count = 0;
-        for (i, &mark_name) in self.mark_names.iter().enumerate() {
-            if str_eq(mark_name, name) {
-                if count == n {
-                    return Some(i);
+        let mut mark_index = 0;
+        for &step in &self.steps {
+            if let Step::Mark { name: mark_name } = step {
+                if str_eq(mark_name, name) {
+                    if count == n {
+                        return Some(mark_index);
+                    }
+                    count += 1;
                 }
-                count += 1;
+                mark_index += 1;
             }
         }
         None
@@ -1904,14 +1891,13 @@ impl<const DOF: usize> LinkageBuf<DOF> {
             params: [Param::EMPTY; DOF_OUT],
             param_len: 0,
             steps: alloc::vec::Vec::new(),
-            mark_names: alloc::vec::Vec::new(),
         };
 
         // Copy self's steps (including Start)
         out.steps.extend_from_slice(&self.steps);
 
         // Append other's steps (skip Start), offsetting param and mark indices
-        let mark_offset = self.mark_names.len();
+        let mark_offset = step_mark_count(&self.steps);
         for i in 1..other.steps.len() {
             let step = other.steps[i].offset_params(DOF, mark_offset);
             out.steps.push(step);
@@ -1931,10 +1917,6 @@ impl<const DOF: usize> LinkageBuf<DOF> {
             i += 1;
         }
         out.param_len = self.param_len + other.param_len;
-
-        // Copy mark names from both
-        out.mark_names.extend_from_slice(&self.mark_names);
-        out.mark_names.extend_from_slice(&other.mark_names);
 
         out
     }
@@ -1958,14 +1940,13 @@ impl<const DOF: usize> LinkageBuf<DOF> {
             params: [Param::EMPTY; DOF_OUT],
             param_len: 0,
             steps: alloc::vec::Vec::new(),
-            mark_names: alloc::vec::Vec::new(),
         };
 
         // Copy self's steps (including Start)
         out.steps.extend_from_slice(&self.steps);
 
         // Append steps from the view (skip Start)
-        let mark_offset = self.mark_names.len();
+        let mark_offset = step_mark_count(&self.steps);
         let view_steps = other.steps();
         for i in 1..view_steps.len() {
             let step = view_steps[i].offset_params(DOF, mark_offset);
@@ -1987,16 +1968,6 @@ impl<const DOF: usize> LinkageBuf<DOF> {
             i += 1;
         }
         out.param_len = self.param_len + DOF2;
-
-        // Copy mark names from self, then add a placeholder for each Mark step in the view.
-        // LinkageView doesn't carry mark names, but we must track the count so that any
-        // future combine/combine_ref calls compute the correct mark_offset.
-        out.mark_names.extend_from_slice(&self.mark_names);
-        for step in &view_steps[1..] {
-            if matches!(step, Step::Mark { .. }) {
-                out.mark_names.push("");
-            }
-        }
 
         out
     }
@@ -2028,7 +1999,6 @@ impl<const DOF: usize, const N: usize> From<&LinkageFixed<DOF, N>> for LinkageBu
             params: linkage.params,
             param_len: linkage.param_len,
             steps: linkage.steps[..linkage.len].to_vec(),
-            mark_names: linkage.mark_names[..linkage.mark_len].to_vec(),
         }
     }
 }
@@ -2077,6 +2047,14 @@ const fn str_eq(left: &str, right: &str) -> bool {
     }
 
     true
+}
+
+#[cfg(feature = "alloc")]
+fn step_mark_count(steps: &[Step]) -> usize {
+    steps
+        .iter()
+        .filter(|step| matches!(step, Step::Mark { .. }))
+        .count()
 }
 
 fn validate_params<const DOF: usize>(params: &[f32; DOF]) {
@@ -2365,8 +2343,6 @@ struct MarkedState {
     pen_style: PenStyle,
 }
 
-const MAX_MARKED_STATES: usize = 64;
-
 /// Iterator over styled poses from a LinkageView (does not require const N).
 struct StyledPosesView<'a, const DOF: usize> {
     steps: &'a [Step],
@@ -2374,8 +2350,6 @@ struct StyledPosesView<'a, const DOF: usize> {
     index: usize,
     pose: Pose,
     pen_style: PenStyle,
-    marked: [MarkedState; MAX_MARKED_STATES],
-    marked_len: usize,
 }
 
 impl<'a, const DOF: usize> StyledPosesView<'a, DOF> {
@@ -2387,11 +2361,6 @@ impl<'a, const DOF: usize> StyledPosesView<'a, DOF> {
             index: 0,
             pose: Pose::start(),
             pen_style: PenStyle::new(),
-            marked: [MarkedState {
-                pose: Pose::start(),
-                pen_style: PenStyle::new(),
-            }; MAX_MARKED_STATES],
-            marked_len: 0,
         }
     }
 }
@@ -2409,20 +2378,12 @@ impl<const DOF: usize> Iterator for StyledPosesView<'_, DOF> {
 
             match step {
                 Step::Mark { name: _ } => {
-                    assert!(
-                        self.marked_len < MAX_MARKED_STATES,
-                        "too many marked states"
-                    );
-                    self.marked[self.marked_len] = MarkedState {
-                        pose: self.pose,
-                        pen_style: self.pen_style,
-                    };
-                    self.marked_len += 1;
                     continue;
                 }
                 Step::Restore { index } => {
-                    self.pose = self.marked[*index].pose;
-                    self.pen_style = self.marked[*index].pen_style;
+                    let marked_state = marked_state_at(self.steps, self.params, *index);
+                    self.pose = marked_state.pose;
+                    self.pen_style = marked_state.pen_style;
                     continue;
                 }
                 _ => {}
@@ -2445,8 +2406,6 @@ struct DrawItemsView<'a, const DOF: usize> {
     index: usize,
     pose: Pose,
     pen_style: PenStyle,
-    marked: [MarkedState; MAX_MARKED_STATES],
-    marked_len: usize,
 }
 
 impl<'a, const DOF: usize> DrawItemsView<'a, DOF> {
@@ -2458,11 +2417,6 @@ impl<'a, const DOF: usize> DrawItemsView<'a, DOF> {
             index: 0,
             pose: Pose::start(),
             pen_style: PenStyle::new(),
-            marked: [MarkedState {
-                pose: Pose::start(),
-                pen_style: PenStyle::new(),
-            }; MAX_MARKED_STATES],
-            marked_len: 0,
         }
     }
 }
@@ -2477,20 +2431,12 @@ impl<const DOF: usize> Iterator for DrawItemsView<'_, DOF> {
 
             match step {
                 Step::Mark { name: _ } => {
-                    assert!(
-                        self.marked_len < MAX_MARKED_STATES,
-                        "too many marked states"
-                    );
-                    self.marked[self.marked_len] = MarkedState {
-                        pose: self.pose,
-                        pen_style: self.pen_style,
-                    };
-                    self.marked_len += 1;
                     continue;
                 }
                 Step::Restore { index } => {
-                    self.pose = self.marked[*index].pose;
-                    self.pen_style = self.marked[*index].pen_style;
+                    let marked_state = marked_state_at(self.steps, self.params, *index);
+                    self.pose = marked_state.pose;
+                    self.pen_style = marked_state.pen_style;
                     continue;
                 }
                 _ => {}
@@ -2562,6 +2508,18 @@ impl<const DOF: usize> Iterator for DrawItemsView<'_, DOF> {
 
         None
     }
+}
+
+fn marked_state_at<const DOF: usize>(
+    _steps: &[Step],
+    _params: &[f32; DOF],
+    _target_mark_index: usize,
+) -> MarkedState {
+    // TODO0000 This replay-based restore path is not acceptable for real evaluation.
+    // Restore should use evaluator-local mark storage sized from a type-level mark count.
+    todo!(
+        "restore evaluation needs evaluator-local mark storage sized from a type-level mark count"
+    )
 }
 
 /// A disk shape yielded by a linkage at the current pose.
