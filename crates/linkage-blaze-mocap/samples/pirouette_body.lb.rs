@@ -1,3 +1,4 @@
+// DOF=4 MARKS=4 STEPS=381
 linkage![
     .define_param("abdomen_xrotation", 0.5)
     .define_param("head_yrotation", 0.5)

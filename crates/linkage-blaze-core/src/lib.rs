@@ -388,7 +388,13 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     #[cfg(feature = "alloc")]
     #[must_use]
     pub fn to_lb_rs(&self) -> String {
-        let mut source = String::from("linkage![\n");
+        let mut source = format!(
+            "// DOF={} MARKS={} STEPS={}\n",
+            self.dof(),
+            MARKS,
+            self.len()
+        );
+        source.push_str("linkage![\n");
         for param in self.params {
             if !param.name().is_empty() {
                 source.push_str("    .define_param(\"");
@@ -3964,7 +3970,8 @@ mod tests {
 
         let source = LINKAGE.view().to_lb_rs();
 
-        assert!(source.starts_with("linkage![\n"));
+        assert!(source.starts_with("// DOF="));
+        assert!(source.contains("linkage![\n"));
         assert!(source.trim_end().ends_with(']'));
         assert!(source.contains(".define_param(\"distance\", 0.5)"));
         assert!(source.contains(".pen_color(Rgb888::new(10, 20, 30))"));
