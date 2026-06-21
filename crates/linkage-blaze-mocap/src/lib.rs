@@ -197,7 +197,13 @@ fn collect_annotations(
         if child_ordinal > 0 {
             restore_annotations.push(clip.joints[joint_index].name.clone());
         }
-        collect_annotations(clip, children, child_index, mark_annotations, restore_annotations);
+        collect_annotations(
+            clip,
+            children,
+            child_index,
+            mark_annotations,
+            restore_annotations,
+        );
     }
 }
 
@@ -831,7 +837,10 @@ Frame Time: 0.0333333
         assert!(source.trim_end().ends_with(']'));
         assert!(source.contains(".define_param(\"hip_xposition\""));
         assert!(source.contains(".define_param(\"chest_zrotation\""));
-        assert!(!source.contains(".mark(\"depth 0\""), "single-child hip should not be marked");
+        assert!(
+            !source.contains(".mark(\"depth 0\""),
+            "single-child hip should not be marked"
+        );
         assert!(source.contains(".mark(\"depth 1\") // chest"));
         assert!(source.contains(".restore(\"depth 1\") // chest"));
         assert!(linkage.view().draw_items(&[0.5; 32]).count() >= 5);

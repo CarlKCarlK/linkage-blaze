@@ -10,7 +10,6 @@
 
 use core::convert::Infallible;
 
-use linkage_blaze_cyd::{Cyd, CydError, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
 use device_envoy_esp::button::{Button as _, ButtonEsp, PressedTo};
 use embassy_time::Instant;
 use esp_backtrace as _;
@@ -20,6 +19,7 @@ use esp_hal::{
     delay::Delay,
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
+use linkage_blaze_cyd::{Cyd, CydError, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
 use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();
