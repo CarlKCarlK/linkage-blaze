@@ -51,8 +51,29 @@ impl DanceClockSim {
 
     #[wasm_bindgen(js_name = renderTime)]
     pub fn render_time(&mut self, hours: u8, minutes: u8, seconds: u8) {
+        let mut time_text = heapless::String::<16>::new();
+        fmt::Write::write_fmt(
+            &mut time_text,
+            format_args!("{:02}:{:02}:{:02}", hours, minutes, seconds),
+        )
+        .ok();
+        self.render_frame(dance_params(hours, minutes, seconds), time_text.as_str());
+    }
+
+    #[wasm_bindgen(js_name = renderParams)]
+    pub fn render_params(&mut self, params: Vec<f32>) {
+        let params = [
+            *params.first().unwrap_or(&0.5),
+            *params.get(1).unwrap_or(&0.5),
+            *params.get(2).unwrap_or(&0.5),
+        ];
+        self.render_frame(params, "params");
+    }
+}
+
+impl DanceClockSim {
+    fn render_frame(&mut self, params: [f32; 3], label: &str) {
         fill_frame(&mut self.rgba, BG);
-        let params = dance_params(hours, minutes, seconds);
         for tile_row in 0..DANCE_TILE_ROWS {
             for tile_column in 0..DANCE_TILE_COLUMNS {
                 let tile_x = tile_column * DANCE_TILE_WIDTH;
@@ -79,16 +100,10 @@ impl DanceClockSim {
             Rectangle::new(WIFI_TEXT_TOP_LEFT, Size::new(90, 10)),
         );
 
-        let mut time_text = heapless::String::<16>::new();
-        fmt::Write::write_fmt(
-            &mut time_text,
-            format_args!("{:02}:{:02}:{:02}", hours, minutes, seconds),
-        )
-        .ok();
         draw_text(
             &mut self.rgba,
             TIME_TEXT_TOP_LEFT,
-            time_text.as_str(),
+            label,
             Rectangle::new(TIME_TEXT_TOP_LEFT, Size::new(72, 10)),
         );
     }
