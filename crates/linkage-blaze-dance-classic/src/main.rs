@@ -1,0 +1,176 @@
+#![no_std]
+#![no_main]
+
+use core::{cell::RefCell, convert::Infallible, fmt};
+
+use device_envoy_esp::{
+    Error,
+    button::{ButtonEsp, PressedTo},
+    clock_sync::{ClockSync as _, ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
+    flash_block::FlashBlockEsp,
+    init_and_start,
+    wifi_auto::{
+        WifiAuto as _, WifiAutoEsp, WifiAutoEvent,
+        fields::{TimezoneField, TimezoneFieldStatic},
+    },
+};
+use embassy_executor::Spawner;
+use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
+use esp_backtrace as _;
+use linkage_blaze_cyd::Cyd;
+use log::info;
+use static_cell::StaticCell;
+
+mod display;
+
+use display::{CydDanceDisplay, CydDanceDisplayError, DanceTime};
+
+const BLACK: Rgb888 = Rgb888::CSS_BLACK;
+
+fn rgb565(color: Rgb888) -> Rgb565 {
+    Rgb565::from(color)
+}
+
+esp_bootloader_esp_idf::esp_app_desc!();
+
+enum MainError {
+    DeviceEnvoy(Error),
+    Cyd(linkage_blaze_cyd::CydError),
+    Display(CydDanceDisplayError),
+}
+
+impl fmt::Debug for MainError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MainError::DeviceEnvoy(error) => {
+                formatter.debug_tuple("DeviceEnvoy").field(error).finish()
+            }
+            MainError::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
+            MainError::Display(error) => formatter.debug_tuple("Display").field(error).finish(),
+        }
+    }
+}
+
+impl From<Error> for MainError {
+    fn from(error: Error) -> Self {
+        MainError::DeviceEnvoy(error)
+    }
+}
+
+impl From<CoreError> for MainError {
+    fn from(error: CoreError) -> Self {
+        MainError::DeviceEnvoy(error.into())
+    }
+}
+
+impl From<linkage_blaze_cyd::CydError> for MainError {
+    fn from(error: linkage_blaze_cyd::CydError) -> Self {
+        MainError::Cyd(error)
+    }
+}
+
+impl From<CydDanceDisplayError> for MainError {
+    fn from(error: CydDanceDisplayError) -> Self {
+        MainError::Display(error)
+    }
+}
+
+#[esp_rtos::main]
+async fn main(spawner: Spawner) -> ! {
+    let err = inner_main(spawner).await.unwrap_err();
+    panic!("{err:?}");
+}
+
+async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
+    init_and_start!(p);
+    esp_println::logger::init_logger(log::LevelFilter::Info);
+
+    info!("Starting CYD dance with WiFi");
+
+    let mut cyd = Cyd::new_display(
+        p.SPI2, p.GPIO14, p.GPIO13, p.GPIO12, p.GPIO15, p.GPIO2, p.GPIO4, p.GPIO21,
+    )?;
+    cyd.clear_now(rgb565(BLACK))?;
+    static DISPLAY: StaticCell<RefCell<CydDanceDisplay>> = StaticCell::new();
+    let display = &*DISPLAY.init(RefCell::new(CydDanceDisplay::new(cyd)));
+    info!("CYD display initialized");
+
+    info!("allocating flash blocks");
+    let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
+    info!("flash blocks ready");
+
+    static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
+    let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
+    let mut force_portal_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
+
+    info!("creating wifi_auto");
+    let wifi_auto = WifiAutoEsp::new(
+        p.WIFI,
+        wifi_auto_flash_block,
+        "CydDance",
+        [timezone_field],
+        spawner,
+    )?;
+    info!("wifi_auto created; starting connect");
+
+    let stack = wifi_auto
+        .connect(&mut force_portal_button, |wifi_auto_event| async move {
+            let wifi_mode = match wifi_auto_event {
+                WifiAutoEvent::CaptivePortalReady => "setup CydDance",
+                WifiAutoEvent::Connecting { .. } => "connecting",
+                WifiAutoEvent::ConnectionFailed => "connect failed",
+            };
+            info!("WiFi mode: {wifi_mode}");
+            if let Err(error) = display.borrow_mut().show(wifi_mode, None) {
+                info!("WiFi mode display failed: {error:?}");
+            }
+            Ok(())
+        })
+        .await?;
+    info!("wifi_auto connect returned stack");
+
+    info!("reading timezone offset");
+    let timezone_offset_minutes = timezone_field
+        .offset_minutes()?
+        .ok_or(Error::MissingCustomWifiAutoField)?;
+    info!("timezone offset minutes = {timezone_offset_minutes}");
+
+    info!("creating clock sync");
+    static CLOCK_SYNC_STATIC: ClockSyncStaticEsp = ClockSyncEsp::new_static();
+    let clock_sync = ClockSyncEsp::new(
+        &CLOCK_SYNC_STATIC,
+        stack,
+        timezone_offset_minutes,
+        Some(ONE_SECOND),
+        spawner,
+    )?;
+    info!("clock sync ready");
+
+    info!("WiFi connected; drawing dance");
+    display.borrow_mut().show("connected", None)?;
+    info!("initial dance draw complete");
+
+    loop {
+        info!("waiting for clock tick");
+        let tick = clock_sync.wait_for_tick().await;
+        let local_time = tick.local_time;
+        info!(
+            "clock tick {:02}:{:02}:{:02}",
+            local_time.hour(),
+            local_time.minute(),
+            local_time.second()
+        );
+        let dance_time =
+            DanceTime::new(local_time.hour(), local_time.minute(), local_time.second())
+                .map_err(|_| MainError::DeviceEnvoy(Error::FormatError))?;
+        info!("updating dance display");
+        display.borrow_mut().show("connected", Some(&dance_time))?;
+        info!("dance display update complete");
+        info!(
+            "time {:02}:{:02}:{:02}",
+            local_time.hour(),
+            local_time.minute(),
+            local_time.second()
+        );
+    }
+}

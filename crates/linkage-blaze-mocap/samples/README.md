@@ -13,3 +13,9 @@ cargo run -p linkage-blaze-mocap --example bvh_to_lb_rs -- \
     crates/linkage-blaze-mocap/samples/pirouette.bvh \
     crates/linkage-blaze-mocap/samples/pirouette.lb.rs
 ```
+
+## Licensing
+
+**Code:** MIT OR Apache-2.0 (same as the rest of this workspace).
+
+**BVH sample data:** third-party CMU/CGSpeed mocap data; not relicensed by us.
