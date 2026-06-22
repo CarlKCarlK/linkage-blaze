@@ -2,7 +2,7 @@ use std::{fs, process};
 
 use linkage_blaze_core::{LinkageFixed, linkage, linkage_fixed};
 
-const FULL: LinkageFixed<132, 4, 537> = linkage_fixed!("../samples/pirouette.lb.rs", 132, 4, 537);
+const FULL: LinkageFixed<132, 4, 537> = linkage_fixed!("../samples/pirouette.lb.rs");
 
 const BODY: LinkageFixed<4, 4, 537> = FULL
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
