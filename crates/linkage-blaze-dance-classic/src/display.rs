@@ -19,11 +19,11 @@ use linkage_blaze_dance_classic::dance_render::{
 use log::info;
 use static_cell::StaticCell;
 
-const SMALL_GLYPH_WIDTH: usize = 6;
 const SMALL_GLYPH_HEIGHT: usize = 10;
-const GLYPH_WORKSPACE_PIXELS: usize = SMALL_GLYPH_WIDTH * SMALL_GLYPH_HEIGHT;
+const TEXT_LINE_WIDTH: usize = 90;
+const TEXT_LINE_WORKSPACE_PIXELS: usize = TEXT_LINE_WIDTH * SMALL_GLYPH_HEIGHT;
 
-type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
+type TextLineWorkspace = RectWorkspace<TEXT_LINE_WORKSPACE_PIXELS>;
 type DanceWorkspace = RectWorkspace<DANCE_TILE_PIXELS>;
 
 fn rgb565(color: Rgb888) -> Rgb565 {
@@ -50,7 +50,7 @@ impl From<CydError> for CydDanceDisplayError {
 
 pub struct CydDanceDisplay {
     cyd: Cyd,
-    glyph_workspace: &'static mut GlyphWorkspace,
+    text_line_workspace: &'static mut TextLineWorkspace,
     dance_workspace: &'static mut DanceWorkspace,
     background_cleared: bool,
     last_time_text: heapless::String<16>,
@@ -59,12 +59,12 @@ pub struct CydDanceDisplay {
 
 impl CydDanceDisplay {
     pub fn new(cyd: Cyd) -> Self {
-        static GLYPH_WORKSPACE: StaticCell<GlyphWorkspace> = StaticCell::new();
+        static TEXT_LINE_WORKSPACE: StaticCell<TextLineWorkspace> = StaticCell::new();
         static DANCE_WORKSPACE: StaticCell<DanceWorkspace> = StaticCell::new();
 
         Self {
             cyd,
-            glyph_workspace: GlyphWorkspace::init_static(&GLYPH_WORKSPACE),
+            text_line_workspace: TextLineWorkspace::init_static(&TEXT_LINE_WORKSPACE),
             dance_workspace: DanceWorkspace::init_static(&DANCE_WORKSPACE),
             background_cleared: false,
             last_time_text: heapless::String::new(),
@@ -88,28 +88,24 @@ impl CydDanceDisplay {
             info!("display background cleared");
         }
 
+        self.show_dance(dance_time)?;
+
         let mut wifi_text = heapless::String::<32>::new();
         fmt::Write::write_fmt(
             &mut wifi_text,
             format_args!("WiFi {}", wifi_label(wifi_mode)),
         )
         .ok();
-        if wifi_text.as_str() != self.last_wifi_text.as_str() {
-            info!("display updating wifi text: {}", wifi_text.as_str());
-            self.show_small_text_line(wifi_text.as_str(), WIFI_TEXT_TOP_LEFT, 90)?;
-            self.last_wifi_text.clear();
-            self.last_wifi_text.push_str(wifi_text.as_str()).ok();
-        }
+        info!("display updating wifi text: {}", wifi_text.as_str());
+        self.show_small_text_line(wifi_text.as_str(), WIFI_TEXT_TOP_LEFT, 90)?;
+        self.last_wifi_text.clear();
+        self.last_wifi_text.push_str(wifi_text.as_str()).ok();
 
         let time_text = dance_time.map_or("--:--:--", DanceTime::as_str);
-        if time_text != self.last_time_text.as_str() {
-            info!("display updating time text: {time_text}");
-            self.show_small_text_line(time_text, TIME_TEXT_TOP_LEFT, 72)?;
-            self.last_time_text.clear();
-            self.last_time_text.push_str(time_text).ok();
-        }
-
-        self.show_dance(dance_time)?;
+        info!("display updating time text: {time_text}");
+        self.show_small_text_line(time_text, TIME_TEXT_TOP_LEFT, 72)?;
+        self.last_time_text.clear();
+        self.last_time_text.push_str(time_text).ok();
 
         info!("display show complete");
         Ok(())
@@ -121,31 +117,26 @@ impl CydDanceDisplay {
         top_left: Point,
         width: usize,
     ) -> Result<(), CydDanceDisplayError> {
+        assert!(
+            width <= TEXT_LINE_WIDTH,
+            "text line width must fit workspace"
+        );
         self.cyd.fill_rect_now(
             Rectangle::new(top_left, Size::new(width as u32, SMALL_GLYPH_HEIGHT as u32)),
             rgb565(BG),
         )?;
 
-        let mut glyph_left = top_left.x;
-        for character in text.chars() {
-            let mut character_text = heapless::String::<4>::new();
-            fmt::Write::write_char(&mut character_text, character).ok();
-            let mut glyph_buffer = self
-                .glyph_workspace
-                .view_mut(SMALL_GLYPH_WIDTH, SMALL_GLYPH_HEIGHT);
-            glyph_buffer.clear(rgb565(BG));
-            Text::with_baseline(
-                character_text.as_str(),
-                Point::new(0, 0),
-                MonoTextStyle::new(&FONT_6X10, rgb565(TEXT)),
-                Baseline::Top,
-            )
-            .draw(&mut glyph_buffer)
-            .ok();
-            self.cyd
-                .flush(&glyph_buffer, Point::new(glyph_left, top_left.y))?;
-            glyph_left += SMALL_GLYPH_WIDTH as i32;
-        }
+        let mut text_line_buffer = self.text_line_workspace.view_mut(width, SMALL_GLYPH_HEIGHT);
+        text_line_buffer.clear(rgb565(BG));
+        Text::with_baseline(
+            text,
+            Point::new(0, 0),
+            MonoTextStyle::new(&FONT_6X10, rgb565(TEXT)),
+            Baseline::Top,
+        )
+        .draw(&mut text_line_buffer)
+        .ok();
+        self.cyd.flush(&text_line_buffer, top_left)?;
 
         Ok(())
     }
