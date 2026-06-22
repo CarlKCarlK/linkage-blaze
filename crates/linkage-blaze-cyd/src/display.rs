@@ -331,6 +331,28 @@ impl PreparedPrimitive {
 
 pub struct CydDisplay {
     display: CydDisplayDevice,
+    screen_size: Size,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CydDisplayOrientation {
+    Landscape,
+    Portrait,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CydDisplayConfig {
+    pub orientation: CydDisplayOrientation,
+}
+
+impl CydDisplayConfig {
+    pub const LANDSCAPE: Self = Self {
+        orientation: CydDisplayOrientation::Landscape,
+    };
+
+    pub const PORTRAIT: Self = Self {
+        orientation: CydDisplayOrientation::Portrait,
+    };
 }
 
 impl CydDisplay {
@@ -348,6 +370,7 @@ impl CydDisplay {
         dc_pin: impl OutputPin + 'static,
         rst_pin: impl OutputPin + 'static,
         backlight_pin: impl OutputPin + 'static,
+        display_config: CydDisplayConfig,
     ) -> Result<CydDisplay, CydDisplayInitError> {
         let spi_config = spi::master::Config::default()
             .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
@@ -371,22 +394,36 @@ impl CydDisplay {
         let interface = SpiInterface::new(spi_device, dc, spi_buffer);
         let mut delay = Delay::new();
 
-        let display = Builder::new(ILI9341Rgb565, interface)
-            .reset_pin(rst)
-            .display_size(240, 320)
-            .color_order(ColorOrder::Bgr)
-            .orientation(
+        let (screen_size, display_orientation) = match display_config.orientation {
+            CydDisplayOrientation::Landscape => (
+                Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
                 Orientation::new()
                     .rotate(Rotation::Deg90)
                     .flip_horizontal()
                     .rotate(Rotation::Deg180),
-            )
+            ),
+            CydDisplayOrientation::Portrait => (
+                Size::new(240, 320),
+                Orientation::new()
+                    .rotate(Rotation::Deg180)
+                    .flip_horizontal(),
+            ),
+        };
+
+        let display = Builder::new(ILI9341Rgb565, interface)
+            .reset_pin(rst)
+            .display_size(240, 320)
+            .color_order(ColorOrder::Bgr)
+            .orientation(display_orientation)
             .init(&mut delay)
             .map_err(|_| CydDisplayInitError::InitDisplay)?;
 
         backlight.set_high();
 
-        Ok(CydDisplay { display })
+        Ok(CydDisplay {
+            display,
+            screen_size,
+        })
     }
 
     pub fn flush_buffer(
@@ -411,13 +448,7 @@ impl CydDisplay {
     }
 
     pub fn clear_now(&mut self, color: Rgb565) -> Result<(), CydDisplayFlushError> {
-        self.fill_rect_now(
-            Rectangle::new(
-                Point::new(0, 0),
-                Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
-            ),
-            color,
-        )
+        self.fill_rect_now(Rectangle::new(Point::new(0, 0), self.screen_size), color)
     }
 
     pub fn fill_rect_now(
@@ -425,10 +456,7 @@ impl CydDisplay {
         rectangle: Rectangle,
         color: Rgb565,
     ) -> Result<(), CydDisplayFlushError> {
-        let screen_rectangle = Rectangle::new(
-            Point::new(0, 0),
-            Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
-        );
+        let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let rectangle = rectangle.intersection(&screen_rectangle);
         if rectangle.size.width == 0 || rectangle.size.height == 0 {
             return Ok(());
@@ -457,10 +485,7 @@ impl CydDisplay {
         background: Rgb565,
         segments: &[LineSegment],
     ) -> Result<(), CydDisplayFlushError> {
-        let screen_rectangle = Rectangle::new(
-            Point::new(0, 0),
-            Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
-        );
+        let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let bounds = bounds.intersection(&screen_rectangle);
         if bounds.size.width == 0 || bounds.size.height == 0 {
             return Ok(());
@@ -488,10 +513,7 @@ impl CydDisplay {
         background: Rgb565,
         draw_primitives: &[DrawPrimitive],
     ) -> Result<(), CydDisplayFlushError> {
-        let screen_rectangle = Rectangle::new(
-            Point::new(0, 0),
-            Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
-        );
+        let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let bounds = bounds.intersection(&screen_rectangle);
         if bounds.size.width == 0 || bounds.size.height == 0 {
             return Ok(());

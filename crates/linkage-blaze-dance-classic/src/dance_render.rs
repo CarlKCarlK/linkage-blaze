@@ -5,6 +5,7 @@ pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
 pub const BG: Rgb888 = Rgb888::CSS_BLACK;
 pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
+pub const TEXT_BAND_HEIGHT: i32 = 34;
 pub const DANCE_TOP_LEFT: Point = Point::new(-68, -170);
 pub const DANCE_WIDTH: usize = 375;
 pub const DANCE_HEIGHT: usize = 500;
@@ -13,7 +14,7 @@ pub const DANCE_TILE_ROWS: usize = 4;
 pub const DANCE_TILE_WIDTH: usize = 125;
 pub const DANCE_TILE_HEIGHT: usize = 125;
 pub const DANCE_TILE_PIXELS: usize = DANCE_TILE_WIDTH * DANCE_TILE_HEIGHT;
-pub const DANCE_CENTER_X: i32 = 188;
+pub const DANCE_CENTER_X: i32 = 198;
 pub const DANCE_BASELINE_Y: i32 = 440;
 pub const DANCE_SCALE: f32 = 1.05;
 pub const SMALL_GLYPH_WIDTH: usize = 6;
@@ -21,8 +22,7 @@ pub const SMALL_GLYPH_HEIGHT: usize = 10;
 pub const TIME_TEXT_TOP_LEFT: Point = Point::new(88, 12);
 pub const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
 pub const DANCE: LinkageFixed<3, 4, 377> = linkage_fixed!("dance.lb.rs");
-const PARAM_TURN: f32 = 0.25;
-const MINUTE_PARAM_TURN: f32 = 0.15;
+const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
 const EYES_FORWARD_PARAM: f32 = 0.5;
 const RIGHT_ARM_12_PARAM: f32 = 0.4375;
 const LEFT_ARM_12_PARAM: f32 = 0.5625;
@@ -52,7 +52,7 @@ impl TileFlush {
             tile_top_left.y + tile_height as i32,
         );
         let visible_left = tile_top_left.x.max(0);
-        let visible_top = tile_top_left.y.max(0);
+        let visible_top = tile_top_left.y.max(TEXT_BAND_HEIGHT);
         let visible_right = tile_bottom_right.x.min(SCREEN_WIDTH as i32);
         let visible_bottom = tile_bottom_right.y.min(SCREEN_HEIGHT as i32);
 
@@ -79,9 +79,9 @@ pub fn dance_params(hours: u8, minutes: u8, seconds: u8) -> [f32; 3] {
     let hour_phase = ((hours % 12) as f32 + minute_phase) / 12.0;
     let signed_hour_phase = signed_phase_from_twelve(hour_phase);
     [
-        wrap_param(EYES_FORWARD_PARAM + second_phase * PARAM_TURN),
-        wrap_param(RIGHT_ARM_12_PARAM + minute_phase * MINUTE_PARAM_TURN),
-        wrap_param(LEFT_ARM_12_PARAM + signed_hour_phase * PARAM_TURN),
+        wrap_param(EYES_FORWARD_PARAM + second_phase * CLOCK_HAND_PARAM_TURN),
+        wrap_param(RIGHT_ARM_12_PARAM + minute_phase * CLOCK_HAND_PARAM_TURN),
+        wrap_param(LEFT_ARM_12_PARAM + signed_hour_phase * CLOCK_HAND_PARAM_TURN),
     ]
 }
 

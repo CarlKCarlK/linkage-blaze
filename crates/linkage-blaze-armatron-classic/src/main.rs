@@ -23,8 +23,8 @@ use static_cell::StaticCell;
 
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCyd, CalibrationConfig, Cyd, CydError, RawPoint, RawTouchEvent, RectBuffer,
-    SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
+    CalibratedCyd, CalibrationConfig, Cyd, CydDisplayConfig, CydError, RawPoint, RawTouchEvent,
+    RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
 };
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -118,14 +118,15 @@ fn inner_main() -> Result<Infallible, MainError> {
     let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);
 
     let mut cyd = Cyd::new_with_touch(
-        p.SPI2,                  // display SPI
-        p.GPIO14,                // display SCK
-        p.GPIO13,                // display MOSI
-        p.GPIO12,                // display MISO
-        p.GPIO15,                // display CS
-        p.GPIO2,                 // display DC
-        p.GPIO4,                 // display reset
-        p.GPIO21,                // display backlight
+        p.SPI2,   // display SPI
+        p.GPIO14, // display SCK
+        p.GPIO13, // display MOSI
+        p.GPIO12, // display MISO
+        p.GPIO15, // display CS
+        p.GPIO2,  // display DC
+        p.GPIO4,  // display reset
+        p.GPIO21, // display backlight
+        CydDisplayConfig::LANDSCAPE,
         p.SPI3,                  // touch SPI
         p.GPIO25,                // touch SCK
         p.GPIO32,                // touch MOSI

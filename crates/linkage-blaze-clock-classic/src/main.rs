@@ -25,7 +25,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::Cyd;
+use linkage_blaze_cyd::{Cyd, CydDisplayConfig};
 use log::info;
 use static_cell::StaticCell;
 
@@ -96,7 +96,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("Starting CYD clock with WiFi");
 
     let mut cyd = Cyd::new_display(
-        p.SPI2, p.GPIO14, p.GPIO13, p.GPIO12, p.GPIO15, p.GPIO2, p.GPIO4, p.GPIO21,
+        p.SPI2,
+        p.GPIO14,
+        p.GPIO13,
+        p.GPIO12,
+        p.GPIO15,
+        p.GPIO2,
+        p.GPIO4,
+        p.GPIO21,
+        CydDisplayConfig::LANDSCAPE,
     )?;
     cyd.clear_now(rgb565(BLACK))?;
     static DISPLAY: StaticCell<RefCell<CydClockDisplay>> = StaticCell::new();
