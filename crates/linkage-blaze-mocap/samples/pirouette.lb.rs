@@ -254,7 +254,6 @@ linkage![
     .roll_param("r_hand_zrotation", -720.0, 720.0)
     .pitch_param("r_hand_xrotation", -720.0, 720.0)
     .yaw_param("r_hand_yrotation", -720.0, 720.0)
-    .mark("rHand")
     .mark("depth 6") // rHand
     .yaw(-19.653826)
     .pitch(7.6659045)
@@ -332,6 +331,7 @@ linkage![
     .roll_param("r_mid2_zrotation", -720.0, 720.0)
     .pitch_param("r_mid2_xrotation", -720.0, 720.0)
     .yaw_param("r_mid2_yrotation", -720.0, 720.0)
+    .mark("rMid2")
     .yaw(-71.37998)
     .pitch(7.147791)
     .pen_down()
@@ -436,7 +436,6 @@ linkage![
     .roll_param("l_hand_zrotation", -720.0, 720.0)
     .pitch_param("l_hand_xrotation", -720.0, 720.0)
     .yaw_param("l_hand_yrotation", -720.0, 720.0)
-    .mark("lHand")
     .mark("depth 6") // lHand
     .yaw(19.653826)
     .pitch(7.6659045)
@@ -514,6 +513,7 @@ linkage![
     .roll_param("l_mid2_zrotation", -720.0, 720.0)
     .pitch_param("l_mid2_xrotation", -720.0, 720.0)
     .yaw_param("l_mid2_yrotation", -720.0, 720.0)
+    .mark("lMid2")
     .yaw(71.37998)
     .pitch(7.147791)
     .pen_down()

@@ -24,7 +24,7 @@ const ARMATRON_LINKAGE: LinkageFixed<15, 4, 159> = ARMATRON_LINKAGE0
     .sphere_param("close hand", 0.5, 0.0);
 const ARMATRON_RK_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 
-// Existing clock const (N=128, larger buffer used in tests)
+// N=128 is a capacity larger than the file's actual step count (48).
 const CLOCK_FIXED: LinkageFixed<2, 2, 128> = linkage_fixed!("linkages/clock.lb.rs");
 const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 128> =
     linkage_fixed!("linkages/clock.lb.rs", 2, 2, 128);

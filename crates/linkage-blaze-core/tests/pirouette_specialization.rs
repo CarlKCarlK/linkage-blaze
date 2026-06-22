@@ -2,8 +2,8 @@
 use linkage_blaze_core::LinkageBuf;
 use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Vec3, linkage, linkage_fixed};
 
-// Pirouette BVH sample: 132 DOF (one per motion-capture channel), 4 mark slots,
-// 536 steps.  The path crosses into the mocap crate's samples directory.
+// Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
+// 538 steps.  The path crosses into the mocap crate's samples directory.
 const PIROUETTE: LinkageFixed<132, 6, 538> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
 
@@ -23,12 +23,12 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, 538> = PIROUETTE
     ]);
 
 // Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
-// steps.  N shrinks from 538 → 382; merge is a no-op here (no adjacent same-type
-// fixed steps remain after stripping), but is included to demonstrate the pipeline.
-// This must evaluate identically to PIROUETTE_BODY at every parameter value.
-const PIROUETTE_BODY_OPT: LinkageFixed<4, 6, 382> = PIROUETTE_BODY
-    .strip_fixed_noops::<382>()
-    .merge_adjacent_fixed::<382>();
+// steps.  N (capacity) shrinks toward ~384; merge is a no-op here (no adjacent
+// same-type fixed steps remain after stripping), but is included to demonstrate
+// the pipeline.  This must evaluate identically to PIROUETTE_BODY at every input.
+const PIROUETTE_BODY_OPT: LinkageFixed<4, 6, 400> = PIROUETTE_BODY
+    .strip_fixed_noops::<400>()
+    .merge_adjacent_fixed::<400>();
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
@@ -252,3 +252,4 @@ fn assert_vec_finite(vec3: Vec3) {
         assert!(value.is_finite());
     }
 }
+
