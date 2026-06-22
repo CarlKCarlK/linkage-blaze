@@ -78,21 +78,28 @@ pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, Moc
 }
 
 /// Create a parameterized LinkageBuf from a BVH clip.
+///
+/// `mark_joints` is a list of joint names that should get a named mark at their
+/// position after their own transform is applied.  These marks persist in the
+/// output linkage so callers can look up the pose of specific body parts after
+/// evaluation.  Hierarchical depth marks are always emitted in addition.
 pub fn build_bvh_linkage_buf<const DOF: usize, const MARKS: usize>(
     clip: &BvhClip,
     layout: &BvhParameterLayout,
+    mark_joints: &[&str],
 ) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     let defaults = clip.frames.first().map_or_else(
         || Ok(Vec::new()),
         |frame| bvh_parameter_defaults(layout, frame),
     )?;
-    build_bvh_linkage_buf_with_defaults(clip, layout, &defaults)
+    build_bvh_linkage_buf_with_defaults(clip, layout, &defaults, mark_joints)
 }
 
 fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
     clip: &BvhClip,
     layout: &BvhParameterLayout,
     defaults: &[f32],
+    mark_joints: &[&str],
 ) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     if layout.len() > DOF {
         return Err(MocapParseError::new(format!(
@@ -111,14 +118,14 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
         .collect();
     let multiple_roots = root_indices.len() >= 2;
 
-    let needed_mark_count = bvh_needed_mark_count(clip, &children);
+    let needed_mark_count = bvh_needed_mark_count(clip, &children, mark_joints);
     if needed_mark_count > MARKS {
         return Err(MocapParseError::new(format!(
             "BVH needs {needed_mark_count} mark slot(s), but LinkageBuf MARKS is {MARKS}"
         )));
     }
 
-    let mut linkage = LinkageBuf::start().pen_up().pen_width(1.5);
+    let mut linkage = LinkageBuf::start().pen_up();
     if multiple_roots {
         linkage = linkage.mark("origin");
     }
@@ -131,13 +138,18 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
         if root_ordinal > 0 {
             linkage = linkage.restore("origin");
         }
-        linkage = append_bvh_joint(linkage, clip, layout, &children, *joint_index, 0)?;
+        linkage =
+            append_bvh_joint(linkage, clip, layout, &children, *joint_index, 0, mark_joints)?;
     }
 
     Ok(linkage)
 }
 
-fn bvh_needed_mark_count(clip: &BvhClip, children: &[Vec<usize>]) -> usize {
+fn bvh_needed_mark_count(
+    clip: &BvhClip,
+    children: &[Vec<usize>],
+    mark_joints: &[&str],
+) -> usize {
     let root_count = clip.joints.iter().filter(|j| j.parent.is_none()).count();
     let origin_slots = usize::from(root_count >= 2);
 
@@ -149,7 +161,12 @@ fn bvh_needed_mark_count(clip: &BvhClip, children: &[Vec<usize>]) -> usize {
         }
     }
 
-    origin_slots + branching_depths.len()
+    let named_mark_count = mark_joints
+        .iter()
+        .filter(|&&name| clip.joints.iter().any(|j| j.name == name))
+        .count();
+
+    origin_slots + branching_depths.len() + named_mark_count
 }
 
 fn bvh_joint_depths(clip: &BvhClip) -> Vec<usize> {
@@ -266,10 +283,11 @@ pub fn bvh_frame_params<const DOF: usize>(
 /// a comment naming the joint being restored.
 pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
     source: &str,
+    mark_joints: &[&str],
 ) -> Result<String, MocapParseError> {
     let clip = parse_bvh(source)?;
     let layout = discover_bvh_parameters(&clip)?;
-    let linkage = build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout)?;
+    let linkage = build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout, mark_joints)?;
     let children = bvh_children(&clip);
     let (mark_annotations, restore_annotations) = bvh_annotations(&clip, &children);
     Ok(annotate_depth_step_lines(
@@ -484,8 +502,18 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
     children: &[Vec<usize>],
     joint_index: usize,
     depth: usize,
+    mark_joints: &[&str],
 ) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
     linkage = apply_bvh_joint_parameters(linkage, layout, joint_index);
+
+    let joint_name = clip.joints[joint_index].name.as_str();
+    if mark_joints.iter().any(|&name| name == joint_name) {
+        // TODO000 review: Box::leak is used because LinkageBuf::mark requires &'static str
+        // (mark_names field is [&'static str; MARKS] shared with LinkageFixed). Consider
+        // whether LinkageBuf could store owned names to avoid the leak.
+        let static_name: &'static str = Box::leak(joint_name.to_string().into_boxed_str());
+        linkage = linkage.mark(static_name);
+    }
 
     let joint_children = &children[joint_index];
     if joint_children.is_empty() {
@@ -502,7 +530,8 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
             linkage = linkage.restore(depth_mark_name(depth));
         }
         linkage = append_offset_segment(linkage, clip.joints[child_index].offset);
-        linkage = append_bvh_joint(linkage, clip, layout, children, child_index, depth + 1)?;
+        linkage =
+            append_bvh_joint(linkage, clip, layout, children, child_index, depth + 1, mark_joints)?;
     }
 
     Ok(linkage)

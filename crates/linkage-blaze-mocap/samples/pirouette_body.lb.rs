@@ -1,11 +1,10 @@
-// DOF=4 MARKS=4 STEPS=381
+// DOF=4 MARKS=4 STEPS=380
 linkage![
     .define_param("abdomen_xrotation", 0.5)
     .define_param("head_yrotation", 0.5)
     .define_param("r_shldr_zrotation", 0.5)
     .define_param("l_shldr_zrotation", 0.5)
     .pen_up()
-    .pen_width(1.5)
     .left(15.31369)
     .up(84.88553)
     .forward(152.03699)
