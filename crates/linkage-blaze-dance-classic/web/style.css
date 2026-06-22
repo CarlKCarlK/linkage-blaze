@@ -1,0 +1,39 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  align-items: center;
+  background: #101418;
+  color: #d7e3f0;
+  display: flex;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  justify-content: center;
+}
+
+main {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+canvas {
+  background: #000;
+  border: 1px solid #334155;
+  image-rendering: pixelated;
+  max-height: min(90vh, 720px);
+  max-width: min(94vw, 960px);
+  width: min(94vw, 960px);
+}
+
+#status {
+  min-height: 1.2em;
+}

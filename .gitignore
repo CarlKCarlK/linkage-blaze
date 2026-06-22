@@ -1,4 +1,5 @@
 /target
 /node_modules
 .claude/worktrees/*
-
+/crates/*/web/pkg
+/crates/*/www/pkg

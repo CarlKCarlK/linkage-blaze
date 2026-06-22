@@ -165,6 +165,25 @@ run-dance-classic:
     just build-dance-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-dance-classic {{_classic_args}}
 
+_dance_classic_crate := "crates/linkage-blaze-dance-classic"
+_dance_classic_www   := "crates/linkage-blaze-dance-classic/web"
+_dance_wasm_port     := "8085"
+
+check-dance-wasm:
+    cargo check -p linkage-blaze-dance-classic --target wasm32-unknown-unknown --no-default-features --lib
+
+build-dance-wasm:
+    wasm-pack build {{_dance_classic_crate}} --target web --out-dir web/pkg --out-name linkage_blaze_dance_classic --no-default-features
+
+serve-dance-wasm port=_dance_wasm_port:
+    -lsof -ti:{{port}} | xargs -r kill
+    cd {{_dance_classic_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-dance-wasm port=_dance_wasm_port:
+    just check-dance-wasm
+    just build-dance-wasm
+    just serve-dance-wasm {{port}}
+
 # ── linkage-blaze-armatron-wasm (web simulator + 3D viewer) ─────────────────
 
 _arm_wasm_crate      := "crates/linkage-blaze-armatron-wasm"
