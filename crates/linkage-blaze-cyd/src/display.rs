@@ -438,6 +438,19 @@ impl CydDisplay {
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 
+    pub fn fill_contiguous_now<I>(
+        &mut self,
+        rectangle: Rectangle,
+        pixels: I,
+    ) -> Result<(), CydDisplayFlushError>
+    where
+        I: IntoIterator<Item = Rgb565>,
+    {
+        self.display
+            .fill_contiguous(&rectangle, pixels)
+            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+    }
+
     pub fn draw_line_segments_now(
         &mut self,
         bounds: Rectangle,

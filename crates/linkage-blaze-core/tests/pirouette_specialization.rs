@@ -1,6 +1,6 @@
-use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Vec3, linkage, linkage_fixed};
 #[cfg(feature = "alloc")]
 use linkage_blaze_core::LinkageBuf;
+use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Vec3, linkage, linkage_fixed};
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 4 mark slots,
 // 537 steps.  The path crosses into the mocap crate's samples directory.
@@ -164,8 +164,6 @@ fn pirouette_body_const_opt_matches_buf_opt() {
         );
     }
 }
-
-
 
 #[cfg(feature = "alloc")]
 #[test]

@@ -21,6 +21,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
     env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-dance-classic {{_classic_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-printer-wasm --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
@@ -147,6 +148,22 @@ run-clock-classic:
     just check-clock-classic
     just build-clock-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-clock-classic {{_classic_args}}
+
+# ── linkage-blaze-dance-classic ─────────────────────────────────────────
+
+generate-dance:
+    cargo run -p linkage-blaze-mocap --example specialize_dance
+
+check-dance-classic:
+    cargo +esp check -p linkage-blaze-dance-classic {{_classic_args}}
+
+build-dance-classic:
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-dance-classic {{_classic_args}}
+
+run-dance-classic:
+    just check-dance-classic
+    just build-dance-classic
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-dance-classic {{_classic_args}}
 
 # ── linkage-blaze-armatron-wasm (web simulator + 3D viewer) ─────────────────
 

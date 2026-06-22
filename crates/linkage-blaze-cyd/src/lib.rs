@@ -275,6 +275,17 @@ impl Cyd {
         Ok(self.display.fill_rect_now(rectangle, color)?)
     }
 
+    pub fn fill_contiguous_now<I>(
+        &mut self,
+        rectangle: Rectangle,
+        pixels: I,
+    ) -> Result<(), CydError>
+    where
+        I: IntoIterator<Item = Rgb565>,
+    {
+        Ok(self.display.fill_contiguous_now(rectangle, pixels)?)
+    }
+
     pub fn draw_line_segments_now(
         &mut self,
         bounds: Rectangle,
