@@ -1,9 +1,10 @@
 use embedded_graphics::prelude::Point;
-use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed};
+use linkage_blaze_core::{DrawItem, DrawItemIter, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed};
 
 pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
-pub const BG: Rgb888 = Rgb888::CSS_BLACK;
+pub const BG: Rgb888 = Rgb888::new(10, 28, 36);
+pub const FIGURE_COLOR: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 pub const TEXT_BAND_HEIGHT: i32 = 34;
 pub const DANCE_TOP_LEFT: Point = Point::new(-68, -170);
@@ -21,7 +22,24 @@ pub const SMALL_GLYPH_WIDTH: usize = 6;
 pub const SMALL_GLYPH_HEIGHT: usize = 10;
 pub const TIME_TEXT_TOP_LEFT: Point = Point::new(88, 12);
 pub const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
-pub const DANCE: LinkageFixed<3, 4, 377> = linkage_fixed!("dance.lb.rs");
+pub const DANCE: LinkageFixed<3, 6, 380> = {
+    const WITH_PEN: LinkageFixed<132, 6, 540> = LinkageFixed::<0, 0, 3>::start()
+        .pen_width(3.5)
+        .pen_color(Rgb888::CSS_IVORY)
+        .combine(linkage_fixed!(
+            "../../linkage-blaze-mocap/samples/pirouette.lb.rs",
+            132,
+            6,
+            538
+        ));
+    WITH_PEN
+        .freeze_param_name::<131>("l_shin_yrotation", 57.6)
+        .freeze_param_name_at_default::<130>("abdomen_xrotation")
+        .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
+        .strip_fixed_noops::<381>()
+        .merge_adjacent_fixed::<380>()
+        .strip_fixed_noops::<380>()
+};
 const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
 const EYES_FORWARD_PARAM: f32 = 0.5;
 const RIGHT_ARM_12_PARAM: f32 = 0.4375;
@@ -31,6 +49,68 @@ pub trait PixelTarget {
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888);
+}
+
+pub trait DanceTileSink {
+    fn draw_tile(&mut self, tile_flush: TileFlush, params: &[f32; 3], hours: u8, minutes: u8);
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DanceClock {
+    params: [f32; 3],
+    hours: u8,
+    minutes: u8,
+}
+
+impl DanceClock {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { params: [0.5; 3], hours: 0, minutes: 0 }
+    }
+
+    #[must_use]
+    pub fn from_time(hours: u8, minutes: u8, seconds: u8) -> Self {
+        Self {
+            params: dance_params(hours, minutes, seconds),
+            hours,
+            minutes,
+        }
+    }
+
+    #[must_use]
+    pub fn from_params(params: [f32; 3]) -> Self {
+        Self { params, hours: 0, minutes: 0 }
+    }
+
+    #[must_use]
+    pub const fn params(&self) -> &[f32; 3] {
+        &self.params
+    }
+
+    pub fn draw_tiles<S: DanceTileSink>(&self, sink: &mut S) {
+        let mut tile_row = 0;
+        while tile_row < DANCE_TILE_ROWS {
+            let mut tile_column = 0;
+            while tile_column < DANCE_TILE_COLUMNS {
+                let tile_x = tile_column * DANCE_TILE_WIDTH;
+                let tile_y = tile_row * DANCE_TILE_HEIGHT;
+                let tile_origin = Point::new(tile_x as i32, tile_y as i32);
+                if let Some(tile_flush) =
+                    TileFlush::new(tile_origin, DANCE_TILE_WIDTH, DANCE_TILE_HEIGHT)
+                {
+                    sink.draw_tile(tile_flush, &self.params, self.hours, self.minutes);
+                }
+                tile_column += 1;
+            }
+            tile_row += 1;
+        }
+    }
+}
+
+impl Default for DanceClock {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -100,8 +180,16 @@ fn wrap_param(value: f32) -> f32 {
     value
 }
 
-pub fn render_tile<T: PixelTarget>(target: &mut T, params: &[f32; 3], tile_origin: Point) {
-    for draw_item in DANCE.view().draw_items(params) {
+pub fn render_tile<T: PixelTarget>(
+    target: &mut T,
+    params: &[f32; 3],
+    tile_origin: Point,
+    hours: u8,
+    minutes: u8,
+) {
+    let dance_view = DANCE.view();
+    let mut iter: DrawItemIter<3, 6> = dance_view.draw_items(params);
+    for draw_item in &mut iter {
         match draw_item {
             DrawItem::Stroke(stroke) => {
                 draw_segment(
@@ -110,6 +198,7 @@ pub fn render_tile<T: PixelTarget>(target: &mut T, params: &[f32; 3], tile_origi
                     pose_to_point(stroke.end()),
                     tile_origin,
                     stroke.color(),
+                    stroke.width(),
                 );
             }
             DrawItem::Disk(disk) => {
@@ -142,6 +231,102 @@ pub fn render_tile<T: PixelTarget>(target: &mut T, params: &[f32; 3], tile_origi
             }
         }
     }
+
+    let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
+    let right_hand_pose = iter.marked_pose("rHand").expect("rHand mark missing from DANCE");
+    let left_hand_pose = iter.marked_pose("lHand").expect("lHand mark missing from DANCE");
+    draw_number_label(target, pose_to_point(right_hand_pose), tile_origin, hour_display as u32);
+    draw_number_label(target, pose_to_point(left_hand_pose), tile_origin, minutes as u32);
+}
+
+const LABEL_BG: Rgb888 = Rgb888::CSS_NAVY;
+const LABEL_FG: Rgb888 = Rgb888::CSS_IVORY;
+const DIGIT_W: i32 = 3;
+const DIGIT_H: i32 = 5;
+const DIGIT_GAP: i32 = 1;
+const LABEL_PAD: i32 = 1;
+
+// Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
+#[rustfmt::skip]
+const DIGIT_BITMAPS: [u16; 10] = [
+    0b111_101_101_101_111, // 0
+    0b010_110_010_010_111, // 1
+    0b111_001_111_100_111, // 2
+    0b111_001_111_001_111, // 3
+    0b101_101_111_001_001, // 4
+    0b111_100_111_001_111, // 5
+    0b111_100_111_101_111, // 6
+    0b111_001_001_001_001, // 7
+    0b111_101_111_101_111, // 8
+    0b111_101_111_001_111, // 9
+];
+
+fn draw_digit<T: PixelTarget>(
+    target: &mut T,
+    digit: u32,
+    origin: Point,
+    tile_origin: Point,
+    color: Rgb888,
+) {
+    let bits = DIGIT_BITMAPS[(digit % 10) as usize];
+    for row in 0..DIGIT_H {
+        for col in 0..DIGIT_W {
+            let bit = 14 - (row * DIGIT_W + col);
+            if (bits >> bit) & 1 == 1 {
+                put_pixel(
+                    target,
+                    origin.x + col,
+                    origin.y + row,
+                    tile_origin,
+                    color,
+                );
+            }
+        }
+    }
+}
+
+fn draw_number_label<T: PixelTarget>(
+    target: &mut T,
+    center: Point,
+    tile_origin: Point,
+    number: u32,
+) {
+    let digit_count = if number >= 10 { 2 } else { 1 };
+    let label_w = digit_count * DIGIT_W + (digit_count - 1) * DIGIT_GAP + 2 * LABEL_PAD;
+    let label_h = DIGIT_H + 2 * LABEL_PAD;
+    let left = center.x - label_w / 2;
+    let top = center.y - label_h / 2;
+
+    for dy in 0..label_h {
+        for dx in 0..label_w {
+            put_pixel(target, left + dx, top + dy, tile_origin, LABEL_BG);
+        }
+    }
+
+    if digit_count == 2 {
+        draw_digit(
+            target,
+            number / 10,
+            Point::new(left + LABEL_PAD, top + LABEL_PAD),
+            tile_origin,
+            LABEL_FG,
+        );
+        draw_digit(
+            target,
+            number % 10,
+            Point::new(left + LABEL_PAD + DIGIT_W + DIGIT_GAP, top + LABEL_PAD),
+            tile_origin,
+            LABEL_FG,
+        );
+    } else {
+        draw_digit(
+            target,
+            number,
+            Point::new(left + LABEL_PAD, top + LABEL_PAD),
+            tile_origin,
+            LABEL_FG,
+        );
+    }
 }
 
 fn draw_segment<T: PixelTarget>(
@@ -150,7 +335,9 @@ fn draw_segment<T: PixelTarget>(
     end: Point,
     tile_origin: Point,
     color: Rgb888,
+    width: f32,
 ) {
+    let half_width = ((width * DANCE_SCALE - 1.0) * 0.5).max(0.0) as i32;
     let mut current_x = start.x;
     let mut current_y = start.y;
     let delta_x = (end.x - start.x).abs();
@@ -160,7 +347,16 @@ fn draw_segment<T: PixelTarget>(
     let mut error = delta_x + delta_y;
 
     loop {
-        put_pixel(target, current_x, current_y, tile_origin, color);
+        // Paint a filled square of (2*half_width+1) pixels at each line-walk point.
+        let mut dy = -half_width;
+        while dy <= half_width {
+            let mut dx = -half_width;
+            while dx <= half_width {
+                put_pixel(target, current_x + dx, current_y + dy, tile_origin, color);
+                dx += 1;
+            }
+            dy += 1;
+        }
         if current_x == end.x && current_y == end.y {
             break;
         }

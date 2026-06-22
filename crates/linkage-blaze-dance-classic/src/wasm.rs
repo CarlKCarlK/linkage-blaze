@@ -13,9 +13,8 @@ use embedded_graphics::{
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::dance_render::{
-    BG, DANCE_TILE_COLUMNS, DANCE_TILE_HEIGHT, DANCE_TILE_ROWS, DANCE_TILE_WIDTH, PixelTarget,
-    SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, TIME_TEXT_TOP_LEFT, TileFlush, WIFI_TEXT_TOP_LEFT,
-    dance_params, render_tile,
+    BG, DanceClock, DanceTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT,
+    TIME_TEXT_TOP_LEFT, TileFlush, WIFI_TEXT_TOP_LEFT, render_tile,
 };
 
 const RGBA_CHANNELS: usize = 4;
@@ -57,7 +56,10 @@ impl DanceClockSim {
             format_args!("{:02}:{:02}:{:02}", hours, minutes, seconds),
         )
         .ok();
-        self.render_frame(dance_params(hours, minutes, seconds), time_text.as_str());
+        self.render_frame(
+            DanceClock::from_time(hours, minutes, seconds),
+            time_text.as_str(),
+        );
     }
 
     #[wasm_bindgen(js_name = renderParams)]
@@ -67,32 +69,17 @@ impl DanceClockSim {
             *params.get(1).unwrap_or(&0.5),
             *params.get(2).unwrap_or(&0.5),
         ];
-        self.render_frame(params, "params");
+        self.render_frame(DanceClock::from_params(params), "params");
     }
 }
 
 impl DanceClockSim {
-    fn render_frame(&mut self, params: [f32; 3], label: &str) {
+    fn render_frame(&mut self, dance_clock: DanceClock, label: &str) {
         fill_frame(&mut self.rgba, BG);
-        for tile_row in 0..DANCE_TILE_ROWS {
-            for tile_column in 0..DANCE_TILE_COLUMNS {
-                let tile_x = tile_column * DANCE_TILE_WIDTH;
-                let tile_y = tile_row * DANCE_TILE_HEIGHT;
-                let tile_origin = Point::new(tile_x as i32, tile_y as i32);
-                let Some(tile_flush) =
-                    TileFlush::new(tile_origin, DANCE_TILE_WIDTH, DANCE_TILE_HEIGHT)
-                else {
-                    continue;
-                };
-                let mut target = RgbaTileTarget {
-                    rgba: &mut self.rgba,
-                    top_left: tile_flush.top_left,
-                    width: tile_flush.width,
-                    height: tile_flush.height,
-                };
-                render_tile(&mut target, &params, tile_flush.origin);
-            }
-        }
+        let mut tile_sink = RgbaDanceTileSink {
+            rgba: &mut self.rgba,
+        };
+        dance_clock.draw_tiles(&mut tile_sink);
         draw_text(
             &mut self.rgba,
             WIFI_TEXT_TOP_LEFT,
@@ -112,6 +99,22 @@ impl DanceClockSim {
 impl Default for DanceClockSim {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+struct RgbaDanceTileSink<'a> {
+    rgba: &'a mut [u8],
+}
+
+impl DanceTileSink for RgbaDanceTileSink<'_> {
+    fn draw_tile(&mut self, tile_flush: TileFlush, params: &[f32; 3], hours: u8, minutes: u8) {
+        let mut target = RgbaTileTarget {
+            rgba: self.rgba,
+            top_left: tile_flush.top_left,
+            width: tile_flush.width,
+            height: tile_flush.height,
+        };
+        render_tile(&mut target, params, tile_flush.origin, hours, minutes);
     }
 }
 

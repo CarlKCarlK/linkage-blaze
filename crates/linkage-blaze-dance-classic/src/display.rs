@@ -12,8 +12,8 @@ use esp_hal::time::Instant;
 use linkage_blaze_core::Rgb888;
 use linkage_blaze_cyd::{Cyd, CydError, RectPixels, RectView, RectWorkspace};
 use linkage_blaze_dance_classic::dance_render::{
-    BG, DANCE_HEIGHT, DANCE_TILE_COLUMNS, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_ROWS,
-    DANCE_TILE_WIDTH, DANCE_WIDTH, PixelTarget, TEXT, TIME_TEXT_TOP_LEFT, TileFlush,
+    BG, DANCE_HEIGHT, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_WIDTH, DANCE_WIDTH,
+    DanceClock, DanceTileSink, PixelTarget, TEXT, TIME_TEXT_TOP_LEFT, TileFlush,
     WIFI_TEXT_TOP_LEFT, dance_params, render_tile,
 };
 use log::info;
@@ -142,7 +142,10 @@ impl CydDanceDisplay {
     }
 
     fn show_dance(&mut self, dance_time: Option<&DanceTime>) -> Result<(), CydDanceDisplayError> {
-        let params = dance_time.map_or([0.5; 3], DanceTime::params);
+        let dance_clock = dance_time.map_or_else(DanceClock::new, |dance_time| {
+            DanceClock::from_params(dance_time.params())
+        });
+        let params = dance_clock.params();
         info!(
             "dance draw start: params=({:.3}, {:.3}, {:.3}), area={}x{}, tile={}x{}",
             params[0],
@@ -154,30 +157,43 @@ impl CydDanceDisplay {
             DANCE_TILE_HEIGHT
         );
         let t0 = Instant::now();
-        for tile_row in 0..DANCE_TILE_ROWS {
-            for tile_column in 0..DANCE_TILE_COLUMNS {
-                let tile_x = tile_column * DANCE_TILE_WIDTH;
-                let tile_y = tile_row * DANCE_TILE_HEIGHT;
-                let tile_origin = Point::new(tile_x as i32, tile_y as i32);
-                let Some(tile_flush) =
-                    TileFlush::new(tile_origin, DANCE_TILE_WIDTH, DANCE_TILE_HEIGHT)
-                else {
-                    continue;
-                };
-                let mut dance_buffer = self
-                    .dance_workspace
-                    .view_mut(tile_flush.width, tile_flush.height);
-                dance_buffer.clear(rgb565(BG));
-                let mut target = RectViewTarget {
-                    rect_view: &mut dance_buffer,
-                };
-                render_tile(&mut target, &params, tile_flush.origin);
-                self.cyd.flush(&dance_buffer, tile_flush.top_left)?;
-            }
-        }
+        let mut sink = EspDanceTileSink {
+            cyd: &mut self.cyd,
+            dance_workspace: self.dance_workspace,
+            result: Ok(()),
+        };
+        dance_clock.draw_tiles(&mut sink);
+        sink.result?;
         let elapsed_ms = (Instant::now() - t0).as_millis();
         info!("dance draw complete: {elapsed_ms} ms");
         Ok(())
+    }
+}
+
+struct EspDanceTileSink<'a> {
+    cyd: &'a mut Cyd,
+    dance_workspace: &'a mut DanceWorkspace,
+    result: Result<(), CydDanceDisplayError>,
+}
+
+impl DanceTileSink for EspDanceTileSink<'_> {
+    fn draw_tile(&mut self, tile_flush: TileFlush, params: &[f32; 3], hours: u8, minutes: u8) {
+        if self.result.is_err() {
+            return;
+        }
+
+        let mut dance_buffer = self
+            .dance_workspace
+            .view_mut(tile_flush.width, tile_flush.height);
+        dance_buffer.clear(rgb565(BG));
+        let mut target = RectViewTarget {
+            rect_view: &mut dance_buffer,
+        };
+        render_tile(&mut target, params, tile_flush.origin, hours, minutes);
+        self.result = self
+            .cyd
+            .flush(&dance_buffer, tile_flush.top_left)
+            .map_err(CydDanceDisplayError::from);
     }
 }
 

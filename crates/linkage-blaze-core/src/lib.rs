@@ -578,8 +578,8 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .any(|item| matches!(item, DrawItem::Stroke(_)));
     /// assert!(has_stroke);
     /// ```
-    pub fn draw_items<'b>(&'b self, params: &'b [f32; DOF]) -> impl Iterator<Item = DrawItem> + 'b {
-        DrawItemsView::<DOF, MARKS>::new(self.steps, params)
+    pub fn draw_items<'b>(&'b self, params: &'b [f32; DOF]) -> DrawItemIter<'b, DOF, MARKS> {
+        DrawItemIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
     }
 }
 
@@ -3539,8 +3539,14 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
 }
 
 /// Iterator over draw items from a LinkageView (does not require const N).
-struct DrawItemsView<'a, const DOF: usize, const MARKS: usize> {
+/// Iterator over [`DrawItem`]s produced by evaluating a linkage.
+///
+/// Obtain via [`LinkageView::draw_items`]. After exhausting the iterator the
+/// [`marked_pose`](DrawItemIter::marked_pose) method lets you query the final
+/// pose at any named mark.
+pub struct DrawItemIter<'a, const DOF: usize, const MARKS: usize> {
     steps: &'a [Step],
+    mark_names: &'a [&'static str; MARKS],
     params: &'a [f32; DOF],
     index: usize,
     pose: Pose,
@@ -3548,11 +3554,16 @@ struct DrawItemsView<'a, const DOF: usize, const MARKS: usize> {
     marked: [MarkedState; MARKS],
 }
 
-impl<'a, const DOF: usize, const MARKS: usize> DrawItemsView<'a, DOF, MARKS> {
-    fn new(steps: &'a [Step], params_values: &'a [f32; DOF]) -> Self {
+impl<'a, const DOF: usize, const MARKS: usize> DrawItemIter<'a, DOF, MARKS> {
+    fn new(
+        steps: &'a [Step],
+        mark_names: &'a [&'static str; MARKS],
+        params_values: &'a [f32; DOF],
+    ) -> Self {
         validate_params(params_values);
         Self {
             steps,
+            mark_names,
             params: params_values,
             index: 0,
             pose: Pose::start(),
@@ -3563,9 +3574,20 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItemsView<'a, DOF, MARKS> {
             }; MARKS],
         }
     }
+
+    /// Return the pose recorded at the named mark, or `None` if the mark was
+    /// never reached during iteration.  Call this after the iterator is
+    /// exhausted to inspect final joint positions.
+    #[must_use]
+    pub fn marked_pose(&self, name: &str) -> Option<Pose> {
+        self.mark_names
+            .iter()
+            .position(|&n| n == name)
+            .map(|index| self.marked[index].pose)
+    }
 }
 
-impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemsView<'_, DOF, MARKS> {
+impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemIter<'_, DOF, MARKS> {
     type Item = DrawItem;
 
     fn next(&mut self) -> Option<Self::Item> {

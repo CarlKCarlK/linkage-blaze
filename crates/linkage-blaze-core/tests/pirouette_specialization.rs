@@ -3,8 +3,8 @@ use linkage_blaze_core::LinkageBuf;
 use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Vec3, linkage, linkage_fixed};
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 4 mark slots,
-// 537 steps.  The path crosses into the mocap crate's samples directory.
-const PIROUETTE: LinkageFixed<132, 4, 537> =
+// 536 steps.  The path crosses into the mocap crate's samples directory.
+const PIROUETTE: LinkageFixed<132, 6, 538> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
 
 // Freeze l_shin_yrotation first (DOF 132 → 131), then retain the four joints
@@ -13,7 +13,7 @@ const PIROUETTE: LinkageFixed<132, 4, 537> =
 //   1: head_yrotation
 //   2: r_shldr_zrotation
 //   3: l_shldr_zrotation
-const PIROUETTE_BODY: LinkageFixed<4, 4, 537> = PIROUETTE
+const PIROUETTE_BODY: LinkageFixed<4, 6, 538> = PIROUETTE
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
     .retain_param_names(&[
         "head_yrotation",
@@ -23,12 +23,12 @@ const PIROUETTE_BODY: LinkageFixed<4, 4, 537> = PIROUETTE
     ]);
 
 // Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
-// steps.  N shrinks from 537 → 381; merge is a no-op here (no adjacent same-type
+// steps.  N shrinks from 538 → 382; merge is a no-op here (no adjacent same-type
 // fixed steps remain after stripping), but is included to demonstrate the pipeline.
 // This must evaluate identically to PIROUETTE_BODY at every parameter value.
-const PIROUETTE_BODY_OPT: LinkageFixed<4, 4, 381> = PIROUETTE_BODY
-    .strip_fixed_noops::<381>()
-    .merge_adjacent_fixed::<381>();
+const PIROUETTE_BODY_OPT: LinkageFixed<4, 6, 382> = PIROUETTE_BODY
+    .strip_fixed_noops::<382>()
+    .merge_adjacent_fixed::<382>();
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
@@ -144,7 +144,7 @@ fn pirouette_body_optimized_matches_original() {
 #[test]
 fn pirouette_body_const_opt_matches_buf_opt() {
     // Build the same pipeline through LinkageBuf and verify identical evaluation.
-    let buf_result = LinkageBuf::<4, 4>::from(&PIROUETTE_BODY)
+    let buf_result = LinkageBuf::<4, 6>::from(&PIROUETTE_BODY)
         .strip_fixed_noops()
         .merge_adjacent_fixed()
         .strip_fixed_noops();
@@ -170,7 +170,7 @@ fn pirouette_body_const_opt_matches_buf_opt() {
 fn pirouette_fixed_and_buf_freeze_retain_produce_same_result() {
     // Load the full pirouette as a LinkageBuf, apply the same freeze+retain
     // pipeline as the const PIROUETTE_BODY, and verify the two paths agree.
-    let buf_body = LinkageBuf::<132, 4>::from(&PIROUETTE)
+    let buf_body = LinkageBuf::<132, 6>::from(&PIROUETTE)
         .freeze_param_name::<131>("l_shin_yrotation", 57.6)
         .retain_param_names::<4>(&[
             "head_yrotation",
