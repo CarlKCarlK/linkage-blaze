@@ -1,5 +1,7 @@
 use embedded_graphics::prelude::Point;
-use linkage_blaze_core::{DrawItem, DrawItemIter, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed};
+use linkage_blaze_core::{
+    DrawItem, DrawItemIter, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed,
+};
 
 pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
@@ -22,23 +24,23 @@ pub const SMALL_GLYPH_WIDTH: usize = 6;
 pub const SMALL_GLYPH_HEIGHT: usize = 10;
 pub const TIME_TEXT_TOP_LEFT: Point = Point::new(88, 12);
 pub const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
-pub const DANCE: LinkageFixed<3, 6, 380> = {
-    const WITH_PEN: LinkageFixed<132, 6, 540> = LinkageFixed::<0, 0, 3>::start()
+pub const DANCE: LinkageFixed<3, 6, 400> = {
+    const WITH_PEN: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
         .pen_width(3.5)
         .pen_color(Rgb888::CSS_IVORY)
         .combine(linkage_fixed!(
             "../../linkage-blaze-mocap/samples/pirouette.lb.rs",
             132,
             6,
-            538
+            600
         ));
     WITH_PEN
         .freeze_param_name::<131>("l_shin_yrotation", 57.6)
         .freeze_param_name_at_default::<130>("abdomen_xrotation")
         .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
-        .strip_fixed_noops::<381>()
-        .merge_adjacent_fixed::<380>()
-        .strip_fixed_noops::<380>()
+        .strip_fixed_noops::<400>()
+        .merge_adjacent_fixed::<400>()
+        .strip_fixed_noops::<400>()
 };
 const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
 const EYES_FORWARD_PARAM: f32 = 0.5;
@@ -65,7 +67,11 @@ pub struct DanceClock {
 impl DanceClock {
     #[must_use]
     pub const fn new() -> Self {
-        Self { params: [0.5; 3], hours: 0, minutes: 0 }
+        Self {
+            params: [0.5; 3],
+            hours: 0,
+            minutes: 0,
+        }
     }
 
     #[must_use]
@@ -79,7 +85,11 @@ impl DanceClock {
 
     #[must_use]
     pub fn from_params(params: [f32; 3]) -> Self {
-        Self { params, hours: 0, minutes: 0 }
+        Self {
+            params,
+            hours: 0,
+            minutes: 0,
+        }
     }
 
     #[must_use]
@@ -233,18 +243,33 @@ pub fn render_tile<T: PixelTarget>(
     }
 
     let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
-    let right_hand_pose = iter.marked_pose("rHand").expect("rHand mark missing from DANCE");
-    let left_hand_pose = iter.marked_pose("lHand").expect("lHand mark missing from DANCE");
-    draw_number_label(target, pose_to_point(right_hand_pose), tile_origin, hour_display as u32);
-    draw_number_label(target, pose_to_point(left_hand_pose), tile_origin, minutes as u32);
+    let right_hand_pose = iter
+        .marked_pose("rMid2")
+        .expect("rMid2 mark missing from DANCE");
+    let left_hand_pose = iter
+        .marked_pose("lMid2")
+        .expect("lMid2 mark missing from DANCE");
+    draw_number_label(
+        target,
+        pose_to_point(left_hand_pose),
+        tile_origin,
+        hour_display as u32,
+    );
+    draw_number_label(
+        target,
+        pose_to_point(right_hand_pose),
+        tile_origin,
+        minutes as u32,
+    );
 }
 
 const LABEL_BG: Rgb888 = Rgb888::CSS_NAVY;
 const LABEL_FG: Rgb888 = Rgb888::CSS_IVORY;
 const DIGIT_W: i32 = 3;
 const DIGIT_H: i32 = 5;
-const DIGIT_GAP: i32 = 1;
-const LABEL_PAD: i32 = 1;
+const DIGIT_SCALE: i32 = 2;
+const DIGIT_GAP: i32 = 2;
+const LABEL_PAD: i32 = 2;
 
 // Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
 #[rustfmt::skip]
@@ -273,13 +298,17 @@ fn draw_digit<T: PixelTarget>(
         for col in 0..DIGIT_W {
             let bit = 14 - (row * DIGIT_W + col);
             if (bits >> bit) & 1 == 1 {
-                put_pixel(
-                    target,
-                    origin.x + col,
-                    origin.y + row,
-                    tile_origin,
-                    color,
-                );
+                for scale_y in 0..DIGIT_SCALE {
+                    for scale_x in 0..DIGIT_SCALE {
+                        put_pixel(
+                            target,
+                            origin.x + col * DIGIT_SCALE + scale_x,
+                            origin.y + row * DIGIT_SCALE + scale_y,
+                            tile_origin,
+                            color,
+                        );
+                    }
+                }
             }
         }
     }
@@ -292,8 +321,10 @@ fn draw_number_label<T: PixelTarget>(
     number: u32,
 ) {
     let digit_count = if number >= 10 { 2 } else { 1 };
-    let label_w = digit_count * DIGIT_W + (digit_count - 1) * DIGIT_GAP + 2 * LABEL_PAD;
-    let label_h = DIGIT_H + 2 * LABEL_PAD;
+    let scaled_digit_w = DIGIT_W * DIGIT_SCALE;
+    let scaled_digit_h = DIGIT_H * DIGIT_SCALE;
+    let label_w = digit_count * scaled_digit_w + (digit_count - 1) * DIGIT_GAP + 2 * LABEL_PAD;
+    let label_h = scaled_digit_h + 2 * LABEL_PAD;
     let left = center.x - label_w / 2;
     let top = center.y - label_h / 2;
 
@@ -314,7 +345,10 @@ fn draw_number_label<T: PixelTarget>(
         draw_digit(
             target,
             number % 10,
-            Point::new(left + LABEL_PAD + DIGIT_W + DIGIT_GAP, top + LABEL_PAD),
+            Point::new(
+                left + LABEL_PAD + scaled_digit_w + DIGIT_GAP,
+                top + LABEL_PAD,
+            ),
             tile_origin,
             LABEL_FG,
         );

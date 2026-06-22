@@ -13,10 +13,10 @@ const BODY: LinkageFixed<4, 6, 538> = FULL
         "r_shldr_zrotation",
     ]);
 
-const BODY_OPTIMIZED: LinkageFixed<4, 6, 382> = BODY
-    .strip_fixed_noops::<382>()
-    .merge_adjacent_fixed::<382>()
-    .strip_fixed_noops::<382>();
+const BODY_OPTIMIZED: LinkageFixed<4, 6, 400> = BODY
+    .strip_fixed_noops::<400>()
+    .merge_adjacent_fixed::<400>()
+    .strip_fixed_noops::<400>();
 
 fn main() {
     let out_path = concat!(env!("CARGO_MANIFEST_DIR"), "/samples/pirouette_body.lb.rs");

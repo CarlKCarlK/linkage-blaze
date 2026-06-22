@@ -1889,7 +1889,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             out_steps[step_index] = self.steps[step_index];
             step_index += 1;
         }
-        assert!(self.len == OUT_N, "OUT_N does not match actual step count");
+        assert!(self.len <= OUT_N, "OUT_N too small for actual step count");
         LinkageFixed {
             steps: out_steps,
             len: self.len,
@@ -3849,6 +3849,8 @@ macro_rules! linkage_fixed {
         include!($path)
     }};
     ($path:literal, $dof:expr, $marks:expr, $n:expr) => {{
+        // $n is a capacity (>= actual step count); DOF, MARKS, and N are checked
+        // against the file's type at the let-binding.
         let linkage: $crate::LinkageFixed<$dof, $marks, $n> = $crate::linkage_fixed!($path);
         linkage
     }};
