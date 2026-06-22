@@ -26,12 +26,13 @@ main {
 }
 
 canvas {
+  aspect-ratio: 3 / 4;
   background: #000;
   border: 1px solid #334155;
+  height: min(90vh, 720px);
   image-rendering: pixelated;
-  max-height: min(90vh, 720px);
-  max-width: min(94vw, 960px);
-  width: min(94vw, 960px);
+  max-width: 94vw;
+  width: auto;
 }
 
 #status {

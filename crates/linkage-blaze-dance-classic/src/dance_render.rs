@@ -5,7 +5,7 @@ pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
 pub const BG: Rgb888 = Rgb888::CSS_BLACK;
 pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
-pub const DANCE_TOP_LEFT: Point = Point::new(-68, -90);
+pub const DANCE_TOP_LEFT: Point = Point::new(-68, -170);
 pub const DANCE_WIDTH: usize = 375;
 pub const DANCE_HEIGHT: usize = 500;
 pub const DANCE_TILE_COLUMNS: usize = 3;
@@ -14,13 +14,18 @@ pub const DANCE_TILE_WIDTH: usize = 125;
 pub const DANCE_TILE_HEIGHT: usize = 125;
 pub const DANCE_TILE_PIXELS: usize = DANCE_TILE_WIDTH * DANCE_TILE_HEIGHT;
 pub const DANCE_CENTER_X: i32 = 188;
-pub const DANCE_BASELINE_Y: i32 = 390;
+pub const DANCE_BASELINE_Y: i32 = 440;
 pub const DANCE_SCALE: f32 = 1.05;
 pub const SMALL_GLYPH_WIDTH: usize = 6;
 pub const SMALL_GLYPH_HEIGHT: usize = 10;
 pub const TIME_TEXT_TOP_LEFT: Point = Point::new(88, 12);
 pub const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
 pub const DANCE: LinkageFixed<3, 4, 377> = linkage_fixed!("dance.lb.rs");
+const PARAM_TURN: f32 = 0.25;
+const MINUTE_PARAM_TURN: f32 = 0.15;
+const EYES_FORWARD_PARAM: f32 = 0.5;
+const RIGHT_ARM_12_PARAM: f32 = 0.4375;
+const LEFT_ARM_12_PARAM: f32 = 0.5625;
 
 pub trait PixelTarget {
     fn width(&self) -> usize;
@@ -69,10 +74,30 @@ impl TileFlush {
 
 #[must_use]
 pub fn dance_params(hours: u8, minutes: u8, seconds: u8) -> [f32; 3] {
-    let second = seconds as f32 / 60.0;
-    let minute = (minutes as f32 + second) / 60.0;
-    let hour = ((hours % 12) as f32 + minute) / 12.0;
-    [second, minute, hour]
+    let second_phase = seconds as f32 / 60.0;
+    let minute_phase = (minutes as f32 + second_phase) / 60.0;
+    let hour_phase = ((hours % 12) as f32 + minute_phase) / 12.0;
+    let signed_hour_phase = signed_phase_from_twelve(hour_phase);
+    [
+        wrap_param(EYES_FORWARD_PARAM + second_phase * PARAM_TURN),
+        wrap_param(RIGHT_ARM_12_PARAM + minute_phase * MINUTE_PARAM_TURN),
+        wrap_param(LEFT_ARM_12_PARAM + signed_hour_phase * PARAM_TURN),
+    ]
+}
+
+fn signed_phase_from_twelve(phase: f32) -> f32 {
+    if phase > 0.5 { phase - 1.0 } else { phase }
+}
+
+fn wrap_param(value: f32) -> f32 {
+    let mut value = value;
+    while value >= 1.0 {
+        value -= 1.0;
+    }
+    while value < 0.0 {
+        value += 1.0;
+    }
+    value
 }
 
 pub fn render_tile<T: PixelTarget>(target: &mut T, params: &[f32; 3], tile_origin: Point) {
@@ -222,15 +247,10 @@ fn put_pixel<T: PixelTarget>(target: &mut T, x: i32, y: i32, tile_origin: Point,
 
 fn pose_to_point(pose: Pose) -> Point {
     let position = pose.position();
-    let point = Point::new(
+    Point::new(
         DANCE_CENTER_X - round_to_i32(position[1] * DANCE_SCALE),
         DANCE_BASELINE_Y - round_to_i32(position[2] * DANCE_SCALE),
-    );
-    rotate_point_90(point)
-}
-
-fn rotate_point_90(point: Point) -> Point {
-    Point::new(DANCE_HEIGHT as i32 - 1 - point.y, point.x)
+    )
 }
 
 fn round_to_i32(value: f32) -> i32 {
