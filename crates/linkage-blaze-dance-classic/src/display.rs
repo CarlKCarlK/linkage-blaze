@@ -3,34 +3,25 @@ use core::fmt;
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::{IntoStorage, Rgb565, WebColors},
+    pixelcolor::{IntoStorage, Rgb565},
     prelude::{Point, Size},
     primitives::Rectangle,
     text::{Baseline, Text},
 };
 use esp_hal::time::Instant;
-use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Rgb888, linkage, linkage_fixed};
-use linkage_blaze_cyd::{Cyd, CydError, RectView, RectWorkspace};
+use linkage_blaze_core::Rgb888;
+use linkage_blaze_cyd::{Cyd, CydError, RectPixels, RectView, RectWorkspace};
+use linkage_blaze_dance_classic::dance_render::{
+    BG, DANCE_HEIGHT, DANCE_TILE_COLUMNS, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_ROWS,
+    DANCE_TILE_WIDTH, DANCE_WIDTH, PixelTarget, TEXT, TIME_TEXT_TOP_LEFT, TileFlush,
+    WIFI_TEXT_TOP_LEFT, dance_params, render_tile,
+};
 use log::info;
 use static_cell::StaticCell;
 
-const BG: Rgb888 = Rgb888::CSS_BLACK;
-const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
-const DANCE_TOP_LEFT: Point = Point::new(60, 36);
-const DANCE_WIDTH: usize = 200;
-const DANCE_HEIGHT: usize = 200;
-const DANCE_TILE_WIDTH: usize = 100;
-const DANCE_TILE_HEIGHT: usize = 100;
-const DANCE_TILE_PIXELS: usize = DANCE_TILE_WIDTH * DANCE_TILE_HEIGHT;
-const DANCE_CENTER_X: i32 = 100;
-const DANCE_BASELINE_Y: i32 = 188;
-const DANCE_SCALE: f32 = 0.56;
 const SMALL_GLYPH_WIDTH: usize = 6;
 const SMALL_GLYPH_HEIGHT: usize = 10;
-const TIME_TEXT_TOP_LEFT: Point = Point::new(136, 12);
-const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
 const GLYPH_WORKSPACE_PIXELS: usize = SMALL_GLYPH_WIDTH * SMALL_GLYPH_HEIGHT;
-const DANCE: LinkageFixed<3, 4, 377> = linkage_fixed!("dance.lb.rs");
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 type DanceWorkspace = RectWorkspace<DANCE_TILE_PIXELS>;
@@ -172,19 +163,25 @@ impl CydDanceDisplay {
             DANCE_TILE_HEIGHT
         );
         let t0 = Instant::now();
-        for tile_y in [0, DANCE_TILE_HEIGHT] {
-            for tile_x in [0, DANCE_TILE_WIDTH] {
+        for tile_row in 0..DANCE_TILE_ROWS {
+            for tile_column in 0..DANCE_TILE_COLUMNS {
+                let tile_x = tile_column * DANCE_TILE_WIDTH;
+                let tile_y = tile_row * DANCE_TILE_HEIGHT;
                 let tile_origin = Point::new(tile_x as i32, tile_y as i32);
-                let tile_top_left = Point::new(
-                    DANCE_TOP_LEFT.x + tile_origin.x,
-                    DANCE_TOP_LEFT.y + tile_origin.y,
-                );
+                let Some(tile_flush) =
+                    TileFlush::new(tile_origin, DANCE_TILE_WIDTH, DANCE_TILE_HEIGHT)
+                else {
+                    continue;
+                };
                 let mut dance_buffer = self
                     .dance_workspace
-                    .view_mut(DANCE_TILE_WIDTH, DANCE_TILE_HEIGHT);
+                    .view_mut(tile_flush.width, tile_flush.height);
                 dance_buffer.clear(rgb565(BG));
-                draw_dance_buffer(&mut dance_buffer, &params, tile_origin);
-                self.cyd.flush(&dance_buffer, tile_top_left)?;
+                let mut target = RectViewTarget {
+                    rect_view: &mut dance_buffer,
+                };
+                render_tile(&mut target, &params, tile_flush.origin);
+                self.cyd.flush(&dance_buffer, tile_flush.top_left)?;
             }
         }
         let elapsed_ms = (Instant::now() - t0).as_millis();
@@ -193,164 +190,22 @@ impl CydDanceDisplay {
     }
 }
 
-fn draw_dance_buffer(dance_buffer: &mut RectView<'_>, params: &[f32; 3], tile_origin: Point) {
-    for draw_item in DANCE.view().draw_items(params) {
-        match draw_item {
-            DrawItem::Stroke(stroke) => {
-                draw_segment(
-                    dance_buffer,
-                    pose_to_point(stroke.start()),
-                    pose_to_point(stroke.end()),
-                    tile_origin,
-                    stroke.color(),
-                );
-            }
-            DrawItem::Disk(disk) => {
-                draw_filled_circle(
-                    dance_buffer,
-                    pose_to_point(disk.pose()),
-                    disk.radius(),
-                    tile_origin,
-                    disk.color(),
-                );
-            }
-            DrawItem::Ring(ring) => {
-                draw_ring(
-                    dance_buffer,
-                    pose_to_point(ring.pose()),
-                    ring.radius(),
-                    ring.width(),
-                    tile_origin,
-                    ring.color(),
-                );
-            }
-            DrawItem::Sphere(sphere) => {
-                draw_filled_circle(
-                    dance_buffer,
-                    pose_to_point(sphere.pose()),
-                    sphere.radius(),
-                    tile_origin,
-                    sphere.color(),
-                );
-            }
-        }
-    }
+struct RectViewTarget<'a, 'b> {
+    rect_view: &'a mut RectView<'b>,
 }
 
-fn draw_segment(
-    dance_buffer: &mut RectView<'_>,
-    start: Point,
-    end: Point,
-    tile_origin: Point,
-    color: Rgb888,
-) {
-    let mut current_x = start.x;
-    let mut current_y = start.y;
-    let delta_x = (end.x - start.x).abs();
-    let delta_y = -(end.y - start.y).abs();
-    let step_x = if start.x < end.x { 1 } else { -1 };
-    let step_y = if start.y < end.y { 1 } else { -1 };
-    let mut error = delta_x + delta_y;
-
-    loop {
-        put_pixel(dance_buffer, current_x, current_y, tile_origin, color);
-        if current_x == end.x && current_y == end.y {
-            break;
-        }
-        let doubled_error = error * 2;
-        if doubled_error >= delta_y {
-            error += delta_y;
-            current_x += step_x;
-        }
-        if doubled_error <= delta_x {
-            error += delta_x;
-            current_y += step_y;
-        }
-    }
-}
-
-fn draw_filled_circle(
-    dance_buffer: &mut RectView<'_>,
-    center: Point,
-    radius: f32,
-    tile_origin: Point,
-    color: Rgb888,
-) {
-    let radius = round_to_i32(radius * DANCE_SCALE).max(1);
-    for local_y in -radius..=radius {
-        for local_x in -radius..=radius {
-            if local_x * local_x + local_y * local_y <= radius * radius {
-                put_pixel(
-                    dance_buffer,
-                    center.x + local_x,
-                    center.y + local_y,
-                    tile_origin,
-                    color,
-                );
-            }
-        }
-    }
-}
-
-fn draw_ring(
-    dance_buffer: &mut RectView<'_>,
-    center: Point,
-    radius: f32,
-    width: f32,
-    tile_origin: Point,
-    color: Rgb888,
-) {
-    let radius = (radius * DANCE_SCALE).max(1.0);
-    let width = (width * DANCE_SCALE).max(1.0);
-    let outer = round_to_i32(radius + width * 0.5).max(1);
-    let inner = round_to_i32((radius - width * 0.5).max(0.0));
-    let outer_squared = outer * outer;
-    let inner_squared = inner * inner;
-    for local_y in -outer..=outer {
-        for local_x in -outer..=outer {
-            let distance_squared = local_x * local_x + local_y * local_y;
-            if distance_squared <= outer_squared && distance_squared >= inner_squared {
-                put_pixel(
-                    dance_buffer,
-                    center.x + local_x,
-                    center.y + local_y,
-                    tile_origin,
-                    color,
-                );
-            }
-        }
-    }
-}
-
-fn put_pixel(dance_buffer: &mut RectView<'_>, x: i32, y: i32, tile_origin: Point, color: Rgb888) {
-    let x = x - tile_origin.x;
-    let y = y - tile_origin.y;
-    if x < 0 || y < 0 {
-        return;
+impl PixelTarget for RectViewTarget<'_, '_> {
+    fn width(&self) -> usize {
+        self.rect_view.width()
     }
 
-    let x = x as usize;
-    let y = y as usize;
-    if x >= DANCE_TILE_WIDTH || y >= DANCE_TILE_HEIGHT {
-        return;
+    fn height(&self) -> usize {
+        self.rect_view.height()
     }
 
-    dance_buffer.raw_pixels_mut()[y * DANCE_TILE_WIDTH + x] = rgb565(color).into_storage();
-}
-
-fn pose_to_point(pose: Pose) -> Point {
-    let position = pose.position();
-    Point::new(
-        DANCE_CENTER_X - round_to_i32(position[1] * DANCE_SCALE),
-        DANCE_BASELINE_Y - round_to_i32(position[2] * DANCE_SCALE),
-    )
-}
-
-fn round_to_i32(value: f32) -> i32 {
-    if value >= 0.0 {
-        (value + 0.5) as i32
-    } else {
-        (value - 0.5) as i32
+    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
+        let stride = self.rect_view.width();
+        self.rect_view.raw_pixels_mut()[y * stride + x] = rgb565(color).into_storage();
     }
 }
 
@@ -391,9 +246,6 @@ impl DanceTime {
     }
 
     fn params(&self) -> [f32; 3] {
-        let second = self.seconds as f32 / 60.0;
-        let minute = (self.minutes as f32 + second) / 60.0;
-        let hour = ((self.hours % 12) as f32 + minute) / 12.0;
-        [second, minute, hour]
+        dance_params(self.hours, self.minutes, self.seconds)
     }
 }
