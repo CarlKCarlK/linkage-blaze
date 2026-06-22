@@ -3,24 +3,28 @@ use core::fmt;
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::{Rgb565, WebColors},
+    pixelcolor::{IntoStorage, Rgb565, WebColors},
     prelude::{Point, Size},
     primitives::Rectangle,
     text::{Baseline, Text},
 };
 use esp_hal::time::Instant;
 use linkage_blaze_core::{DrawItem, LinkageFixed, Pose, Rgb888, linkage, linkage_fixed};
-use linkage_blaze_cyd::{Cyd, CydError, RectWorkspace};
+use linkage_blaze_cyd::{Cyd, CydError, RectView, RectWorkspace};
 use log::info;
 use static_cell::StaticCell;
 
 const BG: Rgb888 = Rgb888::CSS_BLACK;
 const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
-const DANCE_BOUNDS: Rectangle = Rectangle::new(Point::new(16, 38), Size::new(288, 190));
-const DANCE_CENTER_X: i32 = 160;
-const DANCE_BASELINE_Y: i32 = 216;
-const DANCE_SCALE: f32 = 0.82;
-const STROKE_SCALE: f32 = 1.0;
+const DANCE_TOP_LEFT: Point = Point::new(60, 36);
+const DANCE_WIDTH: usize = 200;
+const DANCE_HEIGHT: usize = 200;
+const DANCE_TILE_WIDTH: usize = 100;
+const DANCE_TILE_HEIGHT: usize = 100;
+const DANCE_TILE_PIXELS: usize = DANCE_TILE_WIDTH * DANCE_TILE_HEIGHT;
+const DANCE_CENTER_X: i32 = 100;
+const DANCE_BASELINE_Y: i32 = 188;
+const DANCE_SCALE: f32 = 0.56;
 const SMALL_GLYPH_WIDTH: usize = 6;
 const SMALL_GLYPH_HEIGHT: usize = 10;
 const TIME_TEXT_TOP_LEFT: Point = Point::new(136, 12);
@@ -29,6 +33,7 @@ const GLYPH_WORKSPACE_PIXELS: usize = SMALL_GLYPH_WIDTH * SMALL_GLYPH_HEIGHT;
 const DANCE: LinkageFixed<3, 4, 377> = linkage_fixed!("dance.lb.rs");
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
+type DanceWorkspace = RectWorkspace<DANCE_TILE_PIXELS>;
 
 fn rgb565(color: Rgb888) -> Rgb565 {
     Rgb565::from(color)
@@ -55,6 +60,7 @@ impl From<CydError> for CydDanceDisplayError {
 pub struct CydDanceDisplay {
     cyd: Cyd,
     glyph_workspace: &'static mut GlyphWorkspace,
+    dance_workspace: &'static mut DanceWorkspace,
     background_cleared: bool,
     last_time_text: heapless::String<16>,
     last_wifi_text: heapless::String<32>,
@@ -63,10 +69,12 @@ pub struct CydDanceDisplay {
 impl CydDanceDisplay {
     pub fn new(cyd: Cyd) -> Self {
         static GLYPH_WORKSPACE: StaticCell<GlyphWorkspace> = StaticCell::new();
+        static DANCE_WORKSPACE: StaticCell<DanceWorkspace> = StaticCell::new();
 
         Self {
             cyd,
             glyph_workspace: GlyphWorkspace::init_static(&GLYPH_WORKSPACE),
+            dance_workspace: DanceWorkspace::init_static(&DANCE_WORKSPACE),
             background_cleared: false,
             last_time_text: heapless::String::new(),
             last_wifi_text: heapless::String::new(),
@@ -154,121 +162,180 @@ impl CydDanceDisplay {
     fn show_dance(&mut self, dance_time: Option<&DanceTime>) -> Result<(), CydDanceDisplayError> {
         let params = dance_time.map_or([0.5; 3], DanceTime::params);
         info!(
-            "dance draw start: params=({:.3}, {:.3}, {:.3}), bounds={}x{}",
-            params[0], params[1], params[2], DANCE_BOUNDS.size.width, DANCE_BOUNDS.size.height
+            "dance draw start: params=({:.3}, {:.3}, {:.3}), area={}x{}, tile={}x{}",
+            params[0],
+            params[1],
+            params[2],
+            DANCE_WIDTH,
+            DANCE_HEIGHT,
+            DANCE_TILE_WIDTH,
+            DANCE_TILE_HEIGHT
         );
         let t0 = Instant::now();
-        self.cyd.fill_contiguous_now(
-            DANCE_BOUNDS,
-            DancePixels {
-                index: 0,
-                pixel_count: DANCE_BOUNDS.size.width as usize * DANCE_BOUNDS.size.height as usize,
-                params,
-            },
-        )?;
+        for tile_y in [0, DANCE_TILE_HEIGHT] {
+            for tile_x in [0, DANCE_TILE_WIDTH] {
+                let tile_origin = Point::new(tile_x as i32, tile_y as i32);
+                let tile_top_left = Point::new(
+                    DANCE_TOP_LEFT.x + tile_origin.x,
+                    DANCE_TOP_LEFT.y + tile_origin.y,
+                );
+                let mut dance_buffer = self
+                    .dance_workspace
+                    .view_mut(DANCE_TILE_WIDTH, DANCE_TILE_HEIGHT);
+                dance_buffer.clear(rgb565(BG));
+                draw_dance_buffer(&mut dance_buffer, &params, tile_origin);
+                self.cyd.flush(&dance_buffer, tile_top_left)?;
+            }
+        }
         let elapsed_ms = (Instant::now() - t0).as_millis();
         info!("dance draw complete: {elapsed_ms} ms");
         Ok(())
     }
 }
 
-struct DancePixels {
-    index: usize,
-    pixel_count: usize,
-    params: [f32; 3],
-}
-
-impl Iterator for DancePixels {
-    type Item = Rgb565;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.pixel_count {
-            return None;
-        }
-
-        let local_x = self.index % DANCE_BOUNDS.size.width as usize;
-        let local_y = self.index / DANCE_BOUNDS.size.width as usize;
-        self.index += 1;
-
-        let point = Point::new(
-            DANCE_BOUNDS.top_left.x + local_x as i32,
-            DANCE_BOUNDS.top_left.y + local_y as i32,
-        );
-
-        Some(rgb565(dance_pixel_color(point, &self.params)))
-    }
-}
-
-fn dance_pixel_color(point: Point, params: &[f32; 3]) -> Rgb888 {
-    let mut color = BG;
+fn draw_dance_buffer(dance_buffer: &mut RectView<'_>, params: &[f32; 3], tile_origin: Point) {
     for draw_item in DANCE.view().draw_items(params) {
         match draw_item {
             DrawItem::Stroke(stroke) => {
-                let start = pose_to_point(stroke.start());
-                let end = pose_to_point(stroke.end());
-                let radius = (stroke.width() * STROKE_SCALE * 0.5).max(0.75);
-                if point_covers_segment(point, start, end, radius) {
-                    color = stroke.color();
-                }
+                draw_segment(
+                    dance_buffer,
+                    pose_to_point(stroke.start()),
+                    pose_to_point(stroke.end()),
+                    tile_origin,
+                    stroke.color(),
+                );
             }
             DrawItem::Disk(disk) => {
-                if point_covers_circle(point, pose_to_point(disk.pose()), disk.radius()) {
-                    color = disk.color();
-                }
+                draw_filled_circle(
+                    dance_buffer,
+                    pose_to_point(disk.pose()),
+                    disk.radius(),
+                    tile_origin,
+                    disk.color(),
+                );
             }
             DrawItem::Ring(ring) => {
-                let radius = ring.radius() * DANCE_SCALE;
-                let width = ring.width().max(1.0);
-                if point_covers_ring(point, pose_to_point(ring.pose()), radius, width) {
-                    color = ring.color();
-                }
+                draw_ring(
+                    dance_buffer,
+                    pose_to_point(ring.pose()),
+                    ring.radius(),
+                    ring.width(),
+                    tile_origin,
+                    ring.color(),
+                );
             }
             DrawItem::Sphere(sphere) => {
-                if point_covers_circle(point, pose_to_point(sphere.pose()), sphere.radius()) {
-                    color = sphere.color();
-                }
+                draw_filled_circle(
+                    dance_buffer,
+                    pose_to_point(sphere.pose()),
+                    sphere.radius(),
+                    tile_origin,
+                    sphere.color(),
+                );
             }
         }
     }
-    color
 }
 
-fn point_covers_segment(point: Point, start: Point, end: Point, radius: f32) -> bool {
-    let point_x = point.x as f32;
-    let point_y = point.y as f32;
-    let start_x = start.x as f32;
-    let start_y = start.y as f32;
-    let segment_x = (end.x - start.x) as f32;
-    let segment_y = (end.y - start.y) as f32;
-    let length_squared = segment_x * segment_x + segment_y * segment_y;
-    if length_squared == 0.0 {
-        return point_covers_circle(point, start, radius);
+fn draw_segment(
+    dance_buffer: &mut RectView<'_>,
+    start: Point,
+    end: Point,
+    tile_origin: Point,
+    color: Rgb888,
+) {
+    let mut current_x = start.x;
+    let mut current_y = start.y;
+    let delta_x = (end.x - start.x).abs();
+    let delta_y = -(end.y - start.y).abs();
+    let step_x = if start.x < end.x { 1 } else { -1 };
+    let step_y = if start.y < end.y { 1 } else { -1 };
+    let mut error = delta_x + delta_y;
+
+    loop {
+        put_pixel(dance_buffer, current_x, current_y, tile_origin, color);
+        if current_x == end.x && current_y == end.y {
+            break;
+        }
+        let doubled_error = error * 2;
+        if doubled_error >= delta_y {
+            error += delta_y;
+            current_x += step_x;
+        }
+        if doubled_error <= delta_x {
+            error += delta_x;
+            current_y += step_y;
+        }
+    }
+}
+
+fn draw_filled_circle(
+    dance_buffer: &mut RectView<'_>,
+    center: Point,
+    radius: f32,
+    tile_origin: Point,
+    color: Rgb888,
+) {
+    let radius = round_to_i32(radius * DANCE_SCALE).max(1);
+    for local_y in -radius..=radius {
+        for local_x in -radius..=radius {
+            if local_x * local_x + local_y * local_y <= radius * radius {
+                put_pixel(
+                    dance_buffer,
+                    center.x + local_x,
+                    center.y + local_y,
+                    tile_origin,
+                    color,
+                );
+            }
+        }
+    }
+}
+
+fn draw_ring(
+    dance_buffer: &mut RectView<'_>,
+    center: Point,
+    radius: f32,
+    width: f32,
+    tile_origin: Point,
+    color: Rgb888,
+) {
+    let radius = (radius * DANCE_SCALE).max(1.0);
+    let width = (width * DANCE_SCALE).max(1.0);
+    let outer = round_to_i32(radius + width * 0.5).max(1);
+    let inner = round_to_i32((radius - width * 0.5).max(0.0));
+    let outer_squared = outer * outer;
+    let inner_squared = inner * inner;
+    for local_y in -outer..=outer {
+        for local_x in -outer..=outer {
+            let distance_squared = local_x * local_x + local_y * local_y;
+            if distance_squared <= outer_squared && distance_squared >= inner_squared {
+                put_pixel(
+                    dance_buffer,
+                    center.x + local_x,
+                    center.y + local_y,
+                    tile_origin,
+                    color,
+                );
+            }
+        }
+    }
+}
+
+fn put_pixel(dance_buffer: &mut RectView<'_>, x: i32, y: i32, tile_origin: Point, color: Rgb888) {
+    let x = x - tile_origin.x;
+    let y = y - tile_origin.y;
+    if x < 0 || y < 0 {
+        return;
     }
 
-    let projection = (((point_x - start_x) * segment_x + (point_y - start_y) * segment_y)
-        / length_squared)
-        .clamp(0.0, 1.0);
-    let closest_x = start_x + projection * segment_x;
-    let closest_y = start_y + projection * segment_y;
-    let distance_x = point_x - closest_x;
-    let distance_y = point_y - closest_y;
-    distance_x * distance_x + distance_y * distance_y <= radius * radius
-}
+    let x = x as usize;
+    let y = y as usize;
+    if x >= DANCE_TILE_WIDTH || y >= DANCE_TILE_HEIGHT {
+        return;
+    }
 
-fn point_covers_circle(point: Point, center: Point, radius: f32) -> bool {
-    let radius = radius * DANCE_SCALE;
-    let dx = (point.x - center.x) as f32;
-    let dy = (point.y - center.y) as f32;
-    dx * dx + dy * dy <= radius * radius
-}
-
-fn point_covers_ring(point: Point, center: Point, radius: f32, width: f32) -> bool {
-    let dx = (point.x - center.x) as f32;
-    let dy = (point.y - center.y) as f32;
-    let distance_squared = dx * dx + dy * dy;
-    let outer = radius + width * 0.5;
-    let inner = (radius - width * 0.5).max(0.0);
-    distance_squared <= outer * outer && distance_squared >= inner * inner
+    dance_buffer.raw_pixels_mut()[y * DANCE_TILE_WIDTH + x] = rgb565(color).into_storage();
 }
 
 fn pose_to_point(pose: Pose) -> Point {
