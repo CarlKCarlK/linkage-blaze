@@ -5,15 +5,16 @@ mod calibration;
 mod display;
 mod touch;
 
-use core::fmt;
+use core::{convert::Infallible, fmt};
 
 use device_envoy_esp::{
     button::Button,
     flash_block::{FlashBlock, FlashBlockEsp},
 };
 use embedded_graphics::{
+    Pixel,
     pixelcolor::{Rgb565, Rgb888},
-    prelude::{Point, Size},
+    prelude::{DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
 };
 use static_cell::StaticCell;
@@ -46,7 +47,7 @@ pub struct Cyd {
 /// The app declares one at file scope and names the buffer type it wants:
 ///
 /// ```ignore
-/// static CYD_STATIC: CydStatic<PixelBufferFull> = Cyd::new_static();
+/// static CYD_STATIC: CydStatic<PixelBufferFull> = CydStatic::new();
 /// ```
 ///
 /// The app chooses the buffer type (policy); [`Cyd::new_display_only`] owns the
@@ -55,9 +56,18 @@ pub struct CydStatic<B: DynPixelBuffer> {
     pixel_buffer: StaticCell<B>,
 }
 
+impl<B: DynPixelBuffer> CydStatic<B> {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            pixel_buffer: StaticCell::new(),
+        }
+    }
+}
+
 impl<B: DynPixelBuffer> Default for CydStatic<B> {
     fn default() -> Self {
-        Cyd::new_static()
+        Self::new()
     }
 }
 
@@ -76,8 +86,53 @@ impl<'a> CydFrame<'a> {
         &mut self.view
     }
 
-    pub fn flush(&mut self, top_left: Point) -> Result<(), CydError> {
+    pub fn clear(&mut self, color: Rgb565) {
+        self.view.clear(color);
+    }
+
+    #[must_use]
+    pub fn width(&self) -> usize {
+        self.view.width()
+    }
+
+    #[must_use]
+    pub fn height(&self) -> usize {
+        self.view.height()
+    }
+
+    pub fn raw_pixels_mut(&mut self) -> &mut [u16] {
+        self.view.raw_pixels_mut()
+    }
+
+    pub fn flush(self) -> Result<(), CydError> {
+        self.flush_at(Point::new(0, 0))
+    }
+
+    pub fn flush_at(self, top_left: Point) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(&self.view, top_left)?)
+    }
+}
+
+impl DrawTarget for CydFrame<'_> {
+    type Color = Rgb565;
+    type Error = Infallible;
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        self.clear(color);
+        Ok(())
+    }
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        self.view.draw_iter(pixels)
+    }
+}
+
+impl OriginDimensions for CydFrame<'_> {
+    fn size(&self) -> Size {
+        self.view.size()
     }
 }
 
@@ -94,13 +149,6 @@ pub enum CydError {
 impl Cyd {
     /// Total pixel count of the CYD panel — fixed hardware, independent of orientation.
     pub const SCREEN_PIXELS: usize = SCREEN_PIXELS;
-
-    #[must_use]
-    pub const fn new_static<B: DynPixelBuffer>() -> CydStatic<B> {
-        CydStatic {
-            pixel_buffer: StaticCell::new(),
-        }
-    }
 
     // todo000 couldn't this be const and/or inlined and defined elsewhere?
     // todo000 review rgb565 conversion later.
@@ -342,12 +390,16 @@ impl Cyd {
     /// is flushed without the app juggling a separate buffer.
     pub fn draw_frame<F>(&mut self, size: Size, top_left: Point, render: F) -> Result<(), CydError>
     where
-        F: FnOnce(&mut RectView<'_>),
+        F: FnOnce(&mut CydFrame<'_>),
     {
         let mut cyd_frame = self.frame_mut(size);
-        render(cyd_frame.view_mut());
-        cyd_frame.flush(top_left)?;
+        render(&mut cyd_frame);
+        cyd_frame.flush_at(top_left)?;
         Ok(())
+    }
+
+    pub fn full_frame_mut(&mut self) -> CydFrame<'_> {
+        self.frame_mut(self.screen_size())
     }
 
     pub fn frame_mut(&mut self, size: Size) -> CydFrame<'_> {

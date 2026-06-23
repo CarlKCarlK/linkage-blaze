@@ -8,8 +8,8 @@ use embassy_executor::Spawner;
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::{IntoStorage, Rgb565},
-    prelude::Point,
+    pixelcolor::Rgb565,
+    prelude::{DrawTarget, Point},
     text::{Baseline, Text},
 };
 use esp_backtrace as _;
@@ -17,10 +17,9 @@ use esp_hal::delay::Delay;
 use esp_hal::time::Instant;
 use linkage_blaze_ballet::{
     ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
-    ballet_render::{BACKGROUND, PixelTarget, TEXT, render_frame},
+    ballet_render::{BACKGROUND, TEXT, render_frame},
 };
-use linkage_blaze_core::Rgb888;
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull, RectPixels, RectView};
+use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
 use log::info;
 
 // todo000 I'm not happy with all this noise.
@@ -50,7 +49,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD ballet loop");
 
-    static CYD_STATIC: CydStatic<PixelBufferFull> = Cyd::new_static();
+    static CYD_STATIC: CydStatic<PixelBufferFull> = CydStatic::new();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
@@ -77,16 +76,11 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             let started = Instant::now();
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
-            let mut cyd_frame = cyd.frame_mut(cyd.screen_size());
-            cyd_frame.view_mut().clear(background565);
-            render_frame(
-                &mut FullScreenTarget {
-                    screen_buffer: cyd_frame.view_mut(),
-                },
-                params,
-            );
-            draw_status(cyd_frame.view_mut(), text565, frame_index, last_frame_ms);
-            cyd_frame.flush(Point::new(0, 0))?;
+            let mut cyd_frame = cyd.full_frame_mut();
+            cyd_frame.clear(background565);
+            render_frame(&mut cyd_frame, params);
+            draw_status(&mut cyd_frame, text565, frame_index, last_frame_ms);
+            cyd_frame.flush()?;
             // todo000 look at the time stuff.
             // todo000 continue review from this point
             last_frame_ms = (Instant::now() - started).as_millis();
@@ -96,12 +90,10 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 }
 // todo000 still need to review other files in the project.
 
-fn draw_status(
-    screen_buffer: &mut RectView<'_>,
-    text565: Rgb565,
-    frame_index: usize,
-    last_frame_ms: u64,
-) {
+fn draw_status<D>(draw_target: &mut D, text565: Rgb565, frame_index: usize, last_frame_ms: u64)
+where
+    D: DrawTarget<Color = Rgb565, Error = Infallible>,
+{
     let elapsed_ms = last_frame_ms.max(1);
     let fps_x10 = (10_000 / elapsed_ms) as u32;
     let slomo_x10 = if fps_x10 == 0 {
@@ -130,28 +122,6 @@ fn draw_status(
         MonoTextStyle::new(&FONT_6X10, text565),
         Baseline::Top,
     )
-    .draw(screen_buffer)
+    .draw(draw_target)
     .ok();
-}
-
-struct FullScreenTarget<'a, 'b> {
-    screen_buffer: &'a mut RectView<'b>,
-}
-
-impl PixelTarget for FullScreenTarget<'_, '_> {
-    fn width(&self) -> usize {
-        self.screen_buffer.width()
-    }
-
-    fn height(&self) -> usize {
-        self.screen_buffer.height()
-    }
-
-    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        if x >= self.screen_buffer.width() || y >= self.screen_buffer.height() {
-            return;
-        }
-        let stride = self.screen_buffer.width();
-        self.screen_buffer.raw_pixels_mut()[y * stride + x] = Cyd::rgb565(color).into_storage();
-    }
 }

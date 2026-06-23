@@ -3,6 +3,11 @@ use linkage_blaze_core::{
     DrawItem, DrawItemIter, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed,
 };
 
+#[cfg(target_os = "none")]
+use embedded_graphics::pixelcolor::IntoStorage;
+#[cfg(target_os = "none")]
+use linkage_blaze_cyd::{Cyd, CydFrame};
+
 // todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
 use crate::ballet_frames::BALLET_DOF;
 
@@ -29,6 +34,25 @@ pub trait PixelTarget {
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888);
+}
+
+#[cfg(target_os = "none")]
+impl PixelTarget for CydFrame<'_> {
+    fn width(&self) -> usize {
+        self.width()
+    }
+
+    fn height(&self) -> usize {
+        self.height()
+    }
+
+    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
+        if x >= self.width() || y >= self.height() {
+            return;
+        }
+        let stride = self.width();
+        self.raw_pixels_mut()[y * stride + x] = Cyd::rgb565(color).into_storage();
+    }
 }
 
 // todo0000 (may no longer apply) review the old tile renderer replacement.
