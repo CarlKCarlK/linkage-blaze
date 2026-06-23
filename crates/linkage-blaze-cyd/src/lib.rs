@@ -103,6 +103,7 @@ impl Cyd {
     }
 
     // todo000 couldn't this be const and/or inlined and defined elsewhere?
+    // todo000 review rgb565 conversion later.
     #[inline]
     pub fn rgb565(color: Rgb888) -> Rgb565 {
         Rgb565::from(color)
