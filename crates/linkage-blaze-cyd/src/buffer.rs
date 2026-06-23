@@ -140,6 +140,30 @@ impl<const PIXELS: usize> Default for PixelBuffer<PIXELS> {
     }
 }
 
+/// A pixel buffer that a [`Cyd`](crate::Cyd) can own: it can be initialized into
+/// a `'static` cell and hand out [`RectView`]s. Implemented for any
+/// [`PixelBuffer<PIXELS>`], so an app picks the size via the buffer type it names
+/// in its [`CydStatic`](crate::CydStatic).
+pub trait DynPixelBuffer: 'static {
+    /// Initialize this buffer inside a `'static` cell, returning a unique reference.
+    fn init_static(cell: &'static StaticCell<Self>) -> &'static mut Self
+    where
+        Self: Sized;
+
+    /// Borrow a `width`×`height` view out of the buffer (must fit the capacity).
+    fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_>;
+}
+
+impl<const PIXELS: usize> DynPixelBuffer for PixelBuffer<PIXELS> {
+    fn init_static(cell: &'static StaticCell<Self>) -> &'static mut Self {
+        cell.init_with(Self::new)
+    }
+
+    fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_> {
+        PixelBuffer::view_mut(self, width, height)
+    }
+}
+
 impl RectView<'_> {
     pub fn clear(&mut self, color: Rgb565) {
         self.pixels.fill(color.into_storage());

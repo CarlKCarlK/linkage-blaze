@@ -17,7 +17,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig};
+use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBuffer};
 use log::info;
 use static_cell::StaticCell;
 
@@ -57,7 +57,12 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD dance with WiFi");
 
-    let mut cyd = Cyd::new_display(
+    // todo00 unify: CydDanceDisplay still owns its own two workspaces, so the
+    // Cyd-owned buffer is zero-sized. Look at merging them into one Cyd-owned
+    // buffer (max of the two sizes) rendered via cyd.draw_buffer.
+    static CYD_STATIC: CydStatic<PixelBuffer<0>> = CydStatic::new();
+    let mut cyd = Cyd::new_display_only(
+        &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
         p.GPIO13,

@@ -19,7 +19,10 @@ use esp_hal::{
     delay::Delay,
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydError, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+use linkage_blaze_cyd::{
+    Cyd, CydDisplayConfig, CydError, CydStatic, PixelBuffer, RectBuffer, SCREEN_HEIGHT,
+    SCREEN_WIDTH,
+};
 use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -126,7 +129,12 @@ fn inner_main() -> Result<Infallible, MainError> {
     esp_println::println!("c6: esp_hal init complete");
 
     esp_println::println!("c6: initializing display");
-    let mut cyd = Cyd::new_display(
+    // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
+    // Cyd-owned buffer is zero-sized. Look at rendering into the single Cyd-owned
+    // buffer via cyd.draw_buffer instead.
+    static CYD_STATIC: CydStatic<PixelBuffer<0>> = CydStatic::new();
+    let mut cyd = Cyd::new_display_only(
+        &CYD_STATIC,
         p.SPI2,
         p.GPIO19,
         p.GPIO18,

@@ -16,8 +16,9 @@ use embedded_graphics::{
     prelude::{Point, Size},
     primitives::Rectangle,
 };
+use static_cell::StaticCell;
 
-pub use buffer::{PixelBuffer, RectBuffer, RectPixels, RectView};
+pub use buffer::{DynPixelBuffer, PixelBuffer, RectBuffer, RectPixels, RectView};
 pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
 pub use display::{
     CydDisplay, CydDisplayConfig, CydDisplayFlushError, CydDisplayInitError, CydDisplayOrientation,
@@ -35,6 +36,38 @@ pub struct Cyd {
     calibration_config: Option<CalibrationConfig>,
     calibration_flash_block: Option<FlashBlockEsp>,
     calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
+    // Every Cyd owns exactly one draw buffer. Apps that don't draw through it
+    // pass a zero-sized buffer (e.g. `CydStatic<PixelBuffer<0>>`).
+    pixel_buffer: &'static mut dyn DynPixelBuffer,
+}
+
+/// Static storage for a [`Cyd`]-owned pixel buffer.
+///
+/// The app declares one at file scope and names the buffer type it wants:
+///
+/// ```ignore
+/// static CYD_STATIC: CydStatic<PixelBufferFull> = CydStatic::new();
+/// ```
+///
+/// The app chooses the buffer type (policy); [`Cyd::new_display_only`] owns the
+/// initialization protocol.
+pub struct CydStatic<B: DynPixelBuffer> {
+    pixel_buffer: StaticCell<B>,
+}
+
+impl<B: DynPixelBuffer> CydStatic<B> {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            pixel_buffer: StaticCell::new(),
+        }
+    }
+}
+
+impl<B: DynPixelBuffer> Default for CydStatic<B> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub struct CalibratedCyd<'a> {
@@ -68,7 +101,13 @@ impl Cyd {
         self.display.size()
     }
 
-    pub fn new_display(
+    /// Construct a display-only `Cyd` (no touch) that owns its draw buffer,
+    /// initializing the buffer from app-provided [`CydStatic`] storage.
+    ///
+    /// The app picks the buffer type via `B`; `Cyd` owns the init protocol. Use
+    /// [`Cyd::draw_buffer`] to render into and flush the owned buffer.
+    pub fn new_display_only<B: DynPixelBuffer>(
+        statics: &'static CydStatic<B>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
         display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
         display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -78,6 +117,36 @@ impl Cyd {
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_config: CydDisplayConfig,
+    ) -> Result<Self, CydError> {
+        let pixel_buffer = B::init_static(&statics.pixel_buffer);
+        Self::new_with_buffer(
+            display_spi,
+            display_sck_pin,
+            display_mosi_pin,
+            display_miso_pin,
+            display_cs_pin,
+            display_dc_pin,
+            display_rst_pin,
+            display_backlight_pin,
+            display_config,
+            pixel_buffer,
+        )
+    }
+
+    /// Lower-level escape hatch: construct a display-only `Cyd` from an already
+    /// initialized pixel buffer. Normal apps should prefer [`Cyd::new_display_only`];
+    /// this exists for tests, experiments, or unusual storage strategies.
+    pub fn new_with_buffer(
+        display_spi: impl esp_hal::spi::master::Instance + 'static,
+        display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
+        display_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
+        display_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
+        display_config: CydDisplayConfig,
+        pixel_buffer: &'static mut dyn DynPixelBuffer,
     ) -> Result<Self, CydError> {
         Self::new_inner(
             display_spi,
@@ -92,39 +161,13 @@ impl Cyd {
             None,
             None,
             None,
+            pixel_buffer,
         )
     }
 
-    pub fn new(
-        display_spi: impl esp_hal::spi::master::Instance + 'static,
-        display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
-        display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
-        display_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
-        display_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_config: CydDisplayConfig,
-        calibration_flash_block: FlashBlockEsp,
-        calibration_button: device_envoy_esp::button::ButtonEsp<'static>,
-    ) -> Result<Self, CydError> {
-        Self::new_inner(
-            display_spi,
-            display_sck_pin,
-            display_mosi_pin,
-            display_miso_pin,
-            display_cs_pin,
-            display_dc_pin,
-            display_rst_pin,
-            display_backlight_pin,
-            display_config,
-            None,
-            Some(calibration_flash_block),
-            Some(calibration_button),
-        )
-    }
-
-    pub fn new_with_touch(
+    /// Construct a full `Cyd` with touch + calibration that owns its draw buffer.
+    pub fn new<B: DynPixelBuffer>(
+        statics: &'static CydStatic<B>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
         display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
         display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -151,6 +194,7 @@ impl Cyd {
             touch_cs_pin,
             touch_irq_pin,
         )?;
+        let pixel_buffer = B::init_static(&statics.pixel_buffer);
 
         Self::new_inner(
             display_spi,
@@ -165,6 +209,7 @@ impl Cyd {
             Some(touch),
             Some(calibration_flash_block),
             Some(calibration_button),
+            pixel_buffer,
         )
     }
 
@@ -181,6 +226,7 @@ impl Cyd {
         touch: Option<CydTouch>,
         calibration_flash_block: Option<FlashBlockEsp>,
         calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
+        pixel_buffer: &'static mut dyn DynPixelBuffer,
     ) -> Result<Self, CydError> {
         let mut calibration_flash_block = calibration_flash_block;
         let calibration_config = match (&mut calibration_flash_block, &calibration_button) {
@@ -208,6 +254,7 @@ impl Cyd {
             calibration_config,
             calibration_flash_block,
             calibration_button,
+            pixel_buffer,
         })
     }
 
@@ -271,6 +318,28 @@ impl Cyd {
 
     pub fn flush(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(buffer, top_left)?)
+    }
+
+    /// Render into a `width`×`height` view of the Cyd-owned buffer via `render`,
+    /// then flush that view to the display at `top_left`.
+    ///
+    /// This is the normal way to use the owned buffer: it borrows the buffer and
+    /// the display as disjoint fields, so the closure can render and the result
+    /// is flushed without the app juggling a separate buffer.
+    pub fn draw_buffer<F>(
+        &mut self,
+        width: usize,
+        height: usize,
+        top_left: Point,
+        render: F,
+    ) -> Result<(), CydError>
+    where
+        F: FnOnce(&mut RectView<'_>),
+    {
+        let mut view = self.pixel_buffer.view_mut(width, height);
+        render(&mut view);
+        self.display.flush_buffer(&view, top_left)?;
+        Ok(())
     }
 
     pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
