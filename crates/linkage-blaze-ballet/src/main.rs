@@ -17,14 +17,20 @@ use esp_hal::delay::Delay;
 use esp_hal::time::Instant;
 use linkage_blaze_ballet::{
     ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
-    ballet_render::{BACKGROUND, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, render_frame},
+    ballet_render::{BACKGROUND, PixelTarget, TEXT, render_frame},
 };
 use linkage_blaze_core::Rgb888;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, RectPixels, RectView, RectWorkspace};
 use log::info;
 use static_cell::StaticCell;
 
+// todo000 I'm not happy with all this noise.
+const DISPLAY_CONFIG: CydDisplayConfig = CydDisplayConfig::PORTRAIT;
+const SCREEN_WIDTH: usize = DISPLAY_CONFIG.screen_size().width as usize;
+const SCREEN_HEIGHT: usize = DISPLAY_CONFIG.screen_size().height as usize;
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
+
+// todo000 this seems unmotivated.
 const SOURCE_FPS_X10: u32 = 1200;
 
 type ScreenWorkspace = RectWorkspace<SCREEN_PIXELS>;
@@ -61,7 +67,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO4,
         p.GPIO21,
         // todo000 are there 4 orientations?
-        CydDisplayConfig::PORTRAIT,
+        DISPLAY_CONFIG,
     )?;
     // todo000 agent, remember to never delete my todo's.
     cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
@@ -76,8 +82,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
             // todo000 pull this back in.
             let started = Instant::now();
-            // todo000 these consts should be read from the cyd object, not be here.
-            // todo000 why are these constants need at all?
+            // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
+            // todo000 (may no longer apply) why are these constants need at all?
             let mut screen_buffer = screen_workspace.view_mut(SCREEN_WIDTH, SCREEN_HEIGHT);
             // todo0000 should be fill_screen?
             screen_buffer.clear(Cyd::rgb565(BACKGROUND));
@@ -145,7 +151,7 @@ impl PixelTarget for FullScreenTarget<'_, '_> {
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        if x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT {
+        if x >= self.screen_buffer.width() || y >= self.screen_buffer.height() {
             return;
         }
         let stride = self.screen_buffer.width();
