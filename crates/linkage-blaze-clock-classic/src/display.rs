@@ -51,26 +51,12 @@ const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
 
 type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
 
-fn rgb565(color: Rgb888) -> Rgb565 {
-    Rgb565::from(color)
-}
-
+// Derived Debug reads this payload at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
 pub enum CydClockDisplayError {
     Cyd(CydError),
-}
-
-impl fmt::Debug for CydClockDisplayError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CydClockDisplayError::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
-        }
-    }
-}
-
-impl From<CydError> for CydClockDisplayError {
-    fn from(error: CydError) -> Self {
-        Self::Cyd(error)
-    }
 }
 
 pub struct CydClockDisplay {
@@ -102,7 +88,7 @@ impl CydClockDisplay {
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         if !self.background_cleared {
-            self.cyd.clear_now(rgb565(BG))?;
+            self.cyd.clear_now(Cyd::rgb565(BG))?;
             self.background_cleared = true;
         }
 
@@ -154,11 +140,11 @@ impl CydClockDisplay {
             let mut character_text = heapless::String::<4>::new();
             fmt::Write::write_char(&mut character_text, character).ok();
             let mut glyph_buffer = self.glyph_workspace.view_mut(flush_width, flush_height);
-            glyph_buffer.clear(rgb565(BG));
+            glyph_buffer.clear(Cyd::rgb565(BG));
             Text::with_baseline(
                 character_text.as_str(),
                 Point::new(0, 0),
-                MonoTextStyle::new(font, rgb565(color)),
+                MonoTextStyle::new(font, Cyd::rgb565(color)),
                 Baseline::Top,
             )
             .draw(&mut glyph_buffer)
@@ -226,7 +212,7 @@ impl CydClockDisplay {
                 top_left,
                 embedded_graphics::prelude::Size::new(width as u32, height as u32),
             ),
-            rgb565(BG),
+            Cyd::rgb565(BG),
         )?;
         Ok(())
     }
@@ -249,7 +235,7 @@ impl CydClockDisplay {
                             start,
                             end,
                             width: clock_width_pixels(stroke.width()),
-                            color: Rgb565::from(stroke.color()),
+                            color: Cyd::rgb565(stroke.color()),
                         })
                     } else {
                         continue;
@@ -264,7 +250,7 @@ impl CydClockDisplay {
 
         let t0 = Instant::now();
         self.cyd
-            .draw_primitives_now(CLOCK_BOUNDS, rgb565(BG), &primitives)?;
+            .draw_primitives_now(CLOCK_BOUNDS, Cyd::rgb565(BG), &primitives)?;
         let elapsed_ms = (Instant::now() - t0).as_millis();
         esp_println::println!("draw_primitives_now ms = {}", elapsed_ms);
         Ok(())

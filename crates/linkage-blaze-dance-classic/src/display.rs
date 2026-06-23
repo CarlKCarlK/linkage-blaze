@@ -6,7 +6,7 @@ use embedded_graphics::{
         MonoTextStyle,
         ascii::{FONT_6X10, FONT_9X15_BOLD},
     },
-    pixelcolor::{IntoStorage, Rgb565},
+    pixelcolor::IntoStorage,
     prelude::{Point, Size},
     primitives::Rectangle,
     text::{Baseline, Text},
@@ -33,26 +33,12 @@ const TEXT_LINE_WORKSPACE_PIXELS: usize = TEXT_LINE_WIDTH * TIME_GLYPH_HEIGHT;
 type TextLineWorkspace = RectWorkspace<TEXT_LINE_WORKSPACE_PIXELS>;
 type DanceWorkspace = RectWorkspace<DANCE_TILE_PIXELS>;
 
-fn rgb565(color: Rgb888) -> Rgb565 {
-    Rgb565::from(color)
-}
-
+// Derived Debug reads this payload at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
 pub enum CydDanceDisplayError {
     Cyd(CydError),
-}
-
-impl fmt::Debug for CydDanceDisplayError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CydDanceDisplayError::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
-        }
-    }
-}
-
-impl From<CydError> for CydDanceDisplayError {
-    fn from(error: CydError) -> Self {
-        Self::Cyd(error)
-    }
 }
 
 pub struct CydDanceDisplay {
@@ -86,7 +72,7 @@ impl CydDanceDisplay {
         );
         if !self.background_cleared {
             info!("display clearing background");
-            self.cyd.clear_now(rgb565(BG))?;
+            self.cyd.clear_now(Cyd::rgb565(BG))?;
             self.background_cleared = true;
             info!("display background cleared");
         }
@@ -126,15 +112,15 @@ impl CydDanceDisplay {
                 Point::new(clear_left, TIME_TEXT_TOP),
                 Size::new(clear_width as u32, TIME_GLYPH_HEIGHT as u32),
             ),
-            rgb565(BG),
+            Cyd::rgb565(BG),
         )?;
 
         let mut text_line_buffer = self.text_line_workspace.view_mut(width, TIME_GLYPH_HEIGHT);
-        text_line_buffer.clear(rgb565(BG));
+        text_line_buffer.clear(Cyd::rgb565(BG));
         Text::with_baseline(
             text,
             Point::new(0, 0),
-            MonoTextStyle::new(&FONT_9X15_BOLD, rgb565(TEXT)),
+            MonoTextStyle::new(&FONT_9X15_BOLD, Cyd::rgb565(TEXT)),
             Baseline::Top,
         )
         .draw(&mut text_line_buffer)
@@ -156,15 +142,15 @@ impl CydDanceDisplay {
         );
         self.cyd.fill_rect_now(
             Rectangle::new(top_left, Size::new(width as u32, SMALL_GLYPH_HEIGHT as u32)),
-            rgb565(BG),
+            Cyd::rgb565(BG),
         )?;
 
         let mut text_line_buffer = self.text_line_workspace.view_mut(width, SMALL_GLYPH_HEIGHT);
-        text_line_buffer.clear(rgb565(BG));
+        text_line_buffer.clear(Cyd::rgb565(BG));
         Text::with_baseline(
             text,
             Point::new(0, 0),
-            MonoTextStyle::new(&FONT_6X10, rgb565(TEXT)),
+            MonoTextStyle::new(&FONT_6X10, Cyd::rgb565(TEXT)),
             Baseline::Top,
         )
         .draw(&mut text_line_buffer)
@@ -220,7 +206,7 @@ impl DanceTileSink for EspDanceTileSink<'_> {
         let mut dance_buffer = self
             .dance_workspace
             .view_mut(tile_flush.width, tile_flush.height);
-        dance_buffer.clear(rgb565(BG));
+        dance_buffer.clear(Cyd::rgb565(BG));
         let mut target = RectViewTarget {
             rect_view: &mut dance_buffer,
         };
@@ -247,7 +233,7 @@ impl PixelTarget for RectViewTarget<'_, '_> {
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
         let stride = self.rect_view.width();
-        self.rect_view.raw_pixels_mut()[y * stride + x] = rgb565(color).into_storage();
+        self.rect_view.raw_pixels_mut()[y * stride + x] = Cyd::rgb565(color).into_storage();
     }
 }
 

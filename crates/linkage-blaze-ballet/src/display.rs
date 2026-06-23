@@ -1,9 +1,9 @@
-use core::fmt;
+use core::fmt::Write;
 
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::{IntoStorage, Rgb565},
+    pixelcolor::IntoStorage,
     prelude::Point,
     text::{Baseline, Text},
 };
@@ -24,26 +24,12 @@ const SOURCE_FPS_X10: u32 = 1200;
 
 type ScreenWorkspace = RectWorkspace<SCREEN_PIXELS>;
 
-fn rgb565(color: Rgb888) -> Rgb565 {
-    Rgb565::from(color)
-}
-
+// Derived Debug reads this payload at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
 pub enum CydBalletDisplayError {
     Cyd(CydError),
-}
-
-impl fmt::Debug for CydBalletDisplayError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CydBalletDisplayError::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
-        }
-    }
-}
-
-impl From<CydError> for CydBalletDisplayError {
-    fn from(error: CydError) -> Self {
-        Self::Cyd(error)
-    }
 }
 
 pub struct CydBalletDisplay {
@@ -71,13 +57,13 @@ impl CydBalletDisplay {
         params: &[f32; BALLET_DOF],
     ) -> Result<(), CydBalletDisplayError> {
         if !self.background_cleared {
-            self.cyd.clear_now(rgb565(BG))?;
+            self.cyd.clear_now(Cyd::rgb565(BG))?;
             self.background_cleared = true;
         }
 
         let started = Instant::now();
         let mut screen_buffer = self.screen_workspace.view_mut(SCREEN_WIDTH, SCREEN_HEIGHT);
-        screen_buffer.clear(rgb565(BG));
+        screen_buffer.clear(Cyd::rgb565(BG));
         {
             let mut sink = EspBalletTileSink {
                 screen_buffer: &mut screen_buffer,
@@ -100,7 +86,7 @@ fn draw_status(screen_buffer: &mut RectView<'_>, frame_index: usize, last_frame_
         (SOURCE_FPS_X10 * 10 + fps_x10 / 2) / fps_x10
     };
     let mut status = heapless::String::<64>::new();
-    fmt::Write::write_fmt(
+    Write::write_fmt(
         &mut status,
         format_args!(
             "{}/{}  fps {}.{}  slow {}.{}x",
@@ -117,7 +103,7 @@ fn draw_status(screen_buffer: &mut RectView<'_>, frame_index: usize, last_frame_
     Text::with_baseline(
         status.as_str(),
         Point::new(0, 0),
-        MonoTextStyle::new(&FONT_6X10, rgb565(TEXT)),
+        MonoTextStyle::new(&FONT_6X10, Cyd::rgb565(TEXT)),
         Baseline::Top,
     )
     .draw(screen_buffer)
@@ -169,6 +155,6 @@ impl PixelTarget for FullScreenTileTarget<'_, '_> {
         }
         let stride = self.screen_buffer.width();
         self.screen_buffer.raw_pixels_mut()[screen_y * stride + screen_x] =
-            rgb565(color).into_storage();
+            Cyd::rgb565(color).into_storage();
     }
 }

@@ -1,18 +1,16 @@
 #![no_std]
 #![no_main]
 
-use core::{convert::Infallible, fmt};
+use core::convert::Infallible;
 
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
-use embedded_graphics::pixelcolor::Rgb565;
 use esp_backtrace as _;
 use esp_hal::delay::Delay;
 use linkage_blaze_ballet::{
     ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
     ballet_render::BG,
 };
-use linkage_blaze_core::Rgb888;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig};
 use log::info;
 
@@ -20,38 +18,16 @@ mod display;
 
 use display::{CydBalletDisplay, CydBalletDisplayError};
 
-// todo000 couldn't this be const and/or inlined and defined elsewhere?
-fn rgb565(color: Rgb888) -> Rgb565 {
-    Rgb565::from(color)
-}
-
 esp_bootloader_esp_idf::esp_app_desc!();
 
+// todo0000 is this the best way to do this? isn't there a crate?
+// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
 enum MainError {
     Cyd(linkage_blaze_cyd::CydError),
     Display(CydBalletDisplayError),
-}
-
-// todo0000 is this the best way to do this? isn't there a crate?
-impl fmt::Debug for MainError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MainError::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
-            MainError::Display(error) => formatter.debug_tuple("Display").field(error).finish(),
-        }
-    }
-}
-
-impl From<linkage_blaze_cyd::CydError> for MainError {
-    fn from(error: linkage_blaze_cyd::CydError) -> Self {
-        MainError::Cyd(error)
-    }
-}
-
-impl From<CydBalletDisplayError> for MainError {
-    fn from(error: CydBalletDisplayError) -> Self {
-        MainError::Display(error)
-    }
 }
 
 #[esp_rtos::main]
@@ -81,7 +57,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     // todo000 agent, remember to never delete my todo's.
     // todo000 is the _now suffix good?
     // todo000 BG violates our policy against abbreviations.
-    cyd.clear_now(rgb565(BG))?;
+    cyd.clear_now(Cyd::rgb565(BG))?;
     // todo000 in this case, we likely don't want a CydBalletDisplay struct.
     let mut display = CydBalletDisplay::new(cyd);
     info!("CYD display initialized");

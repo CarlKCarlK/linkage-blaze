@@ -11,7 +11,11 @@ use device_envoy_esp::{
     button::Button,
     flash_block::{FlashBlock, FlashBlockEsp},
 };
-use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
+use embedded_graphics::{
+    pixelcolor::{Rgb565, Rgb888},
+    prelude::Point,
+    primitives::Rectangle,
+};
 
 pub use buffer::{RectBuffer, RectPixels, RectView, RectWorkspace};
 pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
@@ -35,7 +39,7 @@ pub struct CalibratedCyd<'a> {
     calibration_config: CalibrationConfig,
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_more::From)]
 pub enum CydError {
     Flash(device_envoy_esp::Error),
     DisplayInit(CydDisplayInitError),
@@ -45,31 +49,13 @@ pub enum CydError {
     CalibrationUnavailable,
 }
 
-impl From<device_envoy_esp::Error> for CydError {
-    fn from(error: device_envoy_esp::Error) -> Self {
-        Self::Flash(error)
-    }
-}
-
-impl From<CydDisplayInitError> for CydError {
-    fn from(error: CydDisplayInitError) -> Self {
-        Self::DisplayInit(error)
-    }
-}
-
-impl From<CydTouchInitError> for CydError {
-    fn from(error: CydTouchInitError) -> Self {
-        Self::TouchInit(error)
-    }
-}
-
-impl From<CydDisplayFlushError> for CydError {
-    fn from(error: CydDisplayFlushError) -> Self {
-        Self::DisplayFlush(error)
-    }
-}
-
 impl Cyd {
+    // todo000 couldn't this be const and/or inlined and defined elsewhere?
+    #[inline]
+    pub fn rgb565(color: Rgb888) -> Rgb565 {
+        Rgb565::from(color)
+    }
+
     pub fn new_display(
         display_spi: impl esp_hal::spi::master::Instance + 'static,
         display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,

@@ -31,6 +31,9 @@ linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
+derive_more = { version = "2.1.1", default-features = false, features = [
+    "from",
+] }
 embassy-executor = "0.10.0"
 static_cell = "2.1.1"
 device-envoy-esp = { version = "0.1.0", default-features = false }
