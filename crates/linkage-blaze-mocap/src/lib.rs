@@ -855,7 +855,7 @@ Frame Time: 0.0333333
         let clip = parse_bvh(BVH).expect("BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
-            build_bvh_linkage_buf::<32, 8>(&clip, &layout).expect("BVH linkage should build");
+            build_bvh_linkage_buf::<32, 8>(&clip, &layout, &[]).expect("BVH linkage should build");
         let params = bvh_frame_params::<32>(&layout, &clip.frames[1]).expect("params should build");
 
         assert_eq!(layout.len(), 15);
@@ -868,7 +868,7 @@ Frame Time: 0.0333333
 
     #[test]
     fn converts_bvh_to_lb_rs_source() {
-        let source = bvh_to_lb_rs::<32, 8>(BVH).expect("BVH should serialize");
+        let source = bvh_to_lb_rs::<32, 8>(BVH, &[]).expect("BVH should serialize");
         let linkage =
             LinkageBuf::<32, 8>::from_lb_rs(&source).expect("generated source should parse");
 
@@ -918,7 +918,7 @@ Frame Time: 0.0333333
         let clip = parse_bvh(BVH_X_ROTATION).expect("BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
-            build_bvh_linkage_buf::<1, 4>(&clip, &layout).expect("BVH linkage should build");
+            build_bvh_linkage_buf::<1, 4>(&clip, &layout, &[]).expect("BVH linkage should build");
         let params = bvh_frame_params::<1>(&layout, &clip.frames[0]).expect("params should build");
         let stroke = linkage
             .view()
@@ -945,7 +945,7 @@ Frame Time: 0.0333333
 
         let clip = parse_bvh(&bvh).expect("real BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("real BVH layout should parse");
-        let linkage = build_bvh_linkage_buf::<256, 64>(&clip, &layout)
+        let linkage = build_bvh_linkage_buf::<256, 64>(&clip, &layout, &[])
             .expect("real BVH linkage should build");
         let params =
             bvh_frame_params::<256>(&layout, &clip.frames[0]).expect("real params should build");
@@ -962,7 +962,7 @@ Frame Time: 0.0333333
             return;
         };
 
-        let source = bvh_to_lb_rs::<256, 64>(&bvh).expect("real BVH should serialize");
+        let source = bvh_to_lb_rs::<256, 64>(&bvh, &[]).expect("real BVH should serialize");
         let linkage =
             LinkageBuf::<256, 64>::from_lb_rs(&source).expect("real generated source should parse");
 
