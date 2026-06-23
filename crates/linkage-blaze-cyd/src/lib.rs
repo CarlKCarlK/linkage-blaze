@@ -66,6 +66,21 @@ pub struct CalibratedCyd<'a> {
     calibration_config: CalibrationConfig,
 }
 
+pub struct CydFrame<'a> {
+    display: &'a mut CydDisplay,
+    view: RectView<'a>,
+}
+
+impl<'a> CydFrame<'a> {
+    pub fn view_mut(&mut self) -> &mut RectView<'a> {
+        &mut self.view
+    }
+
+    pub fn flush(&mut self, top_left: Point) -> Result<(), CydError> {
+        Ok(self.display.flush_buffer(&self.view, top_left)?)
+    }
+}
+
 #[derive(Debug, derive_more::From)]
 pub enum CydError {
     Flash(device_envoy_esp::Error),
@@ -103,7 +118,7 @@ impl Cyd {
     /// initializing the buffer from app-provided [`CydStatic`] storage.
     ///
     /// The app picks the buffer type via `B`; `Cyd` owns the init protocol. Use
-    /// [`Cyd::draw_buffer`] to render into and flush the owned buffer.
+    /// [`Cyd::draw_frame`] to render into and flush the owned buffer.
     pub fn new_display_only<B: DynPixelBuffer>(
         statics: &'static CydStatic<B>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
@@ -318,26 +333,30 @@ impl Cyd {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
-    /// Render into a `width`×`height` view of the Cyd-owned buffer via `render`,
+    /// Render into a view of the Cyd-owned frame buffer via `render`,
     /// then flush that view to the display at `top_left`.
     ///
     /// This is the normal way to use the owned buffer: it borrows the buffer and
     /// the display as disjoint fields, so the closure can render and the result
     /// is flushed without the app juggling a separate buffer.
-    pub fn draw_buffer<F>(
-        &mut self,
-        width: usize,
-        height: usize,
-        top_left: Point,
-        render: F,
-    ) -> Result<(), CydError>
+    pub fn draw_frame<F>(&mut self, size: Size, top_left: Point, render: F) -> Result<(), CydError>
     where
         F: FnOnce(&mut RectView<'_>),
     {
-        let mut view = self.pixel_buffer.view_mut(width, height);
-        render(&mut view);
-        self.display.flush_buffer(&view, top_left)?;
+        let mut cyd_frame = self.frame_mut(size);
+        render(cyd_frame.view_mut());
+        cyd_frame.flush(top_left)?;
         Ok(())
+    }
+
+    pub fn frame_mut(&mut self, size: Size) -> CydFrame<'_> {
+        let view = self
+            .pixel_buffer
+            .view_mut(size.width as usize, size.height as usize);
+        CydFrame {
+            display: &mut self.display,
+            view,
+        }
     }
 
     pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
