@@ -6,8 +6,9 @@ use linkage_blaze_core::{
 // todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
 use crate::ballet_frames::BALLET_DOF;
 
+// todo00 audit the existing numeric color backlog and add approximate color-name comments.
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)
-pub const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36);
+pub const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36); // very dark blue-green
 pub const FIGURE_COLOR: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 

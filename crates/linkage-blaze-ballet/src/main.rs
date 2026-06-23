@@ -8,7 +8,7 @@ use embassy_executor::Spawner;
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::IntoStorage,
+    pixelcolor::{IntoStorage, Rgb565},
     prelude::Point,
     text::{Baseline, Text},
 };
@@ -64,8 +64,10 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         // todo000 are there 4 orientations?
         CydDisplayConfig::PORTRAIT,
     )?;
+    let background565 = Cyd::rgb565(BACKGROUND);
+    let text565 = Cyd::rgb565(TEXT);
     // todo000 agent, remember to never delete my todo's.
-    cyd.clear(Cyd::rgb565(BACKGROUND))?;
+    cyd.clear(background565)?;
     let mut last_frame_ms = 0;
     info!("CYD display initialized");
 
@@ -76,19 +78,17 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
             let mut cyd_frame = cyd.frame_mut(cyd.screen_size());
-            let screen_buffer = cyd_frame.view_mut();
-            screen_buffer.clear(Cyd::rgb565(BACKGROUND));
-            {
-                // todo000 (may no longer apply) what??? EspBalletTileSink
-                // todo000 continue review from this point
-                let mut target = FullScreenTarget {
-                    screen_buffer: &mut *screen_buffer,
-                };
-                render_frame(&mut target, params);
-            }
-            draw_status(screen_buffer, frame_index, last_frame_ms);
+            cyd_frame.view_mut().clear(background565);
+            render_frame(
+                &mut FullScreenTarget {
+                    screen_buffer: cyd_frame.view_mut(),
+                },
+                params,
+            );
+            draw_status(cyd_frame.view_mut(), text565, frame_index, last_frame_ms);
             cyd_frame.flush(Point::new(0, 0))?;
             // todo000 look at the time stuff.
+            // todo000 continue review from this point
             last_frame_ms = (Instant::now() - started).as_millis();
             Delay::new().delay_millis(1);
         }
@@ -96,7 +96,12 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 }
 // todo000 still need to review other files in the project.
 
-fn draw_status(screen_buffer: &mut RectView<'_>, frame_index: usize, last_frame_ms: u64) {
+fn draw_status(
+    screen_buffer: &mut RectView<'_>,
+    text565: Rgb565,
+    frame_index: usize,
+    last_frame_ms: u64,
+) {
     let elapsed_ms = last_frame_ms.max(1);
     let fps_x10 = (10_000 / elapsed_ms) as u32;
     let slomo_x10 = if fps_x10 == 0 {
@@ -122,7 +127,7 @@ fn draw_status(screen_buffer: &mut RectView<'_>, frame_index: usize, last_frame_
     Text::with_baseline(
         status.as_str(),
         Point::new(0, 0),
-        MonoTextStyle::new(&FONT_6X10, Cyd::rgb565(TEXT)),
+        MonoTextStyle::new(&FONT_6X10, text565),
         Baseline::Top,
     )
     .draw(screen_buffer)

@@ -16,6 +16,7 @@ This file contains shared workspace rules for this repository.
 - Prefer `const` values defined in the local context when they are only used there.
 - Do not add redundant command wrappers that only mirror an existing `cargo` command.
 - Do not maintain backwards-compatibility shims or type aliases. Refactor aggressively so the code looks as-if-designed knowing the final requirements.
+- Any time a color is defined with numeric components, add a nearby comment with its approximate color name.
 
 ## Local CI
 
