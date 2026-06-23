@@ -72,7 +72,7 @@ impl CydDanceDisplay {
         );
         if !self.background_cleared {
             info!("display clearing background");
-            self.cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
+            self.cyd.fill(Cyd::rgb565(BACKGROUND))?;
             self.background_cleared = true;
             info!("display background cleared");
         }
@@ -116,7 +116,7 @@ impl CydDanceDisplay {
         )?;
 
         let mut text_line_buffer = self.text_line_workspace.view_mut(width, TIME_GLYPH_HEIGHT);
-        text_line_buffer.clear(Cyd::rgb565(BACKGROUND));
+        text_line_buffer.fill(Cyd::rgb565(BACKGROUND));
         Text::with_baseline(
             text,
             Point::new(0, 0),
@@ -146,7 +146,7 @@ impl CydDanceDisplay {
         )?;
 
         let mut text_line_buffer = self.text_line_workspace.view_mut(width, SMALL_GLYPH_HEIGHT);
-        text_line_buffer.clear(Cyd::rgb565(BACKGROUND));
+        text_line_buffer.fill(Cyd::rgb565(BACKGROUND));
         Text::with_baseline(
             text,
             Point::new(0, 0),
@@ -206,7 +206,7 @@ impl DanceTileSink for EspDanceTileSink<'_> {
         let mut dance_buffer = self
             .dance_workspace
             .view_mut(tile_flush.width, tile_flush.height);
-        dance_buffer.clear(Cyd::rgb565(BACKGROUND));
+        dance_buffer.fill(Cyd::rgb565(BACKGROUND));
         let mut target = RectViewTarget {
             rect_view: &mut dance_buffer,
         };

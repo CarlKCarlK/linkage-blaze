@@ -1685,7 +1685,7 @@ impl FrameBuffer {
         FRAME_BUFFER.init_with(FrameBuffer::new)
     }
 
-    pub fn clear(&mut self, color: Rgb565) {
+    pub fn fill(&mut self, color: Rgb565) {
         self.pixels.fill(color.into_storage());
     }
 
@@ -1704,7 +1704,7 @@ impl DrawTarget for FrameBuffer {
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.clear(color);
+        self.fill(color);
         Ok(())
     }
 

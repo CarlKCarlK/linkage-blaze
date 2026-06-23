@@ -217,7 +217,7 @@ fn draw_calibration_screen(
     screen_buffer: &mut ScreenBuffer,
     calibration_index: usize,
 ) -> Result<(), MainError> {
-    screen_buffer.clear(Cyd::rgb565(BLACK));
+    screen_buffer.fill(Cyd::rgb565(BLACK));
     if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
         draw_calibration_cross(
             screen_buffer,

@@ -88,7 +88,7 @@ impl CydClockDisplay {
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         if !self.background_cleared {
-            self.cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
+            self.cyd.fill(Cyd::rgb565(BACKGROUND))?;
             self.background_cleared = true;
         }
 
@@ -140,7 +140,7 @@ impl CydClockDisplay {
             let mut character_text = heapless::String::<4>::new();
             fmt::Write::write_char(&mut character_text, character).ok();
             let mut glyph_buffer = self.glyph_workspace.view_mut(flush_width, flush_height);
-            glyph_buffer.clear(Cyd::rgb565(BACKGROUND));
+            glyph_buffer.fill(Cyd::rgb565(BACKGROUND));
             Text::with_baseline(
                 character_text.as_str(),
                 Point::new(0, 0),
