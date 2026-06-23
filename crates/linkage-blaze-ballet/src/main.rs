@@ -75,23 +75,20 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             let started = Instant::now();
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
-            cyd.draw_buffer(
-                cyd.screen_size().width as usize,
-                cyd.screen_size().height as usize,
-                Point::new(0, 0),
-                |screen_buffer| {
-                    screen_buffer.clear(Cyd::rgb565(BACKGROUND));
-                    {
-                        // todo000 (may no longer apply) what??? EspBalletTileSink
-                        // todo000 continue review from this point
-                        let mut target = FullScreenTarget {
-                            screen_buffer: &mut *screen_buffer,
-                        };
-                        render_frame(&mut target, params);
-                    }
-                    draw_status(screen_buffer, frame_index, last_frame_ms);
-                },
-            )?;
+            let mut cyd_frame = cyd.frame_mut(cyd.screen_size());
+            let screen_buffer = cyd_frame.view_mut();
+            screen_buffer.clear(Cyd::rgb565(BACKGROUND));
+            {
+                // todo000 (may no longer apply) what??? EspBalletTileSink
+                // todo000 continue review from this point
+                let mut target = FullScreenTarget {
+                    screen_buffer: &mut *screen_buffer,
+                };
+                render_frame(&mut target, params);
+            }
+            draw_status(screen_buffer, frame_index, last_frame_ms);
+            cyd_frame.flush(Point::new(0, 0))?;
+            // todo000 look at the time stuff.
             last_frame_ms = (Instant::now() - started).as_millis();
             Delay::new().delay_millis(1);
         }

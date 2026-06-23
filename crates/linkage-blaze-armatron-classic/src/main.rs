@@ -116,7 +116,7 @@ fn inner_main() -> Result<Infallible, MainError> {
 
     // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
     // Cyd-owned buffer is zero-sized. Look at rendering into the single Cyd-owned
-    // buffer via cyd.draw_buffer instead.
+    // buffer via cyd.draw_frame or cyd.frame_mut instead.
     static CYD_STATIC: CydStatic<PixelBuffer<0>> = Cyd::new_static();
     let mut cyd = Cyd::new(
         &CYD_STATIC,
