@@ -13,17 +13,17 @@ use device_envoy_esp::{
 };
 use embedded_graphics::{
     pixelcolor::{Rgb565, Rgb888},
-    prelude::Point,
+    prelude::{Point, Size},
     primitives::Rectangle,
 };
 
-pub use buffer::{RectBuffer, RectPixels, RectView, RectWorkspace};
+pub use buffer::{PixelBuffer, RectBuffer, RectPixels, RectView};
 pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
 pub use display::{
     CydDisplay, CydDisplayConfig, CydDisplayFlushError, CydDisplayInitError, CydDisplayOrientation,
     DISPLAY_SPI_HZ, DrawPrimitive, Ellipse, LineSegment,
 };
-pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_WIDTH};
+pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH};
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
 
 pub struct Cyd {
@@ -50,10 +50,19 @@ pub enum CydError {
 }
 
 impl Cyd {
+    /// Total pixel count of the CYD panel — fixed hardware, independent of orientation.
+    pub const SCREEN_PIXELS: usize = SCREEN_PIXELS;
+
     // todo000 couldn't this be const and/or inlined and defined elsewhere?
     #[inline]
     pub fn rgb565(color: Rgb888) -> Rgb565 {
         Rgb565::from(color)
+    }
+
+    /// Oriented screen size (width, height) for the configured orientation.
+    #[must_use]
+    pub const fn screen_size(&self) -> Size {
+        self.display.size()
     }
 
     pub fn new_display(

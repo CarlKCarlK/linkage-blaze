@@ -16,7 +16,7 @@ use linkage_blaze_core::{
     DiskItem, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, RingItem, SphereItem, Vec3,
 };
 use linkage_blaze_cyd::{
-    Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, RectWorkspace, SCREEN_WIDTH,
+    Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, PixelBuffer, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 
@@ -49,7 +49,7 @@ const CLOCK_BOUNDS: Rectangle = Rectangle::new(
 );
 const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
 
-type GlyphWorkspace = RectWorkspace<GLYPH_WORKSPACE_PIXELS>;
+type GlyphWorkspace = PixelBuffer<GLYPH_WORKSPACE_PIXELS>;
 
 // Derived Debug reads this payload at runtime, but dead_code analysis ignores
 // derived impls under -D warnings.

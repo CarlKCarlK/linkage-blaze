@@ -13,7 +13,7 @@ use embedded_graphics::{
 };
 use esp_hal::time::Instant;
 use linkage_blaze_core::Rgb888;
-use linkage_blaze_cyd::{Cyd, CydError, RectPixels, RectView, RectWorkspace};
+use linkage_blaze_cyd::{Cyd, CydError, PixelBuffer, RectPixels, RectView};
 use linkage_blaze_dance_classic::dance_render::{
     BACKGROUND, DANCE_HEIGHT, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_WIDTH, DANCE_WIDTH,
     DanceClock, DanceTileSink, PixelTarget, SCREEN_WIDTH, TEXT, TileFlush, WIFI_TEXT_TOP_LEFT,
@@ -30,8 +30,8 @@ const TIME_TEXT_MAX_CHARS: usize = 11;
 const TEXT_LINE_WIDTH: usize = 120;
 const TEXT_LINE_WORKSPACE_PIXELS: usize = TEXT_LINE_WIDTH * TIME_GLYPH_HEIGHT;
 
-type TextLineWorkspace = RectWorkspace<TEXT_LINE_WORKSPACE_PIXELS>;
-type DanceWorkspace = RectWorkspace<DANCE_TILE_PIXELS>;
+type TextLineWorkspace = PixelBuffer<TEXT_LINE_WORKSPACE_PIXELS>;
+type DanceWorkspace = PixelBuffer<DANCE_TILE_PIXELS>;
 
 // Derived Debug reads this payload at runtime, but dead_code analysis ignores
 // derived impls under -D warnings.
