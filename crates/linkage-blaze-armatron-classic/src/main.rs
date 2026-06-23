@@ -23,8 +23,9 @@ use static_cell::StaticCell;
 
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCyd, CalibrationConfig, Cyd, CydDisplayConfig, CydError, RawPoint, RawTouchEvent,
-    RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
+    CalibratedCyd, CalibrationConfig, Cyd, CydDisplayConfig, CydError, CydStatic, PixelBuffer,
+    RawPoint, RawTouchEvent, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    TouchInputEvent as CydTouchInputEvent,
 };
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -113,7 +114,12 @@ fn inner_main() -> Result<Infallible, MainError> {
     static SCREEN_BUFFER: StaticCell<ScreenBuffer> = StaticCell::new();
     let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);
 
-    let mut cyd = Cyd::new_with_touch(
+    // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
+    // Cyd-owned buffer is zero-sized. Look at rendering into the single Cyd-owned
+    // buffer via cyd.draw_buffer instead.
+    static CYD_STATIC: CydStatic<PixelBuffer<0>> = CydStatic::new();
+    let mut cyd = Cyd::new(
+        &CYD_STATIC,
         p.SPI2,   // display SPI
         p.GPIO14, // display SCK
         p.GPIO13, // display MOSI

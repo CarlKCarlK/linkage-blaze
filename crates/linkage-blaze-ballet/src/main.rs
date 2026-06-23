@@ -20,9 +20,8 @@ use linkage_blaze_ballet::{
     ballet_render::{BACKGROUND, PixelTarget, TEXT, render_frame},
 };
 use linkage_blaze_core::Rgb888;
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, PixelBufferFull, RectPixels, RectView};
+use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull, RectPixels, RectView};
 use log::info;
-use static_cell::StaticCell;
 
 // todo000 I'm not happy with all this noise.
 
@@ -51,7 +50,9 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD ballet loop");
 
-    let mut cyd = Cyd::new_display(
+    static CYD_STATIC: CydStatic<PixelBufferFull> = CydStatic::new();
+    let mut cyd = Cyd::new_display_only(
+        &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
         p.GPIO13,
@@ -65,8 +66,6 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     // todo000 agent, remember to never delete my todo's.
     cyd.clear(Cyd::rgb565(BACKGROUND))?;
-    static SCREEN_PIXEL_BUFFER: StaticCell<PixelBufferFull> = StaticCell::new();
-    let screen_pixel_buffer = PixelBufferFull::init_static(&SCREEN_PIXEL_BUFFER);
     let mut last_frame_ms = 0;
     info!("CYD display initialized");
 
@@ -76,21 +75,24 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             let started = Instant::now();
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
-            let mut screen_buffer = screen_pixel_buffer.view_mut(
-                cyd.screen_size().width as usize,
-                cyd.screen_size().height as usize,
-            );
-            screen_buffer.clear(Cyd::rgb565(BACKGROUND));
-            {
-                // todo000 (may no longer apply) what??? EspBalletTileSink
-                // todo000 continue review from this point
-                let mut target = FullScreenTarget {
-                    screen_buffer: &mut screen_buffer,
-                };
-                render_frame(&mut target, params);
-            }
-            draw_status(&mut screen_buffer, frame_index, last_frame_ms);
-            cyd.flush(&screen_buffer, Point::new(0, 0))?;
+            let size = cyd.screen_size();
+            cyd.draw_buffer(
+                size.width as usize,
+                size.height as usize,
+                Point::new(0, 0),
+                |screen_buffer| {
+                    screen_buffer.clear(Cyd::rgb565(BACKGROUND));
+                    {
+                        // todo000 (may no longer apply) what??? EspBalletTileSink
+                        // todo000 continue review from this point
+                        let mut target = FullScreenTarget {
+                            screen_buffer: &mut *screen_buffer,
+                        };
+                        render_frame(&mut target, params);
+                    }
+                    draw_status(screen_buffer, frame_index, last_frame_ms);
+                },
+            )?;
             last_frame_ms = (Instant::now() - started).as_millis();
             Delay::new().delay_millis(1);
         }
