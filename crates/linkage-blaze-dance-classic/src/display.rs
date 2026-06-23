@@ -2,7 +2,10 @@ use core::fmt;
 
 use embedded_graphics::{
     Drawable,
-    mono_font::{MonoTextStyle, ascii::FONT_6X10},
+    mono_font::{
+        MonoTextStyle,
+        ascii::{FONT_6X10, FONT_9X15_BOLD},
+    },
     pixelcolor::{IntoStorage, Rgb565},
     prelude::{Point, Size},
     primitives::Rectangle,
@@ -13,15 +16,19 @@ use linkage_blaze_core::Rgb888;
 use linkage_blaze_cyd::{Cyd, CydError, RectPixels, RectView, RectWorkspace};
 use linkage_blaze_dance_classic::dance_render::{
     BG, DANCE_HEIGHT, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_WIDTH, DANCE_WIDTH,
-    DanceClock, DanceTileSink, PixelTarget, TEXT, TIME_TEXT_TOP_LEFT, TileFlush,
-    WIFI_TEXT_TOP_LEFT, dance_params, format_clock_12h, render_tile,
+    DanceClock, DanceTileSink, PixelTarget, SCREEN_WIDTH, TEXT, TileFlush, WIFI_TEXT_TOP_LEFT,
+    format_clock_12h, render_tile,
 };
 use log::info;
 use static_cell::StaticCell;
 
 const SMALL_GLYPH_HEIGHT: usize = 10;
-const TEXT_LINE_WIDTH: usize = 90;
-const TEXT_LINE_WORKSPACE_PIXELS: usize = TEXT_LINE_WIDTH * SMALL_GLYPH_HEIGHT;
+const TIME_GLYPH_WIDTH: usize = 9;
+const TIME_GLYPH_HEIGHT: usize = 15;
+const TIME_TEXT_TOP: i32 = 6;
+const TIME_TEXT_MAX_CHARS: usize = 11;
+const TEXT_LINE_WIDTH: usize = 120;
+const TEXT_LINE_WORKSPACE_PIXELS: usize = TEXT_LINE_WIDTH * TIME_GLYPH_HEIGHT;
 
 type TextLineWorkspace = RectWorkspace<TEXT_LINE_WORKSPACE_PIXELS>;
 type DanceWorkspace = RectWorkspace<DANCE_TILE_PIXELS>;
@@ -53,8 +60,6 @@ pub struct CydDanceDisplay {
     text_line_workspace: &'static mut TextLineWorkspace,
     dance_workspace: &'static mut DanceWorkspace,
     background_cleared: bool,
-    last_time_text: heapless::String<16>,
-    last_wifi_text: heapless::String<32>,
 }
 
 impl CydDanceDisplay {
@@ -67,8 +72,6 @@ impl CydDanceDisplay {
             text_line_workspace: TextLineWorkspace::init_static(&TEXT_LINE_WORKSPACE),
             dance_workspace: DanceWorkspace::init_static(&DANCE_WORKSPACE),
             background_cleared: false,
-            last_time_text: heapless::String::new(),
-            last_wifi_text: heapless::String::new(),
         }
     }
 
@@ -98,16 +101,46 @@ impl CydDanceDisplay {
         .ok();
         info!("display updating wifi text: {}", wifi_text.as_str());
         self.show_small_text_line(wifi_text.as_str(), WIFI_TEXT_TOP_LEFT, 90)?;
-        self.last_wifi_text.clear();
-        self.last_wifi_text.push_str(wifi_text.as_str()).ok();
 
         let time_text = dance_time.map_or("--:--:--", DanceTime::as_str);
         info!("display updating time text: {time_text}");
-        self.show_small_text_line(time_text, TIME_TEXT_TOP_LEFT, 72)?;
-        self.last_time_text.clear();
-        self.last_time_text.push_str(time_text).ok();
+        self.show_time_text_line(time_text)?;
 
         info!("display show complete");
+        Ok(())
+    }
+
+    fn show_time_text_line(&mut self, text: &str) -> Result<(), CydDanceDisplayError> {
+        let width = text.chars().count() * TIME_GLYPH_WIDTH;
+        assert!(
+            width <= TEXT_LINE_WIDTH,
+            "time text width must fit workspace"
+        );
+        let clear_width = TIME_TEXT_MAX_CHARS * TIME_GLYPH_WIDTH;
+        let clear_left = (SCREEN_WIDTH as i32 - clear_width as i32) / 2;
+        let text_left = clear_left + (clear_width as i32 - width as i32) / 2;
+        let top_left = Point::new(text_left, TIME_TEXT_TOP);
+
+        self.cyd.fill_rect_now(
+            Rectangle::new(
+                Point::new(clear_left, TIME_TEXT_TOP),
+                Size::new(clear_width as u32, TIME_GLYPH_HEIGHT as u32),
+            ),
+            rgb565(BG),
+        )?;
+
+        let mut text_line_buffer = self.text_line_workspace.view_mut(width, TIME_GLYPH_HEIGHT);
+        text_line_buffer.clear(rgb565(BG));
+        Text::with_baseline(
+            text,
+            Point::new(0, 0),
+            MonoTextStyle::new(&FONT_9X15_BOLD, rgb565(TEXT)),
+            Baseline::Top,
+        )
+        .draw(&mut text_line_buffer)
+        .ok();
+        self.cyd.flush(&text_line_buffer, top_left)?;
+
         Ok(())
     }
 
@@ -248,9 +281,5 @@ impl DanceTime {
 
     pub fn as_str(&self) -> &str {
         self.text.as_str()
-    }
-
-    fn params(&self) -> [f32; 3] {
-        dance_params(self.hours, self.minutes, self.seconds)
     }
 }

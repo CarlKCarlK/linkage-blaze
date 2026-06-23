@@ -138,18 +138,21 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
         if root_ordinal > 0 {
             linkage = linkage.restore("origin");
         }
-        linkage =
-            append_bvh_joint(linkage, clip, layout, &children, *joint_index, 0, mark_joints)?;
+        linkage = append_bvh_joint(
+            linkage,
+            clip,
+            layout,
+            &children,
+            *joint_index,
+            0,
+            mark_joints,
+        )?;
     }
 
     Ok(linkage)
 }
 
-fn bvh_needed_mark_count(
-    clip: &BvhClip,
-    children: &[Vec<usize>],
-    mark_joints: &[&str],
-) -> usize {
+fn bvh_needed_mark_count(clip: &BvhClip, children: &[Vec<usize>], mark_joints: &[&str]) -> usize {
     let root_count = clip.joints.iter().filter(|j| j.parent.is_none()).count();
     let origin_slots = usize::from(root_count >= 2);
 
@@ -530,8 +533,15 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
             linkage = linkage.restore(depth_mark_name(depth));
         }
         linkage = append_offset_segment(linkage, clip.joints[child_index].offset);
-        linkage =
-            append_bvh_joint(linkage, clip, layout, children, child_index, depth + 1, mark_joints)?;
+        linkage = append_bvh_joint(
+            linkage,
+            clip,
+            layout,
+            children,
+            child_index,
+            depth + 1,
+            mark_joints,
+        )?;
     }
 
     Ok(linkage)

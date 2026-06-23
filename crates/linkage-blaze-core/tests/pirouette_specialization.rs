@@ -252,4 +252,3 @@ fn assert_vec_finite(vec3: Vec3) {
         assert!(value.is_finite());
     }
 }
-

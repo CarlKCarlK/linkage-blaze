@@ -312,7 +312,7 @@ const DIGIT_SCALE: i32 = 2; // 3x5 cells become 6x10 px glyphs
 const DIGIT_GAP: i32 = 2; // gap between the two digits of a placard
 // Both placards are the same fixed size and always show two digits, so the hour
 // ("05") and minute ("28") signs match.
-const PLACARD_W: i32 = 30;
+const PLACARD_W: i32 = 34; // a touch wider so "00"/"34" aren't cramped
 const PLACARD_H: i32 = 20;
 const PLACARD_BORDER_PX: i32 = 2; // sign frame thickness
 const HANGER_PX: i32 = 2; // hanger line thickness
@@ -320,7 +320,7 @@ const HANGER_HOOK: i32 = 7; // short vertical hook straight down from the hand
 const HANGER_TRIANGLE: i32 = 22; // height of the triangle from hook apex to sign top
 // Faint clock-face marks (12/3/6/9) drawn behind the figure.  The center is in
 // SCREEN coordinates and converted to dance space in draw_dial (see DANCE_TOP_LEFT).
-const DIAL_COLOR: Rgb888 = Rgb888::new(48, 64, 72); // dim teal-gray
+const DIAL_COLOR: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray (47, 79, 79)
 const DIAL_SCALE: i32 = 2;
 const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
 const DIAL_RADIUS_X: i32 = 100;
@@ -386,7 +386,14 @@ fn draw_number_centered<T: PixelTarget>(
     let left = center.x - total_w / 2;
     let top = center.y - glyph_h / 2;
     if digit_count == 2 {
-        draw_digit(target, number / 10, Point::new(left, top), tile_origin, color, scale);
+        draw_digit(
+            target,
+            number / 10,
+            Point::new(left, top),
+            tile_origin,
+            color,
+            scale,
+        );
         draw_digit(
             target,
             number % 10,
@@ -396,7 +403,14 @@ fn draw_number_centered<T: PixelTarget>(
             scale,
         );
     } else {
-        draw_digit(target, number, Point::new(left, top), tile_origin, color, scale);
+        draw_digit(
+            target,
+            number,
+            Point::new(left, top),
+            tile_origin,
+            color,
+            scale,
+        );
     }
 }
 
@@ -527,8 +541,10 @@ fn draw_rect_border<T: PixelTarget>(
 ) {
     for dy in 0..height {
         for dx in 0..width {
-            let on_border =
-                dx < thickness || dx >= width - thickness || dy < thickness || dy >= height - thickness;
+            let on_border = dx < thickness
+                || dx >= width - thickness
+                || dy < thickness
+                || dy >= height - thickness;
             if on_border {
                 put_pixel(target, left + dx, top + dy, tile_origin, color);
             }
