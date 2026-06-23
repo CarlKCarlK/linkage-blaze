@@ -14,7 +14,7 @@ use linkage_blaze_cyd::{Cyd, CydError, RectPixels, RectView, RectWorkspace};
 use linkage_blaze_dance_classic::dance_render::{
     BG, DANCE_HEIGHT, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_WIDTH, DANCE_WIDTH,
     DanceClock, DanceTileSink, PixelTarget, TEXT, TIME_TEXT_TOP_LEFT, TileFlush,
-    WIFI_TEXT_TOP_LEFT, dance_params, render_tile,
+    WIFI_TEXT_TOP_LEFT, dance_params, format_clock_12h, render_tile,
 };
 use log::info;
 use static_cell::StaticCell;
@@ -237,11 +237,7 @@ pub struct DanceTime {
 
 impl DanceTime {
     pub fn new(hours: u8, minutes: u8, seconds: u8) -> Result<Self, fmt::Error> {
-        let mut text = heapless::String::<16>::new();
-        fmt::Write::write_fmt(
-            &mut text,
-            format_args!("{:02}:{:02}:{:02}", hours, minutes, seconds),
-        )?;
+        let text = format_clock_12h(hours, minutes, seconds);
         Ok(Self {
             text,
             hours,

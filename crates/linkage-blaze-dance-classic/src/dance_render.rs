@@ -26,16 +26,35 @@ pub const DANCE_TILE_PIXELS: usize = DANCE_TILE_WIDTH * DANCE_TILE_HEIGHT;
 // Figure placement / size.  Centered horizontally on the 240px-wide screen and
 // scaled up to fill most of the height below the top text band.  These three
 // are the knobs to tune on-device if the figure clips an edge.
-pub const DANCE_CENTER_X: i32 = 202;
+pub const DANCE_CENTER_X: i32 = 207;
 pub const DANCE_BASELINE_Y: i32 = 480;
-pub const DANCE_SCALE: f32 = 1.45;
+pub const DANCE_SCALE: f32 = 1.35;
 
 // Figure stroke is a single fixed pixel width (reads less like debug line art).
 const FIGURE_STROKE_PX: i32 = 3;
 pub const SMALL_GLYPH_WIDTH: usize = 6;
 pub const SMALL_GLYPH_HEIGHT: usize = 10;
-pub const TIME_TEXT_TOP_LEFT: Point = Point::new(88, 12);
+// 12-hour clock text is right-justified to a fixed 11-char field ("12:04:32 PM")
+// near the screen's right edge; single-digit hours get a leading space.
+pub const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
+pub const TIME_TEXT_WIDTH: usize = 72;
 pub const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
+
+/// Format a 12-hour clock string with AM/PM, right-justified to 11 characters
+/// (e.g. " 5:04:32 PM" or "12:04:32 PM").  No alloc.
+pub fn format_clock_12h(hours: u8, minutes: u8, seconds: u8) -> heapless::String<16> {
+    let hour12 = match hours % 12 {
+        0 => 12,
+        other => other,
+    };
+    let suffix = if hours % 24 < 12 { "AM" } else { "PM" };
+    let mut text = heapless::String::new();
+    let _ = core::fmt::write(
+        &mut text,
+        format_args!("{hour12:>2}:{minutes:02}:{seconds:02} {suffix}"),
+    );
+    text
+}
 pub const DANCE: LinkageFixed<3, 6, 400> = {
     const WITH_PEN: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
         .pen_width(3.5)
@@ -209,6 +228,9 @@ pub fn render_tile<T: PixelTarget>(
     hours: u8,
     minutes: u8,
 ) {
+    // Faint dial marks first, so the figure and placards draw over them.
+    draw_dial(target, tile_origin);
+
     let dance_view = DANCE.view();
     let mut iter: DrawItemIter<3, 6> = dance_view.draw_items(params);
     // The figure is a single color: ignore each item's model color and stroke
@@ -288,11 +310,21 @@ const DIGIT_W: i32 = 3;
 const DIGIT_H: i32 = 5;
 const DIGIT_SCALE: i32 = 2; // 3x5 cells become 6x10 px glyphs
 const DIGIT_GAP: i32 = 2; // gap between the two digits of a placard
-const PLACARD_PAD_X: i32 = 9; // horizontal padding inside the sign
-const PLACARD_PAD_Y: i32 = 6; // vertical padding inside the sign
+// Both placards are the same fixed size and always show two digits, so the hour
+// ("05") and minute ("28") signs match.
+const PLACARD_W: i32 = 30;
+const PLACARD_H: i32 = 20;
 const PLACARD_BORDER_PX: i32 = 2; // sign frame thickness
-const HANGER_PX: i32 = 2; // triangular hanger line thickness
-const HANGER_DROP: i32 = 16; // gap from hand anchor down to top of the sign
+const HANGER_PX: i32 = 2; // hanger line thickness
+const HANGER_HOOK: i32 = 7; // short vertical hook straight down from the hand
+const HANGER_TRIANGLE: i32 = 22; // height of the triangle from hook apex to sign top
+// Faint clock-face marks (12/3/6/9) drawn behind the figure.  The center is in
+// SCREEN coordinates and converted to dance space in draw_dial (see DANCE_TOP_LEFT).
+const DIAL_COLOR: Rgb888 = Rgb888::new(48, 64, 72); // dim teal-gray
+const DIAL_SCALE: i32 = 2;
+const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
+const DIAL_RADIUS_X: i32 = 100;
+const DIAL_RADIUS_Y: i32 = 118;
 
 // Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
 #[rustfmt::skip]
@@ -315,18 +347,19 @@ fn draw_digit<T: PixelTarget>(
     origin: Point,
     tile_origin: Point,
     color: Rgb888,
+    scale: i32,
 ) {
     let bits = DIGIT_BITMAPS[(digit % 10) as usize];
     for row in 0..DIGIT_H {
         for col in 0..DIGIT_W {
             let bit = 14 - (row * DIGIT_W + col);
             if (bits >> bit) & 1 == 1 {
-                for scale_y in 0..DIGIT_SCALE {
-                    for scale_x in 0..DIGIT_SCALE {
+                for scale_y in 0..scale {
+                    for scale_x in 0..scale {
                         put_pixel(
                             target,
-                            origin.x + col * DIGIT_SCALE + scale_x,
-                            origin.y + row * DIGIT_SCALE + scale_y,
+                            origin.x + col * scale + scale_x,
+                            origin.y + row * scale + scale_y,
                             tile_origin,
                             color,
                         );
@@ -337,31 +370,58 @@ fn draw_digit<T: PixelTarget>(
     }
 }
 
+/// Draw a 1- or 2-digit number centered on `center`, at the given pixel scale.
+fn draw_number_centered<T: PixelTarget>(
+    target: &mut T,
+    number: u32,
+    center: Point,
+    tile_origin: Point,
+    color: Rgb888,
+    scale: i32,
+) {
+    let glyph_w = DIGIT_W * scale;
+    let glyph_h = DIGIT_H * scale;
+    let digit_count = if number >= 10 { 2 } else { 1 };
+    let total_w = digit_count * glyph_w + (digit_count - 1) * DIGIT_GAP;
+    let left = center.x - total_w / 2;
+    let top = center.y - glyph_h / 2;
+    if digit_count == 2 {
+        draw_digit(target, number / 10, Point::new(left, top), tile_origin, color, scale);
+        draw_digit(
+            target,
+            number % 10,
+            Point::new(left + glyph_w + DIGIT_GAP, top),
+            tile_origin,
+            color,
+            scale,
+        );
+    } else {
+        draw_digit(target, number, Point::new(left, top), tile_origin, color, scale);
+    }
+}
+
 /// Draw a hanging number sign anchored at `anchor` (a hand mark in screen
-/// coordinates).  The sign hangs straight down: its top edge sits `HANGER_DROP`
-/// pixels below the hand, and two hanger lines run from the hand to the sign's
-/// top corners, forming a triangle.  The sign never rotates with the hand.
+/// coordinates).  The sign is a fixed size and always shows two digits.  It
+/// hangs straight down via a short vertical hook from the hand, then a triangle
+/// splays out to the sign's two top corners.  The sign never rotates with the
+/// hand.  `number` is shown modulo 100 (00–99).
 fn draw_hanging_placard<T: PixelTarget>(
     target: &mut T,
     anchor: Point,
     tile_origin: Point,
     number: u32,
 ) {
-    let digit_count = if number >= 10 { 2 } else { 1 };
-    let scaled_digit_w = DIGIT_W * DIGIT_SCALE;
-    let scaled_digit_h = DIGIT_H * DIGIT_SCALE;
-    let inner_w = digit_count * scaled_digit_w + (digit_count - 1) * DIGIT_GAP;
+    let card_left = anchor.x - PLACARD_W / 2;
+    let card_top = anchor.y + HANGER_HOOK + HANGER_TRIANGLE;
+    let card_right = card_left + PLACARD_W;
 
-    let card_w = inner_w + 2 * PLACARD_PAD_X;
-    let card_h = scaled_digit_h + 2 * PLACARD_PAD_Y;
-    let card_left = anchor.x - card_w / 2;
-    let card_top = anchor.y + HANGER_DROP;
-    let card_right = card_left + card_w;
-
-    // Two hanger lines from the hand anchor down to the sign's top corners.
+    // Short vertical hook straight down from the hand, then a triangle out to
+    // the sign's top corners.
+    let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
+    draw_segment(target, anchor, apex, tile_origin, PLACARD_BORDER, HANGER_PX);
     draw_segment(
         target,
-        anchor,
+        apex,
         Point::new(card_left, card_top),
         tile_origin,
         PLACARD_BORDER,
@@ -369,7 +429,7 @@ fn draw_hanging_placard<T: PixelTarget>(
     );
     draw_segment(
         target,
-        anchor,
+        apex,
         Point::new(card_right, card_top),
         tile_origin,
         PLACARD_BORDER,
@@ -377,45 +437,66 @@ fn draw_hanging_placard<T: PixelTarget>(
     );
 
     // Sign face then frame.
-    fill_rect(target, card_left, card_top, card_w, card_h, tile_origin, PLACARD_FILL);
+    fill_rect(
+        target,
+        card_left,
+        card_top,
+        PLACARD_W,
+        PLACARD_H,
+        tile_origin,
+        PLACARD_FILL,
+    );
     draw_rect_border(
         target,
         card_left,
         card_top,
-        card_w,
-        card_h,
+        PLACARD_W,
+        PLACARD_H,
         PLACARD_BORDER_PX,
         tile_origin,
         PLACARD_BORDER,
     );
 
-    // Centered number text.
-    let text_left = card_left + (card_w - inner_w) / 2;
-    let text_top = card_top + (card_h - scaled_digit_h) / 2;
-    if digit_count == 2 {
-        draw_digit(
-            target,
-            number / 10,
-            Point::new(text_left, text_top),
-            tile_origin,
-            PLACARD_TEXT,
-        );
-        draw_digit(
-            target,
-            number % 10,
-            Point::new(text_left + scaled_digit_w + DIGIT_GAP, text_top),
-            tile_origin,
-            PLACARD_TEXT,
-        );
-    } else {
-        draw_digit(
-            target,
-            number,
-            Point::new(text_left, text_top),
-            tile_origin,
-            PLACARD_TEXT,
-        );
-    }
+    // Centered two-digit number (always padded, e.g. "05").
+    let glyph_w = DIGIT_W * DIGIT_SCALE;
+    let glyph_h = DIGIT_H * DIGIT_SCALE;
+    let total_w = 2 * glyph_w + DIGIT_GAP;
+    let text_left = card_left + (PLACARD_W - total_w) / 2;
+    let text_top = card_top + (PLACARD_H - glyph_h) / 2;
+    let value = number % 100;
+    draw_digit(
+        target,
+        value / 10,
+        Point::new(text_left, text_top),
+        tile_origin,
+        PLACARD_TEXT,
+        DIGIT_SCALE,
+    );
+    draw_digit(
+        target,
+        value % 10,
+        Point::new(text_left + glyph_w + DIGIT_GAP, text_top),
+        tile_origin,
+        PLACARD_TEXT,
+        DIGIT_SCALE,
+    );
+}
+
+/// Draw the faint clock-face marks (12 at top, 3 right, 6 bottom, 9 left) behind
+/// the figure.  Dim and subtle so they support rather than compete.
+fn draw_dial<T: PixelTarget>(target: &mut T, tile_origin: Point) {
+    // Convert the screen-space dial center into dance space (the space that
+    // pose_to_point and put_pixel use), which is offset by DANCE_TOP_LEFT.
+    let center_x = DIAL_CENTER_SCREEN.x - DANCE_TOP_LEFT.x;
+    let center_y = DIAL_CENTER_SCREEN.y - DANCE_TOP_LEFT.y;
+    let top = Point::new(center_x, center_y - DIAL_RADIUS_Y);
+    let bottom = Point::new(center_x, center_y + DIAL_RADIUS_Y);
+    let right = Point::new(center_x + DIAL_RADIUS_X, center_y);
+    let left = Point::new(center_x - DIAL_RADIUS_X, center_y);
+    draw_number_centered(target, 12, top, tile_origin, DIAL_COLOR, DIAL_SCALE);
+    draw_number_centered(target, 3, right, tile_origin, DIAL_COLOR, DIAL_SCALE);
+    draw_number_centered(target, 6, bottom, tile_origin, DIAL_COLOR, DIAL_SCALE);
+    draw_number_centered(target, 9, left, tile_origin, DIAL_COLOR, DIAL_SCALE);
 }
 
 fn fill_rect<T: PixelTarget>(

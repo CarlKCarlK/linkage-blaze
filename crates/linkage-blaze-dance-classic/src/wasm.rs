@@ -1,6 +1,5 @@
 use alloc::vec;
 use alloc::vec::Vec;
-use core::fmt;
 
 use embedded_graphics::{
     Drawable, Pixel,
@@ -14,7 +13,8 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::dance_render::{
     BG, DanceClock, DanceTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT,
-    TIME_TEXT_TOP_LEFT, TileFlush, WIFI_TEXT_TOP_LEFT, render_tile,
+    TIME_TEXT_TOP_LEFT, TIME_TEXT_WIDTH, TileFlush, WIFI_TEXT_TOP_LEFT, format_clock_12h,
+    render_tile,
 };
 
 const RGBA_CHANNELS: usize = 4;
@@ -50,12 +50,7 @@ impl DanceClockSim {
 
     #[wasm_bindgen(js_name = renderTime)]
     pub fn render_time(&mut self, hours: u8, minutes: u8, seconds: u8) {
-        let mut time_text = heapless::String::<16>::new();
-        fmt::Write::write_fmt(
-            &mut time_text,
-            format_args!("{:02}:{:02}:{:02}", hours, minutes, seconds),
-        )
-        .ok();
+        let time_text = format_clock_12h(hours, minutes, seconds);
         self.render_frame(
             DanceClock::from_time(hours, minutes, seconds),
             time_text.as_str(),
@@ -91,7 +86,7 @@ impl DanceClockSim {
             &mut self.rgba,
             TIME_TEXT_TOP_LEFT,
             label,
-            Rectangle::new(TIME_TEXT_TOP_LEFT, Size::new(72, 10)),
+            Rectangle::new(TIME_TEXT_TOP_LEFT, Size::new(TIME_TEXT_WIDTH as u32, 10)),
         );
     }
 }

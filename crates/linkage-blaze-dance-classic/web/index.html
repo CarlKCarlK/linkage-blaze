@@ -10,6 +10,21 @@
     <main>
       <canvas id="screen" aria-label="CYD dance clock simulator"></canvas>
       <div id="status">loading</div>
+      <div id="scrub">
+        <label for="time-slider">Test time (Midnight → Noon)</label>
+        <input
+          id="time-slider"
+          type="range"
+          min="0"
+          max="43200"
+          step="1"
+          value="0"
+        />
+        <div id="scrub-readout">
+          <span id="scrub-time">00:00:00</span>
+          <button id="scrub-live" type="button">Live</button>
+        </div>
+      </div>
     </main>
     <script type="module" src="./main.js"></script>
   </body>
