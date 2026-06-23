@@ -261,26 +261,22 @@ impl Cyd {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
-    pub fn clear_now(&mut self, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.display.clear_now(color)?)
+    pub fn fill_screen(&mut self, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.display.fill_screen(color)?)
     }
 
-    pub fn fill_rect_now(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.display.fill_rect_now(rectangle, color)?)
+    pub fn fill_rect(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.display.fill_rect(rectangle, color)?)
     }
 
-    pub fn fill_contiguous_now<I>(
-        &mut self,
-        rectangle: Rectangle,
-        pixels: I,
-    ) -> Result<(), CydError>
+    pub fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), CydError>
     where
         I: IntoIterator<Item = Rgb565>,
     {
-        Ok(self.display.fill_contiguous_now(rectangle, pixels)?)
+        Ok(self.display.fill_contiguous(rectangle, pixels)?)
     }
 
-    pub fn draw_line_segments_now(
+    pub fn draw_line_segments(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
@@ -288,10 +284,10 @@ impl Cyd {
     ) -> Result<(), CydError> {
         Ok(self
             .display
-            .draw_line_segments_now(bounds, background, segments)?)
+            .draw_line_segments(bounds, background, segments)?)
     }
 
-    pub fn draw_primitives_now(
+    pub fn draw_primitives(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
@@ -299,7 +295,7 @@ impl Cyd {
     ) -> Result<(), CydError> {
         Ok(self
             .display
-            .draw_primitives_now(bounds, background, primitives)?)
+            .draw_primitives(bounds, background, primitives)?)
     }
 }
 
@@ -335,31 +331,30 @@ impl CalibratedCyd<'_> {
         self.cyd.flush(buffer, top_left)
     }
 
-    pub fn clear_now(&mut self, color: Rgb565) -> Result<(), CydError> {
-        self.cyd.clear_now(color)
+    pub fn fill_screen(&mut self, color: Rgb565) -> Result<(), CydError> {
+        self.cyd.fill_screen(color)
     }
 
-    pub fn fill_rect_now(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        self.cyd.fill_rect_now(rectangle, color)
+    pub fn fill_rect(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        self.cyd.fill_rect(rectangle, color)
     }
 
-    pub fn draw_line_segments_now(
+    pub fn draw_line_segments(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
         segments: &[LineSegment],
     ) -> Result<(), CydError> {
-        self.cyd
-            .draw_line_segments_now(bounds, background, segments)
+        self.cyd.draw_line_segments(bounds, background, segments)
     }
 
-    pub fn draw_primitives_now(
+    pub fn draw_primitives(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
         primitives: &[DrawPrimitive],
     ) -> Result<(), CydError> {
-        self.cyd.draw_primitives_now(bounds, background, primitives)
+        self.cyd.draw_primitives(bounds, background, primitives)
     }
 }
 

@@ -336,6 +336,8 @@ pub struct CydDisplay {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CydDisplayOrientation {
+    // todo000 later support a full algebra of rotations and flips like the
+    // device-envoy 2D LED panel orientation model.
     Landscape,
     Portrait,
 }
@@ -447,11 +449,11 @@ impl CydDisplay {
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 
-    pub fn clear_now(&mut self, color: Rgb565) -> Result<(), CydDisplayFlushError> {
-        self.fill_rect_now(Rectangle::new(Point::new(0, 0), self.screen_size), color)
+    pub fn fill_screen(&mut self, color: Rgb565) -> Result<(), CydDisplayFlushError> {
+        self.fill_rect(Rectangle::new(Point::new(0, 0), self.screen_size), color)
     }
 
-    pub fn fill_rect_now(
+    pub fn fill_rect(
         &mut self,
         rectangle: Rectangle,
         color: Rgb565,
@@ -466,7 +468,7 @@ impl CydDisplay {
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 
-    pub fn fill_contiguous_now<I>(
+    pub fn fill_contiguous<I>(
         &mut self,
         rectangle: Rectangle,
         pixels: I,
@@ -479,7 +481,7 @@ impl CydDisplay {
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 
-    pub fn draw_line_segments_now(
+    pub fn draw_line_segments(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
@@ -507,7 +509,7 @@ impl CydDisplay {
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 
-    pub fn draw_primitives_now(
+    pub fn draw_primitives(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,

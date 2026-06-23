@@ -9,7 +9,7 @@ pub const SCREEN_HEIGHT: usize = 320;
 // Palette --------------------------------------------------------------------
 // Deep blue/teal night background, a single warm "bone" color for the whole
 // figure, dark-teal placards, and a muted cool color for the secondary top text.
-pub const BG: Rgb888 = Rgb888::CSS_MIDNIGHT_BLUE; // deep night blue (25, 25, 112)
+pub const BACKGROUND: Rgb888 = Rgb888::CSS_MIDNIGHT_BLUE; // deep night blue (25, 25, 112)
 pub const FIGURE_COLOR: Rgb888 = Rgb888::CSS_WHEAT; // warm pale bone-like tan (245, 222, 179)
 pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
 const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face

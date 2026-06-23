@@ -15,7 +15,7 @@ use esp_hal::time::Instant;
 use linkage_blaze_core::Rgb888;
 use linkage_blaze_cyd::{Cyd, CydError, RectPixels, RectView, RectWorkspace};
 use linkage_blaze_dance_classic::dance_render::{
-    BG, DANCE_HEIGHT, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_WIDTH, DANCE_WIDTH,
+    BACKGROUND, DANCE_HEIGHT, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_WIDTH, DANCE_WIDTH,
     DanceClock, DanceTileSink, PixelTarget, SCREEN_WIDTH, TEXT, TileFlush, WIFI_TEXT_TOP_LEFT,
     format_clock_12h, render_tile,
 };
@@ -72,7 +72,7 @@ impl CydDanceDisplay {
         );
         if !self.background_cleared {
             info!("display clearing background");
-            self.cyd.clear_now(Cyd::rgb565(BG))?;
+            self.cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
             self.background_cleared = true;
             info!("display background cleared");
         }
@@ -107,16 +107,16 @@ impl CydDanceDisplay {
         let text_left = clear_left + (clear_width as i32 - width as i32) / 2;
         let top_left = Point::new(text_left, TIME_TEXT_TOP);
 
-        self.cyd.fill_rect_now(
+        self.cyd.fill_rect(
             Rectangle::new(
                 Point::new(clear_left, TIME_TEXT_TOP),
                 Size::new(clear_width as u32, TIME_GLYPH_HEIGHT as u32),
             ),
-            Cyd::rgb565(BG),
+            Cyd::rgb565(BACKGROUND),
         )?;
 
         let mut text_line_buffer = self.text_line_workspace.view_mut(width, TIME_GLYPH_HEIGHT);
-        text_line_buffer.clear(Cyd::rgb565(BG));
+        text_line_buffer.clear(Cyd::rgb565(BACKGROUND));
         Text::with_baseline(
             text,
             Point::new(0, 0),
@@ -140,13 +140,13 @@ impl CydDanceDisplay {
             width <= TEXT_LINE_WIDTH,
             "text line width must fit workspace"
         );
-        self.cyd.fill_rect_now(
+        self.cyd.fill_rect(
             Rectangle::new(top_left, Size::new(width as u32, SMALL_GLYPH_HEIGHT as u32)),
-            Cyd::rgb565(BG),
+            Cyd::rgb565(BACKGROUND),
         )?;
 
         let mut text_line_buffer = self.text_line_workspace.view_mut(width, SMALL_GLYPH_HEIGHT);
-        text_line_buffer.clear(Cyd::rgb565(BG));
+        text_line_buffer.clear(Cyd::rgb565(BACKGROUND));
         Text::with_baseline(
             text,
             Point::new(0, 0),
@@ -206,7 +206,7 @@ impl DanceTileSink for EspDanceTileSink<'_> {
         let mut dance_buffer = self
             .dance_workspace
             .view_mut(tile_flush.width, tile_flush.height);
-        dance_buffer.clear(Cyd::rgb565(BG));
+        dance_buffer.clear(Cyd::rgb565(BACKGROUND));
         let mut target = RectViewTarget {
             rect_view: &mut dance_buffer,
         };

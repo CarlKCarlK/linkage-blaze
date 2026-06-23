@@ -39,7 +39,7 @@ const CLOCK_TOP_LEFT: Point = Point::new(80, 80);
 const CLOCK_CENTER_X: i32 = 80;
 const CLOCK_CENTER_Y: i32 = 80;
 const HAND_SCALE: f32 = 1.0;
-const BG: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
+const BACKGROUND: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 const TEXT_DIM: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_MAIN: Rgb888 = Rgb888::CSS_NAVY;
 const TEXT_OK: Rgb888 = Rgb888::CSS_NAVY;
@@ -88,7 +88,7 @@ impl CydClockDisplay {
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         if !self.background_cleared {
-            self.cyd.clear_now(Cyd::rgb565(BG))?;
+            self.cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
             self.background_cleared = true;
         }
 
@@ -140,7 +140,7 @@ impl CydClockDisplay {
             let mut character_text = heapless::String::<4>::new();
             fmt::Write::write_char(&mut character_text, character).ok();
             let mut glyph_buffer = self.glyph_workspace.view_mut(flush_width, flush_height);
-            glyph_buffer.clear(Cyd::rgb565(BG));
+            glyph_buffer.clear(Cyd::rgb565(BACKGROUND));
             Text::with_baseline(
                 character_text.as_str(),
                 Point::new(0, 0),
@@ -207,12 +207,12 @@ impl CydClockDisplay {
         width: usize,
         height: usize,
     ) -> Result<(), CydClockDisplayError> {
-        self.cyd.fill_rect_now(
+        self.cyd.fill_rect(
             Rectangle::new(
                 top_left,
                 embedded_graphics::prelude::Size::new(width as u32, height as u32),
             ),
-            Cyd::rgb565(BG),
+            Cyd::rgb565(BACKGROUND),
         )?;
         Ok(())
     }
@@ -250,9 +250,9 @@ impl CydClockDisplay {
 
         let t0 = Instant::now();
         self.cyd
-            .draw_primitives_now(CLOCK_BOUNDS, Cyd::rgb565(BG), &primitives)?;
+            .draw_primitives(CLOCK_BOUNDS, Cyd::rgb565(BACKGROUND), &primitives)?;
         let elapsed_ms = (Instant::now() - t0).as_millis();
-        esp_println::println!("draw_primitives_now ms = {}", elapsed_ms);
+        esp_println::println!("draw_primitives ms = {}", elapsed_ms);
         Ok(())
     }
 }

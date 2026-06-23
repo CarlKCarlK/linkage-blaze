@@ -140,9 +140,9 @@ where
         &mut self,
         touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
     ) -> Option<RawTouchEvent> {
-        let is_pressed_now = self.is_pressed();
+        let touch_is_pressed = self.is_pressed();
 
-        if is_pressed_now {
+        if touch_is_pressed {
             if let Some((raw_x, raw_y)) = self.read_raw_xy(touch_spi_device) {
                 let event = if self.was_pressed {
                     RawTouchEvent::Move { raw_x, raw_y }
