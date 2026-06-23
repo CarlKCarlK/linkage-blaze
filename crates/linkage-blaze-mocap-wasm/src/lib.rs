@@ -29,7 +29,8 @@ impl MocapClipWasm {
     pub fn new(bvh_source: &str) -> Result<Self, JsValue> {
         let clip = parse_bvh(bvh_source).map_err(to_js_error)?;
         let layout = discover_bvh_parameters(&clip).map_err(to_js_error)?;
-        let linkage = build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout).map_err(to_js_error)?;
+        let linkage =
+            build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout, &[]).map_err(to_js_error)?;
 
         Ok(Self {
             linkage,
