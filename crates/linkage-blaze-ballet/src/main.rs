@@ -20,6 +20,7 @@ mod display;
 
 use display::{CydBalletDisplay, CydBalletDisplayError};
 
+// todo000 couldn't this be const and/or inlined and defined elsewhere?
 fn rgb565(color: Rgb888) -> Rgb565 {
     Rgb565::from(color)
 }
@@ -31,6 +32,7 @@ enum MainError {
     Display(CydBalletDisplayError),
 }
 
+// todo0000 is this the best way to do this? isn't there a crate?
 impl fmt::Debug for MainError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -73,18 +75,25 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO2,
         p.GPIO4,
         p.GPIO21,
+        // todo000 are there 4 orientations?
         CydDisplayConfig::PORTRAIT,
     )?;
+    // todo000 agent, remember to never delete my todo's.
+    // todo000 is the _now suffix good?
+    // todo000 BG violates our policy against abbreviations.
     cyd.clear_now(rgb565(BG))?;
+    // todo000 in this case, we likely don't want a CydBalletDisplay struct.
     let mut display = CydBalletDisplay::new(cyd);
     info!("CYD display initialized");
 
+    // todo0000 shouldn't this just be a for loop?
     let mut frame_index = 0;
     loop {
         if frame_index == 0 {
             info!("starting ballet cycle");
         }
         let params = &BALLET_FRAMES[frame_index];
+        // todo000 pull this back in.
         display.show_frame(frame_index, params)?;
         frame_index += 1;
         if frame_index >= BALLET_FRAME_COUNT {
@@ -93,3 +102,4 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         Delay::new().delay_millis(1);
     }
 }
+// todo000 still need to review other files in the project.
