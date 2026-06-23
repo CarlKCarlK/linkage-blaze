@@ -3,7 +3,10 @@ use alloc::vec::Vec;
 
 use embedded_graphics::{
     Drawable, Pixel,
-    mono_font::{MonoTextStyle, ascii::FONT_6X10},
+    mono_font::{
+        MonoTextStyle,
+        ascii::{FONT_6X10, FONT_9X15_BOLD},
+    },
     pixelcolor::{Rgb888, RgbColor},
     prelude::{DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
@@ -12,10 +15,14 @@ use embedded_graphics::{
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::dance_render::{
-    BG, DanceClock, DanceTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT,
-    TIME_TEXT_TOP_LEFT, TIME_TEXT_WIDTH, TileFlush, WIFI_TEXT_TOP_LEFT, format_clock_12h,
-    render_tile,
+    BG, DanceClock, DanceTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, TileFlush,
+    WIFI_TEXT_TOP_LEFT, format_clock_12h, render_tile,
 };
+
+// Top time text: bold and bigger than the tiny "WiFi SIM" status, centered.
+const TIME_FONT_W: i32 = 9; // FONT_9X15_BOLD glyph width
+const TIME_FONT_H: i32 = 15;
+const TIME_TEXT_TOP: i32 = 6;
 
 const RGBA_CHANNELS: usize = 4;
 
@@ -82,12 +89,7 @@ impl DanceClockSim {
             Rectangle::new(WIFI_TEXT_TOP_LEFT, Size::new(90, 10)),
         );
 
-        draw_text(
-            &mut self.rgba,
-            TIME_TEXT_TOP_LEFT,
-            label,
-            Rectangle::new(TIME_TEXT_TOP_LEFT, Size::new(TIME_TEXT_WIDTH as u32, 10)),
-        );
+        draw_time(&mut self.rgba, label);
     }
 }
 
@@ -165,6 +167,26 @@ impl OriginDimensions for RgbaDrawTarget<'_> {
     fn size(&self) -> Size {
         Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
     }
+}
+
+fn draw_time(rgba: &mut [u8], text: &str) {
+    let field_w = text.chars().count() as i32 * TIME_FONT_W;
+    let left = (SCREEN_WIDTH as i32 - field_w) / 2;
+    let top_left = Point::new(left, TIME_TEXT_TOP);
+    fill_rect(
+        rgba,
+        Rectangle::new(top_left, Size::new(field_w as u32, TIME_FONT_H as u32)),
+        BG,
+    );
+    let mut target = RgbaDrawTarget { rgba };
+    Text::with_baseline(
+        text,
+        top_left,
+        MonoTextStyle::new(&FONT_9X15_BOLD, TEXT),
+        Baseline::Top,
+    )
+    .draw(&mut target)
+    .ok();
 }
 
 fn draw_text(rgba: &mut [u8], top_left: Point, text: &str, clear_rect: Rectangle) {
