@@ -44,7 +44,7 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize>
         storage.init_with(Self::new)
     }
 
-    pub fn fill(&mut self, color: Rgb565) {
+    pub fn clear(&mut self, color: Rgb565) {
         self.pixels.fill(color.into_storage());
     }
 
@@ -85,7 +85,7 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> DrawTarget
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.fill(color);
+        self.clear(color);
         Ok(())
     }
 
@@ -138,7 +138,7 @@ impl<const PIXELS: usize> Default for RectWorkspace<PIXELS> {
 }
 
 impl RectView<'_> {
-    pub fn fill(&mut self, color: Rgb565) {
+    pub fn clear(&mut self, color: Rgb565) {
         self.pixels.fill(color.into_storage());
     }
 
@@ -166,7 +166,7 @@ impl DrawTarget for RectView<'_> {
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.fill(color);
+        self.clear(color);
         Ok(())
     }
 

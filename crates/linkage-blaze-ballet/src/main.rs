@@ -70,7 +70,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         DISPLAY_CONFIG,
     )?;
     // todo000 agent, remember to never delete my todo's.
-    cyd.fill(Cyd::rgb565(BACKGROUND))?;
+    cyd.clear(Cyd::rgb565(BACKGROUND))?;
     static SCREEN_WORKSPACE: StaticCell<ScreenWorkspace> = StaticCell::new();
     let screen_workspace = ScreenWorkspace::init_static(&SCREEN_WORKSPACE);
     let mut last_frame_ms = 0;
@@ -83,7 +83,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
             let mut screen_buffer = screen_workspace.view_mut(SCREEN_WIDTH, SCREEN_HEIGHT);
-            screen_buffer.fill(Cyd::rgb565(BACKGROUND));
+            screen_buffer.clear(Cyd::rgb565(BACKGROUND));
             {
                 // todo000 (may no longer apply) what??? EspBalletTileSink
                 // todo000 continue review from this point
