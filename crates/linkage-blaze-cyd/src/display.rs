@@ -355,14 +355,25 @@ impl CydDisplayConfig {
     pub const PORTRAIT: Self = Self {
         orientation: CydDisplayOrientation::Portrait,
     };
+
+    #[must_use]
+    pub const fn screen_size(self) -> Size {
+        match self.orientation {
+            CydDisplayOrientation::Landscape => {
+                Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
+            }
+            CydDisplayOrientation::Portrait => Size::new(240, 320),
+        }
+    }
+
+    #[must_use]
+    pub const fn screen_pixels(self) -> usize {
+        let screen_size = self.screen_size();
+        screen_size.width as usize * screen_size.height as usize
+    }
 }
 
 impl CydDisplay {
-    #[must_use]
-    pub const fn screen_size() -> Size {
-        Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
-    }
-
     pub fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,
@@ -396,20 +407,15 @@ impl CydDisplay {
         let interface = SpiInterface::new(spi_device, dc, spi_buffer);
         let mut delay = Delay::new();
 
-        let (screen_size, display_orientation) = match display_config.orientation {
-            CydDisplayOrientation::Landscape => (
-                Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32),
-                Orientation::new()
-                    .rotate(Rotation::Deg90)
-                    .flip_horizontal()
-                    .rotate(Rotation::Deg180),
-            ),
-            CydDisplayOrientation::Portrait => (
-                Size::new(240, 320),
-                Orientation::new()
-                    .rotate(Rotation::Deg180)
-                    .flip_horizontal(),
-            ),
+        let screen_size = display_config.screen_size();
+        let display_orientation = match display_config.orientation {
+            CydDisplayOrientation::Landscape => Orientation::new()
+                .rotate(Rotation::Deg90)
+                .flip_horizontal()
+                .rotate(Rotation::Deg180),
+            CydDisplayOrientation::Portrait => Orientation::new()
+                .rotate(Rotation::Deg180)
+                .flip_horizontal(),
         };
 
         let display = Builder::new(ILI9341Rgb565, interface)
