@@ -13,8 +13,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use esp_backtrace as _;
-use esp_hal::delay::Delay;
-use esp_hal::time::Instant;
+use esp_hal::time::{Duration, Instant};
 use linkage_blaze_ballet::{
     ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
     ballet_render::{BACKGROUND, TEXT, render_frame},
@@ -67,54 +66,65 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     let text565 = Cyd::rgb565(TEXT);
     // todo000 agent, remember to never delete my todo's.
     cyd.clear(background565)?;
-    let mut last_frame_ms = 0;
     info!("CYD display initialized");
 
+    let mut last_frame_duration = None;
     loop {
         info!("starting ballet cycle");
         for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
             let started = Instant::now();
-            // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
-            // todo000 (may no longer apply) why are these constants need at all?
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
             render_frame(&mut cyd_frame, params);
-            draw_status(&mut cyd_frame, text565, frame_index, last_frame_ms);
+            draw_status(&mut cyd_frame, text565, frame_index, last_frame_duration);
             cyd_frame.flush()?;
-            // todo000 look at the time stuff.
-            // todo000 continue review from this point
-            last_frame_ms = (Instant::now() - started).as_millis();
-            Delay::new().delay_millis(1);
+            last_frame_duration = Some(Instant::now() - started);
         }
     }
 }
 // todo000 still need to review other files in the project.
 
-fn draw_status<D>(draw_target: &mut D, text565: Rgb565, frame_index: usize, last_frame_ms: u64)
-where
+fn draw_status<D>(
+    draw_target: &mut D,
+    text565: Rgb565,
+    frame_index: usize,
+    last_frame_duration: Option<Duration>,
+) where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
-    let elapsed_ms = last_frame_ms.max(1);
-    let fps_x10 = (10_000 / elapsed_ms) as u32;
-    let slomo_x10 = if fps_x10 == 0 {
-        0
-    } else {
-        (SOURCE_FPS_X10 * 10 + fps_x10 / 2) / fps_x10
-    };
     let mut status = heapless::String::<64>::new();
-    Write::write_fmt(
-        &mut status,
-        format_args!(
-            "{}/{}  fps {}.{}  slow {}.{}x",
-            frame_index + 1,
-            BALLET_FRAME_COUNT,
-            fps_x10 / 10,
-            fps_x10 % 10,
-            slomo_x10 / 10,
-            slomo_x10 % 10
-        ),
-    )
-    .ok();
+    if let Some(last_frame_duration) = last_frame_duration {
+        let elapsed_ms = last_frame_duration.as_millis().max(1);
+        let fps_x10 = (10_000 / elapsed_ms) as u32;
+        let slomo_x10 = if fps_x10 == 0 {
+            0
+        } else {
+            (SOURCE_FPS_X10 * 10 + fps_x10 / 2) / fps_x10
+        };
+        Write::write_fmt(
+            &mut status,
+            format_args!(
+                "{}/{}  fps {}.{}  slow {}.{}x",
+                frame_index + 1,
+                BALLET_FRAME_COUNT,
+                fps_x10 / 10,
+                fps_x10 % 10,
+                slomo_x10 / 10,
+                slomo_x10 % 10
+            ),
+        )
+        .ok();
+    } else {
+        Write::write_fmt(
+            &mut status,
+            format_args!(
+                "{}/{}  fps --.-  slow --.-x",
+                frame_index + 1,
+                BALLET_FRAME_COUNT
+            ),
+        )
+        .ok();
+    }
 
     Text::with_baseline(
         status.as_str(),
