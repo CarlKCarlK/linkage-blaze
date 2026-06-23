@@ -150,6 +150,19 @@ impl Cyd {
     /// Total pixel count of the CYD panel — fixed hardware, independent of orientation.
     pub const SCREEN_PIXELS: usize = SCREEN_PIXELS;
 
+    /// Create [`CydStatic`] storage for a pixel buffer of type `B`.
+    ///
+    /// Equivalent to `CydStatic::<B>::new()` but namespaced under `Cyd` so all
+    /// construction calls share a common prefix.
+    ///
+    /// ```ignore
+    /// static CYD_STATIC: CydStatic<PixelBufferFull> = Cyd::new_static();
+    /// ```
+    #[must_use]
+    pub const fn new_static<B: DynPixelBuffer>() -> CydStatic<B> {
+        CydStatic::new()
+    }
+
     // todo000 couldn't this be const and/or inlined and defined elsewhere?
     // todo000 review rgb565 conversion later.
     #[inline]

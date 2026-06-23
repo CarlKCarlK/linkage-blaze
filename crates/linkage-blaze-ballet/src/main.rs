@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![cfg_attr(feature = "const-parse", allow(long_running_const_eval))]
 
 use core::{convert::Infallible, fmt::Write};
 
@@ -52,7 +53,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD ballet loop");
 
-    static CYD_STATIC: CydStatic<PixelBufferFull> = CydStatic::new();
+    static CYD_STATIC: CydStatic<PixelBufferFull> = Cyd::new_static();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
@@ -69,21 +70,23 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     let background565 = Cyd::rgb565(BACKGROUND);
     let text565 = Cyd::rgb565(TEXT);
     // todo000 agent, remember to never delete my todo's.
-    cyd.clear(background565)?;
     info!("CYD display initialized");
 
     let mut last_frame_duration = None;
     loop {
         info!("starting ballet cycle");
+        // todo000 We don't expect BALLET_DOF to be a free-floating constant.
         for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
             let started = Instant::now();
+            // todo000 pull this out of the loops?
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
             let ballet_view = BALLET.view();
+            // todo000 move iterator into for line.
             let mut draw_items = ballet_view.draw_items(params);
-            // todo0000 (may no longer apply) review the old tile renderer replacement.
             for draw_item in &mut draw_items {
                 match draw_item {
+                    // todo understand pose_to_point
                     DrawItem::Stroke(stroke) => {
                         draw_segment(
                             &mut cyd_frame,
@@ -93,6 +96,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
                             FIGURE_STROKE_PX,
                         );
                     }
+                    // todo00 Disk or filled_circle?
                     DrawItem::Disk(disk) => {
                         draw_filled_circle(
                             &mut cyd_frame,
@@ -101,6 +105,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
                             FIGURE_COLOR,
                         );
                     }
+                    // todo00 kill Ring?
                     DrawItem::Ring(ring) => {
                         draw_ring(
                             &mut cyd_frame,
