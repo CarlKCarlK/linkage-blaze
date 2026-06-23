@@ -26,6 +26,9 @@ pub use display::{
 pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH};
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
 
+/// A [`PixelBuffer`] sized to the whole CYD panel.
+pub type PixelBufferFull = PixelBuffer<{ Cyd::SCREEN_PIXELS }>;
+
 pub struct Cyd {
     display: CydDisplay,
     touch: Option<CydTouch>,
