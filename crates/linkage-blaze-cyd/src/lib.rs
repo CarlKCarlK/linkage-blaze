@@ -46,7 +46,7 @@ pub struct Cyd {
 /// The app declares one at file scope and names the buffer type it wants:
 ///
 /// ```ignore
-/// static CYD_STATIC: CydStatic<PixelBufferFull> = CydStatic::new();
+/// static CYD_STATIC: CydStatic<PixelBufferFull> = Cyd::new_static();
 /// ```
 ///
 /// The app chooses the buffer type (policy); [`Cyd::new_display_only`] owns the
@@ -55,18 +55,9 @@ pub struct CydStatic<B: DynPixelBuffer> {
     pixel_buffer: StaticCell<B>,
 }
 
-impl<B: DynPixelBuffer> CydStatic<B> {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            pixel_buffer: StaticCell::new(),
-        }
-    }
-}
-
 impl<B: DynPixelBuffer> Default for CydStatic<B> {
     fn default() -> Self {
-        Self::new()
+        Cyd::new_static()
     }
 }
 
@@ -88,6 +79,13 @@ pub enum CydError {
 impl Cyd {
     /// Total pixel count of the CYD panel — fixed hardware, independent of orientation.
     pub const SCREEN_PIXELS: usize = SCREEN_PIXELS;
+
+    #[must_use]
+    pub const fn new_static<B: DynPixelBuffer>() -> CydStatic<B> {
+        CydStatic {
+            pixel_buffer: StaticCell::new(),
+        }
+    }
 
     // todo000 couldn't this be const and/or inlined and defined elsewhere?
     #[inline]
