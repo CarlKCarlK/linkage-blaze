@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use core::{cell::RefCell, convert::Infallible, fmt};
+use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_esp::{
     Error,
@@ -15,7 +15,7 @@ use device_envoy_esp::{
     },
 };
 use embassy_executor::Spawner;
-use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
+use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig};
 use log::info;
@@ -27,51 +27,21 @@ use display::{CydDanceDisplay, CydDanceDisplayError, DanceTime};
 
 const BLACK: Rgb888 = Rgb888::CSS_BLACK;
 
-fn rgb565(color: Rgb888) -> Rgb565 {
-    Rgb565::from(color)
-}
-
 esp_bootloader_esp_idf::esp_app_desc!();
 
+// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
 enum MainError {
     DeviceEnvoy(Error),
     Cyd(linkage_blaze_cyd::CydError),
     Display(CydDanceDisplayError),
 }
 
-impl fmt::Debug for MainError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MainError::DeviceEnvoy(error) => {
-                formatter.debug_tuple("DeviceEnvoy").field(error).finish()
-            }
-            MainError::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
-            MainError::Display(error) => formatter.debug_tuple("Display").field(error).finish(),
-        }
-    }
-}
-
-impl From<Error> for MainError {
-    fn from(error: Error) -> Self {
-        MainError::DeviceEnvoy(error)
-    }
-}
-
 impl From<CoreError> for MainError {
     fn from(error: CoreError) -> Self {
         MainError::DeviceEnvoy(error.into())
-    }
-}
-
-impl From<linkage_blaze_cyd::CydError> for MainError {
-    fn from(error: linkage_blaze_cyd::CydError) -> Self {
-        MainError::Cyd(error)
-    }
-}
-
-impl From<CydDanceDisplayError> for MainError {
-    fn from(error: CydDanceDisplayError) -> Self {
-        MainError::Display(error)
     }
 }
 
@@ -98,7 +68,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO21,
         CydDisplayConfig::PORTRAIT,
     )?;
-    cyd.clear_now(rgb565(BLACK))?;
+    cyd.clear_now(Cyd::rgb565(BLACK))?;
     static DISPLAY: StaticCell<RefCell<CydDanceDisplay>> = StaticCell::new();
     let display = &*DISPLAY.init(RefCell::new(CydDanceDisplay::new(cyd)));
     info!("CYD display initialized");

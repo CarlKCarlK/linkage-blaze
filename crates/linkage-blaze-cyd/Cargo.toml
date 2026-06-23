@@ -17,6 +17,9 @@ esp32c6 = [
 
 [dependencies]
 device-envoy-esp = { version = "0.1.0", default-features = false }
+derive_more = { version = "2.1.1", default-features = false, features = [
+    "from",
+] }
 embedded-graphics = { version = "0.8", default-features = false }
 embedded-hal = "1.0"
 embedded-hal-bus = "0.3.0"

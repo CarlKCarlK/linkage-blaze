@@ -17,6 +17,9 @@ esp32 = [
 
 [dependencies]
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
+derive_more = { version = "2.1.1", default-features = false, features = [
+    "from",
+] }
 embassy-executor = "0.10.0"
 embedded-graphics = { version = "0.8", default-features = false }
 heapless = "0.9.1"

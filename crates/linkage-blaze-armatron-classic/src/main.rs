@@ -47,10 +47,6 @@ const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
 
-fn rgb565(color: Rgb888) -> Rgb565 {
-    Rgb565::from(color)
-}
-
 #[derive(Debug)]
 enum MainError {
     Flash,
@@ -221,7 +217,7 @@ fn draw_calibration_screen(
     screen_buffer: &mut ScreenBuffer,
     calibration_index: usize,
 ) -> Result<(), MainError> {
-    screen_buffer.clear(rgb565(BLACK));
+    screen_buffer.clear(Cyd::rgb565(BLACK));
     if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
         draw_calibration_cross(
             screen_buffer,
@@ -302,11 +298,11 @@ fn draw_calibration_cross(
     let bottom = Point::new(center.x, center.y + CALIBRATION_CROSS_HALF_SIZE);
 
     Line::new(left, right)
-        .into_styled(PrimitiveStyle::with_stroke(rgb565(YELLOW), 4))
+        .into_styled(PrimitiveStyle::with_stroke(Cyd::rgb565(YELLOW), 4))
         .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
     Line::new(top, bottom)
-        .into_styled(PrimitiveStyle::with_stroke(rgb565(YELLOW), 4))
+        .into_styled(PrimitiveStyle::with_stroke(Cyd::rgb565(YELLOW), 4))
         .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
 
@@ -317,7 +313,7 @@ fn draw_calibration_cross(
         ),
         (CALIBRATION_CENTER_DOT_RADIUS * 2 + 1) as u32,
     )
-    .into_styled(PrimitiveStyle::with_fill(rgb565(WHITE)))
+    .into_styled(PrimitiveStyle::with_fill(Cyd::rgb565(WHITE)))
     .draw(target)
     .map_err(|_| MainError::DrawCalibrationCenterDot)?;
 

@@ -1504,6 +1504,7 @@ fn project_dir(world_y: f32, world_z: f32, r: f32) -> (f32, f32) {
     (-world_y * r, -world_z * r)
 }
 
+// todo000 review rgb565_from_rgb888 later.
 fn rgb565_from_rgb888(color: Rgb888) -> Rgb565 {
     Rgb565::from(color)
 }
