@@ -15,8 +15,8 @@ use embedded_graphics::{
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::dance_render::{
-    BG, DanceClock, DanceTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, TileFlush,
-    WIFI_TEXT_TOP_LEFT, format_clock_12h, render_tile,
+    BACKGROUND, DanceClock, DanceTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT,
+    TileFlush, WIFI_TEXT_TOP_LEFT, format_clock_12h, render_tile,
 };
 
 // Top time text: bold and bigger than the tiny "WiFi SIM" status, centered.
@@ -77,7 +77,7 @@ impl DanceClockSim {
 
 impl DanceClockSim {
     fn render_frame(&mut self, dance_clock: DanceClock, label: &str) {
-        fill_frame(&mut self.rgba, BG);
+        fill_frame(&mut self.rgba, BACKGROUND);
         let mut tile_sink = RgbaDanceTileSink {
             rgba: &mut self.rgba,
         };
@@ -176,7 +176,7 @@ fn draw_time(rgba: &mut [u8], text: &str) {
     fill_rect(
         rgba,
         Rectangle::new(top_left, Size::new(field_w as u32, TIME_FONT_H as u32)),
-        BG,
+        BACKGROUND,
     );
     let mut target = RgbaDrawTarget { rgba };
     Text::with_baseline(
@@ -190,7 +190,7 @@ fn draw_time(rgba: &mut [u8], text: &str) {
 }
 
 fn draw_text(rgba: &mut [u8], top_left: Point, text: &str, clear_rect: Rectangle) {
-    fill_rect(rgba, clear_rect, BG);
+    fill_rect(rgba, clear_rect, BACKGROUND);
     let mut target = RgbaDrawTarget { rgba };
     Text::with_baseline(
         text,

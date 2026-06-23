@@ -11,8 +11,8 @@ use esp_hal::time::Instant;
 use linkage_blaze_ballet::{
     ballet_frames::{BALLET_DOF, BALLET_FRAME_COUNT},
     ballet_render::{
-        BG, BalletTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, TileFlush, draw_tiles,
-        render_tile,
+        BACKGROUND, BalletTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, TileFlush,
+        draw_tiles, render_tile,
     },
 };
 use linkage_blaze_core::Rgb888;
@@ -57,13 +57,13 @@ impl CydBalletDisplay {
         params: &[f32; BALLET_DOF],
     ) -> Result<(), CydBalletDisplayError> {
         if !self.background_cleared {
-            self.cyd.clear_now(Cyd::rgb565(BG))?;
+            self.cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
             self.background_cleared = true;
         }
 
         let started = Instant::now();
         let mut screen_buffer = self.screen_workspace.view_mut(SCREEN_WIDTH, SCREEN_HEIGHT);
-        screen_buffer.clear(Cyd::rgb565(BG));
+        screen_buffer.clear(Cyd::rgb565(BACKGROUND));
         {
             let mut sink = EspBalletTileSink {
                 screen_buffer: &mut screen_buffer,

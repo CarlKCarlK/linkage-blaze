@@ -11,7 +11,7 @@ pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
 
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)
-pub const BG: Rgb888 = Rgb888::new(10, 28, 36);
+pub const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36);
 pub const FIGURE_COLOR: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 

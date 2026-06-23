@@ -7,10 +7,7 @@ use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use esp_hal::delay::Delay;
-use linkage_blaze_ballet::{
-    ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
-    ballet_render::BG,
-};
+use linkage_blaze_ballet::{ballet_frames::BALLET_FRAMES, ballet_render::BACKGROUND};
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig};
 use log::info;
 
@@ -20,7 +17,6 @@ use display::{CydBalletDisplay, CydBalletDisplayError};
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-// todo0000 is this the best way to do this? isn't there a crate?
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores
 // derived impls under -D warnings.
 #[allow(dead_code)]
@@ -55,27 +51,18 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         CydDisplayConfig::PORTRAIT,
     )?;
     // todo000 agent, remember to never delete my todo's.
-    // todo000 is the _now suffix good?
-    // todo000 BG violates our policy against abbreviations.
-    cyd.clear_now(Cyd::rgb565(BG))?;
+    cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
     // todo000 in this case, we likely don't want a CydBalletDisplay struct.
     let mut display = CydBalletDisplay::new(cyd);
     info!("CYD display initialized");
 
-    // todo0000 shouldn't this just be a for loop?
-    let mut frame_index = 0;
     loop {
-        if frame_index == 0 {
-            info!("starting ballet cycle");
+        info!("starting ballet cycle");
+        for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
+            // todo000 pull this back in.
+            display.show_frame(frame_index, params)?;
+            Delay::new().delay_millis(1);
         }
-        let params = &BALLET_FRAMES[frame_index];
-        // todo000 pull this back in.
-        display.show_frame(frame_index, params)?;
-        frame_index += 1;
-        if frame_index >= BALLET_FRAME_COUNT {
-            frame_index = 0;
-        }
-        Delay::new().delay_millis(1);
     }
 }
 // todo000 still need to review other files in the project.
