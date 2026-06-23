@@ -19,9 +19,9 @@ pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 
 // todo000 these could be OK, but there are a lot of them. Can't some be done via math?
 pub const STATUS_BAND_HEIGHT: i32 = 20;
-pub const BALLET_CENTER_X: i32 = 207;
-pub const BALLET_BASELINE_Y: i32 = 480;
-pub const BALLET_SCALE: f32 = 1.35;
+pub const BALLET_CENTER_X: i32 = 84;
+pub const BALLET_BASELINE_Y: i32 = 300;
+pub const BALLET_SCALE: f32 = 1.575;
 
 // todo000 is this used anywhere? if so, why?
 const FIGURE_STROKE_PX: i32 = 5;
