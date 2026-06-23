@@ -3,19 +3,24 @@ use linkage_blaze_core::{
     DrawItem, DrawItemIter, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed,
 };
 
+// todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
 use crate::ballet_frames::BALLET_DOF;
 
+// todo000 these should be read from the cyd object, not be here.
 pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
 
+// todo000 every numeric color should have a comment telling what it is. (and named colors are better)
 pub const BG: Rgb888 = Rgb888::new(10, 28, 36);
 pub const FIGURE_COLOR: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 
+// todo000 these could be OK, but there are a lot of them. Can't some be done via math?
 pub const STATUS_BAND_HEIGHT: i32 = 20;
 pub const BALLET_TOP_LEFT: Point = Point::new(-68, -180);
 pub const BALLET_WIDTH: usize = 375;
 pub const BALLET_HEIGHT: usize = 500;
+// todo0000 I thought we got rid of tiling in this app.
 pub const BALLET_TILE_COLUMNS: usize = 3;
 pub const BALLET_TILE_ROWS: usize = 4;
 pub const BALLET_TILE_WIDTH: usize = 125;
@@ -25,21 +30,25 @@ pub const BALLET_CENTER_X: i32 = 207;
 pub const BALLET_BASELINE_Y: i32 = 480;
 pub const BALLET_SCALE: f32 = 1.35;
 
+// todo000 is this used anywhere? if so, why?
 const FIGURE_STROKE_PX: i32 = 5;
 
 pub const BALLET: LinkageFixed<BALLET_DOF, 6, 538> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
 
+// todo0000 review this
 pub trait PixelTarget {
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888);
 }
 
+// todo0000 review this
 pub trait BalletTileSink {
     fn draw_tile(&mut self, tile_flush: TileFlush, params: &[f32; BALLET_DOF]);
 }
 
+// todo0000 review this
 #[derive(Clone, Copy, Debug)]
 pub struct TileFlush {
     pub top_left: Point,
@@ -48,6 +57,7 @@ pub struct TileFlush {
     pub height: usize,
 }
 
+// todo0000 review this
 impl TileFlush {
     pub fn new(tile_origin: Point, tile_width: usize, tile_height: usize) -> Option<Self> {
         let tile_top_left = Point::new(
@@ -79,6 +89,7 @@ impl TileFlush {
     }
 }
 
+// todo0000 review this
 pub fn draw_tiles<S: BalletTileSink>(params: &[f32; BALLET_DOF], sink: &mut S) {
     let mut tile_row = 0;
     while tile_row < BALLET_TILE_ROWS {
@@ -98,6 +109,7 @@ pub fn draw_tiles<S: BalletTileSink>(params: &[f32; BALLET_DOF], sink: &mut S) {
     }
 }
 
+// todo0000 review this
 pub fn render_tile<T: PixelTarget>(target: &mut T, params: &[f32; BALLET_DOF], tile_origin: Point) {
     let ballet_view = BALLET.view();
     let mut iter: DrawItemIter<BALLET_DOF, 6> = ballet_view.draw_items(params);
