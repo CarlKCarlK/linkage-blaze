@@ -20,7 +20,7 @@ use linkage_blaze_ballet::{
     ballet_render::{BACKGROUND, PixelTarget, TEXT, render_frame},
 };
 use linkage_blaze_core::Rgb888;
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, PixelBuffer, RectPixels, RectView};
+use linkage_blaze_cyd::{Cyd, CydDisplayConfig, PixelBufferFull, RectPixels, RectView};
 use log::info;
 use static_cell::StaticCell;
 
@@ -65,10 +65,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     // todo000 agent, remember to never delete my todo's.
     cyd.clear(Cyd::rgb565(BACKGROUND))?;
-    // todo000 RectWorkspace is a bad name
-    static SCREEN_PIXEL_BUFFER: StaticCell<PixelBuffer<{ Cyd::SCREEN_PIXELS }>> = StaticCell::new();
-    let screen_pixel_buffer = PixelBuffer::init_static(&SCREEN_PIXEL_BUFFER);
-    let screen_size = cyd.screen_size();
+    static SCREEN_PIXEL_BUFFER: StaticCell<PixelBufferFull> = StaticCell::new();
+    let screen_pixel_buffer = PixelBufferFull::init_static(&SCREEN_PIXEL_BUFFER);
     let mut last_frame_ms = 0;
     info!("CYD display initialized");
 
@@ -78,8 +76,10 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             let started = Instant::now();
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
-            let mut screen_buffer = screen_pixel_buffer
-                .view_mut(screen_size.width as usize, screen_size.height as usize);
+            let mut screen_buffer = screen_pixel_buffer.view_mut(
+                cyd.screen_size().width as usize,
+                cyd.screen_size().height as usize,
+            );
             screen_buffer.clear(Cyd::rgb565(BACKGROUND));
             {
                 // todo000 (may no longer apply) what??? EspBalletTileSink
