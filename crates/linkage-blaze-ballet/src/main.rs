@@ -50,7 +50,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD ballet loop");
 
-    static CYD_STATIC: CydStatic<PixelBufferFull> = CydStatic::new();
+    static CYD_STATIC: CydStatic<PixelBufferFull> = Cyd::new_static();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
@@ -75,10 +75,9 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             let started = Instant::now();
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
-            let size = cyd.screen_size();
             cyd.draw_buffer(
-                size.width as usize,
-                size.height as usize,
+                cyd.screen_size().width as usize,
+                cyd.screen_size().height as usize,
                 Point::new(0, 0),
                 |screen_buffer| {
                     screen_buffer.clear(Cyd::rgb565(BACKGROUND));

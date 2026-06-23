@@ -140,6 +140,7 @@ impl<const PIXELS: usize> Default for PixelBuffer<PIXELS> {
     }
 }
 
+// todo00 understand this code.
 /// A pixel buffer that a [`Cyd`](crate::Cyd) can own: it can be initialized into
 /// a `'static` cell and hand out [`RectView`]s. Implemented for any
 /// [`PixelBuffer<PIXELS>`], so an app picks the size via the buffer type it names

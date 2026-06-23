@@ -68,7 +68,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     // todo00 unify: CydClockDisplay still owns its own glyph workspace, so the
     // Cyd-owned buffer is zero-sized. Look at moving the glyph rendering onto the
     // single Cyd-owned buffer via cyd.draw_buffer.
-    static CYD_STATIC: CydStatic<PixelBuffer<0>> = CydStatic::new();
+    static CYD_STATIC: CydStatic<PixelBuffer<0>> = Cyd::new_static();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
