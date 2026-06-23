@@ -374,6 +374,12 @@ impl CydDisplayConfig {
 }
 
 impl CydDisplay {
+    /// Oriented screen size stored at init time.
+    #[must_use]
+    pub const fn size(&self) -> Size {
+        self.screen_size
+    }
+
     pub fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,

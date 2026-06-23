@@ -7,20 +7,23 @@ use embedded_graphics::{
 };
 use static_cell::StaticCell;
 
+// todo000 review this name w.r.t. PixelBuffer.
 pub trait RectPixels {
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     fn raw_pixels(&self) -> &[u16];
 }
 
+// todo000 review this name w.r.t. PixelBuffer.
 pub struct RectBuffer<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> {
     pixels: [u16; PIXELS],
 }
 
-pub struct RectWorkspace<const PIXELS: usize> {
+pub struct PixelBuffer<const PIXELS: usize> {
     pixels: [u16; PIXELS],
 }
 
+// todo000 review this name w.r.t. PixelBuffer.
 pub struct RectView<'a> {
     width: usize,
     height: usize,
@@ -108,7 +111,7 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> DrawTarget
     }
 }
 
-impl<const PIXELS: usize> RectWorkspace<PIXELS> {
+impl<const PIXELS: usize> PixelBuffer<PIXELS> {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -116,7 +119,7 @@ impl<const PIXELS: usize> RectWorkspace<PIXELS> {
         }
     }
 
-    pub fn init_static(storage: &'static StaticCell<Self>) -> &'static mut RectWorkspace<PIXELS> {
+    pub fn init_static(storage: &'static StaticCell<Self>) -> &'static mut PixelBuffer<PIXELS> {
         storage.init_with(Self::new)
     }
 
@@ -131,7 +134,7 @@ impl<const PIXELS: usize> RectWorkspace<PIXELS> {
     }
 }
 
-impl<const PIXELS: usize> Default for RectWorkspace<PIXELS> {
+impl<const PIXELS: usize> Default for PixelBuffer<PIXELS> {
     fn default() -> Self {
         Self::new()
     }
