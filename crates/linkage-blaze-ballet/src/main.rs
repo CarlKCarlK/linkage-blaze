@@ -81,6 +81,9 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     let mut frame_index = 0;
     loop {
+        if frame_index == 0 {
+            info!("starting ballet cycle");
+        }
         let params = &BALLET_FRAMES[frame_index];
         display.show_frame(frame_index, params)?;
         frame_index += 1;
