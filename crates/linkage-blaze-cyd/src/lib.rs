@@ -261,8 +261,8 @@ impl Cyd {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
-    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.display.fill(color)?)
+    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.display.clear(color)?)
     }
 
     pub fn fill_rect(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
@@ -331,8 +331,8 @@ impl CalibratedCyd<'_> {
         self.cyd.flush(buffer, top_left)
     }
 
-    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
-        self.cyd.fill(color)
+    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
+        self.cyd.clear(color)
     }
 
     pub fn fill_rect(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {

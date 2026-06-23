@@ -455,7 +455,7 @@ impl CydDisplay {
             .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
     }
 
-    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydDisplayFlushError> {
+    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydDisplayFlushError> {
         self.fill_rect(Rectangle::new(Point::new(0, 0), self.screen_size), color)
     }
 

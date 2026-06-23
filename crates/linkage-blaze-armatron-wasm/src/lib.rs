@@ -173,7 +173,7 @@ impl DrawTarget for WasmDisplay {
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.frame_buffer.fill(color);
+        self.frame_buffer.clear(color);
         Ok(())
     }
 
