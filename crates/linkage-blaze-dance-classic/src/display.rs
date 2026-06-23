@@ -142,8 +142,10 @@ impl CydDanceDisplay {
     }
 
     fn show_dance(&mut self, dance_time: Option<&DanceTime>) -> Result<(), CydDanceDisplayError> {
+        // Use from_time so hours/minutes reach the placards; from_params would
+        // zero them and the signs would always read 12 and 0.
         let dance_clock = dance_time.map_or_else(DanceClock::new, |dance_time| {
-            DanceClock::from_params(dance_time.params())
+            DanceClock::from_time(dance_time.hours, dance_time.minutes, dance_time.seconds)
         });
         let params = dance_clock.params();
         info!(

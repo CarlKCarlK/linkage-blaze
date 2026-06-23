@@ -5,9 +5,15 @@ use linkage_blaze_core::{
 
 pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
-pub const BG: Rgb888 = Rgb888::new(10, 28, 36);
-pub const FIGURE_COLOR: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
-pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
+
+// Palette --------------------------------------------------------------------
+// Deep blue/teal night background, a single warm "bone" color for the whole
+// figure, dark-teal placards, and a muted cool color for the secondary top text.
+pub const BG: Rgb888 = Rgb888::CSS_MIDNIGHT_BLUE; // deep night blue (25, 25, 112)
+pub const FIGURE_COLOR: Rgb888 = Rgb888::CSS_WHEAT; // warm pale bone-like tan (245, 222, 179)
+pub const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
+const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
+
 pub const TEXT_BAND_HEIGHT: i32 = 34;
 pub const DANCE_TOP_LEFT: Point = Point::new(-68, -170);
 pub const DANCE_WIDTH: usize = 375;
@@ -17,9 +23,15 @@ pub const DANCE_TILE_ROWS: usize = 4;
 pub const DANCE_TILE_WIDTH: usize = 125;
 pub const DANCE_TILE_HEIGHT: usize = 125;
 pub const DANCE_TILE_PIXELS: usize = DANCE_TILE_WIDTH * DANCE_TILE_HEIGHT;
-pub const DANCE_CENTER_X: i32 = 198;
-pub const DANCE_BASELINE_Y: i32 = 440;
-pub const DANCE_SCALE: f32 = 1.05;
+// Figure placement / size.  Centered horizontally on the 240px-wide screen and
+// scaled up to fill most of the height below the top text band.  These three
+// are the knobs to tune on-device if the figure clips an edge.
+pub const DANCE_CENTER_X: i32 = 202;
+pub const DANCE_BASELINE_Y: i32 = 480;
+pub const DANCE_SCALE: f32 = 1.45;
+
+// Figure stroke is a single fixed pixel width (reads less like debug line art).
+const FIGURE_STROKE_PX: i32 = 3;
 pub const SMALL_GLYPH_WIDTH: usize = 6;
 pub const SMALL_GLYPH_HEIGHT: usize = 10;
 pub const TIME_TEXT_TOP_LEFT: Point = Point::new(88, 12);
@@ -199,6 +211,8 @@ pub fn render_tile<T: PixelTarget>(
 ) {
     let dance_view = DANCE.view();
     let mut iter: DrawItemIter<3, 6> = dance_view.draw_items(params);
+    // The figure is a single color: ignore each item's model color and stroke
+    // width, and draw everything in FIGURE_COLOR at a fixed stroke width.
     for draw_item in &mut iter {
         match draw_item {
             DrawItem::Stroke(stroke) => {
@@ -207,8 +221,8 @@ pub fn render_tile<T: PixelTarget>(
                     pose_to_point(stroke.start()),
                     pose_to_point(stroke.end()),
                     tile_origin,
-                    stroke.color(),
-                    stroke.width(),
+                    FIGURE_COLOR,
+                    FIGURE_STROKE_PX,
                 );
             }
             DrawItem::Disk(disk) => {
@@ -217,7 +231,7 @@ pub fn render_tile<T: PixelTarget>(
                     pose_to_point(disk.pose()),
                     disk.radius(),
                     tile_origin,
-                    disk.color(),
+                    FIGURE_COLOR,
                 );
             }
             DrawItem::Ring(ring) => {
@@ -227,7 +241,7 @@ pub fn render_tile<T: PixelTarget>(
                     ring.radius(),
                     ring.width(),
                     tile_origin,
-                    ring.color(),
+                    FIGURE_COLOR,
                 );
             }
             DrawItem::Sphere(sphere) => {
@@ -236,12 +250,14 @@ pub fn render_tile<T: PixelTarget>(
                     pose_to_point(sphere.pose()),
                     sphere.radius(),
                     tile_origin,
-                    sphere.color(),
+                    FIGURE_COLOR,
                 );
             }
         }
     }
 
+    // Hanging placards use the hand marks only as anchor points; they hang
+    // straight down in screen coordinates and do not inherit hand rotation.
     let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
     let right_hand_pose = iter
         .marked_pose("rMid2")
@@ -249,13 +265,13 @@ pub fn render_tile<T: PixelTarget>(
     let left_hand_pose = iter
         .marked_pose("lMid2")
         .expect("lMid2 mark missing from DANCE");
-    draw_number_label(
+    draw_hanging_placard(
         target,
         pose_to_point(left_hand_pose),
         tile_origin,
         hour_display as u32,
     );
-    draw_number_label(
+    draw_hanging_placard(
         target,
         pose_to_point(right_hand_pose),
         tile_origin,
@@ -263,13 +279,20 @@ pub fn render_tile<T: PixelTarget>(
     );
 }
 
-const LABEL_BG: Rgb888 = Rgb888::CSS_NAVY;
-const LABEL_FG: Rgb888 = Rgb888::CSS_IVORY;
+// Placard ("hanging sign") styling.  Fill is a darker, richer color than the
+// background; border and text share the figure color so the signs read as part
+// of the figure's world.
+const PLACARD_BORDER: Rgb888 = FIGURE_COLOR;
+const PLACARD_TEXT: Rgb888 = FIGURE_COLOR;
 const DIGIT_W: i32 = 3;
 const DIGIT_H: i32 = 5;
-const DIGIT_SCALE: i32 = 2;
-const DIGIT_GAP: i32 = 2;
-const LABEL_PAD: i32 = 2;
+const DIGIT_SCALE: i32 = 2; // 3x5 cells become 6x10 px glyphs
+const DIGIT_GAP: i32 = 2; // gap between the two digits of a placard
+const PLACARD_PAD_X: i32 = 9; // horizontal padding inside the sign
+const PLACARD_PAD_Y: i32 = 6; // vertical padding inside the sign
+const PLACARD_BORDER_PX: i32 = 2; // sign frame thickness
+const HANGER_PX: i32 = 2; // triangular hanger line thickness
+const HANGER_DROP: i32 = 16; // gap from hand anchor down to top of the sign
 
 // Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
 #[rustfmt::skip]
@@ -314,52 +337,121 @@ fn draw_digit<T: PixelTarget>(
     }
 }
 
-fn draw_number_label<T: PixelTarget>(
+/// Draw a hanging number sign anchored at `anchor` (a hand mark in screen
+/// coordinates).  The sign hangs straight down: its top edge sits `HANGER_DROP`
+/// pixels below the hand, and two hanger lines run from the hand to the sign's
+/// top corners, forming a triangle.  The sign never rotates with the hand.
+fn draw_hanging_placard<T: PixelTarget>(
     target: &mut T,
-    center: Point,
+    anchor: Point,
     tile_origin: Point,
     number: u32,
 ) {
     let digit_count = if number >= 10 { 2 } else { 1 };
     let scaled_digit_w = DIGIT_W * DIGIT_SCALE;
     let scaled_digit_h = DIGIT_H * DIGIT_SCALE;
-    let label_w = digit_count * scaled_digit_w + (digit_count - 1) * DIGIT_GAP + 2 * LABEL_PAD;
-    let label_h = scaled_digit_h + 2 * LABEL_PAD;
-    let left = center.x - label_w / 2;
-    let top = center.y - label_h / 2;
+    let inner_w = digit_count * scaled_digit_w + (digit_count - 1) * DIGIT_GAP;
 
-    for dy in 0..label_h {
-        for dx in 0..label_w {
-            put_pixel(target, left + dx, top + dy, tile_origin, LABEL_BG);
-        }
-    }
+    let card_w = inner_w + 2 * PLACARD_PAD_X;
+    let card_h = scaled_digit_h + 2 * PLACARD_PAD_Y;
+    let card_left = anchor.x - card_w / 2;
+    let card_top = anchor.y + HANGER_DROP;
+    let card_right = card_left + card_w;
 
+    // Two hanger lines from the hand anchor down to the sign's top corners.
+    draw_segment(
+        target,
+        anchor,
+        Point::new(card_left, card_top),
+        tile_origin,
+        PLACARD_BORDER,
+        HANGER_PX,
+    );
+    draw_segment(
+        target,
+        anchor,
+        Point::new(card_right, card_top),
+        tile_origin,
+        PLACARD_BORDER,
+        HANGER_PX,
+    );
+
+    // Sign face then frame.
+    fill_rect(target, card_left, card_top, card_w, card_h, tile_origin, PLACARD_FILL);
+    draw_rect_border(
+        target,
+        card_left,
+        card_top,
+        card_w,
+        card_h,
+        PLACARD_BORDER_PX,
+        tile_origin,
+        PLACARD_BORDER,
+    );
+
+    // Centered number text.
+    let text_left = card_left + (card_w - inner_w) / 2;
+    let text_top = card_top + (card_h - scaled_digit_h) / 2;
     if digit_count == 2 {
         draw_digit(
             target,
             number / 10,
-            Point::new(left + LABEL_PAD, top + LABEL_PAD),
+            Point::new(text_left, text_top),
             tile_origin,
-            LABEL_FG,
+            PLACARD_TEXT,
         );
         draw_digit(
             target,
             number % 10,
-            Point::new(
-                left + LABEL_PAD + scaled_digit_w + DIGIT_GAP,
-                top + LABEL_PAD,
-            ),
+            Point::new(text_left + scaled_digit_w + DIGIT_GAP, text_top),
             tile_origin,
-            LABEL_FG,
+            PLACARD_TEXT,
         );
     } else {
         draw_digit(
             target,
             number,
-            Point::new(left + LABEL_PAD, top + LABEL_PAD),
+            Point::new(text_left, text_top),
             tile_origin,
-            LABEL_FG,
+            PLACARD_TEXT,
         );
+    }
+}
+
+fn fill_rect<T: PixelTarget>(
+    target: &mut T,
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+    tile_origin: Point,
+    color: Rgb888,
+) {
+    for dy in 0..height {
+        for dx in 0..width {
+            put_pixel(target, left + dx, top + dy, tile_origin, color);
+        }
+    }
+}
+
+fn draw_rect_border<T: PixelTarget>(
+    target: &mut T,
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+    thickness: i32,
+    tile_origin: Point,
+    color: Rgb888,
+) {
+    for dy in 0..height {
+        for dx in 0..width {
+            let on_border =
+                dx < thickness || dx >= width - thickness || dy < thickness || dy >= height - thickness;
+            if on_border {
+                put_pixel(target, left + dx, top + dy, tile_origin, color);
+            }
+        }
     }
 }
 
@@ -369,9 +461,11 @@ fn draw_segment<T: PixelTarget>(
     end: Point,
     tile_origin: Point,
     color: Rgb888,
-    width: f32,
+    thickness: i32,
 ) {
-    let half_width = ((width * DANCE_SCALE - 1.0) * 0.5).max(0.0) as i32;
+    // Brush spans `thickness` pixels, supporting both even and odd widths.
+    let brush_low = -(thickness / 2);
+    let brush_high = brush_low + thickness - 1;
     let mut current_x = start.x;
     let mut current_y = start.y;
     let delta_x = (end.x - start.x).abs();
@@ -381,11 +475,11 @@ fn draw_segment<T: PixelTarget>(
     let mut error = delta_x + delta_y;
 
     loop {
-        // Paint a filled square of (2*half_width+1) pixels at each line-walk point.
-        let mut dy = -half_width;
-        while dy <= half_width {
-            let mut dx = -half_width;
-            while dx <= half_width {
+        // Paint a filled square of `thickness` pixels at each line-walk point.
+        let mut dy = brush_low;
+        while dy <= brush_high {
+            let mut dx = brush_low;
+            while dx <= brush_high {
                 put_pixel(target, current_x + dx, current_y + dy, tile_origin, color);
                 dx += 1;
             }
