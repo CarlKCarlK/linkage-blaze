@@ -23,7 +23,9 @@
       "Read(//home/carlk/programs/old-robot-arm/**)",
       "Bash(xargs ls)",
       "Bash(just check-armatron-core *)",
-      "Bash(just check-arm-wasm *)"
+      "Bash(just check-arm-wasm *)",
+      "Bash(ls ~/export-esp.sh 2>/dev/null && echo \"esp env present\" || echo \"no esp env\"; rustup toolchain list 2>/dev/null | grep -i esp || echo \"no esp toolchain\")",
+      "Read(//home/carlk/**)"
     ]
   }
 }
