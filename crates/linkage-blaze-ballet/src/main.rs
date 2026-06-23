@@ -70,8 +70,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         DISPLAY_CONFIG,
     )?;
     // todo000 agent, remember to never delete my todo's.
-    cyd.fill_screen(Cyd::rgb565(BACKGROUND))?;
-    // todo000 (may no longer apply) in this case, we likely don't want a CydBalletDisplay struct.
+    cyd.fill(Cyd::rgb565(BACKGROUND))?;
     static SCREEN_WORKSPACE: StaticCell<ScreenWorkspace> = StaticCell::new();
     let screen_workspace = ScreenWorkspace::init_static(&SCREEN_WORKSPACE);
     let mut last_frame_ms = 0;
@@ -80,13 +79,11 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     loop {
         info!("starting ballet cycle");
         for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
-            // todo000 pull this back in.
             let started = Instant::now();
             // todo000 (may no longer apply) these consts should be read from the cyd object, not be here.
             // todo000 (may no longer apply) why are these constants need at all?
             let mut screen_buffer = screen_workspace.view_mut(SCREEN_WIDTH, SCREEN_HEIGHT);
-            // todo0000 should be fill_screen?
-            screen_buffer.clear(Cyd::rgb565(BACKGROUND));
+            screen_buffer.fill(Cyd::rgb565(BACKGROUND));
             {
                 // todo000 (may no longer apply) what??? EspBalletTileSink
                 // todo000 continue review from this point

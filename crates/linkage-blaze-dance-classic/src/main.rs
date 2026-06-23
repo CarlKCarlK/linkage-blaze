@@ -68,7 +68,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO21,
         CydDisplayConfig::PORTRAIT,
     )?;
-    cyd.fill_screen(Cyd::rgb565(BLACK))?;
+    cyd.fill(Cyd::rgb565(BLACK))?;
     static DISPLAY: StaticCell<RefCell<CydDanceDisplay>> = StaticCell::new();
     let display = &*DISPLAY.init(RefCell::new(CydDanceDisplay::new(cyd)));
     info!("CYD display initialized");
