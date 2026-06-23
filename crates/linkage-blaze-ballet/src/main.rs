@@ -16,11 +16,8 @@ use esp_backtrace as _;
 use esp_hal::delay::Delay;
 use esp_hal::time::Instant;
 use linkage_blaze_ballet::{
-    ballet_frames::{BALLET_DOF, BALLET_FRAME_COUNT, BALLET_FRAMES},
-    ballet_render::{
-        BACKGROUND, BalletTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, TileFlush,
-        draw_tiles, render_tile,
-    },
+    ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
+    ballet_render::{BACKGROUND, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT, render_frame},
 };
 use linkage_blaze_core::Rgb888;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, RectPixels, RectView, RectWorkspace};
@@ -79,13 +76,18 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
             // todo000 pull this back in.
             let started = Instant::now();
+            // todo000 these consts should be read from the cyd object, not be here.
+            // todo000 why are these constants need at all?
             let mut screen_buffer = screen_workspace.view_mut(SCREEN_WIDTH, SCREEN_HEIGHT);
+            // todo0000 should be fill_screen?
             screen_buffer.clear(Cyd::rgb565(BACKGROUND));
             {
-                let mut sink = EspBalletTileSink {
+                // todo000 (may no longer apply) what??? EspBalletTileSink
+                // todo000 continue review from this point
+                let mut target = FullScreenTarget {
                     screen_buffer: &mut screen_buffer,
                 };
-                draw_tiles(params, &mut sink);
+                render_frame(&mut target, params);
             }
             draw_status(&mut screen_buffer, frame_index, last_frame_ms);
             cyd.flush(&screen_buffer, Point::new(0, 0))?;
@@ -129,51 +131,24 @@ fn draw_status(screen_buffer: &mut RectView<'_>, frame_index: usize, last_frame_
     .ok();
 }
 
-struct EspBalletTileSink<'a, 'b> {
+struct FullScreenTarget<'a, 'b> {
     screen_buffer: &'a mut RectView<'b>,
 }
 
-impl BalletTileSink for EspBalletTileSink<'_, '_> {
-    fn draw_tile(&mut self, tile_flush: TileFlush, params: &[f32; BALLET_DOF]) {
-        let mut target = FullScreenTileTarget {
-            screen_buffer: self.screen_buffer,
-            top_left: tile_flush.top_left,
-            width: tile_flush.width,
-            height: tile_flush.height,
-        };
-        render_tile(&mut target, params, tile_flush.origin);
-    }
-}
-
-struct FullScreenTileTarget<'a, 'b> {
-    screen_buffer: &'a mut RectView<'b>,
-    top_left: Point,
-    width: usize,
-    height: usize,
-}
-
-impl PixelTarget for FullScreenTileTarget<'_, '_> {
+impl PixelTarget for FullScreenTarget<'_, '_> {
     fn width(&self) -> usize {
-        self.width
+        self.screen_buffer.width()
     }
 
     fn height(&self) -> usize {
-        self.height
+        self.screen_buffer.height()
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        let screen_x = self.top_left.x + x as i32;
-        let screen_y = self.top_left.y + y as i32;
-        if screen_x < 0 || screen_y < 0 {
-            return;
-        }
-        let screen_x = screen_x as usize;
-        let screen_y = screen_y as usize;
-        if screen_x >= SCREEN_WIDTH || screen_y >= SCREEN_HEIGHT {
+        if x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT {
             return;
         }
         let stride = self.screen_buffer.width();
-        self.screen_buffer.raw_pixels_mut()[screen_y * stride + screen_x] =
-            Cyd::rgb565(color).into_storage();
+        self.screen_buffer.raw_pixels_mut()[y * stride + x] = Cyd::rgb565(color).into_storage();
     }
 }
