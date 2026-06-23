@@ -1,7 +1,5 @@
 use embedded_graphics::prelude::Point;
-use linkage_blaze_core::{
-    DrawItem, DrawItemIter, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed,
-};
+use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed};
 
 #[cfg(target_os = "none")]
 use embedded_graphics::pixelcolor::IntoStorage;
@@ -24,7 +22,7 @@ pub const BALLET_BASELINE_Y: i32 = 300;
 pub const BALLET_SCALE: f32 = 1.575;
 
 // todo000 is this used anywhere? if so, why?
-const FIGURE_STROKE_PX: i32 = 5;
+pub const FIGURE_STROKE_PX: i32 = 5;
 
 pub const BALLET: LinkageFixed<BALLET_DOF, 6, 538> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
@@ -55,51 +53,7 @@ impl PixelTarget for CydFrame<'_> {
     }
 }
 
-// todo0000 (may no longer apply) review the old tile renderer replacement.
-pub fn render_frame<T: PixelTarget>(target: &mut T, params: &[f32; BALLET_DOF]) {
-    let ballet_view = BALLET.view();
-    let mut iter: DrawItemIter<BALLET_DOF, 6> = ballet_view.draw_items(params);
-    for draw_item in &mut iter {
-        match draw_item {
-            DrawItem::Stroke(stroke) => {
-                draw_segment(
-                    target,
-                    pose_to_point(stroke.start()),
-                    pose_to_point(stroke.end()),
-                    FIGURE_COLOR,
-                    FIGURE_STROKE_PX,
-                );
-            }
-            DrawItem::Disk(disk) => {
-                draw_filled_circle(
-                    target,
-                    pose_to_point(disk.pose()),
-                    disk.radius(),
-                    FIGURE_COLOR,
-                );
-            }
-            DrawItem::Ring(ring) => {
-                draw_ring(
-                    target,
-                    pose_to_point(ring.pose()),
-                    ring.radius(),
-                    ring.width(),
-                    FIGURE_COLOR,
-                );
-            }
-            DrawItem::Sphere(sphere) => {
-                draw_filled_circle(
-                    target,
-                    pose_to_point(sphere.pose()),
-                    sphere.radius(),
-                    FIGURE_COLOR,
-                );
-            }
-        }
-    }
-}
-
-fn draw_segment<T: PixelTarget>(
+pub fn draw_segment<T: PixelTarget>(
     target: &mut T,
     start: Point,
     end: Point,
@@ -141,7 +95,12 @@ fn draw_segment<T: PixelTarget>(
     }
 }
 
-fn draw_filled_circle<T: PixelTarget>(target: &mut T, center: Point, radius: f32, color: Rgb888) {
+pub fn draw_filled_circle<T: PixelTarget>(
+    target: &mut T,
+    center: Point,
+    radius: f32,
+    color: Rgb888,
+) {
     let radius = round_to_i32(radius * BALLET_SCALE).max(1);
     for local_y in -radius..=radius {
         for local_x in -radius..=radius {
@@ -152,7 +111,7 @@ fn draw_filled_circle<T: PixelTarget>(target: &mut T, center: Point, radius: f32
     }
 }
 
-fn draw_ring<T: PixelTarget>(
+pub fn draw_ring<T: PixelTarget>(
     target: &mut T,
     center: Point,
     radius: f32,
@@ -189,7 +148,7 @@ fn put_pixel<T: PixelTarget>(target: &mut T, x: i32, y: i32, color: Rgb888) {
     target.put_pixel(x, y, color);
 }
 
-fn pose_to_point(pose: Pose) -> Point {
+pub fn pose_to_point(pose: Pose) -> Point {
     let position = pose.position();
     Point::new(
         BALLET_CENTER_X - round_to_i32(position[1] * BALLET_SCALE),

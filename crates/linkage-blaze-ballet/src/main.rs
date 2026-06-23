@@ -16,8 +16,12 @@ use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
 use linkage_blaze_ballet::{
     ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
-    ballet_render::{BACKGROUND, TEXT, render_frame},
+    ballet_render::{
+        BACKGROUND, BALLET, FIGURE_COLOR, FIGURE_STROKE_PX, TEXT, draw_filled_circle, draw_ring,
+        draw_segment, pose_to_point,
+    },
 };
+use linkage_blaze_core::DrawItem;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
 use log::info;
 
@@ -75,7 +79,49 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
-            render_frame(&mut cyd_frame, params);
+            let ballet_view = BALLET.view();
+            let mut draw_items = ballet_view.draw_items(params);
+            // todo0000 (may no longer apply) review the old tile renderer replacement.
+            for draw_item in &mut draw_items {
+                match draw_item {
+                    DrawItem::Stroke(stroke) => {
+                        draw_segment(
+                            &mut cyd_frame,
+                            pose_to_point(stroke.start()),
+                            pose_to_point(stroke.end()),
+                            FIGURE_COLOR,
+                            FIGURE_STROKE_PX,
+                        );
+                    }
+                    DrawItem::Disk(disk) => {
+                        draw_filled_circle(
+                            &mut cyd_frame,
+                            pose_to_point(disk.pose()),
+                            disk.radius(),
+                            FIGURE_COLOR,
+                        );
+                    }
+                    DrawItem::Ring(ring) => {
+                        draw_ring(
+                            &mut cyd_frame,
+                            pose_to_point(ring.pose()),
+                            ring.radius(),
+                            ring.width(),
+                            FIGURE_COLOR,
+                        );
+                    }
+                    DrawItem::Sphere(sphere) => {
+                        draw_filled_circle(
+                            &mut cyd_frame,
+                            pose_to_point(sphere.pose()),
+                            sphere.radius(),
+                            FIGURE_COLOR,
+                        );
+                    }
+                }
+            }
+
+            // todo000 review this
             draw_status(&mut cyd_frame, text565, frame_index, last_frame_duration);
             cyd_frame.flush()?;
             last_frame_duration = Some(Instant::now() - started);
