@@ -179,6 +179,14 @@ impl<const DOF: usize, const FRAME_COUNT: usize> BvhMotion<DOF, FRAME_COUNT> {
 pub const fn parse_bvh_motion_section<const DOF: usize, const FRAME_COUNT: usize>(
     bytes: &[u8],
 ) -> [[f32; DOF]; FRAME_COUNT] {
+    // Pre-pass: count channels in HIERARCHY to validate DOF before any parsing.
+    // If DOF is wrong the "index out of bounds: the length is 0 but the index is N"
+    // compile error below shows N — the correct DOF value to use instead.
+    let actual_dof = count_bvh_channels(bytes);
+    if actual_dof > 0 && actual_dof != DOF {
+        let _: u8 = [][actual_dof]; // correct DOF = N shown as "the index is N" in the compile error
+    }
+
     let mut i = find_after(bytes, 0, b"MOTION");
 
     // "Frames:\t<count>\n"
@@ -428,6 +436,28 @@ pub const fn normalize_bvh_motion<const DOF: usize, const FRAME_COUNT: usize>(
 }
 
 // ── channel-type scanner ──────────────────────────────────────────────────────
+
+/// Count the total number of channels declared in the BVH HIERARCHY section.
+///
+/// Sums every `CHANNELS N ...` line before the `MOTION` keyword.  Used by
+/// [`parse_bvh_motion_section`] to validate `DOF` before any motion parsing.
+pub const fn count_bvh_channels(bytes: &[u8]) -> usize {
+    let hierarchy_end = find_motion_offset(bytes);
+    let mut i = 0;
+    let mut total = 0usize;
+    while i < hierarchy_end {
+        if bytes_match(bytes, i, b"CHANNELS") {
+            i += 8;
+            i = skip_whitespace(bytes, i);
+            let (count, next) = parse_uint(bytes, i);
+            i = next;
+            total += count;
+        } else {
+            i += 1;
+        }
+    }
+    total
+}
 
 /// Scan the BVH hierarchy section and return which of the `DOF` channels are
 /// position channels (`true`) versus rotation channels (`false`).
