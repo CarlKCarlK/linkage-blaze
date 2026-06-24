@@ -16,8 +16,8 @@ use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
 
 use linkage_blaze_core::{
-    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion,
-    linkage, linkage_fixed, render_draw_items,
+    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_motion,
+    bvh_parse::BvhMotion, linkage, linkage_fixed, render_draw_items,
 };
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
 use log::info;
@@ -25,29 +25,28 @@ use log::info;
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)
 const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36); // very dark blue-green
-const FIGURE_COLOR: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
+const FIGURE: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 
 // todo000 these could be OK, but there are a lot of them. Can't some be done via math?
-const BALLET_CENTER_X: i32 = 84;
-const BALLET_BASELINE_Y: i32 = 300;
-const BALLET_SCALE: f32 = 1.575;
+const CENTER_X: i32 = 84;
+const BASELINE_Y: i32 = 300;
+const SCALE: f32 = 1.575;
 
 #[allow(long_running_const_eval)]
 const MOTION: BvhMotion<132, 592> = bvh_motion!("../../linkage-blaze-mocap/samples/pirouette.bvh");
 const LINKAGE_INNER: LinkageFixed<{ MOTION.dof() }, 6, 538> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
 const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>::start()
-    .pen_color(FIGURE_COLOR)
+    .pen_color(FIGURE)
     .pen_width(3.2)
     .combine(LINKAGE_INNER);
 
-const BALLET_PROJECTION: NegXProjection = NegXProjection {
-    center_x: BALLET_CENTER_X as f32,
-    baseline_y: BALLET_BASELINE_Y as f32,
-    scale: BALLET_SCALE,
+const PROJECTION: NegXProjection = NegXProjection {
+    center_x: CENTER_X as f32,
+    baseline_y: BASELINE_Y as f32,
+    scale: SCALE,
 };
-
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -104,7 +103,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             // todo000 a free-floating function?
             // todo000 understand the inputs.
             render_draw_items(
-                &BALLET_PROJECTION,
+                &PROJECTION,
                 &mut PixelSurface::new(&mut cyd_frame),
                 linkage.draw_items(&params),
             );
