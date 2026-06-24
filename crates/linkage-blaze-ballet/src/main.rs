@@ -67,8 +67,8 @@ const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
 include!("ballet_frames_precomputed.rs");
 
 use linkage_blaze_ballet::ballet_render::{
-    BACKGROUND, BALLET, FIGURE_COLOR, FIGURE_STROKE_PX, TEXT, draw_filled_circle, draw_segment,
-    pose_to_point,
+    BACKGROUND, BALLET, TEXT, disk_screen_axes, draw_filled_circle, draw_filled_ellipse,
+    draw_segment, pose_to_point,
 };
 use linkage_blaze_core::DrawItem;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
@@ -138,17 +138,19 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
                             &mut cyd_frame,
                             pose_to_point(stroke.start()),
                             pose_to_point(stroke.end()),
-                            FIGURE_COLOR,
-                            FIGURE_STROKE_PX,
+                            stroke.color(),
+                            stroke.width(),
                         );
                     }
-                    // todo00 Disk or filled_circle?
                     DrawItem::Disk(disk) => {
-                        draw_filled_circle(
+                        let (axis_a, axis_b) =
+                            disk_screen_axes(disk.pose().orientation(), disk.radius());
+                        draw_filled_ellipse(
                             &mut cyd_frame,
                             pose_to_point(disk.pose()),
-                            disk.radius(),
-                            FIGURE_COLOR,
+                            axis_a,
+                            axis_b,
+                            disk.color(),
                         );
                     }
                     DrawItem::Sphere(sphere) => {
@@ -156,7 +158,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
                             &mut cyd_frame,
                             pose_to_point(sphere.pose()),
                             sphere.radius(),
-                            FIGURE_COLOR,
+                            sphere.color(),
                         );
                     }
                 }
