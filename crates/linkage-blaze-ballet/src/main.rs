@@ -42,6 +42,7 @@ const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>:
     .pen_width(3.2)
     .combine(LINKAGE_INNER);
 
+// todo000 still to understand projections.
 const PROJECTION: NegXProjection = NegXProjection {
     center_x: CENTER_X as f32,
     baseline_y: BASELINE_Y as f32,
@@ -133,7 +134,7 @@ fn draw_status<D>(
                 slomo,
             ),
         )
-        .ok();
+        .expect("status text fits in 64 bytes");
     } else {
         Write::write_fmt(
             &mut status,
@@ -143,7 +144,7 @@ fn draw_status<D>(
                 MOTION.sample_count()
             ),
         )
-        .ok();
+        .expect("status text fits in 64 bytes");
     }
 
     Text::with_baseline(
@@ -153,5 +154,5 @@ fn draw_status<D>(
         Baseline::Top,
     )
     .draw(draw_target)
-    .ok();
+    .expect("drawing to an Infallible target cannot fail");
 }

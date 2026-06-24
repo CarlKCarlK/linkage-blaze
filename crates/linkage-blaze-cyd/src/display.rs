@@ -537,7 +537,7 @@ impl CydDisplay {
         let mut prepared = heapless::Vec::<PreparedPrimitive, 16>::new();
         for prim in draw_primitives {
             if let Some(prep) = PreparedPrimitive::from_draw_primitive(prim) {
-                prepared.push(prep).ok();
+                prepared.push(prep).expect("at most 16 prepared primitives");
             }
         }
 

@@ -104,17 +104,21 @@ impl CydClockDisplay {
             &mut wifi_text,
             format_args!("WiFi {}", wifi_label(wifi_mode)),
         )
-        .ok();
+        .expect("wifi text fits in 32 bytes");
         if wifi_text.as_str() != self.last_wifi_text.as_str() {
             self.show_small_text_line(wifi_text.as_str(), TEXT_OK, Point::new(240, 8), 70)?;
             self.last_wifi_text.clear();
-            self.last_wifi_text.push_str(wifi_text.as_str()).ok();
+            self.last_wifi_text
+                .push_str(wifi_text.as_str())
+                .expect("wifi text fits in last_wifi_text buffer");
         }
 
         if time_text != self.last_time_text.as_str() {
             self.show_main_text_line(time_text, TEXT_MAIN)?;
             self.last_time_text.clear();
-            self.last_time_text.push_str(time_text).ok();
+            self.last_time_text
+                .push_str(time_text)
+                .expect("time text fits in last_time_text buffer");
         }
 
         self.show_clock(CLOCK_HANDS.view(), clock_time)?;
@@ -138,7 +142,8 @@ impl CydClockDisplay {
 
         for character in text.chars() {
             let mut character_text = heapless::String::<4>::new();
-            fmt::Write::write_char(&mut character_text, character).ok();
+            fmt::Write::write_char(&mut character_text, character)
+                .expect("single character fits in 4 bytes");
             let mut glyph_buffer = self.glyph_workspace.view_mut(flush_width, flush_height);
             glyph_buffer.clear(Cyd::rgb565(BACKGROUND));
             Text::with_baseline(
@@ -148,7 +153,7 @@ impl CydClockDisplay {
                 Baseline::Top,
             )
             .draw(&mut glyph_buffer)
-            .ok();
+            .expect("drawing to an Infallible glyph buffer cannot fail");
             if scale > 1 {
                 scale_glyph_in_place(&mut glyph_buffer, glyph_width, glyph_height, scale);
             }
@@ -185,9 +190,9 @@ impl CydClockDisplay {
         color: Rgb888,
     ) -> Result<(), CydClockDisplayError> {
         let mut padded = heapless::String::<16>::new();
-        padded.push_str(text).ok();
+        padded.push_str(text).expect("time text fits in 16 bytes");
         while padded.chars().count() < MAX_TIME_CHARS {
-            padded.push(' ').ok();
+            padded.push(' ').expect("padded time text fits in 16 bytes");
         }
         let x = (SCREEN_WIDTH as i32 - MAX_TIME_DISPLAY_WIDTH as i32) / 2;
         self.show_text_line(
@@ -244,7 +249,7 @@ impl CydClockDisplay {
                 DrawItem::Disk(disk) => DrawPrimitive::Ellipse(disk_to_ellipse(disk)),
                 DrawItem::Sphere(sphere) => DrawPrimitive::Ellipse(sphere_to_ellipse(sphere)),
             };
-            primitives.push(prim).ok();
+            primitives.push(prim).expect("at most 16 clock primitives");
         }
 
         let t0 = Instant::now();

@@ -93,7 +93,9 @@ impl CydSim {
 
     #[wasm_bindgen(js_name = drawViewOnly)]
     pub fn draw_view_only(&mut self) {
-        self.sim.draw_view_only(&mut self.display).ok();
+        self.sim
+            .draw_view_only(&mut self.display)
+            .expect("drawing to the Infallible wasm display cannot fail");
     }
 
     pub fn reverse_kinematics(&mut self) -> f32 {
@@ -138,12 +140,15 @@ impl CydSim {
 impl CydSim {
     fn new_from_core_sim(sim: CoreCydSim) -> Self {
         let mut display = WasmDisplay::new();
-        sim.draw(&mut display).ok();
+        sim.draw(&mut display)
+            .expect("drawing to the Infallible wasm display cannot fail");
         Self { sim, display }
     }
 
     fn draw_frame(&mut self) {
-        self.sim.draw(&mut self.display).ok();
+        self.sim
+            .draw(&mut self.display)
+            .expect("drawing to the Infallible wasm display cannot fail");
     }
 }
 
