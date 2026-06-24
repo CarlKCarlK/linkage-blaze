@@ -286,7 +286,7 @@ pub(super) fn assert_png_matches_expected(
 
     let expected_bytes = fs::read(&expected_path)?;
     let actual_bytes = fs::read(&output_path)?;
-    let _ = fs::remove_file(&output_path);
+    fs::remove_file(&output_path).expect("remove temp output file");
     assert_eq!(
         expected_bytes, actual_bytes,
         "PNG bytes differ; rerun with ROBOT_ARM_UPDATE_PNGS=1 to accept the new image"

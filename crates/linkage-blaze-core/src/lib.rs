@@ -28,8 +28,8 @@ extern crate std;
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-mod math;
 pub mod bvh_parse;
+mod math;
 
 #[cfg(feature = "alloc")]
 use alloc::borrow::ToOwned;
@@ -547,7 +547,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// let start = styled.next().expect("has start");
     /// assert!(start.pose().position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
     /// assert_eq!(start.pen(), PenState::Down);
-    /// let _ = styled.next();
+    /// styled.next().expect("has first forward");
     /// let end = styled.next().expect("has second forward");
     /// assert!(end.pose().position()[0] > 2.9);
     /// ```
@@ -1403,7 +1403,10 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// Duplicate names are allowed; later definitions shadow earlier ones when
     /// a DSL method like `yaw_param` looks up the name.
     pub const fn define_param(mut self, name: &'static str, default: f32) -> Self {
-        assert!(self.param_len < DOF, "DOF is too small; use a large DOF then call .param_count() to find the exact value");
+        assert!(
+            self.param_len < DOF,
+            "DOF is too small; use a large DOF then call .param_count() to find the exact value"
+        );
         assert!(default >= 0.0, "parameter default must be at least 0.0");
         assert!(default <= 1.0, "parameter default must be at most 1.0");
         self.params[self.param_len] = Param { name, default };
@@ -1420,7 +1423,10 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         let index = match self.mark_index(name) {
             Some(index) => index,
             None => {
-                assert!(self.mark_len < MARKS, "MARKS is too small; use a large MARKS then call .mark_count() to find the exact value");
+                assert!(
+                    self.mark_len < MARKS,
+                    "MARKS is too small; use a large MARKS then call .mark_count() to find the exact value"
+                );
                 let index = self.mark_len;
                 self.mark_names[index] = name;
                 self.mark_len += 1;
@@ -1494,7 +1500,10 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     }
 
     const fn push(mut self, step: Step) -> Self {
-        assert!(self.len < N, "N is too small; use a large N then call .step_count() to find the exact value");
+        assert!(
+            self.len < N,
+            "N is too small; use a large N then call .step_count() to find the exact value"
+        );
         self.steps[self.len] = step;
         self.len += 1;
         self
@@ -3693,6 +3702,121 @@ pub enum DrawItem {
     Sphere(SphereItem),
 }
 
+impl DrawItem {
+    /// Project this 3D/linkage-space item through `projection` into a
+    /// 2D/screen-space [`ProjectedDrawItem`] ready to [`draw`](ProjectedDrawItem::draw).
+    #[must_use]
+    pub fn project<P: Projection>(self, projection: &P) -> ProjectedDrawItem {
+        match self {
+            DrawItem::Stroke(stroke) => ProjectedDrawItem::Stroke {
+                start: projection.project_pos(stroke.start()),
+                end: projection.project_pos(stroke.end()),
+                color: stroke.color(),
+                pixel_width: projection.project_width(stroke.width()),
+            },
+            DrawItem::Disk(disk) => {
+                let orientation = disk.pose().orientation();
+                ProjectedDrawItem::Ellipse {
+                    center: projection.project_pos(disk.pose()),
+                    axis_a: projection.project_dir(
+                        disk.pose(),
+                        orientation.forward(),
+                        disk.radius(),
+                    ),
+                    axis_b: projection.project_dir(disk.pose(), orientation.left(), disk.radius()),
+                    color: disk.color(),
+                }
+            }
+            DrawItem::Sphere(sphere) => ProjectedDrawItem::Circle {
+                center: projection.project_pos(sphere.pose()),
+                pixel_radius: projection.project_radius(sphere.pose(), sphere.radius()),
+                color: sphere.color(),
+            },
+        }
+    }
+}
+
+/// A [`DrawItem`] after projection into 2D pixel space, ready to draw onto a
+/// [`PixelTarget`].
+///
+/// Obtain one with [`DrawItem::project`]. All coordinates and sizes are in
+/// pixels. The `color` stays [`Rgb888`]; the target performs any conversion
+/// (for example to `Rgb565`) at its pixel boundary.
+#[derive(Clone, Copy, Debug)]
+pub enum ProjectedDrawItem {
+    /// A line stroke from `start` to `end` with the given pixel width.
+    Stroke {
+        start: (f32, f32),
+        end: (f32, f32),
+        color: Rgb888,
+        pixel_width: f32,
+    },
+    /// A filled, possibly foreshortened, ellipse (a projected disk).
+    ///
+    /// The ellipse is the locus of `center + s·axis_a + t·axis_b` with `s²+t² ≤ 1`.
+    Ellipse {
+        center: (f32, f32),
+        axis_a: (f32, f32),
+        axis_b: (f32, f32),
+        color: Rgb888,
+    },
+    /// A filled circle (a projected sphere).
+    Circle {
+        center: (f32, f32),
+        pixel_radius: f32,
+        color: Rgb888,
+    },
+}
+
+impl ProjectedDrawItem {
+    /// Draw this item onto a [`PixelTarget`].
+    ///
+    /// Strokes use the embedded-graphics [`Line`](embedded_graphics::primitives::Line)
+    /// primitive and circles use [`Circle`](embedded_graphics::primitives::Circle);
+    /// the general projected ellipse is rasterized with [`fill_ellipse_pixels`].
+    pub fn draw<T: PixelTarget>(&self, target: &mut T) {
+        use embedded_graphics::{
+            Drawable,
+            primitives::{Circle, Line, Primitive, PrimitiveStyle},
+        };
+        match *self {
+            ProjectedDrawItem::Stroke {
+                start,
+                end,
+                color,
+                pixel_width,
+            } => {
+                let width = ((pixel_width + 0.5) as u32).max(1);
+                Line::new(to_point(start), to_point(end))
+                    .into_styled(PrimitiveStyle::with_stroke(color, width))
+                    .draw(&mut PixelTargetAdapter(target))
+                    .expect("drawing onto a PixelTargetAdapter is Infallible");
+            }
+            ProjectedDrawItem::Ellipse {
+                center,
+                axis_a,
+                axis_b,
+                color,
+            } => {
+                fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
+                    pixel_put(target, x, y, color);
+                });
+            }
+            ProjectedDrawItem::Circle {
+                center,
+                pixel_radius,
+                color,
+            } => {
+                let diameter = (((pixel_radius * 2.0) + 0.5) as u32).max(1);
+                Circle::with_center(to_point(center), diameter)
+                    .into_styled(PrimitiveStyle::with_fill(color))
+                    .draw(&mut PixelTargetAdapter(target))
+                    .expect("drawing onto a PixelTargetAdapter is Infallible");
+            }
+        }
+    }
+}
+
 /// Maps 3D world-space geometry to 2D pixel-space for a particular view.
 ///
 /// All `project_*` methods return pixel-space values. Perspective renderers
@@ -3905,12 +4029,20 @@ pub struct PixelSurface<'a, T: PixelTarget> {
 
 impl<'a, T: PixelTarget> PixelSurface<'a, T> {
     pub fn new(target: &'a mut T) -> Self {
-        Self { target, tile_origin: embedded_graphics::prelude::Point::new(0, 0) }
+        Self {
+            target,
+            tile_origin: embedded_graphics::prelude::Point::new(0, 0),
+        }
     }
 
     /// Write one pixel at `(x, y)` in the drawing coordinate system, clipping to the target bounds.
     pub fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888) {
-        pixel_put(self.target, x - self.tile_origin.x, y - self.tile_origin.y, color);
+        pixel_put(
+            self.target,
+            x - self.tile_origin.x,
+            y - self.tile_origin.y,
+            color,
+        );
     }
 }
 
@@ -3957,7 +4089,10 @@ impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
         let width = (pixel_width + 0.5) as u32;
         Line::new(to_point(start), to_point(end))
             .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
-            .draw(&mut TiledDrawAdapter { target: self.target, tile_origin: self.tile_origin })
+            .draw(&mut TiledDrawAdapter {
+                target: self.target,
+                tile_origin: self.tile_origin,
+            })
             .unwrap();
     }
 
@@ -3983,7 +4118,10 @@ impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
         let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
         Circle::with_center(to_point(center), diameter.max(1))
             .into_styled(PrimitiveStyle::with_fill(color))
-            .draw(&mut TiledDrawAdapter { target: self.target, tile_origin: self.tile_origin })
+            .draw(&mut TiledDrawAdapter {
+                target: self.target,
+                tile_origin: self.tile_origin,
+            })
             .unwrap();
     }
 }
@@ -4503,7 +4641,7 @@ mod tests {
             0.5, // spin hand
         ];
 
-        let _ = LINKAGE0.view().final_pose(&params);
+        LINKAGE0.view().final_pose(&params);
     }
 
     // ── Shadowing semantics ───────────────────────────────────────────────────

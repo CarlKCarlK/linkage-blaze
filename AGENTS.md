@@ -7,6 +7,7 @@ This file contains shared workspace rules for this repository.
 - Avoid introducing `unsafe` blocks. If a change truly requires `unsafe`, call it out explicitly and explain the justification so the user can review it carefully.
 - Do not "fix" warnings or errors by suppressing lints (for example `#[allow(...)]`, crate-level allow attributes, or similar) unless the human explicitly requests that suppression.
 - If warnings are caused by obsolete code, delete or refactor the obsolete code instead of hiding the warning.
+- Never use `let _ = …` to suppress a `Result`. Use `.expect("…")` with a message stating the invariant (or handle the error properly). This applies even when the error type is `Infallible`: write `.expect(...)` rather than silently dropping the value. For a non-`Result` value that is intentionally unused, call the function as a plain statement instead of binding it to `_`.
 - Keep the core crate `no_std` and no-allocation unless the user explicitly changes that goal.
 - Avoid silent clamping; prefer asserts or typed ranges so out-of-range inputs fail fast.
 - Prefer `no_run` doctests; use `ignore` only when absolutely necessary, and call out why.

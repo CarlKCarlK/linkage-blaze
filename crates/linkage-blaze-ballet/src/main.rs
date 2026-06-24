@@ -16,8 +16,8 @@ use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
 
 use linkage_blaze_core::{
-    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_motion,
-    bvh_parse::BvhMotion, linkage, linkage_fixed, render_draw_items,
+    LinkageFixed, NegXProjection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
+    linkage_fixed,
 };
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
 use log::info;
@@ -100,11 +100,9 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             // todo000 proj is too short
             // todo000 a free-floating function?
             // todo000 understand the inputs.
-            render_draw_items(
-                &PROJECTION,
-                &mut PixelSurface::new(&mut cyd_frame),
-                linkage.draw_items(&params),
-            );
+            for draw_item in linkage.draw_items(&params) {
+                draw_item.project(&PROJECTION).draw(&mut cyd_frame);
+            }
 
             // todo000 review this
             draw_status(&mut cyd_frame, text565, sample_index, last_sample_duration);

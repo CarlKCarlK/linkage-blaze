@@ -48,23 +48,21 @@ impl CydSim {
 
     pub fn touch_down(&mut self, x: f32, y: f32) {
         use linkage_blaze_armatron_core::TouchInputEvent;
-        let _ = self
-            .sim
+        self.sim
             .handle_touch_input_event(TouchInputEvent::Down { x, y });
         self.draw_frame();
     }
 
     pub fn touch_move(&mut self, x: f32, y: f32) {
         use linkage_blaze_armatron_core::TouchInputEvent;
-        let _ = self
-            .sim
+        self.sim
             .handle_touch_input_event(TouchInputEvent::Move { x, y });
         self.draw_frame();
     }
 
     pub fn touch_up(&mut self) {
         use linkage_blaze_armatron_core::TouchInputEvent;
-        let _ = self.sim.handle_touch_input_event(TouchInputEvent::Up);
+        self.sim.handle_touch_input_event(TouchInputEvent::Up);
         self.draw_frame();
     }
 
