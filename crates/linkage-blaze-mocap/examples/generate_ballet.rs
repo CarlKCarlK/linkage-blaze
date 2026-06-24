@@ -35,10 +35,10 @@ fn run() -> Result<(), String> {
         "// `const-parse` feature is not enabled.  Regenerate with `just generate-ballet`."
     )
     .map_err(format_error)?;
-    // BALLET_DOF and BALLET_FRAME_COUNT are defined in ballet_frames.rs; do not duplicate them.
+    // DOF and FRAME_COUNT are defined in lib.rs; do not duplicate them.
     writeln!(
         output,
-        "\npub static BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] = ["
+        "\npub static FRAMES: [[f32; DOF]; FRAME_COUNT] = ["
     )
     .map_err(format_error)?;
 
