@@ -10,11 +10,7 @@ path = "src/main.rs"
 required-features = ["esp32"]
 
 [features]
-default = ["esp32", "const-parse"]
-# Parse pirouette.bvh at compile time via const fn (~8 s extra build time).
-# Without this feature the pre-generated `ballet_frames_precomputed.rs` is used instead.
-# Regenerate the pre-generated file with `just generate-ballet`.
-const-parse = []
+default = ["esp32"]
 esp32 = [
     "device-envoy-esp/esp32",
     "esp-hal/esp32",
