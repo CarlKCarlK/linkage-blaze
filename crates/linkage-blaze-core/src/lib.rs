@@ -3665,6 +3665,101 @@ pub enum DrawItem {
     Sphere(SphereItem),
 }
 
+/// Maps 3D world-space geometry to 2D pixel-space for a particular view.
+///
+/// All `project_*` methods return pixel-space values. Perspective renderers
+/// use the `pose` argument to apply depth-based scaling where needed.
+pub trait Projection {
+    /// Project a pose's position to pixel-space `(x, y)`.
+    fn project_pos(&self, pose: Pose) -> (f32, f32);
+    /// Project a world-space direction vector (scaled by `radius`) to pixel-space.
+    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32);
+    /// Scale a world-space sphere radius to pixel-space.
+    fn project_radius(&self, pose: Pose, radius: f32) -> f32;
+    /// Scale a world-space stroke width to pixel-space.
+    fn project_width(&self, width: f32) -> f32;
+}
+
+/// Draws 2D primitives in pixel space. All coordinates and sizes are pre-scaled.
+pub trait DrawSurface {
+    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32);
+    fn filled_ellipse(
+        &mut self,
+        center: (f32, f32),
+        axis_a: (f32, f32),
+        axis_b: (f32, f32),
+        color: Rgb888,
+    );
+    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888);
+}
+
+/// Render draw items through a projection and surface. Handles the Disk→ellipse
+/// conversion so every renderer automatically gets correct foreshortening.
+pub fn render_draw_items<P, S>(proj: &P, surface: &mut S, items: impl Iterator<Item = DrawItem>)
+where
+    P: Projection,
+    S: DrawSurface,
+{
+    for item in items {
+        match item {
+            DrawItem::Stroke(s) => surface.stroke(
+                proj.project_pos(s.start()),
+                proj.project_pos(s.end()),
+                s.color(),
+                proj.project_width(s.width()),
+            ),
+            DrawItem::Disk(d) => {
+                let orient = d.pose().orientation();
+                surface.filled_ellipse(
+                    proj.project_pos(d.pose()),
+                    proj.project_dir(d.pose(), orient.forward(), d.radius()),
+                    proj.project_dir(d.pose(), orient.left(), d.radius()),
+                    d.color(),
+                );
+            }
+            DrawItem::Sphere(s) => surface.filled_circle(
+                proj.project_pos(s.pose()),
+                proj.project_radius(s.pose(), s.radius()),
+                s.color(),
+            ),
+        }
+    }
+}
+
+/// Rasterize an ellipse pixel-by-pixel via a callback.
+///
+/// The ellipse is the locus of `center + s·axis_a + t·axis_b` where `s²+t² ≤ 1`.
+/// All values are in pixel space. Skips degenerate (edge-on) ellipses silently.
+pub fn fill_ellipse_pixels(
+    center: (f32, f32),
+    axis_a: (f32, f32),
+    axis_b: (f32, f32),
+    mut put_pixel: impl FnMut(i32, i32),
+) {
+    let (ax, ay) = axis_a;
+    let (bx, by) = axis_b;
+    let det = ax * by - ay * bx;
+    if det.abs() < 0.5 {
+        return;
+    }
+    let inv_det = 1.0 / det;
+    let bound_x = (ax.abs() + bx.abs()) as i32 + 1;
+    let bound_y = (ay.abs() + by.abs()) as i32 + 1;
+    let cx = center.0 as i32;
+    let cy = center.1 as i32;
+    for local_y in -bound_y..=bound_y {
+        for local_x in -bound_x..=bound_x {
+            let dx = local_x as f32;
+            let dy = local_y as f32;
+            let s = (by * dx - bx * dy) * inv_det;
+            let t = (ax * dy - ay * dx) * inv_det;
+            if s * s + t * t <= 1.0 {
+                put_pixel(cx + local_x, cy + local_y);
+            }
+        }
+    }
+}
+
 // ── .lb.rs include macros ────────────────────────────────────────────────────
 //
 // A `.lb.rs` file is a complete Rust expression.

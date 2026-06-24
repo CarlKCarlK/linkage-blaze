@@ -1,5 +1,15 @@
-use embedded_graphics::prelude::Point;
-use linkage_blaze_core::{LinkageFixed, Mat3, Pose, Rgb888, WebColors, linkage, linkage_fixed};
+use core::convert::Infallible;
+use embedded_graphics::{
+    Drawable, Pixel,
+    draw_target::DrawTarget,
+    geometry::{OriginDimensions, Size},
+    prelude::Point,
+    primitives::{Circle, Line, Primitive, PrimitiveStyle},
+};
+use linkage_blaze_core::{
+    DrawSurface, LinkageFixed, Pose, Projection, Rgb888, Vec3, WebColors, fill_ellipse_pixels,
+    linkage, linkage_fixed,
+};
 
 #[cfg(target_os = "none")]
 use embedded_graphics::pixelcolor::IntoStorage;
@@ -57,101 +67,86 @@ impl PixelTarget for CydFrame<'_> {
     }
 }
 
-pub fn draw_segment<T: PixelTarget>(
-    target: &mut T,
-    start: Point,
-    end: Point,
-    color: Rgb888,
-    width: f32,
-) {
-    let thickness = round_to_i32(width * BALLET_SCALE).max(1);
-    let brush_low = -(thickness / 2);
-    let brush_high = brush_low + thickness - 1;
-    let mut current_x = start.x;
-    let mut current_y = start.y;
-    let delta_x = (end.x - start.x).abs();
-    let delta_y = -(end.y - start.y).abs();
-    let step_x = if start.x < end.x { 1 } else { -1 };
-    let step_y = if start.y < end.y { 1 } else { -1 };
-    let mut error = delta_x + delta_y;
+/// Adapts a [`PixelTarget`] to the embedded-graphics [`DrawTarget`] interface.
+struct PixelTargetAdapter<'a, T: PixelTarget>(&'a mut T);
 
-    loop {
-        let mut dy = brush_low;
-        while dy <= brush_high {
-            let mut dx = brush_low;
-            while dx <= brush_high {
-                put_pixel(target, current_x + dx, current_y + dy, color);
-                dx += 1;
-            }
-            dy += 1;
+impl<T: PixelTarget> DrawTarget for PixelTargetAdapter<'_, T> {
+    type Color = Rgb888;
+    type Error = Infallible;
+
+    fn draw_iter<I: IntoIterator<Item = Pixel<Rgb888>>>(
+        &mut self,
+        pixels: I,
+    ) -> Result<(), Infallible> {
+        for Pixel(point, color) in pixels {
+            put_pixel(self.0, point.x, point.y, color);
         }
-        if current_x == end.x && current_y == end.y {
-            break;
-        }
-        let doubled_error = error * 2;
-        if doubled_error >= delta_y {
-            error += delta_y;
-            current_x += step_x;
-        }
-        if doubled_error <= delta_x {
-            error += delta_x;
-            current_y += step_y;
-        }
+        Ok(())
     }
 }
 
-pub fn draw_filled_circle<T: PixelTarget>(
-    target: &mut T,
-    center: Point,
-    radius: f32,
-    color: Rgb888,
-) {
-    let radius = round_to_i32(radius * BALLET_SCALE).max(1);
-    for local_y in -radius..=radius {
-        for local_x in -radius..=radius {
-            if local_x * local_x + local_y * local_y <= radius * radius {
-                put_pixel(target, center.x + local_x, center.y + local_y, color);
-            }
-        }
+impl<T: PixelTarget> OriginDimensions for PixelTargetAdapter<'_, T> {
+    fn size(&self) -> Size {
+        Size::new(self.0.width() as u32, self.0.height() as u32)
     }
 }
 
-/// Project a disk's orientation and radius into two screen-space half-axis vectors.
-/// The ballet view looks along -X: screen_x ← -world_Y, screen_y ← -world_Z.
-pub fn disk_screen_axes(orient: Mat3, radius: f32) -> ((f32, f32), (f32, f32)) {
-    let axis_a = (-orient[1][0] * radius, -orient[2][0] * radius);
-    let axis_b = (-orient[1][1] * radius, -orient[2][1] * radius);
-    (axis_a, axis_b)
+/// Orthographic projection for the ballet renderer.
+/// View: looking along -X; screen_x ← -world_Y, screen_y ← -world_Z.
+pub struct BalletProjection;
+
+impl Projection for BalletProjection {
+    fn project_pos(&self, pose: Pose) -> (f32, f32) {
+        let p = pose.position();
+        (
+            BALLET_CENTER_X as f32 - p[1] * BALLET_SCALE,
+            BALLET_BASELINE_Y as f32 - p[2] * BALLET_SCALE,
+        )
+    }
+
+    fn project_dir(&self, _pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
+        let r = radius * BALLET_SCALE;
+        (-world_dir[1] * r, -world_dir[2] * r)
+    }
+
+    fn project_radius(&self, _pose: Pose, radius: f32) -> f32 {
+        radius * BALLET_SCALE
+    }
+
+    fn project_width(&self, width: f32) -> f32 {
+        width * BALLET_SCALE
+    }
 }
 
-/// Fill an ellipse defined by two screen-space half-axis vectors from the center.
-/// Skips degenerate (edge-on) disks whose projected area is zero.
-pub fn draw_filled_ellipse<T: PixelTarget>(
-    target: &mut T,
-    center: Point,
-    axis_a: (f32, f32),
-    axis_b: (f32, f32),
-    color: Rgb888,
-) {
-    let (ax, ay) = (axis_a.0 * BALLET_SCALE, axis_a.1 * BALLET_SCALE);
-    let (bx, by) = (axis_b.0 * BALLET_SCALE, axis_b.1 * BALLET_SCALE);
-    let det = ax * by - ay * bx;
-    if det.abs() < 0.5 {
-        return;
+/// Wraps a [`PixelTarget`] as a [`DrawSurface`] using ballet-style drawing.
+pub struct BalletSurface<'a, T: PixelTarget>(pub &'a mut T);
+
+impl<T: PixelTarget> DrawSurface for BalletSurface<'_, T> {
+    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
+        let width = (pixel_width + 0.5) as u32;
+        Line::new(to_point(start), to_point(end))
+            .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
+            .draw(&mut PixelTargetAdapter(self.0))
+            .ok();
     }
-    let inv_det = 1.0 / det;
-    let bound_x = (ax.abs() + bx.abs()) as i32 + 1;
-    let bound_y = (ay.abs() + by.abs()) as i32 + 1;
-    for local_y in -bound_y..=bound_y {
-        for local_x in -bound_x..=bound_x {
-            let dx = local_x as f32;
-            let dy = local_y as f32;
-            let s = (by * dx - bx * dy) * inv_det;
-            let t = (ax * dy - ay * dx) * inv_det;
-            if s * s + t * t <= 1.0 {
-                put_pixel(target, center.x + local_x, center.y + local_y, color);
-            }
-        }
+
+    fn filled_ellipse(
+        &mut self,
+        center: (f32, f32),
+        axis_a: (f32, f32),
+        axis_b: (f32, f32),
+        color: Rgb888,
+    ) {
+        let target = &mut *self.0;
+        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| put_pixel(target, x, y, color));
+    }
+
+    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
+        let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
+        Circle::with_center(to_point(center), diameter.max(1))
+            .into_styled(PrimitiveStyle::with_fill(color))
+            .draw(&mut PixelTargetAdapter(self.0))
+            .ok();
     }
 }
 
@@ -159,28 +154,14 @@ fn put_pixel<T: PixelTarget>(target: &mut T, x: i32, y: i32, color: Rgb888) {
     if x < 0 || y < 0 {
         return;
     }
-
     let x = x as usize;
     let y = y as usize;
     if x >= target.width() || y >= target.height() {
         return;
     }
-
     target.put_pixel(x, y, color);
 }
 
-pub fn pose_to_point(pose: Pose) -> Point {
-    let position = pose.position();
-    Point::new(
-        BALLET_CENTER_X - round_to_i32(position[1] * BALLET_SCALE),
-        BALLET_BASELINE_Y - round_to_i32(position[2] * BALLET_SCALE),
-    )
-}
-
-fn round_to_i32(value: f32) -> i32 {
-    if value >= 0.0 {
-        (value + 0.5) as i32
-    } else {
-        (value - 0.5) as i32
-    }
+fn to_point(xy: (f32, f32)) -> Point {
+    Point::new(xy.0 as i32, xy.1 as i32)
 }

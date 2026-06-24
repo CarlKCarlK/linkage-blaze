@@ -1,6 +1,14 @@
-use embedded_graphics::prelude::Point;
+use core::convert::Infallible;
+use embedded_graphics::{
+    Drawable, Pixel,
+    draw_target::DrawTarget,
+    geometry::{OriginDimensions, Size},
+    prelude::Point,
+    primitives::{Circle, Line, Primitive, PrimitiveStyle},
+};
 use linkage_blaze_core::{
-    DrawItem, DrawItemIter, LinkageFixed, Pose, Rgb888, WebColors, linkage, linkage_fixed,
+    DrawItemIter, DrawSurface, LinkageFixed, Pose, Projection, Rgb888, Vec3, WebColors,
+    fill_ellipse_pixels, linkage, linkage_fixed, render_draw_items,
 };
 
 pub const SCREEN_WIDTH: usize = 240;
@@ -221,6 +229,111 @@ fn wrap_param(value: f32) -> f32 {
     value
 }
 
+/// Orthographic projection for the dance renderer.
+/// View: looking along -X; screen_x ← -world_Y, screen_y ← -world_Z.
+struct DanceProjection;
+
+impl Projection for DanceProjection {
+    fn project_pos(&self, pose: Pose) -> (f32, f32) {
+        let p = pose.position();
+        (
+            DANCE_CENTER_X as f32 - p[1] * DANCE_SCALE,
+            DANCE_BASELINE_Y as f32 - p[2] * DANCE_SCALE,
+        )
+    }
+
+    fn project_dir(&self, _pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
+        let r = radius * DANCE_SCALE;
+        (-world_dir[1] * r, -world_dir[2] * r)
+    }
+
+    fn project_radius(&self, _pose: Pose, radius: f32) -> f32 {
+        radius * DANCE_SCALE
+    }
+
+    fn project_width(&self, _width: f32) -> f32 {
+        FIGURE_STROKE_PX as f32
+    }
+}
+
+/// Adapts a [`PixelTarget`] tile to the embedded-graphics [`DrawTarget`] interface,
+/// applying the tile origin offset and overriding all pixel colors with `override_color`.
+struct DanceTargetAdapter<'a, T: PixelTarget> {
+    target: &'a mut T,
+    tile_origin: Point,
+    override_color: Rgb888,
+}
+
+impl<T: PixelTarget> DrawTarget for DanceTargetAdapter<'_, T> {
+    type Color = Rgb888;
+    type Error = Infallible;
+
+    fn draw_iter<I: IntoIterator<Item = Pixel<Rgb888>>>(
+        &mut self,
+        pixels: I,
+    ) -> Result<(), Infallible> {
+        for Pixel(point, _) in pixels {
+            put_pixel(self.target, point.x, point.y, self.tile_origin, self.override_color);
+        }
+        Ok(())
+    }
+}
+
+impl<T: PixelTarget> OriginDimensions for DanceTargetAdapter<'_, T> {
+    fn size(&self) -> Size {
+        Size::new(self.target.width() as u32, self.target.height() as u32)
+    }
+}
+
+/// Wraps a [`PixelTarget`] tile as a [`DrawSurface`], applying the tile origin offset
+/// and overriding all colors with [`FIGURE_COLOR`].
+struct DanceSurface<'a, T: PixelTarget> {
+    target: &'a mut T,
+    tile_origin: Point,
+}
+
+impl<'a, T: PixelTarget> DanceSurface<'a, T> {
+    fn adapter(&mut self) -> DanceTargetAdapter<'_, T> {
+        DanceTargetAdapter {
+            target: self.target,
+            tile_origin: self.tile_origin,
+            override_color: FIGURE_COLOR,
+        }
+    }
+}
+
+impl<T: PixelTarget> DrawSurface for DanceSurface<'_, T> {
+    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), _color: Rgb888, pixel_width: f32) {
+        let width = (pixel_width + 0.5) as u32;
+        Line::new(to_point(start), to_point(end))
+            .into_styled(PrimitiveStyle::with_stroke(FIGURE_COLOR, width.max(1)))
+            .draw(&mut self.adapter())
+            .ok();
+    }
+
+    fn filled_ellipse(
+        &mut self,
+        center: (f32, f32),
+        axis_a: (f32, f32),
+        axis_b: (f32, f32),
+        _color: Rgb888,
+    ) {
+        let tile_origin = self.tile_origin;
+        let target = &mut *self.target;
+        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
+            put_pixel(target, x, y, tile_origin, FIGURE_COLOR);
+        });
+    }
+
+    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, _color: Rgb888) {
+        let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
+        Circle::with_center(to_point(center), diameter.max(1))
+            .into_styled(PrimitiveStyle::with_fill(FIGURE_COLOR))
+            .draw(&mut self.adapter())
+            .ok();
+    }
+}
+
 pub fn render_tile<T: PixelTarget>(
     target: &mut T,
     params: &[f32; 3],
@@ -233,40 +346,11 @@ pub fn render_tile<T: PixelTarget>(
 
     let dance_view = DANCE.view();
     let mut iter: DrawItemIter<3, 6> = dance_view.draw_items(params);
-    // The figure is a single color: ignore each item's model color and stroke
-    // width, and draw everything in FIGURE_COLOR at a fixed stroke width.
-    for draw_item in &mut iter {
-        match draw_item {
-            DrawItem::Stroke(stroke) => {
-                draw_segment(
-                    target,
-                    pose_to_point(stroke.start()),
-                    pose_to_point(stroke.end()),
-                    tile_origin,
-                    FIGURE_COLOR,
-                    FIGURE_STROKE_PX,
-                );
-            }
-            DrawItem::Disk(disk) => {
-                draw_filled_circle(
-                    target,
-                    pose_to_point(disk.pose()),
-                    disk.radius(),
-                    tile_origin,
-                    FIGURE_COLOR,
-                );
-            }
-            DrawItem::Sphere(sphere) => {
-                draw_filled_circle(
-                    target,
-                    pose_to_point(sphere.pose()),
-                    sphere.radius(),
-                    tile_origin,
-                    FIGURE_COLOR,
-                );
-            }
-        }
-    }
+    render_draw_items(
+        &DanceProjection,
+        &mut DanceSurface { target, tile_origin },
+        &mut iter,
+    );
 
     // Hanging placards use the hand marks only as anchor points; they hang
     // straight down in screen coordinates and do not inherit hand rotation.
@@ -587,29 +671,6 @@ fn draw_segment<T: PixelTarget>(
     }
 }
 
-fn draw_filled_circle<T: PixelTarget>(
-    target: &mut T,
-    center: Point,
-    radius: f32,
-    tile_origin: Point,
-    color: Rgb888,
-) {
-    let radius = round_to_i32(radius * DANCE_SCALE).max(1);
-    for local_y in -radius..=radius {
-        for local_x in -radius..=radius {
-            if local_x * local_x + local_y * local_y <= radius * radius {
-                put_pixel(
-                    target,
-                    center.x + local_x,
-                    center.y + local_y,
-                    tile_origin,
-                    color,
-                );
-            }
-        }
-    }
-}
-
 fn put_pixel<T: PixelTarget>(target: &mut T, x: i32, y: i32, tile_origin: Point, color: Rgb888) {
     let x = x - tile_origin.x;
     let y = y - tile_origin.y;
@@ -632,6 +693,10 @@ fn pose_to_point(pose: Pose) -> Point {
         DANCE_CENTER_X - round_to_i32(position[1] * DANCE_SCALE),
         DANCE_BASELINE_Y - round_to_i32(position[2] * DANCE_SCALE),
     )
+}
+
+fn to_point(xy: (f32, f32)) -> Point {
+    Point::new(xy.0 as i32, xy.1 as i32)
 }
 
 fn round_to_i32(value: f32) -> i32 {
