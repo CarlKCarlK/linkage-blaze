@@ -2,7 +2,10 @@
 //!
 //! Parses the numeric subset used in BVH motion files:
 //!
-//!   `['-'|'+'] digits ['.' digits] [('e'|'E') ['-'|'+'] digits]`
+//!   `['-'|'+'] (digits ['.' digits?] | '.' digits) [('e'|'E') ['-'|'+'] digits]`
+//!
+//! Leading and trailing decimal points are accepted (`.5` and `42.`).
+//! At least one digit must appear somewhere in the mantissa.
 //!
 //! Returns raw `f32` values exactly as they appear in the file — no
 //! normalization or channel-mapping is applied here.  Callers are responsible
@@ -19,8 +22,9 @@
 //! 4. `value = mantissa × 10^decimal_exp` via repeated multiply/divide.
 //!
 //! This is not correctly-rounded IEEE 754 parsing (unlike `str::parse::<f32>`)
-//! but it is deterministic, allocation-free, and accurate to within a few ULPs
-//! for BVH motion data, which carries at most 9 significant digits.
+//! but it is deterministic, allocation-free, and accurate enough for BVH motion
+//! visualization.  Validated against `str::parse::<f32>` for representative BVH
+//! values with relative tolerance 1e-5.
 
 // todo000 article: Parsing a 764 KB BVH file in a Rust const fn takes ~8 s.
 // Is that acceptable for an embedded project?  Weigh against the alternative:
@@ -44,14 +48,14 @@ pub const fn parse_bvh_motion_section<const DOF: usize, const FRAMES: usize>(
 
     // "Frames:\t<count>\n"
     i = find_after(bytes, i, b"Frames:");
-    i = skip_whitespace(bytes, i);
+    i = skip_inline_whitespace(bytes, i);
     let (frame_count, next) = parse_uint(bytes, i);
     assert!(frame_count == FRAMES, "BVH Frames count does not match FRAMES");
     i = skip_to_next_line(bytes, next);
 
     // "Frame Time:\t<value>\n" — parse to confirm structure, discard value.
     i = find_after(bytes, i, b"Frame Time:");
-    let (_, next) = parse_f32(bytes, skip_whitespace(bytes, i));
+    let (_, next) = parse_f32(bytes, skip_inline_whitespace(bytes, i));
     i = skip_to_next_line(bytes, next);
 
     let mut out = [[0.0f32; DOF]; FRAMES];
@@ -142,13 +146,15 @@ pub const fn parse_f32(bytes: &[u8], start: usize) -> (f32, usize) {
         "parse_f32: exponent out of supported range [-100, 100]"
     );
 
-    let mut value = mantissa as f32;
-    value = scale_pow10(value, exp10);
+    // Scale in f64 then cast: eliminates the ~1-ULP rounding error that
+    // accumulates when repeated ×10 / ÷10 steps are done in f32.
+    let mut value = mantissa as f64;
+    value = scale_pow10_f64(value, exp10);
     if negative {
         value = -value;
     }
 
-    (value, i)
+    (value as f32, i)
 }
 
 pub const fn parse_uint(bytes: &[u8], start: usize) -> (usize, usize) {
@@ -165,6 +171,18 @@ pub const fn parse_uint(bytes: &[u8], start: usize) -> (usize, usize) {
 }
 
 pub const fn scale_pow10(mut value: f32, mut exp: i32) -> f32 {
+    while exp > 0 {
+        value *= 10.0;
+        exp -= 1;
+    }
+    while exp < 0 {
+        value /= 10.0;
+        exp += 1;
+    }
+    value
+}
+
+pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
     while exp > 0 {
         value *= 10.0;
         exp -= 1;
@@ -206,6 +224,19 @@ pub const fn skip_whitespace(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() {
         match bytes[i] {
             b' ' | b'\t' | b'\r' | b'\n' => i += 1,
+            _ => break,
+        }
+    }
+    i
+}
+
+/// Like `skip_whitespace` but does not cross newlines — used after header
+/// keywords (`Frames:`, `Frame Time:`) so a missing value on the same line
+/// fails at parse time rather than silently consuming the next line.
+pub const fn skip_inline_whitespace(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() {
+        match bytes[i] {
+            b' ' | b'\t' | b'\r' => i += 1,
             _ => break,
         }
     }
@@ -575,5 +606,62 @@ Frame Time:\t0.033333\n\
     #[should_panic(expected = "needle not found")]
     fn rejects_missing_motion_section() {
         parse_bvh_motion_section::<2, 1>(b"Frames: 1\nFrame Time: 0.1\n1.0 2.0\n");
+    }
+
+    #[test]
+    #[should_panic(expected = "needle not found")]
+    fn rejects_missing_frame_time() {
+        parse_bvh_motion_section::<2, 1>(
+            b"MOTION\nFrames: 1\n1.0 2.0\n",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "expected at least one digit")]
+    fn rejects_bad_frame_time_value() {
+        // Value is on the next line; skip_inline_whitespace does not cross it,
+        // so parse_f32 sees '\n' and fails rather than consuming the data row.
+        parse_bvh_motion_section::<2, 1>(
+            b"MOTION\nFrames: 1\nFrame Time:\n1.0 2.0\n",
+        );
+    }
+
+    // ── parse_f32: digit-count limit ──────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "too many significant digits")]
+    fn parse_f32_rejects_too_many_digits() {
+        parse_f32(b"1234567890123456789", 0); // 19 digits
+    }
+
+    // ── parse_bvh_motion_section: exponents and signs ─────────────────────
+
+    const EXP_BVH: &[u8] = b"\
+MOTION\n\
+Frames:\t1\n\
+Frame Time:\t8.33333e-3\n\
++1.0 -2.5 9.27476e-16\n\
+";
+
+    #[test]
+    fn parses_motion_with_exponents_and_plus_signs() {
+        let frames = parse_bvh_motion_section::<3, 1>(EXP_BVH);
+        assert!((frames[0][0] - 1.0).abs() < 1e-6);
+        assert!((frames[0][1] + 2.5).abs() < 1e-6);
+        assert!(frames[0][2].abs() < 1e-10);
+    }
+
+    // ── skip_inline_whitespace ────────────────────────────────────────────
+
+    #[test]
+    fn skip_inline_whitespace_stops_at_newline() {
+        let i = skip_inline_whitespace(b"  \t  \n42", 0);
+        assert_eq!(i, 5); // stops before '\n'
+    }
+
+    #[test]
+    fn skip_inline_whitespace_skips_space_and_tab() {
+        let i = skip_inline_whitespace(b"  \t42", 0);
+        assert_eq!(i, 3);
     }
 }
