@@ -149,83 +149,65 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> BvhMotion<DOF, SAMPLE_COUNT> {
         out
     }
 
-    /// Return an iterator over all motion samples in order, yielding [`MotionSample`] values.
+    /// Return an iterator over all motion samples in order.
     ///
-    /// Each [`MotionSample`] owns its decoded `params` array and exposes the
-    /// sample index via [`MotionSample::index`].
+    /// Each item is a `[f32; DOF]` parameter array for one sample.
+    /// Use `.enumerate()` when the sample index is needed:
     ///
     /// ```rust,no_run
     /// # use linkage_blaze_core::bvh_parse::BvhMotion;
     /// # let motion = BvhMotion::<3, 2>::new([[0; 3]; 2]);
-    /// for sample in motion.samples() {
-    ///     let _params: &[f32; 3] = &sample.params;
-    ///     let _index: usize = sample.index();
+    /// for (sample_index, params) in motion.samples().enumerate() {
+    ///     let _params: &[f32; 3] = &params;
+    ///     let _index: usize = sample_index;
     /// }
     /// ```
-    pub fn samples(&self) -> MotionSampleIter<'_, DOF, SAMPLE_COUNT> {
-        MotionSampleIter {
+    pub fn samples(&self) -> BvhMotionSamples<'_, DOF, SAMPLE_COUNT> {
+        BvhMotionSamples {
             motion: self,
-            index: 0,
+            sample_index: 0,
         }
     }
 
-    /// Decode one motion sample into an existing buffer, avoiding a local array.
-    pub fn sample_into(&self, sample_index: usize, out: &mut [f32; DOF]) {
+    /// Decode one motion sample into an existing buffer.
+    pub fn sample_into(&self, sample_index: usize, params: &mut [f32; DOF]) {
         let packed = &self.motion[sample_index];
         let mut i = 0;
         while i < DOF {
-            out[i] = u16_to_norm(packed[i]);
+            params[i] = u16_to_norm(packed[i]);
             i += 1;
         }
     }
 }
 
-/// A single decoded motion sample returned by [`BvhMotion::samples`].
-pub struct MotionSample<const DOF: usize> {
-    /// Decoded parameter values for this motion sample.
-    pub params: [f32; DOF],
-    index: usize,
-}
-
-impl<const DOF: usize> MotionSample<DOF> {
-    /// Return the zero-based index of this sample within its motion clip.
-    #[must_use]
-    pub fn index(&self) -> usize {
-        self.index
-    }
-}
-
 /// Iterator over motion samples of a [`BvhMotion`], created by [`BvhMotion::samples`].
-pub struct MotionSampleIter<'a, const DOF: usize, const SAMPLE_COUNT: usize> {
+pub struct BvhMotionSamples<'a, const DOF: usize, const SAMPLE_COUNT: usize> {
     motion: &'a BvhMotion<DOF, SAMPLE_COUNT>,
-    index: usize,
+    sample_index: usize,
 }
 
 impl<'a, const DOF: usize, const SAMPLE_COUNT: usize> Iterator
-    for MotionSampleIter<'a, DOF, SAMPLE_COUNT>
+    for BvhMotionSamples<'a, DOF, SAMPLE_COUNT>
 {
-    type Item = MotionSample<DOF>;
+    type Item = [f32; DOF];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= SAMPLE_COUNT {
+        if self.sample_index >= SAMPLE_COUNT {
             return None;
         }
-        let index = self.index;
-        self.index += 1;
-        Some(MotionSample {
-            params: self.motion.sample(index),
-            index,
-        })
+        let sample_index = self.sample_index;
+        self.sample_index += 1;
+        Some(self.motion.sample(sample_index))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = SAMPLE_COUNT - self.index;
+        let remaining = SAMPLE_COUNT - self.sample_index;
         (remaining, Some(remaining))
     }
 }
 
 impl<const DOF: usize, const SAMPLE_COUNT: usize> ExactSizeIterator
-    for MotionSampleIter<'_, DOF, SAMPLE_COUNT>
+    for BvhMotionSamples<'_, DOF, SAMPLE_COUNT>
 {
 }
 
@@ -1224,8 +1206,42 @@ Frame Time:\t0.033\n\
     #[test]
     fn sample_into_expands_one_sample() {
         let motion = BvhMotion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
-        let mut out = [99.0f32; 3];
-        motion.sample_into(0, &mut out);
-        assert_eq!(out, [0.0, 0.5, 1.0]);
+        let mut params = [99.0f32; 3];
+        motion.sample_into(0, &mut params);
+        assert_eq!(params, [0.0, 0.5, 1.0]);
+    }
+
+    #[test]
+    fn sample_and_sample_into_agree() {
+        let motion = BvhMotion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
+        let mut params = [0.0f32; 3];
+        motion.sample_into(0, &mut params);
+        assert_eq!(motion.sample(0), params);
+    }
+
+    #[test]
+    fn samples_iter_yields_arrays() {
+        let motion = BvhMotion::<2, 3>::new([
+            [0, 65535],
+            [PARAM_CENTER_U16, PARAM_CENTER_U16],
+            [65535, 0],
+        ]);
+        let mut iter = motion.samples();
+        assert_eq!(iter.next(), Some(motion.sample(0)));
+        assert_eq!(iter.next(), Some(motion.sample(1)));
+        assert_eq!(iter.next(), Some(motion.sample(2)));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn samples_iter_exact_size() {
+        let motion = BvhMotion::<2, 4>::new([[0; 2]; 4]);
+        assert_eq!(motion.samples().len(), 4);
+    }
+
+    #[test]
+    fn sample_count_matches_const() {
+        let motion = BvhMotion::<2, 5>::new([[0; 2]; 5]);
+        assert_eq!(motion.sample_count(), 5);
     }
 }
