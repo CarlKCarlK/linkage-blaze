@@ -9,23 +9,17 @@ mod tests {
     // The include above defines `pub static BALLET_FRAMES: [[f32; DOF]; FRAMES]`.
 
     #[allow(long_running_const_eval)]
-    const CONST_FRAMES: linkage_blaze_core::bvh_parse::BvhMotion<
-        BALLET_DOF,
-        BALLET_FRAME_COUNT,
-    > = linkage_blaze_core::bvh_frames!(
-        "../../linkage-blaze-mocap/samples/pirouette.bvh",
-        BALLET_DOF,
-        BALLET_FRAME_COUNT
-    );
+    const CONST_MOTION: linkage_blaze_core::bvh_parse::BvhMotion<132, 592> =
+        linkage_blaze_core::bvh_motion!("../../linkage-blaze-mocap/samples/pirouette.bvh");
 
     #[test]
     fn precomputed_matches_const_fn() {
-        // CONST_FRAMES is u16-quantized; allow up to 1 LSB of rounding error.
+        // CONST_MOTION is u16-quantized; allow up to 1 LSB of rounding error.
         const TOLERANCE: f32 = 1.0 / 65535.0;
-        for frame_idx in 0..BALLET_FRAME_COUNT {
-            let const_frame = CONST_FRAMES.frame(frame_idx);
+        for frame_idx in 0..CONST_MOTION.frame_count() {
+            let const_frame = CONST_MOTION.frame(frame_idx);
             let precomputed = &BALLET_FRAMES[frame_idx];
-            for ch in 0..BALLET_DOF {
+            for ch in 0..CONST_MOTION.dof() {
                 let diff = (const_frame[ch] - precomputed[ch]).abs();
                 assert!(
                     diff <= TOLERANCE,

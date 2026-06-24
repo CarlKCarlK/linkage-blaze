@@ -38,23 +38,21 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 /// Parse and normalize a BVH file embedded at compile time.
 ///
 /// The path is resolved relative to the file that invokes the macro, exactly
-/// like a bare `include_bytes!`.  `DOF` and `FRAMES` must match the channel
-/// count and frame count in the file; a mismatch panics at compile time with a
-/// descriptive message.
+/// like a bare `include_bytes!`.  `DOF` and `FRAME_COUNT` are inferred from
+/// the type annotation; a mismatch panics at compile time with a descriptive
+/// message.
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// #[allow(long_running_const_eval)]
-/// const FRAMES: BvhMotion<132, 592> =
-///     linkage_blaze_core::bvh_frames!("path/to/motion.bvh", 132, 592);
+/// const MOTION: BvhMotion<132, 592> =
+///     linkage_blaze_core::bvh_motion!("path/to/motion.bvh");
 /// ```
 #[macro_export]
-macro_rules! bvh_frames {
-    ($file:expr, $dof:expr, $frames:expr) => {
-        $crate::bvh_parse::parse_and_normalize_bvh_motion::<$dof, $frames>(include_bytes!(
-            $file
-        ))
+macro_rules! bvh_motion {
+    ($path:literal) => {
+        $crate::bvh_parse::BvhMotion::from_bvh_bytes(include_bytes!($path))
     };
 }
 
@@ -95,33 +93,53 @@ pub const fn u16_to_norm(x: u16) -> f32 {
 /// Each `f32` parameter in `[0.0, 1.0]` is encoded as a `u16` in `[0, 65535]`,
 /// halving memory use. Decode one frame at a time with [`frame`](BvhMotion::frame)
 /// or [`frame_into`](BvhMotion::frame_into).
-pub struct BvhMotion<const DOF: usize, const FRAMES: usize> {
-    frames: [[u16; DOF]; FRAMES],
+pub struct BvhMotion<const DOF: usize, const FRAME_COUNT: usize> {
+    motion: [[u16; DOF]; FRAME_COUNT],
 }
 
-impl<const DOF: usize, const FRAMES: usize> BvhMotion<DOF, FRAMES> {
+impl<const DOF: usize, const FRAME_COUNT: usize> BvhMotion<DOF, FRAME_COUNT> {
+    /// The number of degrees of freedom (channels per frame).
+    pub const DOF: usize = DOF;
+
+    /// The number of frames in this motion clip.
+    pub const FRAME_COUNT: usize = FRAME_COUNT;
+
     /// Construct from a pre-quantized `u16` frame array.
-    pub const fn new(frames: [[u16; DOF]; FRAMES]) -> Self {
-        Self { frames }
+    pub const fn new(motion: [[u16; DOF]; FRAME_COUNT]) -> Self {
+        Self { motion }
     }
 
-    pub(crate) const fn from_normalized(f32_frames: [[f32; DOF]; FRAMES]) -> Self {
-        let mut data = [[0u16; DOF]; FRAMES];
+    /// Parse and normalize a BVH file's bytes into this motion type.
+    ///
+    /// `DOF` and `FRAME_COUNT` are inferred from the type annotation.
+    /// Panics at compile time if the file's channel count or frame count
+    /// does not match.
+    pub const fn from_bvh_bytes(bytes: &[u8]) -> Self {
+        parse_and_normalize_bvh_motion::<DOF, FRAME_COUNT>(bytes)
+    }
+
+    pub(crate) const fn from_normalized(f32_motion: [[f32; DOF]; FRAME_COUNT]) -> Self {
+        let mut data = [[0u16; DOF]; FRAME_COUNT];
         let mut frame = 0;
-        while frame < FRAMES {
+        while frame < FRAME_COUNT {
             let mut ch = 0;
             while ch < DOF {
-                data[frame][ch] = norm_to_u16(f32_frames[frame][ch]);
+                data[frame][ch] = norm_to_u16(f32_motion[frame][ch]);
                 ch += 1;
             }
             frame += 1;
         }
-        Self { frames: data }
+        Self { motion: data }
+    }
+
+    /// Return the number of degrees of freedom (channels per frame).
+    pub const fn dof(&self) -> usize {
+        DOF
     }
 
     /// Return the number of frames.
     pub const fn frame_count(&self) -> usize {
-        FRAMES
+        FRAME_COUNT
     }
 
     /// Decode one frame into a stack-allocated `[f32; DOF]` array.
@@ -137,13 +155,13 @@ impl<const DOF: usize, const FRAMES: usize> BvhMotion<DOF, FRAMES> {
     ///
     /// ```rust,ignore
     /// let mut params = [0.0f32; DOF];
-    /// for i in 0..motion.frame_count() {
-    ///     motion.frame_into(i, &mut params);
+    /// for frame_index in 0..motion.frame_count() {
+    ///     motion.frame_into(frame_index, &mut params);
     ///     // use params ...
     /// }
     /// ```
     pub fn frame_into(&self, frame_index: usize, out: &mut [f32; DOF]) {
-        let packed = &self.frames[frame_index];
+        let packed = &self.motion[frame_index];
         let mut i = 0;
         while i < DOF {
             out[i] = u16_to_norm(packed[i]);
@@ -152,22 +170,22 @@ impl<const DOF: usize, const FRAMES: usize> BvhMotion<DOF, FRAMES> {
     }
 }
 
-/// Parse the MOTION section of a BVH file into a `FRAMES × DOF` array of raw
+/// Parse the MOTION section of a BVH file into a `FRAME_COUNT × DOF` array of raw
 /// `f32` values.
 ///
-/// `bytes` is the full BVH file.  `DOF` and `FRAMES` must exactly match the
+/// `bytes` is the full BVH file.  `DOF` and `FRAME_COUNT` must exactly match the
 /// channel count and frame count in the file; the parser asserts on mismatch
 /// and panics at compile time if either is wrong.
-pub const fn parse_bvh_motion_section<const DOF: usize, const FRAMES: usize>(
+pub const fn parse_bvh_motion_section<const DOF: usize, const FRAME_COUNT: usize>(
     bytes: &[u8],
-) -> [[f32; DOF]; FRAMES] {
+) -> [[f32; DOF]; FRAME_COUNT] {
     let mut i = find_after(bytes, 0, b"MOTION");
 
     // "Frames:\t<count>\n"
     i = find_after(bytes, i, b"Frames:");
     i = skip_inline_whitespace(bytes, i);
     let (frame_count, next) = parse_uint(bytes, i);
-    assert!(frame_count == FRAMES, "BVH Frames count does not match FRAMES");
+    assert!(frame_count == FRAME_COUNT, "BVH Frames count does not match FRAME_COUNT");
     i = skip_to_next_line(bytes, next);
 
     // "Frame Time:\t<value>\n" — parse to confirm structure, discard value.
@@ -175,9 +193,9 @@ pub const fn parse_bvh_motion_section<const DOF: usize, const FRAMES: usize>(
     let (_, next) = parse_f32(bytes, skip_inline_whitespace(bytes, i));
     i = skip_to_next_line(bytes, next);
 
-    let mut out = [[0.0f32; DOF]; FRAMES];
+    let mut out = [[0.0f32; DOF]; FRAME_COUNT];
     let mut frame = 0;
-    while frame < FRAMES {
+    while frame < FRAME_COUNT {
         let mut ch = 0;
         while ch < DOF {
             i = skip_whitespace(bytes, i);
@@ -312,13 +330,13 @@ pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
 }
 
 /// Parse and normalize a BVH file's motion section in one step.
-pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const FRAMES: usize>(
+pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const FRAME_COUNT: usize>(
     bytes: &[u8],
-) -> BvhMotion<DOF, FRAMES> {
-    let raw = parse_bvh_motion_section::<DOF, FRAMES>(bytes);
+) -> BvhMotion<DOF, FRAME_COUNT> {
+    let raw = parse_bvh_motion_section::<DOF, FRAME_COUNT>(bytes);
     let channel_is_position = parse_bvh_channel_is_position::<DOF>(bytes);
     let normalized =
-        normalize_bvh_motion::<DOF, FRAMES>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE);
+        normalize_bvh_motion::<DOF, FRAME_COUNT>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE);
     BvhMotion::from_normalized(normalized)
 }
 
@@ -358,17 +376,17 @@ impl BvhNormalizePolicy {
 /// - `raw` — output of [`parse_bvh_motion_section`]
 /// - `is_position` — output of [`parse_bvh_channel_is_position`]
 /// - `policy` — Linkage Blaze parameter-range and snap policy
-pub const fn normalize_bvh_motion<const DOF: usize, const FRAMES: usize>(
-    raw: [[f32; DOF]; FRAMES],
+pub const fn normalize_bvh_motion<const DOF: usize, const FRAME_COUNT: usize>(
+    raw: [[f32; DOF]; FRAME_COUNT],
     is_position: [bool; DOF],
     policy: BvhNormalizePolicy,
-) -> [[f32; DOF]; FRAMES] {
+) -> [[f32; DOF]; FRAME_COUNT] {
     let pos_range = policy.position_high - policy.position_low;
     let rot_range = policy.rotation_high - policy.rotation_low;
 
-    let mut out = [[0.0f32; DOF]; FRAMES];
+    let mut out = [[0.0f32; DOF]; FRAME_COUNT];
     let mut frame = 0;
-    while frame < FRAMES {
+    while frame < FRAME_COUNT {
         let mut ch = 0;
         while ch < DOF {
             let v = raw[frame][ch];
@@ -849,7 +867,7 @@ Frame Time:\t0.033333\n\
     }
 
     #[test]
-    #[should_panic(expected = "Frames count")]
+    #[should_panic(expected = "Frames count does not match FRAME_COUNT")]
     fn rejects_wrong_frame_count() {
         parse_bvh_motion_section::<2, 4>(TINY_BVH); // TINY_BVH has 3 frames
     }
