@@ -63,10 +63,6 @@ fn pirouette_body_evaluates_without_alloc_storage() {
                 assert_pose_finite(disk_item.pose());
                 assert!(disk_item.radius().is_finite());
             }
-            DrawItem::Ring(ring_item) => {
-                assert_pose_finite(ring_item.pose());
-                assert!(ring_item.radius().is_finite());
-            }
             DrawItem::Sphere(sphere_item) => {
                 assert_pose_finite(sphere_item.pose());
                 assert!(sphere_item.radius().is_finite());
@@ -216,11 +212,6 @@ fn assert_draw_item_close(left: DrawItem, right: DrawItem, tolerance: f32) {
         (DrawItem::Disk(left), DrawItem::Disk(right)) => {
             assert_pose_close(left.pose(), right.pose(), tolerance);
             assert!((left.radius() - right.radius()).abs() <= tolerance);
-        }
-        (DrawItem::Ring(left), DrawItem::Ring(right)) => {
-            assert_pose_close(left.pose(), right.pose(), tolerance);
-            assert!((left.radius() - right.radius()).abs() <= tolerance);
-            assert!((left.width() - right.width()).abs() <= tolerance);
         }
         (DrawItem::Sphere(left), DrawItem::Sphere(right)) => {
             assert_pose_close(left.pose(), right.pose(), tolerance);

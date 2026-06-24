@@ -67,8 +67,8 @@ const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
 include!("ballet_frames_precomputed.rs");
 
 use linkage_blaze_ballet::ballet_render::{
-    BACKGROUND, BALLET, FIGURE_COLOR, FIGURE_STROKE_PX, TEXT, draw_filled_circle, draw_ring,
-    draw_segment, pose_to_point,
+    BACKGROUND, BALLET, FIGURE_COLOR, FIGURE_STROKE_PX, TEXT, draw_filled_circle, draw_segment,
+    pose_to_point,
 };
 use linkage_blaze_core::DrawItem;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
@@ -148,16 +148,6 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
                             &mut cyd_frame,
                             pose_to_point(disk.pose()),
                             disk.radius(),
-                            FIGURE_COLOR,
-                        );
-                    }
-                    // todo00 kill Ring?
-                    DrawItem::Ring(ring) => {
-                        draw_ring(
-                            &mut cyd_frame,
-                            pose_to_point(ring.pose()),
-                            ring.radius(),
-                            ring.width(),
                             FIGURE_COLOR,
                         );
                     }

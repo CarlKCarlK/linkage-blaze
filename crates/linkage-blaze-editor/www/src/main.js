@@ -190,7 +190,6 @@ function rebuildLinkage() {
   for (const p of primitives) {
     if (p.type === "segment") addSegment(p);
     else if (p.type === "disk") addDisk(p);
-    else if (p.type === "ring") addRing(p);
     else if (p.type === "sphere") addSphere(p);
   }
   if (firstFit || fitOnNextRebuild) { fitView(); firstFit = false; fitOnNextRebuild = false; }
@@ -223,16 +222,6 @@ function addSegmentCap(position, radius, material) {
 
 function addDisk(p) {
   const geom = new THREE.CircleGeometry(p.radius, 64);
-  const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color), side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(...p.center);
-  orientToNormal(mesh, p.normal);
-  linkageGroup.add(mesh);
-}
-
-function addRing(p) {
-  const hw = modelWidthRadius(p.width);
-  const geom = new THREE.TorusGeometry(p.radius, hw, 8, 64);
   const mat = new THREE.MeshBasicMaterial({ color: threeColor(p.color), side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(...p.center);

@@ -111,29 +111,6 @@ pub fn draw_filled_circle<T: PixelTarget>(
     }
 }
 
-pub fn draw_ring<T: PixelTarget>(
-    target: &mut T,
-    center: Point,
-    radius: f32,
-    width: f32,
-    color: Rgb888,
-) {
-    let radius = (radius * BALLET_SCALE).max(1.0);
-    let width = (width * BALLET_SCALE).max(1.0);
-    let outer = round_to_i32(radius + width * 0.5).max(1);
-    let inner = round_to_i32((radius - width * 0.5).max(0.0));
-    let outer_squared = outer * outer;
-    let inner_squared = inner * inner;
-    for local_y in -outer..=outer {
-        for local_x in -outer..=outer {
-            let distance_squared = local_x * local_x + local_y * local_y;
-            if distance_squared <= outer_squared && distance_squared >= inner_squared {
-                put_pixel(target, center.x + local_x, center.y + local_y, color);
-            }
-        }
-    }
-}
-
 fn put_pixel<T: PixelTarget>(target: &mut T, x: i32, y: i32, color: Rgb888) {
     if x < 0 || y < 0 {
         return;

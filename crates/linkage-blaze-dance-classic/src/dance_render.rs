@@ -256,16 +256,6 @@ pub fn render_tile<T: PixelTarget>(
                     FIGURE_COLOR,
                 );
             }
-            DrawItem::Ring(ring) => {
-                draw_ring(
-                    target,
-                    pose_to_point(ring.pose()),
-                    ring.radius(),
-                    ring.width(),
-                    tile_origin,
-                    FIGURE_COLOR,
-                );
-            }
             DrawItem::Sphere(sphere) => {
                 draw_filled_circle(
                     target,
@@ -608,36 +598,6 @@ fn draw_filled_circle<T: PixelTarget>(
     for local_y in -radius..=radius {
         for local_x in -radius..=radius {
             if local_x * local_x + local_y * local_y <= radius * radius {
-                put_pixel(
-                    target,
-                    center.x + local_x,
-                    center.y + local_y,
-                    tile_origin,
-                    color,
-                );
-            }
-        }
-    }
-}
-
-fn draw_ring<T: PixelTarget>(
-    target: &mut T,
-    center: Point,
-    radius: f32,
-    width: f32,
-    tile_origin: Point,
-    color: Rgb888,
-) {
-    let radius = (radius * DANCE_SCALE).max(1.0);
-    let width = (width * DANCE_SCALE).max(1.0);
-    let outer = round_to_i32(radius + width * 0.5).max(1);
-    let inner = round_to_i32((radius - width * 0.5).max(0.0));
-    let outer_squared = outer * outer;
-    let inner_squared = inner * inner;
-    for local_y in -outer..=outer {
-        for local_x in -outer..=outer {
-            let distance_squared = local_x * local_x + local_y * local_y;
-            if distance_squared <= outer_squared && distance_squared >= inner_squared {
                 put_pixel(
                     target,
                     center.x + local_x,

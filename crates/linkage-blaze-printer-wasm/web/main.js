@@ -259,7 +259,6 @@ fitDefault();
 //   type 0 = Stroke   (x0..z0 = start, x1..z1 = end, size1 = width in mm)
 //   type 1 = Sphere   (x0..z0 = center, size1 = radius)
 //   type 2 = Disk     (x0..z0 = center, size1 = radius) — used for heated bed
-//   type 3 = Ring     (x0..z0 = center, size1 = radius, size2 = width)
 function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
   // Dispose and remove all old dynamic objects
   for (let i = dynamicGroup.children.length - 1; i >= 0; i--) {
@@ -307,13 +306,6 @@ function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
       const mesh = new THREE.Mesh(geo, mat);
       const floorClearance = z0 <= 0.01 ? 1 : 0;
       mesh.position.set(x0, y0, z0 + floorClearance);
-      dynamicGroup.add(mesh);
-    } else if (type === 3) {
-      const width = items[i + 11];
-      const geo = new THREE.TorusGeometry(size1, Math.max(0.5, width / 2), 8, 96);
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55 });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x0, y0, z0 + 1.5);
       dynamicGroup.add(mesh);
     }
   }

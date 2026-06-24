@@ -630,15 +630,6 @@ impl CydSim {
                 DrawItem::Disk(disk) => {
                     self.draw_projected_disk(buffer, disk.pose(), disk.radius(), disk.color());
                 }
-                DrawItem::Ring(ring) => {
-                    self.draw_projected_ring(
-                        buffer,
-                        ring.pose(),
-                        ring.radius(),
-                        ring.width(),
-                        ring.color(),
-                    );
-                }
                 DrawItem::Sphere(sphere) => {
                     self.draw_projected_sphere(
                         buffer,
@@ -697,68 +688,6 @@ impl CydSim {
                     let u = by * dx - bx * dy;
                     let v = ax * dy - ay * dx;
                     if u * u + v * v <= det_sq {
-                        Some(Pixel(Point::new(x, y), color))
-                    } else {
-                        None
-                    }
-                })
-            }))
-            .ok();
-    }
-
-    fn draw_projected_ring(
-        &self,
-        target: &mut impl DrawTarget<Color = Rgb565>,
-        pose: Pose,
-        radius: f32,
-        width: f32,
-        color_raw: Rgb888,
-    ) {
-        let orient = pose.orientation();
-        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-        let Vec3([px, py, pz]) = pose.position();
-        let scale = self.scale();
-        let factor = self.perspective_factor(px);
-        let r = radius * scale * factor;
-        let color = rgb565_from_rgb888(color_raw);
-        let half_w = screen_width_pixels(width, scale) as f32 * 0.5 * factor;
-
-        let (cx, cy) = project_pos(py * factor, pz * factor, scale);
-        let (ax, ay) = project_dir(orient[1][0], orient[2][0], r);
-        let (bx, by) = project_dir(orient[1][1], orient[2][1], r);
-
-        let det = ax * by - bx * ay;
-        let det_sq = det * det;
-
-        if det_sq < 0.25 || r <= 0.0 {
-            return;
-        }
-
-        let outer_scale_sq = ((r + half_w) / r) * ((r + half_w) / r);
-        let inner_scale_sq = if r > half_w {
-            ((r - half_w) / r) * ((r - half_w) / r)
-        } else {
-            0.0
-        };
-
-        let outer_scale = (r + half_w) / r;
-        let hw = (libm::sqrtf(ax * ax + bx * bx) * outer_scale) as i32 + 2;
-        let hh = (libm::sqrtf(ay * ay + by * by) * outer_scale) as i32 + 2;
-
-        let x0 = (cx - hw).max(0);
-        let y0 = (cy - hh).max(0);
-        let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
-        let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
-
-        target
-            .draw_iter((y0..=y1).flat_map(move |y| {
-                (x0..=x1).filter_map(move |x| {
-                    let dx = x as f32 - cx as f32;
-                    let dy = y as f32 - cy as f32;
-                    let u = by * dx - bx * dy;
-                    let v = ax * dy - ay * dx;
-                    let dist_sq = u * u + v * v;
-                    if dist_sq <= det_sq * outer_scale_sq && dist_sq > det_sq * inner_scale_sq {
                         Some(Pixel(Point::new(x, y), color))
                     } else {
                         None

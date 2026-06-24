@@ -123,19 +123,6 @@ fn flatten_draw_item(draw_item: DrawItem) -> [f32; STRIDE] {
             record[9] = color.b() as f32;
             record[10] = disk.radius();
         }
-        DrawItem::Ring(ring) => {
-            record[0] = 3.0;
-            let [x, y, z] = ring.pose().position().into_array();
-            record[1] = x;
-            record[2] = y;
-            record[3] = z;
-            let color = ring.color();
-            record[7] = color.r() as f32;
-            record[8] = color.g() as f32;
-            record[9] = color.b() as f32;
-            record[10] = ring.radius();
-            record[11] = ring.width();
-        }
     }
 
     record

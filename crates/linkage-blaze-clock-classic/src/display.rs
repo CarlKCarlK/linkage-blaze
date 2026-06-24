@@ -13,7 +13,7 @@ use embedded_graphics::{
 };
 use esp_hal::time::Instant;
 use linkage_blaze_core::{
-    DiskItem, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, RingItem, SphereItem, Vec3,
+    DiskItem, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, SphereItem, Vec3,
 };
 use linkage_blaze_cyd::{
     Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, PixelBuffer, SCREEN_WIDTH,
@@ -242,7 +242,6 @@ impl CydClockDisplay {
                     }
                 }
                 DrawItem::Disk(disk) => DrawPrimitive::Ellipse(disk_to_ellipse(disk)),
-                DrawItem::Ring(ring) => DrawPrimitive::Ellipse(ring_to_ellipse(ring)),
                 DrawItem::Sphere(sphere) => DrawPrimitive::Ellipse(sphere_to_ellipse(sphere)),
             };
             primitives.push(prim).ok();
@@ -323,25 +322,6 @@ fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
         stroke_width: 0,
         color: Rgb565::from(disk.color()),
         filled: true,
-    }
-}
-
-fn ring_to_ellipse(ring: RingItem) -> Ellipse {
-    let pos = ring.pose().position();
-    let center = clock_point(Point::new(
-        CLOCK_CENTER_X + project_x(pos, 1.0),
-        CLOCK_CENTER_Y + project_y(pos, 1.0),
-    ));
-    let orient = ring.pose().orientation();
-    let r = ring.radius();
-    Ellipse {
-        center,
-        axis_a: project_dir(orient[0][0], orient[1][0], r),
-        axis_b: project_dir(orient[0][1], orient[1][1], r),
-        radius: r,
-        stroke_width: clock_width_pixels(ring.width()),
-        color: Rgb565::from(ring.color()),
-        filled: false,
     }
 }
 
