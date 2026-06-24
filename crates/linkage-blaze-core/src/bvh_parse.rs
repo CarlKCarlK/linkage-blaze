@@ -193,7 +193,9 @@ pub const fn parse_bvh_motion_section<const DOF: usize, const FRAME_COUNT: usize
     i = find_after(bytes, i, b"Frames:");
     i = skip_inline_whitespace(bytes, i);
     let (frame_count, next) = parse_uint(bytes, i);
-    assert!(frame_count == FRAME_COUNT, "BVH Frames count does not match FRAME_COUNT");
+    if frame_count != FRAME_COUNT {
+        let _: u8 = [][frame_count]; // correct FRAME_COUNT = N shown as "the index is N" in the compile error
+    }
     i = skip_to_next_line(bytes, next);
 
     // "Frame Time:\t<value>\n" — parse to confirm structure, discard value.
@@ -897,7 +899,7 @@ Frame Time:\t0.033333\n\
     }
 
     #[test]
-    #[should_panic(expected = "Frames count does not match FRAME_COUNT")]
+    #[should_panic(expected = "index out of bounds")]
     fn rejects_wrong_frame_count() {
         parse_bvh_motion_section::<2, 4>(TINY_BVH); // TINY_BVH has 3 frames
     }

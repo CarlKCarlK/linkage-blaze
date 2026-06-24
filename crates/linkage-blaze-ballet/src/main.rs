@@ -15,11 +15,12 @@ use embedded_graphics::{
 use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
 
-use linkage_blaze_core::bvh_parse::BvhMotion;
 use linkage_blaze_core::{
-    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_motion, linkage,
-    linkage_fixed, render_draw_items,
+    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion,
+    linkage, linkage_fixed, render_draw_items,
 };
+use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
+use log::info;
 
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)
@@ -46,11 +47,7 @@ const BALLET_PROJECTION: NegXProjection = NegXProjection {
     baseline_y: BALLET_BASELINE_Y as f32,
     scale: BALLET_SCALE,
 };
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
-use log::info;
 
-// todo000 this seems unmotivated.
-const SOURCE_FPS_X10: u32 = 1200;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -131,23 +128,17 @@ fn draw_status<D>(
 {
     let mut status = heapless::String::<64>::new();
     if let Some(last_frame_duration) = last_frame_duration {
-        let elapsed_ms = last_frame_duration.as_millis().max(1);
-        let fps_x10 = (10_000 / elapsed_ms) as u32;
-        let slomo_x10 = if fps_x10 == 0 {
-            0
-        } else {
-            (SOURCE_FPS_X10 * 10 + fps_x10 / 2) / fps_x10
-        };
+        let elapsed_secs = last_frame_duration.as_micros() as f32 * 1e-6_f32;
+        let fps = (1.0_f32 / elapsed_secs).max(0.1);
+        let slomo = 120.0_f32 / fps;
         Write::write_fmt(
             &mut status,
             format_args!(
-                "{}/{}  fps {}.{}  slow {}.{}x",
+                "{}/{}  fps {:.1}  slow {:.1}x",
                 frame_index + 1,
                 MOTION.frame_count(),
-                fps_x10 / 10,
-                fps_x10 % 10,
-                slomo_x10 / 10,
-                slomo_x10 % 10
+                fps,
+                slomo,
             ),
         )
         .ok();

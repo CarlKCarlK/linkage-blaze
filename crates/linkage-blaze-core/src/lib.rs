@@ -1374,12 +1374,36 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         DOF
     }
 
+    /// Return the number of steps actually used (including the implicit start step).
+    ///
+    /// Use this to discover the correct `N` after building with an oversized capacity.
+    #[must_use]
+    pub const fn step_count(&self) -> usize {
+        self.len
+    }
+
+    /// Return the number of parameters actually defined.
+    ///
+    /// Use this to discover the correct `DOF` after building with an oversized capacity.
+    #[must_use]
+    pub const fn param_count(&self) -> usize {
+        self.param_len
+    }
+
+    /// Return the number of distinct mark names actually used.
+    ///
+    /// Use this to discover the correct `MARKS` after building with an oversized capacity.
+    #[must_use]
+    pub const fn mark_count(&self) -> usize {
+        self.mark_len
+    }
+
     /// Define a named runtime parameter.
     ///
     /// Duplicate names are allowed; later definitions shadow earlier ones when
     /// a DSL method like `yaw_param` looks up the name.
     pub const fn define_param(mut self, name: &'static str, default: f32) -> Self {
-        assert!(self.param_len < DOF, "linkage has more params than DOF");
+        assert!(self.param_len < DOF, "DOF is too small; use a large DOF then call .param_count() to find the exact value");
         assert!(default >= 0.0, "parameter default must be at least 0.0");
         assert!(default <= 1.0, "parameter default must be at most 1.0");
         self.params[self.param_len] = Param { name, default };
@@ -1396,7 +1420,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         let index = match self.mark_index(name) {
             Some(index) => index,
             None => {
-                assert!(self.mark_len < MARKS, "linkage has more marks than MARKS");
+                assert!(self.mark_len < MARKS, "MARKS is too small; use a large MARKS then call .mark_count() to find the exact value");
                 let index = self.mark_len;
                 self.mark_names[index] = name;
                 self.mark_len += 1;
@@ -1470,7 +1494,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     }
 
     const fn push(mut self, step: Step) -> Self {
-        assert!(self.len < N, "linkage has more steps than N");
+        assert!(self.len < N, "N is too small; use a large N then call .step_count() to find the exact value");
         self.steps[self.len] = step;
         self.len += 1;
         self
@@ -2011,16 +2035,19 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         self,
         other: LinkageFixed<DOF2, MARKS2, N2>,
     ) -> LinkageFixed<DOF_OUT, MARKS_OUT, N_OUT> {
-        assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF1 + DOF2");
-        assert!(
-            MARKS_OUT >= self.mark_len + other.mark_len,
-            "MARKS_OUT must fit all marks from both linkages"
-        );
+        let needed_dof = DOF + DOF2;
+        if DOF_OUT != needed_dof {
+            let _: u8 = [][needed_dof]; // correct DOF_OUT = N shown as "the index is N" in the compile error
+        }
+        let needed_marks = self.mark_len + other.mark_len;
+        if MARKS_OUT < needed_marks {
+            let _: u8 = [][needed_marks]; // correct MARKS_OUT = N shown as "the index is N" in the compile error
+        }
         let other_steps = other.len - 1; // skip the implicit Start step
-        assert!(
-            N_OUT >= self.len + other_steps,
-            "N_OUT must fit all steps from both linkages"
-        );
+        let needed_n = self.len + other_steps;
+        if N_OUT < needed_n {
+            let _: u8 = [][needed_n]; // correct N_OUT = N shown as "the index is N" in the compile error
+        }
 
         let mut out = LinkageFixed {
             steps: [const { Step::Start }; N_OUT],
