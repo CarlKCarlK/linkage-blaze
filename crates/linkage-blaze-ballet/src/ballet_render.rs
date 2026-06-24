@@ -7,7 +7,7 @@ use embedded_graphics::pixelcolor::IntoStorage;
 use linkage_blaze_cyd::{Cyd, CydFrame};
 
 // todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
-use crate::ballet_frames::BALLET_DOF;
+const BALLET_DOF: usize = 132;
 
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)

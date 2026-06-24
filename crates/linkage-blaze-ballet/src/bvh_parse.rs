@@ -194,6 +194,157 @@ pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
     value
 }
 
+// ── normalization policy and helper ──────────────────────────────────────────
+
+/// Linkage Blaze parameter-encoding policy for BVH channels.
+///
+/// These ranges are **not** extracted from the BVH file — BVH has no concept
+/// of a valid-range declaration.  They are a Linkage Blaze design choice:
+/// each parameter is stored as a `[0, 1]` float mapped from the physical range
+/// below.  Keep them here, not buried inside the parser.
+pub struct BvhNormalizePolicy {
+    pub position_low: f32,
+    pub position_high: f32,
+    pub rotation_low: f32,
+    pub rotation_high: f32,
+    /// Normalized value to snap toward (typically 0.5 = centered).
+    pub snap_center: f32,
+    /// Half-width of the snap band around `snap_center`.
+    pub snap_epsilon: f32,
+}
+
+impl BvhNormalizePolicy {
+    /// Default Linkage Blaze policy: positions ±300, rotations ±720°.
+    pub const LINKAGE_BLAZE: Self = Self {
+        position_low: -300.0,
+        position_high: 300.0,
+        rotation_low: -720.0,
+        rotation_high: 720.0,
+        snap_center: 0.5,
+        snap_epsilon: 0.01,
+    };
+}
+
+/// Normalize a raw BVH motion table into `[0, 1]` Linkage parameters.
+///
+/// - `raw` — output of [`parse_bvh_motion_section`]
+/// - `is_position` — output of [`parse_bvh_channel_is_position`]
+/// - `policy` — Linkage Blaze parameter-range and snap policy
+pub const fn normalize_bvh_motion<const DOF: usize, const FRAMES: usize>(
+    raw: [[f32; DOF]; FRAMES],
+    is_position: [bool; DOF],
+    policy: BvhNormalizePolicy,
+) -> [[f32; DOF]; FRAMES] {
+    let pos_range = policy.position_high - policy.position_low;
+    let rot_range = policy.rotation_high - policy.rotation_low;
+
+    let mut out = [[0.0f32; DOF]; FRAMES];
+    let mut frame = 0;
+    while frame < FRAMES {
+        let mut ch = 0;
+        while ch < DOF {
+            let v = raw[frame][ch];
+            if is_position[ch] {
+                assert!(
+                    v >= policy.position_low,
+                    "BVH position channel value is below Linkage Blaze normalization range"
+                );
+                assert!(
+                    v <= policy.position_high,
+                    "BVH position channel value is above Linkage Blaze normalization range"
+                );
+            } else {
+                assert!(
+                    v >= policy.rotation_low,
+                    "BVH rotation channel value is below Linkage Blaze normalization range"
+                );
+                assert!(
+                    v <= policy.rotation_high,
+                    "BVH rotation channel value is above Linkage Blaze normalization range"
+                );
+            }
+            let (low, range) = if is_position[ch] {
+                (policy.position_low, pos_range)
+            } else {
+                (policy.rotation_low, rot_range)
+            };
+            let norm = (v - low) / range;
+            out[frame][ch] = if (norm - policy.snap_center).abs() <= policy.snap_epsilon {
+                policy.snap_center
+            } else {
+                norm
+            };
+            ch += 1;
+        }
+        frame += 1;
+    }
+    out
+}
+
+// ── channel-type scanner ──────────────────────────────────────────────────────
+
+/// Scan the BVH hierarchy section and return which of the `DOF` channels are
+/// position channels (`true`) versus rotation channels (`false`).
+///
+/// Reads every `CHANNELS N <type>...` line before the `MOTION` keyword, in
+/// order.  Panics if the total channel count does not equal `DOF`.
+pub const fn parse_bvh_channel_is_position<const DOF: usize>(bytes: &[u8]) -> [bool; DOF] {
+    let hierarchy_end = find_motion_offset(bytes);
+
+    let mut result = [false; DOF];
+    let mut i = 0;
+    let mut ch_index = 0;
+
+    while i < hierarchy_end {
+        if bytes_match(bytes, i, b"CHANNELS") {
+            i += 8;
+            i = skip_whitespace(bytes, i);
+            let (count, next) = parse_uint(bytes, i);
+            i = next;
+            let mut c = 0;
+            while c < count {
+                i = skip_whitespace(bytes, i);
+                let is_pos = bytes_match(bytes, i, b"Xposition")
+                    || bytes_match(bytes, i, b"Yposition")
+                    || bytes_match(bytes, i, b"Zposition");
+                i = skip_token(bytes, i);
+                assert!(ch_index < DOF, "BVH: more channels in file than DOF");
+                result[ch_index] = is_pos;
+                ch_index += 1;
+                c += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    assert!(ch_index == DOF, "BVH: channel count does not match DOF");
+    result
+}
+
+/// Return the byte offset of the `M` in `MOTION`, or `bytes.len()` if absent.
+const fn find_motion_offset(bytes: &[u8]) -> usize {
+    let mut i = 0;
+    while i + 6 <= bytes.len() {
+        if bytes_match(bytes, i, b"MOTION") {
+            return i;
+        }
+        i += 1;
+    }
+    bytes.len()
+}
+
+/// Skip forward past the current non-whitespace token.
+pub const fn skip_token(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() {
+        match bytes[i] {
+            b' ' | b'\t' | b'\r' | b'\n' => break,
+            _ => i += 1,
+        }
+    }
+    i
+}
+
 // ── byte-stream helpers ───────────────────────────────────────────────────────
 
 /// Scan forward from `start` for `needle`; return the index just after it.
@@ -663,5 +814,157 @@ Frame Time:\t8.33333e-3\n\
     fn skip_inline_whitespace_skips_space_and_tab() {
         let i = skip_inline_whitespace(b"  \t42", 0);
         assert_eq!(i, 3);
+    }
+
+    // ── skip_token ────────────────────────────────────────────────────────
+
+    #[test]
+    fn skip_token_stops_at_whitespace() {
+        let i = skip_token(b"Xrotation next", 0);
+        assert_eq!(i, 9);
+    }
+
+    #[test]
+    fn skip_token_at_end_of_input() {
+        let i = skip_token(b"Xrotation", 0);
+        assert_eq!(i, 9);
+    }
+
+    // ── parse_bvh_channel_is_position ─────────────────────────────────────
+
+    // Standard layout: positions first, then rotations.
+    const CHANNEL_BVH: &[u8] = b"\
+HIERARCHY\n\
+ROOT hip\n\
+{\n\
+  OFFSET 0 0 0\n\
+  CHANNELS 6 Xposition Yposition Zposition Zrotation Yrotation Xrotation\n\
+  JOINT chest\n\
+  {\n\
+    OFFSET 0 5 0\n\
+    CHANNELS 3 Zrotation Xrotation Yrotation\n\
+    End Site { OFFSET 0 3 0 }\n\
+  }\n\
+}\n\
+MOTION\n\
+Frames:\t1\n\
+Frame Time:\t0.033\n\
+1 2 3 4 5 6 7 8 9\n\
+";
+
+    #[test]
+    fn channel_scanner_standard_layout() {
+        let is_pos = parse_bvh_channel_is_position::<9>(CHANNEL_BVH);
+        assert_eq!(
+            is_pos,
+            [true, true, true, false, false, false, false, false, false]
+        );
+    }
+
+    // Nonstandard root: positions and rotations interleaved — proves the
+    // scanner reads channel names from the file, not `ch < 3`.
+    const NONSTANDARD_BVH: &[u8] = b"\
+HIERARCHY\n\
+ROOT hip\n\
+{\n\
+  OFFSET 0 0 0\n\
+  CHANNELS 6 Zrotation Xposition Yrotation Yposition Xrotation Zposition\n\
+  End Site { OFFSET 0 1 0 }\n\
+}\n\
+MOTION\n\
+Frames:\t1\n\
+Frame Time:\t0.033\n\
+1 2 3 4 5 6\n\
+";
+
+    #[test]
+    fn channel_scanner_nonstandard_interleaved_order() {
+        let is_pos = parse_bvh_channel_is_position::<6>(NONSTANDARD_BVH);
+        assert_eq!(is_pos, [false, true, false, true, false, true]);
+    }
+
+    #[test]
+    #[should_panic(expected = "more channels in file than DOF")]
+    fn channel_scanner_rejects_dof_too_small() {
+        parse_bvh_channel_is_position::<5>(CHANNEL_BVH); // file has 9 channels
+    }
+
+    #[test]
+    #[should_panic(expected = "channel count does not match DOF")]
+    fn channel_scanner_rejects_dof_too_large() {
+        parse_bvh_channel_is_position::<12>(CHANNEL_BVH); // file has 9 channels
+    }
+
+    // ── normalize_bvh_motion ──────────────────────────────────────────────
+
+    #[test]
+    fn normalize_maps_zero_rotation_to_half() {
+        let raw = [[0.0f32; 1]; 1];
+        let out = normalize_bvh_motion::<1, 1>(raw, [false], BvhNormalizePolicy::LINKAGE_BLAZE);
+        // (0.0 + 720) / 1440 = 0.5, within snap → exactly 0.5
+        assert_eq!(out[0][0], 0.5);
+    }
+
+    #[test]
+    fn normalize_maps_position_and_rotation_correctly() {
+        let raw = [[150.0f32, 360.0f32]; 1];
+        let is_pos = [true, false];
+        let out = normalize_bvh_motion::<2, 1>(raw, is_pos, BvhNormalizePolicy::LINKAGE_BLAZE);
+        // position: (150 + 300) / 600 = 0.75
+        assert!((out[0][0] - 0.75).abs() < 1e-6);
+        // rotation: (360 + 720) / 1440 = 0.75
+        assert!((out[0][1] - 0.75).abs() < 1e-6);
+    }
+
+    #[test]
+    fn normalize_snaps_near_center_to_half() {
+        // 0.5% rotation (well within ±0.01 snap band after normalization)
+        let raw = [[7.2f32]; 1]; // (7.2 + 720) / 1440 = 0.505, |0.505 - 0.5| = 0.005 ≤ 0.01
+        let out = normalize_bvh_motion::<1, 1>(raw, [false], BvhNormalizePolicy::LINKAGE_BLAZE);
+        assert_eq!(out[0][0], 0.5);
+    }
+
+    #[test]
+    fn normalize_does_not_snap_outside_band() {
+        // (21.6 + 720) / 1440 = 0.515, |0.515 - 0.5| = 0.015 > 0.01
+        let raw = [[21.6f32]; 1];
+        let out = normalize_bvh_motion::<1, 1>(raw, [false], BvhNormalizePolicy::LINKAGE_BLAZE);
+        assert!((out[0][0] - 0.515).abs() < 1e-6);
+    }
+
+    #[test]
+    fn normalize_accepts_range_boundaries() {
+        // Exact boundaries normalize to 0.0 and 1.0.
+        let raw = [[-720.0f32, 720.0f32, -300.0f32, 300.0f32]; 1];
+        let is_pos = [false, false, true, true];
+        let out = normalize_bvh_motion::<4, 1>(raw, is_pos, BvhNormalizePolicy::LINKAGE_BLAZE);
+        assert_eq!(out[0][0], 0.0);
+        assert_eq!(out[0][1], 1.0);
+        assert_eq!(out[0][2], 0.0);
+        assert_eq!(out[0][3], 1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "rotation channel value is above")]
+    fn normalize_rejects_rotation_above_range() {
+        normalize_bvh_motion::<1, 1>([[721.0f32]; 1], [false], BvhNormalizePolicy::LINKAGE_BLAZE);
+    }
+
+    #[test]
+    #[should_panic(expected = "rotation channel value is below")]
+    fn normalize_rejects_rotation_below_range() {
+        normalize_bvh_motion::<1, 1>([[-721.0f32]; 1], [false], BvhNormalizePolicy::LINKAGE_BLAZE);
+    }
+
+    #[test]
+    #[should_panic(expected = "position channel value is above")]
+    fn normalize_rejects_position_above_range() {
+        normalize_bvh_motion::<1, 1>([[301.0f32]; 1], [true], BvhNormalizePolicy::LINKAGE_BLAZE);
+    }
+
+    #[test]
+    #[should_panic(expected = "position channel value is below")]
+    fn normalize_rejects_position_below_range() {
+        normalize_bvh_motion::<1, 1>([[-301.0f32]; 1], [true], BvhNormalizePolicy::LINKAGE_BLAZE);
     }
 }
