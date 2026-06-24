@@ -1,6 +1,6 @@
 use std::{fmt::Write as _, fs, process};
 
-use linkage_blaze_mocap::{bvh_frame_params, discover_bvh_parameters, parse_bvh};
+use linkage_blaze_mocap::{bvh_sample_params, discover_bvh_parameters, parse_bvh};
 
 const DOF: usize = 132;
 const INPUT_PATH: &str = "crates/linkage-blaze-mocap/samples/pirouette.bvh";
@@ -35,16 +35,16 @@ fn run() -> Result<(), String> {
         "// `const-parse` feature is not enabled.  Regenerate with `just generate-ballet`."
     )
     .map_err(format_error)?;
-    // DOF and FRAME_COUNT are defined in lib.rs; do not duplicate them.
+    // DOF and SAMPLE_COUNT are defined in lib.rs; do not duplicate them.
     writeln!(
         output,
-        "\npub static FRAMES: [[f32; DOF]; FRAME_COUNT] = ["
+        "\npub static SAMPLES: [[f32; DOF]; SAMPLE_COUNT] = ["
     )
     .map_err(format_error)?;
 
-    for frame in &clip.frames {
-        let params = bvh_frame_params::<DOF>(&layout, frame)
-            .map_err(|error| format!("failed to convert BVH frame: {error}"))?;
+    for sample in &clip.samples {
+        let params = bvh_sample_params::<DOF>(&layout, sample)
+            .map_err(|error| format!("failed to convert BVH motion sample: {error}"))?;
         output.push_str("    [");
         for (param_index, param) in params.iter().enumerate() {
             if param_index > 0 {

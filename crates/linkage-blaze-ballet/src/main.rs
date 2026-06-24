@@ -90,12 +90,10 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     let linkage = LINKAGE.view();
-    let mut params = [0.0f32; MOTION.dof()];
     let mut last_frame_duration = None;
     loop {
         info!("starting ballet cycle");
-        for frame_index in 0..MOTION.frame_count() {
-            MOTION.frame_into(frame_index, &mut params);
+        for sample in MOTION.samples() {
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
@@ -105,11 +103,11 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             render_draw_items(
                 &PROJECTION,
                 &mut PixelSurface::new(&mut cyd_frame),
-                linkage.draw_items(&params),
+                linkage.draw_items(&sample.params),
             );
 
             // todo000 review this
-            draw_status(&mut cyd_frame, text565, frame_index, last_frame_duration);
+            draw_status(&mut cyd_frame, text565, sample.index(), last_frame_duration);
             cyd_frame.flush()?;
             last_frame_duration = Some(Instant::now() - started);
         }
@@ -120,7 +118,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 fn draw_status<D>(
     draw_target: &mut D,
     text565: Rgb565,
-    frame_index: usize,
+    sample_index: usize,
     last_frame_duration: Option<Duration>,
 ) where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
@@ -134,8 +132,8 @@ fn draw_status<D>(
             &mut status,
             format_args!(
                 "{}/{}  fps {:.1}  slow {:.1}x",
-                frame_index + 1,
-                MOTION.frame_count(),
+                sample_index + 1,
+                MOTION.sample_count(),
                 fps,
                 slomo,
             ),
@@ -146,8 +144,8 @@ fn draw_status<D>(
             &mut status,
             format_args!(
                 "{}/{}  fps --.-  slow --.-x",
-                frame_index + 1,
-                MOTION.frame_count()
+                sample_index + 1,
+                MOTION.sample_count()
             ),
         )
         .ok();

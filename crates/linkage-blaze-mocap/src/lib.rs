@@ -4,12 +4,12 @@ use std::fmt;
 
 use linkage_blaze_core::LinkageBuf;
 
-/// Parsed BVH clip: hierarchy plus motion frames.
+/// Parsed BVH clip: hierarchy plus motion samples.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BvhClip {
     pub joints: Vec<BvhJoint>,
-    pub frames: Vec<BvhFrame>,
-    pub frame_time: f32,
+    pub samples: Vec<MotionSample>,
+    pub sample_time: f32,
     channel_count: usize,
 }
 
@@ -33,9 +33,9 @@ pub enum BvhChannel {
     Zrotation,
 }
 
-/// One BVH motion frame.
+/// One BVH motion sample.
 #[derive(Clone, Debug, PartialEq)]
-pub struct BvhFrame {
+pub struct MotionSample {
     pub values: Vec<f32>,
 }
 
@@ -88,9 +88,9 @@ pub fn build_bvh_linkage_buf<const DOF: usize, const MARKS: usize>(
     layout: &BvhParameterLayout,
     mark_joints: &[&str],
 ) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
-    let defaults = clip.frames.first().map_or_else(
+    let defaults = clip.samples.first().map_or_else(
         || Ok(Vec::new()),
-        |frame| bvh_parameter_defaults(layout, frame),
+        |sample| bvh_parameter_defaults(layout, sample),
     )?;
     build_bvh_linkage_buf_with_defaults(clip, layout, &defaults, mark_joints)
 }
@@ -257,10 +257,10 @@ fn annotate_depth_step_lines(
     result
 }
 
-/// Return normalized Linkage parameter values for one BVH frame.
-pub fn bvh_frame_params<const DOF: usize>(
+/// Return normalized Linkage parameter values for one motion sample.
+pub fn bvh_sample_params<const DOF: usize>(
     layout: &BvhParameterLayout,
-    frame: &BvhFrame,
+    sample: &MotionSample,
 ) -> Result<[f32; DOF], MocapParseError> {
     if layout.len() > DOF {
         return Err(MocapParseError::new(format!(
@@ -269,7 +269,7 @@ pub fn bvh_frame_params<const DOF: usize>(
         )));
     }
 
-    let defaults = bvh_parameter_defaults(layout, frame)?;
+    let defaults = bvh_parameter_defaults(layout, sample)?;
     let mut params = [0.5; DOF];
     for (parameter_index, default) in defaults.into_iter().enumerate() {
         params[parameter_index] = default;
@@ -280,7 +280,7 @@ pub fn bvh_frame_params<const DOF: usize>(
 
 /// Convert BVH motion text into generated `.lb.rs` source.
 ///
-/// The generated linkage uses defaults from the first BVH motion frame, so
+/// The generated linkage uses defaults from the first BVH motion sample, so
 /// loading the generated file starts in a captured pose. Mark names use
 /// `"depth N"` slots (one per tree level), and each `.restore` line carries
 /// a comment naming the joint being restored.
@@ -310,31 +310,31 @@ pub fn parse_bvh(source: &str) -> Result<BvhClip, MocapParseError> {
     parser.parse_joint(root_name, None)?;
     parser.expect("MOTION")?;
     parser.expect("Frames:")?;
-    let frame_count = parser.next_usize("frame count")?;
-    parser.expect("Frame")?;
+    let sample_count = parser.next_usize("sample count")?;
+    parser.expect("Frame")?;   // BVH file syntax: "Frame Time:"
     parser.expect("Time:")?;
-    let frame_time = parser.next_f32("frame time")?;
+    let sample_time = parser.next_f32("sample time")?;
 
-    let mut frames = Vec::with_capacity(frame_count);
-    for frame_index in 0..frame_count {
+    let mut samples = Vec::with_capacity(sample_count);
+    for sample_index in 0..sample_count {
         let mut values = Vec::with_capacity(parser.channel_count);
         for _ in 0..parser.channel_count {
-            values.push(parser.next_f32("BVH frame channel value")?);
+            values.push(parser.next_f32("BVH sample channel value")?);
         }
         if values.len() != parser.channel_count {
             return Err(MocapParseError::new(format!(
-                "BVH frame {frame_index} has {} values, expected {}",
+                "BVH sample {sample_index} has {} values, expected {}",
                 values.len(),
                 parser.channel_count
             )));
         }
-        frames.push(BvhFrame { values });
+        samples.push(MotionSample { values });
     }
 
     Ok(BvhClip {
         joints: parser.joints,
-        frames,
-        frame_time,
+        samples,
+        sample_time,
         channel_count: parser.channel_count,
     })
 }
@@ -438,13 +438,13 @@ fn apply_bvh_joint_parameters<const DOF: usize, const MARKS: usize>(
 
 fn bvh_parameter_defaults(
     layout: &BvhParameterLayout,
-    frame: &BvhFrame,
+    sample: &MotionSample,
 ) -> Result<Vec<f32>, MocapParseError> {
     let mut defaults = Vec::with_capacity(layout.len());
 
     for parameter in &layout.parameters {
-        let value = frame.values.get(parameter.index).copied().ok_or_else(|| {
-            MocapParseError::new(format!("BVH frame missing channel {}", parameter.index))
+        let value = sample.values.get(parameter.index).copied().ok_or_else(|| {
+            MocapParseError::new(format!("BVH sample missing channel {}", parameter.index))
         })?;
         defaults.push(normalize_bvh_parameter_default(parameter, value)?);
     }
@@ -842,21 +842,21 @@ Frame Time: 0.0333333
         let clip = parse_bvh(BVH).expect("BVH should parse");
 
         assert_eq!(clip.joints.len(), 6);
-        assert_eq!(clip.frames.len(), 2);
+        assert_eq!(clip.samples.len(), 2);
         assert_eq!(clip.channel_count, 15);
         assert_eq!(clip.joints[0].name, "hip");
         assert_eq!(clip.joints[2].name, "leftArm");
         assert_eq!(clip.joints[3].parent, Some(2));
-        assert_eq!(clip.frames[1].values[14], 120.0);
+        assert_eq!(clip.samples[1].values[14], 120.0);
     }
 
     #[test]
-    fn builds_bvh_linkage_buf_and_frame_params() {
+    fn builds_bvh_linkage_buf_and_sample_params() {
         let clip = parse_bvh(BVH).expect("BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
             build_bvh_linkage_buf::<32, 8>(&clip, &layout, &[]).expect("BVH linkage should build");
-        let params = bvh_frame_params::<32>(&layout, &clip.frames[1]).expect("params should build");
+        let params = bvh_sample_params::<32>(&layout, &clip.samples[1]).expect("params should build");
 
         assert_eq!(layout.len(), 15);
         assert_eq!(params[0], 0.5);
@@ -919,7 +919,7 @@ Frame Time: 0.0333333
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
             build_bvh_linkage_buf::<1, 4>(&clip, &layout, &[]).expect("BVH linkage should build");
-        let params = bvh_frame_params::<1>(&layout, &clip.frames[0]).expect("params should build");
+        let params = bvh_sample_params::<1>(&layout, &clip.samples[0]).expect("params should build");
         let stroke = linkage
             .view()
             .draw_items(&params)
@@ -948,10 +948,10 @@ Frame Time: 0.0333333
         let linkage = build_bvh_linkage_buf::<256, 64>(&clip, &layout, &[])
             .expect("real BVH linkage should build");
         let params =
-            bvh_frame_params::<256>(&layout, &clip.frames[0]).expect("real params should build");
+            bvh_sample_params::<256>(&layout, &clip.samples[0]).expect("real params should build");
 
         assert!(clip.joints.len() > 40);
-        assert!(clip.frames.len() > 500);
+        assert!(clip.samples.len() > 500);
         assert!(layout.len() > 120);
         assert!(linkage.view().draw_items(&params).count() > 40);
     }

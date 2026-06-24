@@ -38,7 +38,7 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 /// Parse and normalize a BVH file embedded at compile time.
 ///
 /// The path is resolved relative to the file that invokes the macro, exactly
-/// like a bare `include_bytes!`.  `DOF` and `FRAME_COUNT` are inferred from
+/// like a bare `include_bytes!`.  `DOF` and `SAMPLE_COUNT` are inferred from
 /// the type annotation; a mismatch panics at compile time with a descriptive
 /// message.
 ///
@@ -91,77 +91,87 @@ pub const fn u16_to_norm(x: u16) -> f32 {
 /// Normalized BVH motion data stored as quantized `u16` values.
 ///
 /// Each `f32` parameter in `[0.0, 1.0]` is encoded as a `u16` in `[0, 65535]`,
-/// halving memory use. Decode one frame at a time with [`frame`](BvhMotion::frame)
-/// or [`frame_into`](BvhMotion::frame_into).
-pub struct BvhMotion<const DOF: usize, const FRAME_COUNT: usize> {
-    motion: [[u16; DOF]; FRAME_COUNT],
+/// halving memory use. Decode one motion sample at a time with
+/// [`sample`](BvhMotion::sample) or [`sample_into`](BvhMotion::sample_into).
+pub struct BvhMotion<const DOF: usize, const SAMPLE_COUNT: usize> {
+    motion: [[u16; DOF]; SAMPLE_COUNT],
 }
 
-impl<const DOF: usize, const FRAME_COUNT: usize> BvhMotion<DOF, FRAME_COUNT> {
-    /// The number of degrees of freedom (channels per frame).
+impl<const DOF: usize, const SAMPLE_COUNT: usize> BvhMotion<DOF, SAMPLE_COUNT> {
+    /// The number of degrees of freedom (channels per motion sample).
     pub const DOF: usize = DOF;
 
-    /// The number of frames in this motion clip.
-    pub const FRAME_COUNT: usize = FRAME_COUNT;
+    /// The number of motion samples in this clip.
+    pub const SAMPLE_COUNT: usize = SAMPLE_COUNT;
 
-    /// Construct from a pre-quantized `u16` frame array.
-    pub const fn new(motion: [[u16; DOF]; FRAME_COUNT]) -> Self {
+    /// Construct from a pre-quantized `u16` sample array.
+    pub const fn new(motion: [[u16; DOF]; SAMPLE_COUNT]) -> Self {
         Self { motion }
     }
 
     /// Parse and normalize a BVH file's bytes into this motion type.
     ///
-    /// `DOF` and `FRAME_COUNT` are inferred from the type annotation.
-    /// Panics at compile time if the file's channel count or frame count
+    /// `DOF` and `SAMPLE_COUNT` are inferred from the type annotation.
+    /// Panics at compile time if the file's channel count or sample count
     /// does not match.
     pub const fn from_bvh_bytes(bytes: &[u8]) -> Self {
-        parse_and_normalize_bvh_motion::<DOF, FRAME_COUNT>(bytes)
+        parse_and_normalize_bvh_motion::<DOF, SAMPLE_COUNT>(bytes)
     }
 
-    pub(crate) const fn from_normalized(f32_motion: [[f32; DOF]; FRAME_COUNT]) -> Self {
-        let mut data = [[0u16; DOF]; FRAME_COUNT];
-        let mut frame = 0;
-        while frame < FRAME_COUNT {
+    pub(crate) const fn from_normalized(f32_motion: [[f32; DOF]; SAMPLE_COUNT]) -> Self {
+        let mut data = [[0u16; DOF]; SAMPLE_COUNT];
+        let mut sample = 0;
+        while sample < SAMPLE_COUNT {
             let mut ch = 0;
             while ch < DOF {
-                data[frame][ch] = norm_to_u16(f32_motion[frame][ch]);
+                data[sample][ch] = norm_to_u16(f32_motion[sample][ch]);
                 ch += 1;
             }
-            frame += 1;
+            sample += 1;
         }
         Self { motion: data }
     }
 
-    /// Return the number of degrees of freedom (channels per frame).
+    /// Return the number of degrees of freedom (channels per motion sample).
     pub const fn dof(&self) -> usize {
         DOF
     }
 
-    /// Return the number of frames.
-    pub const fn frame_count(&self) -> usize {
-        FRAME_COUNT
+    /// Return the number of motion samples.
+    pub const fn sample_count(&self) -> usize {
+        SAMPLE_COUNT
     }
 
-    /// Decode one frame into a stack-allocated `[f32; DOF]` array.
-    pub fn frame(&self, frame_index: usize) -> [f32; DOF] {
+    /// Decode one motion sample into a stack-allocated `[f32; DOF]` array.
+    pub fn sample(&self, sample_index: usize) -> [f32; DOF] {
         let mut out = [0.0f32; DOF];
-        self.frame_into(frame_index, &mut out);
+        self.sample_into(sample_index, &mut out);
         out
     }
 
-    /// Decode one frame into an existing buffer, avoiding a local array.
+    /// Return an iterator over all motion samples in order, yielding [`MotionSample`] values.
     ///
-    /// Preferred on embedded targets where minimizing stack pressure matters:
+    /// Each [`MotionSample`] owns its decoded `params` array and exposes the
+    /// sample index via [`MotionSample::index`].
     ///
-    /// ```rust,ignore
-    /// let mut params = [0.0f32; DOF];
-    /// for frame_index in 0..motion.frame_count() {
-    ///     motion.frame_into(frame_index, &mut params);
-    ///     // use params ...
+    /// ```rust,no_run
+    /// # use linkage_blaze_core::bvh_parse::BvhMotion;
+    /// # let motion = BvhMotion::<3, 2>::new([[0; 3]; 2]);
+    /// for sample in motion.samples() {
+    ///     let _params: &[f32; 3] = &sample.params;
+    ///     let _index: usize = sample.index();
     /// }
     /// ```
-    pub fn frame_into(&self, frame_index: usize, out: &mut [f32; DOF]) {
-        let packed = &self.motion[frame_index];
+    pub fn samples(&self) -> MotionSampleIter<'_, DOF, SAMPLE_COUNT> {
+        MotionSampleIter {
+            motion: self,
+            index: 0,
+        }
+    }
+
+    /// Decode one motion sample into an existing buffer, avoiding a local array.
+    pub fn sample_into(&self, sample_index: usize, out: &mut [f32; DOF]) {
+        let packed = &self.motion[sample_index];
         let mut i = 0;
         while i < DOF {
             out[i] = u16_to_norm(packed[i]);
@@ -170,15 +180,64 @@ impl<const DOF: usize, const FRAME_COUNT: usize> BvhMotion<DOF, FRAME_COUNT> {
     }
 }
 
-/// Parse the MOTION section of a BVH file into a `FRAME_COUNT × DOF` array of raw
+/// A single decoded motion sample returned by [`BvhMotion::samples`].
+pub struct MotionSample<const DOF: usize> {
+    /// Decoded parameter values for this motion sample.
+    pub params: [f32; DOF],
+    index: usize,
+}
+
+impl<const DOF: usize> MotionSample<DOF> {
+    /// Return the zero-based index of this sample within its motion clip.
+    #[must_use]
+    pub fn index(&self) -> usize {
+        self.index
+    }
+}
+
+/// Iterator over motion samples of a [`BvhMotion`], created by [`BvhMotion::samples`].
+pub struct MotionSampleIter<'a, const DOF: usize, const SAMPLE_COUNT: usize> {
+    motion: &'a BvhMotion<DOF, SAMPLE_COUNT>,
+    index: usize,
+}
+
+impl<'a, const DOF: usize, const SAMPLE_COUNT: usize> Iterator
+    for MotionSampleIter<'a, DOF, SAMPLE_COUNT>
+{
+    type Item = MotionSample<DOF>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= SAMPLE_COUNT {
+            return None;
+        }
+        let index = self.index;
+        self.index += 1;
+        Some(MotionSample {
+            params: self.motion.sample(index),
+            index,
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = SAMPLE_COUNT - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<const DOF: usize, const SAMPLE_COUNT: usize> ExactSizeIterator
+    for MotionSampleIter<'_, DOF, SAMPLE_COUNT>
+{
+}
+
+/// Parse the MOTION section of a BVH file into a `SAMPLE_COUNT × DOF` array of raw
 /// `f32` values.
 ///
-/// `bytes` is the full BVH file.  `DOF` and `FRAME_COUNT` must exactly match the
-/// channel count and frame count in the file; the parser asserts on mismatch
+/// `bytes` is the full BVH file.  `DOF` and `SAMPLE_COUNT` must exactly match the
+/// channel count and sample count in the file; the parser asserts on mismatch
 /// and panics at compile time if either is wrong.
-pub const fn parse_bvh_motion_section<const DOF: usize, const FRAME_COUNT: usize>(
+pub const fn parse_bvh_motion_section<const DOF: usize, const SAMPLE_COUNT: usize>(
     bytes: &[u8],
-) -> [[f32; DOF]; FRAME_COUNT] {
+) -> [[f32; DOF]; SAMPLE_COUNT] {
     // Pre-pass: count channels in HIERARCHY to validate DOF before any parsing.
     // If DOF is wrong the "index out of bounds: the length is 0 but the index is N"
     // compile error below shows N — the correct DOF value to use instead.
@@ -189,12 +248,12 @@ pub const fn parse_bvh_motion_section<const DOF: usize, const FRAME_COUNT: usize
 
     let mut i = find_after(bytes, 0, b"MOTION");
 
-    // "Frames:\t<count>\n"
+    // "Frames:\t<count>\n" — BVH file syntax; `sample_count` is the parsed value.
     i = find_after(bytes, i, b"Frames:");
     i = skip_inline_whitespace(bytes, i);
-    let (frame_count, next) = parse_uint(bytes, i);
-    if frame_count != FRAME_COUNT {
-        let _: u8 = [][frame_count]; // correct FRAME_COUNT = N shown as "the index is N" in the compile error
+    let (sample_count, next) = parse_uint(bytes, i);
+    if sample_count != SAMPLE_COUNT {
+        let _: u8 = [][sample_count]; // correct SAMPLE_COUNT = N shown as "the index is N" in the compile error
     }
     i = skip_to_next_line(bytes, next);
 
@@ -203,18 +262,18 @@ pub const fn parse_bvh_motion_section<const DOF: usize, const FRAME_COUNT: usize
     let (_, next) = parse_f32(bytes, skip_inline_whitespace(bytes, i));
     i = skip_to_next_line(bytes, next);
 
-    let mut out = [[0.0f32; DOF]; FRAME_COUNT];
-    let mut frame = 0;
-    while frame < FRAME_COUNT {
+    let mut out = [[0.0f32; DOF]; SAMPLE_COUNT];
+    let mut sample = 0;
+    while sample < SAMPLE_COUNT {
         let mut ch = 0;
         while ch < DOF {
             i = skip_whitespace(bytes, i);
             let (value, next_i) = parse_f32(bytes, i);
             i = next_i;
-            out[frame][ch] = value;
+            out[sample][ch] = value;
             ch += 1;
         }
-        frame += 1;
+        sample += 1;
     }
 
     // Reject trailing non-whitespace: catches DOF too small.
@@ -340,13 +399,13 @@ pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
 }
 
 /// Parse and normalize a BVH file's motion section in one step.
-pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const FRAME_COUNT: usize>(
+pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT: usize>(
     bytes: &[u8],
-) -> BvhMotion<DOF, FRAME_COUNT> {
-    let raw = parse_bvh_motion_section::<DOF, FRAME_COUNT>(bytes);
+) -> BvhMotion<DOF, SAMPLE_COUNT> {
+    let raw = parse_bvh_motion_section::<DOF, SAMPLE_COUNT>(bytes);
     let channel_is_position = parse_bvh_channel_is_position::<DOF>(bytes);
     let normalized =
-        normalize_bvh_motion::<DOF, FRAME_COUNT>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE);
+        normalize_bvh_motion::<DOF, SAMPLE_COUNT>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE);
     BvhMotion::from_normalized(normalized)
 }
 
@@ -386,20 +445,20 @@ impl BvhNormalizePolicy {
 /// - `raw` — output of [`parse_bvh_motion_section`]
 /// - `is_position` — output of [`parse_bvh_channel_is_position`]
 /// - `policy` — Linkage Blaze parameter-range and snap policy
-pub const fn normalize_bvh_motion<const DOF: usize, const FRAME_COUNT: usize>(
-    raw: [[f32; DOF]; FRAME_COUNT],
+pub const fn normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT: usize>(
+    raw: [[f32; DOF]; SAMPLE_COUNT],
     is_position: [bool; DOF],
     policy: BvhNormalizePolicy,
-) -> [[f32; DOF]; FRAME_COUNT] {
+) -> [[f32; DOF]; SAMPLE_COUNT] {
     let pos_range = policy.position_high - policy.position_low;
     let rot_range = policy.rotation_high - policy.rotation_low;
 
-    let mut out = [[0.0f32; DOF]; FRAME_COUNT];
-    let mut frame = 0;
-    while frame < FRAME_COUNT {
+    let mut out = [[0.0f32; DOF]; SAMPLE_COUNT];
+    let mut sample = 0;
+    while sample < SAMPLE_COUNT {
         let mut ch = 0;
         while ch < DOF {
-            let v = raw[frame][ch];
+            let v = raw[sample][ch];
             if is_position[ch] {
                 assert!(
                     v >= policy.position_low,
@@ -425,14 +484,14 @@ pub const fn normalize_bvh_motion<const DOF: usize, const FRAME_COUNT: usize>(
                 (policy.rotation_low, rot_range)
             };
             let norm = (v - low) / range;
-            out[frame][ch] = if (norm - policy.snap_center).abs() <= policy.snap_epsilon {
+            out[sample][ch] = if (norm - policy.snap_center).abs() <= policy.snap_epsilon {
                 policy.snap_center
             } else {
                 norm
             };
             ch += 1;
         }
-        frame += 1;
+        sample += 1;
     }
     out
 }
@@ -889,19 +948,19 @@ Frame Time:\t0.033333\n\
 
     #[test]
     fn parse_tiny_bvh_motion() {
-        let frames = parse_bvh_motion_section::<2, 3>(TINY_BVH);
-        assert!((frames[0][0] - 1.0).abs() < 1e-6);
-        assert!((frames[0][1] - 2.0).abs() < 1e-6);
-        assert!((frames[1][0] - (-3.5)).abs() < 1e-6);
-        assert!((frames[1][1] - 4.25).abs() < 1e-6);
-        assert!((frames[2][0] - 0.0).abs() < 1e-6);
-        assert!((frames[2][1] - (-0.001)).abs() < 1e-6);
+        let samples = parse_bvh_motion_section::<2, 3>(TINY_BVH);
+        assert!((samples[0][0] - 1.0).abs() < 1e-6);
+        assert!((samples[0][1] - 2.0).abs() < 1e-6);
+        assert!((samples[1][0] - (-3.5)).abs() < 1e-6);
+        assert!((samples[1][1] - 4.25).abs() < 1e-6);
+        assert!((samples[2][0] - 0.0).abs() < 1e-6);
+        assert!((samples[2][1] - (-0.001)).abs() < 1e-6);
     }
 
     #[test]
     #[should_panic(expected = "index out of bounds")]
-    fn rejects_wrong_frame_count() {
-        parse_bvh_motion_section::<2, 4>(TINY_BVH); // TINY_BVH has 3 frames
+    fn rejects_wrong_sample_count() {
+        parse_bvh_motion_section::<2, 4>(TINY_BVH); // TINY_BVH has 3 samples
     }
 
     const TOO_FEW_VALUES: &[u8] = b"\
@@ -974,10 +1033,10 @@ Frame Time:\t8.33333e-3\n\
 
     #[test]
     fn parses_motion_with_exponents_and_plus_signs() {
-        let frames = parse_bvh_motion_section::<3, 1>(EXP_BVH);
-        assert!((frames[0][0] - 1.0).abs() < 1e-6);
-        assert!((frames[0][1] + 2.5).abs() < 1e-6);
-        assert!(frames[0][2].abs() < 1e-10);
+        let samples = parse_bvh_motion_section::<3, 1>(EXP_BVH);
+        assert!((samples[0][0] - 1.0).abs() < 1e-6);
+        assert!((samples[0][1] + 2.5).abs() < 1e-6);
+        assert!(samples[0][2].abs() < 1e-10);
     }
 
     // ── skip_inline_whitespace ────────────────────────────────────────────
@@ -1163,10 +1222,10 @@ Frame Time:\t0.033\n\
     }
 
     #[test]
-    fn frame_into_expands_one_frame() {
+    fn sample_into_expands_one_sample() {
         let motion = BvhMotion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
         let mut out = [99.0f32; 3];
-        motion.frame_into(0, &mut out);
+        motion.sample_into(0, &mut out);
         assert_eq!(out, [0.0, 0.5, 1.0]);
     }
 }
