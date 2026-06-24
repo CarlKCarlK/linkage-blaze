@@ -90,10 +90,10 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     let linkage = LINKAGE.view();
-    let mut last_frame_duration = None;
+    let mut last_sample_duration = None;
     loop {
         info!("starting ballet cycle");
-        for sample in MOTION.samples() {
+        for (sample_index, params) in MOTION.samples().enumerate() {
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
@@ -103,13 +103,13 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             render_draw_items(
                 &PROJECTION,
                 &mut PixelSurface::new(&mut cyd_frame),
-                linkage.draw_items(&sample.params),
+                linkage.draw_items(&params),
             );
 
             // todo000 review this
-            draw_status(&mut cyd_frame, text565, sample.index(), last_frame_duration);
+            draw_status(&mut cyd_frame, text565, sample_index, last_sample_duration);
             cyd_frame.flush()?;
-            last_frame_duration = Some(Instant::now() - started);
+            last_sample_duration = Some(Instant::now() - started);
         }
     }
 }
@@ -119,13 +119,13 @@ fn draw_status<D>(
     draw_target: &mut D,
     text565: Rgb565,
     sample_index: usize,
-    last_frame_duration: Option<Duration>,
+    last_sample_duration: Option<Duration>,
 ) where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let mut status = heapless::String::<64>::new();
-    if let Some(last_frame_duration) = last_frame_duration {
-        let elapsed_secs = last_frame_duration.as_micros() as f32 * 1e-6_f32;
+    if let Some(last_sample_duration) = last_sample_duration {
+        let elapsed_secs = last_sample_duration.as_micros() as f32 * 1e-6_f32;
         let fps = (1.0_f32 / elapsed_secs).max(0.1);
         let slomo = 120.0_f32 / fps;
         Write::write_fmt(
