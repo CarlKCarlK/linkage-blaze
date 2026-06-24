@@ -67,10 +67,9 @@ const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
 include!("ballet_frames_precomputed.rs");
 
 use linkage_blaze_ballet::ballet_render::{
-    BACKGROUND, BALLET, TEXT, disk_screen_axes, draw_filled_circle, draw_filled_ellipse,
-    draw_segment, pose_to_point,
+    BACKGROUND, BALLET, BalletProjection, BalletSurface, TEXT,
 };
-use linkage_blaze_core::DrawItem;
+use linkage_blaze_core::render_draw_items;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
 use log::info;
 
@@ -127,42 +126,16 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         // todo000 We don't expect BALLET_DOF to be a free-floating constant.
         for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
             let started = Instant::now();
-            // todo000 pull this out of the loops?
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
-            for draw_item in &mut linkage.draw_items(params) {
-                match draw_item {
-                    // todo understand pose_to_point
-                    DrawItem::Stroke(stroke) => {
-                        draw_segment(
-                            &mut cyd_frame,
-                            pose_to_point(stroke.start()),
-                            pose_to_point(stroke.end()),
-                            stroke.color(),
-                            stroke.width(),
-                        );
-                    }
-                    DrawItem::Disk(disk) => {
-                        let (axis_a, axis_b) =
-                            disk_screen_axes(disk.pose().orientation(), disk.radius());
-                        draw_filled_ellipse(
-                            &mut cyd_frame,
-                            pose_to_point(disk.pose()),
-                            axis_a,
-                            axis_b,
-                            disk.color(),
-                        );
-                    }
-                    DrawItem::Sphere(sphere) => {
-                        draw_filled_circle(
-                            &mut cyd_frame,
-                            pose_to_point(sphere.pose()),
-                            sphere.radius(),
-                            sphere.color(),
-                        );
-                    }
-                }
-            }
+            // todo000 proj is too short
+            // todo000 a free-floating function?
+            // todo000 understand the inputs.
+            render_draw_items(
+                &BalletProjection,
+                &mut BalletSurface(&mut cyd_frame),
+                linkage.draw_items(params),
+            );
 
             // todo000 review this
             draw_status(&mut cyd_frame, text565, frame_index, last_frame_duration);

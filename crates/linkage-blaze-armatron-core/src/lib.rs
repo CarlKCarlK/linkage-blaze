@@ -16,7 +16,8 @@ use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
 use linkage_blaze_core::{
-    DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, Vec3, linkage, linkage_fixed,
+    DrawSurface, LinkageFixed, LinkageView, Pose, Projection, Rgb888, Vec3, linkage, linkage_fixed,
+    render_draw_items,
 };
 
 // todo00 I hate all these constants.
@@ -613,111 +614,7 @@ impl CydSim {
         linkage: LinkageView<'_, 15, 4>,
         buffer: &mut impl DrawTarget<Color = Rgb565>,
     ) {
-        for draw_item in linkage.draw_items(&self.params) {
-            match draw_item {
-                DrawItem::Stroke(segment) => {
-                    let start = self.pose_to_screen(segment.start());
-                    let end = self.pose_to_screen(segment.end());
-                    let width = screen_width_pixels(segment.width(), self.scale());
-                    let color = rgb565_from_rgb888(segment.color());
-                    Line::new(start, end)
-                        .into_styled(PrimitiveStyle::with_stroke(color, width))
-                        .draw(buffer)
-                        .ok();
-                    draw_round_cap(buffer, start, width, color);
-                    draw_round_cap(buffer, end, width, color);
-                }
-                DrawItem::Disk(disk) => {
-                    self.draw_projected_disk(buffer, disk.pose(), disk.radius(), disk.color());
-                }
-                DrawItem::Sphere(sphere) => {
-                    self.draw_projected_sphere(
-                        buffer,
-                        sphere.pose(),
-                        sphere.radius(),
-                        sphere.color(),
-                    );
-                }
-            }
-        }
-    }
-
-    /// Draw a filled disk projected through the pose orientation onto the screen.
-    ///
-    /// Projects the disk's 3D axes (orientation columns 0 and 1) to 2D and rasterizes
-    /// the resulting ellipse pixel-by-pixel so that tilted disks appear as ellipses.
-    fn draw_projected_disk(
-        &self,
-        target: &mut impl DrawTarget<Color = Rgb565>,
-        pose: Pose,
-        radius: f32,
-        color_raw: Rgb888,
-    ) {
-        let orient = pose.orientation();
-        //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-        let Vec3([px, py, pz]) = pose.position();
-        let scale = self.scale();
-        let factor = self.perspective_factor(px);
-        let r = radius * scale * factor;
-        let color = rgb565_from_rgb888(color_raw);
-
-        let (cx, cy) = project_pos(py * factor, pz * factor, scale);
-        let (ax, ay) = project_dir(orient[1][0], orient[2][0], r);
-        let (bx, by) = project_dir(orient[1][1], orient[2][1], r);
-
-        let det = ax * by - bx * ay;
-        let det_sq = det * det;
-
-        if det_sq < 0.25 {
-            return; // edge-on: disk too thin to rasterize
-        }
-
-        let hw = libm::sqrtf(ax * ax + bx * bx) as i32 + 1;
-        let hh = libm::sqrtf(ay * ay + by * by) as i32 + 1;
-
-        let x0 = (cx - hw).max(0);
-        let y0 = (cy - hh).max(0);
-        let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
-        let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
-
-        target
-            .draw_iter((y0..=y1).flat_map(move |y| {
-                (x0..=x1).filter_map(move |x| {
-                    let dx = x as f32 - cx as f32;
-                    let dy = y as f32 - cy as f32;
-                    let u = by * dx - bx * dy;
-                    let v = ax * dy - ay * dx;
-                    if u * u + v * v <= det_sq {
-                        Some(Pixel(Point::new(x, y), color))
-                    } else {
-                        None
-                    }
-                })
-            }))
-            .ok();
-    }
-
-    fn draw_projected_sphere(
-        &self,
-        target: &mut impl DrawTarget<Color = Rgb565>,
-        pose: Pose,
-        radius: f32,
-        color_raw: Rgb888,
-    ) {
-        if radius <= 0.0 {
-            return;
-        }
-
-        let scale = self.scale();
-        let diameter = round_to_u32(radius * scale * 2.0);
-        if diameter == 0 {
-            return;
-        }
-
-        Circle::with_center(self.pose_to_screen(pose), diameter)
-            .into_styled(PrimitiveStyle::with_fill(rgb565_from_rgb888(color_raw)))
-            .draw(target)
-            .ok();
+        render_draw_items(self, &mut ArmatronSurface { buffer }, linkage.draw_items(&self.params));
     }
 
     fn draw_sliders(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
@@ -1017,6 +914,99 @@ impl CydSim {
 impl Default for CydSim {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Projection for CydSim {
+    fn project_pos(&self, pose: Pose) -> (f32, f32) {
+        let p = self.pose_to_screen(pose);
+        (p.x as f32, p.y as f32)
+    }
+
+    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
+        let factor = self.perspective_factor(pose.position()[0]);
+        let r = radius * self.scale() * factor;
+        project_dir(world_dir[1], world_dir[2], r)
+    }
+
+    fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
+        let factor = self.perspective_factor(pose.position()[0]);
+        radius * self.scale() * factor
+    }
+
+    fn project_width(&self, width: f32) -> f32 {
+        screen_width_pixels(width, self.scale()) as f32
+    }
+}
+
+struct ArmatronSurface<'a, T: DrawTarget<Color = Rgb565>> {
+    buffer: &'a mut T,
+}
+
+impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
+    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
+        let start = Point::new(start.0 as i32, start.1 as i32);
+        let end = Point::new(end.0 as i32, end.1 as i32);
+        let width = round_to_u32(pixel_width).max(1);
+        let color = rgb565_from_rgb888(color);
+        Line::new(start, end)
+            .into_styled(PrimitiveStyle::with_stroke(color, width))
+            .draw(self.buffer)
+            .ok();
+    }
+
+    fn filled_ellipse(
+        &mut self,
+        center: (f32, f32),
+        axis_a: (f32, f32),
+        axis_b: (f32, f32),
+        color: Rgb888,
+    ) {
+        let cx = center.0 as i32;
+        let cy = center.1 as i32;
+        let (ax, ay) = axis_a;
+        let (bx, by) = axis_b;
+        let det = ax * by - bx * ay;
+        let det_sq = det * det;
+        if det_sq < 0.25 {
+            return;
+        }
+        let hw = libm::sqrtf(ax * ax + bx * bx) as i32 + 1;
+        let hh = libm::sqrtf(ay * ay + by * by) as i32 + 1;
+        let x0 = (cx - hw).max(0);
+        let y0 = (cy - hh).max(0);
+        let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
+        let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
+        let color = rgb565_from_rgb888(color);
+        self.buffer
+            .draw_iter((y0..=y1).flat_map(move |y| {
+                (x0..=x1).filter_map(move |x| {
+                    let dx = x as f32 - cx as f32;
+                    let dy = y as f32 - cy as f32;
+                    let u = by * dx - bx * dy;
+                    let v = ax * dy - ay * dx;
+                    if u * u + v * v <= det_sq {
+                        Some(Pixel(Point::new(x, y), color))
+                    } else {
+                        None
+                    }
+                })
+            }))
+            .ok();
+    }
+
+    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
+        if pixel_radius <= 0.0 {
+            return;
+        }
+        let diameter = round_to_u32(pixel_radius * 2.0);
+        if diameter == 0 {
+            return;
+        }
+        Circle::with_center(Point::new(center.0 as i32, center.1 as i32), diameter)
+            .into_styled(PrimitiveStyle::with_fill(rgb565_from_rgb888(color)))
+            .draw(self.buffer)
+            .ok();
     }
 }
 
@@ -1444,20 +1434,6 @@ fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
 
 fn stroke_style(color: Rgb888, stroke_width: u32) -> PrimitiveStyle<Rgb565> {
     PrimitiveStyle::with_stroke(rgb565_from_rgb888(color), stroke_width)
-}
-
-fn draw_round_cap(
-    target: &mut impl DrawTarget<Color = Rgb565>,
-    center: Point,
-    width: u32,
-    color: Rgb565,
-) {
-    let diameter = width.max(1);
-    let radius = diameter as i32 / 2;
-    Circle::new(Point::new(center.x - radius, center.y - radius), diameter)
-        .into_styled(PrimitiveStyle::with_fill(color))
-        .draw(target)
-        .ok();
 }
 
 fn distance(left: Vec3, right: Vec3) -> f32 {
