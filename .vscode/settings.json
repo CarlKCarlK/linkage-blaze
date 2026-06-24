@@ -13,6 +13,14 @@
     "rust-analyzer.diagnostics.enable": false,
     "cSpell.words": [
         "cosf",
-        "sinf"
+        "shldr",
+        "sinf",
+        "slomo",
+        "Xposition",
+        "xrotation",
+        "Yposition",
+        "yrotation",
+        "Zposition",
+        "zrotation"
     ]
 }

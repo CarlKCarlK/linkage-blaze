@@ -3815,6 +3815,205 @@ pub fn to_point(xy: (f32, f32)) -> embedded_graphics::prelude::Point {
     embedded_graphics::prelude::Point::new(xy.0 as i32, xy.1 as i32)
 }
 
+/// Orthographic projection looking along the negative X axis.
+///
+/// World Y maps to screen X (negated) and world Z maps to screen Y (negated),
+/// with a configurable origin and uniform scale factor.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::NegXProjection;
+/// let projection = NegXProjection { center_x: 84.0, baseline_y: 300.0, scale: 1.575 };
+/// ```
+pub struct NegXProjection {
+    pub center_x: f32,
+    pub baseline_y: f32,
+    pub scale: f32,
+}
+
+impl Projection for NegXProjection {
+    fn project_pos(&self, pose: Pose) -> (f32, f32) {
+        let p = pose.position();
+        (
+            self.center_x - p[1] * self.scale,
+            self.baseline_y - p[2] * self.scale,
+        )
+    }
+
+    fn project_dir(&self, _pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
+        let r = radius * self.scale;
+        (-world_dir[1] * r, -world_dir[2] * r)
+    }
+
+    fn project_radius(&self, _pose: Pose, radius: f32) -> f32 {
+        radius * self.scale
+    }
+
+    fn project_width(&self, width: f32) -> f32 {
+        width * self.scale
+    }
+}
+
+/// Wraps a [`PixelTarget`] as a [`DrawSurface`] using embedded-graphics primitives.
+///
+/// `tile_origin` is the surface-space origin of the rendering coordinate system.
+/// Set it to `Point::new(0, 0)` to render to the full target without any offset.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::{PixelSurface, PixelTarget, Rgb888};
+/// # use embedded_graphics::prelude::Point;
+/// # struct MyTarget;
+/// # impl PixelTarget for MyTarget {
+/// #     fn width(&self) -> usize { 240 }
+/// #     fn height(&self) -> usize { 320 }
+/// #     fn put_pixel(&mut self, _x: usize, _y: usize, _color: Rgb888) {}
+/// # }
+/// # let mut target = MyTarget;
+/// let mut surface = PixelSurface::new(&mut target);
+/// ```
+pub struct PixelSurface<'a, T: PixelTarget> {
+    pub target: &'a mut T,
+    pub tile_origin: embedded_graphics::prelude::Point,
+}
+
+impl<'a, T: PixelTarget> PixelSurface<'a, T> {
+    pub fn new(target: &'a mut T) -> Self {
+        Self { target, tile_origin: embedded_graphics::prelude::Point::new(0, 0) }
+    }
+
+    /// Write one pixel at `(x, y)` in the drawing coordinate system, clipping to the target bounds.
+    pub fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888) {
+        pixel_put(self.target, x - self.tile_origin.x, y - self.tile_origin.y, color);
+    }
+}
+
+struct TiledDrawAdapter<'a, T: PixelTarget> {
+    target: &'a mut T,
+    tile_origin: embedded_graphics::prelude::Point,
+}
+
+impl<T: PixelTarget> embedded_graphics::draw_target::DrawTarget for TiledDrawAdapter<'_, T> {
+    type Color = Rgb888;
+    type Error = core::convert::Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = embedded_graphics::Pixel<Rgb888>>,
+    {
+        for embedded_graphics::Pixel(point, color) in pixels {
+            pixel_put(
+                self.target,
+                point.x - self.tile_origin.x,
+                point.y - self.tile_origin.y,
+                color,
+            );
+        }
+        Ok(())
+    }
+}
+
+impl<T: PixelTarget> embedded_graphics::geometry::OriginDimensions for TiledDrawAdapter<'_, T> {
+    fn size(&self) -> embedded_graphics::geometry::Size {
+        embedded_graphics::geometry::Size::new(
+            self.target.width() as u32,
+            self.target.height() as u32,
+        )
+    }
+}
+
+impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
+    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
+        use embedded_graphics::{
+            Drawable,
+            primitives::{Line, Primitive, PrimitiveStyle},
+        };
+        let width = (pixel_width + 0.5) as u32;
+        Line::new(to_point(start), to_point(end))
+            .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
+            .draw(&mut TiledDrawAdapter { target: self.target, tile_origin: self.tile_origin })
+            .unwrap();
+    }
+
+    fn filled_ellipse(
+        &mut self,
+        center: (f32, f32),
+        axis_a: (f32, f32),
+        axis_b: (f32, f32),
+        color: Rgb888,
+    ) {
+        let tile_origin = self.tile_origin;
+        let target = &mut *self.target;
+        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
+            pixel_put(target, x - tile_origin.x, y - tile_origin.y, color);
+        });
+    }
+
+    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
+        use embedded_graphics::{
+            Drawable,
+            primitives::{Circle, Primitive, PrimitiveStyle},
+        };
+        let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
+        Circle::with_center(to_point(center), diameter.max(1))
+            .into_styled(PrimitiveStyle::with_fill(color))
+            .draw(&mut TiledDrawAdapter { target: self.target, tile_origin: self.tile_origin })
+            .unwrap();
+    }
+}
+
+/// Perspective projection looking along the negative X axis.
+///
+/// Applies a focal-length perspective divide on the world X coordinate (depth),
+/// then maps world Y to screen X and world Z to screen Y.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::PerspectiveNegXProjection;
+/// let projection = PerspectiveNegXProjection {
+///     center_x: 120.0,
+///     center_y: 160.0,
+///     scale: 15.0,
+///     focal: 30.0,
+/// };
+/// ```
+pub struct PerspectiveNegXProjection {
+    pub center_x: f32,
+    pub center_y: f32,
+    pub scale: f32,
+    /// Focal length in world units. Larger values produce less foreshortening.
+    pub focal: f32,
+}
+
+impl PerspectiveNegXProjection {
+    fn depth_factor(&self, depth: f32) -> f32 {
+        self.focal / (self.focal + depth).max(self.focal * 0.05)
+    }
+}
+
+impl Projection for PerspectiveNegXProjection {
+    fn project_pos(&self, pose: Pose) -> (f32, f32) {
+        let p = pose.position();
+        let factor = self.depth_factor(p[0]);
+        (
+            self.center_x - p[1] * self.scale * factor,
+            self.center_y - p[2] * self.scale * factor,
+        )
+    }
+
+    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
+        let factor = self.depth_factor(pose.position()[0]);
+        let r = radius * self.scale * factor;
+        (-world_dir[1] * r, -world_dir[2] * r)
+    }
+
+    fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
+        let factor = self.depth_factor(pose.position()[0]);
+        radius * self.scale * factor
+    }
+
+    fn project_width(&self, width: f32) -> f32 {
+        (width * self.scale).max(1.0)
+    }
+}
+
 // ── .lb.rs include macros ────────────────────────────────────────────────────
 //
 // A `.lb.rs` file is a complete Rust expression.

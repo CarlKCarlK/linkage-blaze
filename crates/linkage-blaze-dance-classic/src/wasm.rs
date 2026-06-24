@@ -14,6 +14,8 @@ use embedded_graphics::{
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
+use linkage_blaze_core::PixelSurface;
+
 use crate::dance_render::{
     BACKGROUND, DanceClock, DanceTileSink, PixelTarget, SCREEN_HEIGHT, SCREEN_WIDTH, TEXT,
     TileFlush, WIFI_TEXT_TOP_LEFT, format_clock_12h, render_tile,
@@ -111,7 +113,12 @@ impl DanceTileSink for RgbaDanceTileSink<'_> {
             width: tile_flush.width,
             height: tile_flush.height,
         };
-        render_tile(&mut target, params, tile_flush.origin, hours, minutes);
+        render_tile(
+            &mut PixelSurface { target: &mut target, tile_origin: tile_flush.origin },
+            params,
+            hours,
+            minutes,
+        );
     }
 }
 

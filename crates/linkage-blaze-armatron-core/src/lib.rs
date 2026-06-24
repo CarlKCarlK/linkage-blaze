@@ -16,8 +16,8 @@ use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
 use linkage_blaze_core::{
-    DrawSurface, LinkageFixed, LinkageView, Pose, Projection, Rgb888, Vec3, linkage, linkage_fixed,
-    render_draw_items,
+    DrawSurface, LinkageFixed, LinkageView, PerspectiveNegXProjection, Rgb888, Vec3, linkage,
+    linkage_fixed, render_draw_items,
 };
 
 // todo00 I hate all these constants.
@@ -614,7 +614,11 @@ impl CydSim {
         linkage: LinkageView<'_, 15, 4>,
         buffer: &mut impl DrawTarget<Color = Rgb565>,
     ) {
-        render_draw_items(self, &mut ArmatronSurface { buffer }, linkage.draw_items(&self.params));
+        render_draw_items(
+            &self.projection(),
+            &mut ArmatronSurface { buffer },
+            linkage.draw_items(&self.params),
+        );
     }
 
     fn draw_sliders(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
@@ -894,20 +898,13 @@ impl CydSim {
     }
 
     //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-    fn pose_to_screen(&self, pose: Pose) -> Point {
-        let Vec3([x, y, z]) = pose.position();
-        let factor = self.perspective_factor(x);
-        let (cx, cy) = project_pos(y * factor, z * factor, self.scale());
-        Point::new(cx, cy)
-    }
-
-    fn perspective_factor(&self, depth: f32) -> f32 {
-        const FOCAL: f32 = 30.0;
-        FOCAL / (FOCAL + depth).max(FOCAL * 0.05)
-    }
-
-    fn scale(&self) -> f32 {
-        PIXELS_PER_UNIT
+    pub fn projection(&self) -> PerspectiveNegXProjection {
+        PerspectiveNegXProjection {
+            center_x: SCREEN_WIDTH as f32 / 2.0,
+            center_y: SCREEN_HEIGHT as f32 / 2.0,
+            scale: PIXELS_PER_UNIT,
+            focal: 30.0,
+        }
     }
 }
 
@@ -917,27 +914,6 @@ impl Default for CydSim {
     }
 }
 
-impl Projection for CydSim {
-    fn project_pos(&self, pose: Pose) -> (f32, f32) {
-        let p = self.pose_to_screen(pose);
-        (p.x as f32, p.y as f32)
-    }
-
-    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
-        let factor = self.perspective_factor(pose.position()[0]);
-        let r = radius * self.scale() * factor;
-        project_dir(world_dir[1], world_dir[2], r)
-    }
-
-    fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
-        let factor = self.perspective_factor(pose.position()[0]);
-        radius * self.scale() * factor
-    }
-
-    fn project_width(&self, width: f32) -> f32 {
-        screen_width_pixels(width, self.scale()) as f32
-    }
-}
 
 struct ArmatronSurface<'a, T: DrawTarget<Color = Rgb565>> {
     buffer: &'a mut T,
@@ -1401,26 +1377,6 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
         }
     }
     None
-}
-
-fn screen_width_pixels(width: f32, scale: f32) -> u32 {
-    round_to_u32(width * scale).max(1)
-}
-
-// Robot Ortho projection: +Y → screen left, +Z → screen up, X is depth (dropped).
-//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-
-#[inline]
-fn project_pos(world_y: f32, world_z: f32, scale: f32) -> (i32, i32) {
-    (
-        SCREEN_WIDTH as i32 / 2 - round_to_i32(world_y * scale),
-        SCREEN_HEIGHT as i32 / 2 - round_to_i32(world_z * scale),
-    )
-}
-
-#[inline]
-fn project_dir(world_y: f32, world_z: f32, r: f32) -> (f32, f32) {
-    (-world_y * r, -world_z * r)
 }
 
 // todo000 review rgb565_from_rgb888 later.
