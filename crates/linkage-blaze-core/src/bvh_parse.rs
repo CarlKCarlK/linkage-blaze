@@ -46,7 +46,7 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 ///
 /// ```rust,ignore
 /// #[allow(long_running_const_eval)]
-/// const FRAMES: [[f32; 132]; 592] =
+/// const FRAMES: BvhMotion<132, 592> =
 ///     linkage_blaze_core::bvh_frames!("path/to/motion.bvh", 132, 592);
 /// ```
 #[macro_export]
@@ -56,6 +56,100 @@ macro_rules! bvh_frames {
             $file
         ))
     };
+}
+
+/// u16 value that decodes to exactly 0.5.
+///
+/// BVH normalization snaps near-center values to exactly 0.5 (the linkage
+/// parameter center/default). This constant preserves that exact 0.5 through
+/// the u16 round-trip without floating-point rounding error.
+pub const PARAM_CENTER_U16: u16 = 32768;
+
+/// Encode a normalized `[0.0, 1.0]` parameter value as a `u16`.
+///
+/// Panics at compile time if `v` is outside `[0.0, 1.0]`.
+/// Exactly 0.5 maps to [`PARAM_CENTER_U16`] and back without error.
+pub const fn norm_to_u16(v: f32) -> u16 {
+    assert!(v >= 0.0, "normalized value is below 0.0");
+    assert!(v <= 1.0, "normalized value is above 1.0");
+    if v == 0.5 {
+        PARAM_CENTER_U16
+    } else {
+        (v * 65535.0 + 0.5) as u16
+    }
+}
+
+/// Decode a `u16` back to a normalized `[0.0, 1.0]` parameter value.
+///
+/// [`PARAM_CENTER_U16`] decodes to exactly 0.5.
+pub const fn u16_to_norm(x: u16) -> f32 {
+    if x == PARAM_CENTER_U16 {
+        0.5
+    } else {
+        x as f32 * (1.0 / 65535.0)
+    }
+}
+
+/// Normalized BVH motion data stored as quantized `u16` values.
+///
+/// Each `f32` parameter in `[0.0, 1.0]` is encoded as a `u16` in `[0, 65535]`,
+/// halving memory use. Decode one frame at a time with [`frame`](BvhMotion::frame)
+/// or [`frame_into`](BvhMotion::frame_into).
+pub struct BvhMotion<const DOF: usize, const FRAMES: usize> {
+    frames: [[u16; DOF]; FRAMES],
+}
+
+impl<const DOF: usize, const FRAMES: usize> BvhMotion<DOF, FRAMES> {
+    /// Construct from a pre-quantized `u16` frame array.
+    pub const fn new(frames: [[u16; DOF]; FRAMES]) -> Self {
+        Self { frames }
+    }
+
+    pub(crate) const fn from_normalized(f32_frames: [[f32; DOF]; FRAMES]) -> Self {
+        let mut data = [[0u16; DOF]; FRAMES];
+        let mut frame = 0;
+        while frame < FRAMES {
+            let mut ch = 0;
+            while ch < DOF {
+                data[frame][ch] = norm_to_u16(f32_frames[frame][ch]);
+                ch += 1;
+            }
+            frame += 1;
+        }
+        Self { frames: data }
+    }
+
+    /// Return the number of frames.
+    pub const fn frame_count(&self) -> usize {
+        FRAMES
+    }
+
+    /// Decode one frame into a stack-allocated `[f32; DOF]` array.
+    pub fn frame(&self, frame_index: usize) -> [f32; DOF] {
+        let mut out = [0.0f32; DOF];
+        self.frame_into(frame_index, &mut out);
+        out
+    }
+
+    /// Decode one frame into an existing buffer, avoiding a local array.
+    ///
+    /// Preferred on embedded targets where minimizing stack pressure matters:
+    ///
+    /// ```rust,ignore
+    /// let mut params = [0.0f32; DOF];
+    /// for i in 0..motion.frame_count() {
+    ///     motion.frame_into(i, &mut params);
+    ///     // use params ...
+    /// }
+    /// ```
+    pub fn frame_into(&self, frame_index: usize, out: &mut [f32; DOF]) {
+        let packed = &self.frames[frame_index];
+        let mut i = 0;
+        while i < DOF {
+            out[i] = u16_to_norm(packed[i]);
+            i += 1;
+        }
+    }
 }
 
 /// Parse the MOTION section of a BVH file into a `FRAMES × DOF` array of raw
@@ -220,10 +314,12 @@ pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
 /// Parse and normalize a BVH file's motion section in one step.
 pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const FRAMES: usize>(
     bytes: &[u8],
-) -> [[f32; DOF]; FRAMES] {
+) -> BvhMotion<DOF, FRAMES> {
     let raw = parse_bvh_motion_section::<DOF, FRAMES>(bytes);
     let channel_is_position = parse_bvh_channel_is_position::<DOF>(bytes);
-    normalize_bvh_motion::<DOF, FRAMES>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE)
+    let normalized =
+        normalize_bvh_motion::<DOF, FRAMES>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE);
+    BvhMotion::from_normalized(normalized)
 }
 
 // ── normalization policy and helper ──────────────────────────────────────────
@@ -998,5 +1094,29 @@ Frame Time:\t0.033\n\
     #[should_panic(expected = "position channel value is below")]
     fn normalize_rejects_position_below_range() {
         normalize_bvh_motion::<1, 1>([[-301.0f32]; 1], [true], BvhNormalizePolicy::LINKAGE_BLAZE);
+    }
+
+    // ── norm_to_u16 / u16_to_norm / BvhMotion ────────────────────────────────
+
+    #[test]
+    fn u16_endpoints_are_exact() {
+        assert_eq!(norm_to_u16(0.0), 0);
+        assert_eq!(norm_to_u16(1.0), 65535);
+        assert_eq!(u16_to_norm(0), 0.0);
+        assert_eq!(u16_to_norm(65535), 1.0);
+    }
+
+    #[test]
+    fn u16_center_is_exact_by_policy() {
+        assert_eq!(norm_to_u16(0.5), PARAM_CENTER_U16);
+        assert_eq!(u16_to_norm(PARAM_CENTER_U16), 0.5);
+    }
+
+    #[test]
+    fn frame_into_expands_one_frame() {
+        let motion = BvhMotion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
+        let mut out = [99.0f32; 3];
+        motion.frame_into(0, &mut out);
+        assert_eq!(out, [0.0, 0.5, 1.0]);
     }
 }

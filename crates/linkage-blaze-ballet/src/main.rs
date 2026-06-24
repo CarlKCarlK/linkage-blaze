@@ -15,16 +15,18 @@ use embedded_graphics::{
 use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
 
+use linkage_blaze_core::bvh_parse::BvhMotion;
 use linkage_blaze_core::{
     LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_frames, linkage,
     linkage_fixed, render_draw_items,
 };
 
+//todo000 is frame the best name?
 const BALLET_DOF: usize = 132;
 const BALLET_FRAME_COUNT: usize = 592;
 
 #[allow(long_running_const_eval)]
-const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] = bvh_frames!(
+const BALLET_FRAMES: BvhMotion<BALLET_DOF, BALLET_FRAME_COUNT> = bvh_frames!(
     "../../linkage-blaze-mocap/samples/pirouette.bvh",
     BALLET_DOF,
     BALLET_FRAME_COUNT
@@ -105,11 +107,13 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     let linkage = BALLET.view();
+    let mut params = [0.0f32; BALLET_DOF];
     let mut last_frame_duration = None;
     loop {
         info!("starting ballet cycle");
         // todo000 We don't expect BALLET_DOF to be a free-floating constant.
-        for (frame_index, params) in BALLET_FRAMES.iter().enumerate() {
+        for frame_index in 0..BALLET_FRAME_COUNT {
+            BALLET_FRAMES.frame_into(frame_index, &mut params);
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
@@ -119,7 +123,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             render_draw_items(
                 &BALLET_PROJECTION,
                 &mut PixelSurface::new(&mut cyd_frame),
-                linkage.draw_items(params),
+                linkage.draw_items(&params),
             );
 
             // todo000 review this
