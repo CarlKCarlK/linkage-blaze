@@ -7,8 +7,8 @@ use alloc::{string::String, vec::Vec};
 use embedded_graphics_core::pixelcolor::RgbColor;
 use linkage_blaze_core::{DrawItem, LinkageBuf};
 use linkage_blaze_mocap::{
-    BvhFrame, BvhParameterLayout, build_bvh_linkage_buf, bvh_frame_params, discover_bvh_parameters,
-    parse_bvh,
+    BvhParameterLayout, MotionSample, build_bvh_linkage_buf, bvh_sample_params,
+    discover_bvh_parameters, parse_bvh,
 };
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
@@ -20,7 +20,7 @@ const STRIDE: usize = 12;
 pub struct MocapClipWasm {
     linkage: LinkageBuf<DOF, MARKS>,
     layout: BvhParameterLayout,
-    frames: Vec<BvhFrame>,
+    samples: Vec<MotionSample>,
 }
 
 #[wasm_bindgen]
@@ -35,13 +35,13 @@ impl MocapClipWasm {
         Ok(Self {
             linkage,
             layout,
-            frames: clip.frames,
+            samples: clip.samples,
         })
     }
 
     #[wasm_bindgen(js_name = frameCount)]
-    pub fn frame_count(&self) -> usize {
-        self.frames.len()
+    pub fn sample_count(&self) -> usize {
+        self.samples.len()
     }
 
     #[wasm_bindgen(js_name = parameterCount)]
@@ -50,8 +50,8 @@ impl MocapClipWasm {
     }
 
     #[wasm_bindgen(js_name = renderFrame)]
-    pub fn render_frame(&self, frame_index: usize) -> Result<Vec<f32>, JsValue> {
-        let params = self.params_for_frame(frame_index)?;
+    pub fn render_sample(&self, sample_index: usize) -> Result<Vec<f32>, JsValue> {
+        let params = self.params_for_sample(sample_index)?;
 
         Ok(self
             .linkage
@@ -62,20 +62,20 @@ impl MocapClipWasm {
     }
 
     #[wasm_bindgen(js_name = frameParams)]
-    pub fn frame_params(&self, frame_index: usize) -> Result<Vec<f32>, JsValue> {
-        let params = self.params_for_frame(frame_index)?;
+    pub fn sample_params(&self, sample_index: usize) -> Result<Vec<f32>, JsValue> {
+        let params = self.params_for_sample(sample_index)?;
 
         Ok(Vec::from(params))
     }
 }
 
 impl MocapClipWasm {
-    fn params_for_frame(&self, frame_index: usize) -> Result<[f32; DOF], JsValue> {
-        let frame = self
-            .frames
-            .get(frame_index)
-            .ok_or_else(|| JsValue::from_str("frame index out of range"))?;
-        bvh_frame_params::<DOF>(&self.layout, frame).map_err(to_js_error)
+    fn params_for_sample(&self, sample_index: usize) -> Result<[f32; DOF], JsValue> {
+        let sample = self
+            .samples
+            .get(sample_index)
+            .ok_or_else(|| JsValue::from_str("sample index out of range"))?;
+        bvh_sample_params::<DOF>(&self.layout, sample).map_err(to_js_error)
     }
 }
 
