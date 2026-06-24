@@ -66,10 +66,8 @@ const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
 #[cfg(not(feature = "const-parse"))]
 include!("ballet_frames_precomputed.rs");
 
-use linkage_blaze_ballet::ballet_render::{
-    BACKGROUND, BALLET, BalletProjection, BalletSurface, TEXT,
-};
-use linkage_blaze_core::render_draw_items;
+use linkage_blaze_ballet::ballet_render::{BACKGROUND, BALLET, BALLET_PROJECTION, TEXT};
+use linkage_blaze_core::{PixelSurface, render_draw_items};
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
 use log::info;
 
@@ -132,8 +130,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             // todo000 a free-floating function?
             // todo000 understand the inputs.
             render_draw_items(
-                &BalletProjection,
-                &mut BalletSurface(&mut cyd_frame),
+                &BALLET_PROJECTION,
+                &mut PixelSurface::new(&mut cyd_frame),
                 linkage.draw_items(params),
             );
 

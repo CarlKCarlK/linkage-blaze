@@ -1,16 +1,9 @@
-use core::convert::Infallible;
-use embedded_graphics::{
-    Drawable, Pixel,
-    draw_target::DrawTarget,
-    geometry::{OriginDimensions, Size},
-    prelude::Point,
-    primitives::{Circle, Line, Primitive, PrimitiveStyle},
-};
-use linkage_blaze_core::{
-    DrawItemIter, DrawSurface, LinkageFixed, Pose, Projection, Rgb888, Vec3, WebColors,
-    fill_ellipse_pixels, linkage, linkage_fixed, render_draw_items, to_point,
-};
+use embedded_graphics::prelude::Point;
 pub use linkage_blaze_core::PixelTarget;
+use linkage_blaze_core::{
+    DrawItemIter, LinkageFixed, NegXProjection, PixelSurface, Pose, Projection, Rgb888, WebColors,
+    linkage, linkage_fixed, render_draw_items, to_point,
+};
 
 pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
@@ -39,8 +32,6 @@ pub const DANCE_CENTER_X: i32 = 207;
 pub const DANCE_BASELINE_Y: i32 = 480;
 pub const DANCE_SCALE: f32 = 1.35;
 
-// Figure stroke is a single fixed pixel width (reads less like debug line art).
-const FIGURE_STROKE_PX: i32 = 3;
 pub const SMALL_GLYPH_WIDTH: usize = 6;
 pub const SMALL_GLYPH_HEIGHT: usize = 10;
 // 12-hour clock text is right-justified to a fixed 11-char field ("12:04:32 PM")
@@ -48,6 +39,12 @@ pub const SMALL_GLYPH_HEIGHT: usize = 10;
 pub const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
 pub const TIME_TEXT_WIDTH: usize = 72;
 pub const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
+
+pub const DANCE_PROJECTION: NegXProjection = NegXProjection {
+    center_x: DANCE_CENTER_X as f32,
+    baseline_y: DANCE_BASELINE_Y as f32,
+    scale: DANCE_SCALE,
+};
 
 /// Format a 12-hour clock string with AM/PM, right-justified to 11 characters
 /// (e.g. " 5:04:32 PM" or "12:04:32 PM").  No alloc.
@@ -224,122 +221,18 @@ fn wrap_param(value: f32) -> f32 {
     value
 }
 
-/// Orthographic projection for the dance renderer.
-/// View: looking along -X; screen_x ← -world_Y, screen_y ← -world_Z.
-struct DanceProjection;
-
-impl Projection for DanceProjection {
-    fn project_pos(&self, pose: Pose) -> (f32, f32) {
-        let p = pose.position();
-        (
-            DANCE_CENTER_X as f32 - p[1] * DANCE_SCALE,
-            DANCE_BASELINE_Y as f32 - p[2] * DANCE_SCALE,
-        )
-    }
-
-    fn project_dir(&self, _pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
-        let r = radius * DANCE_SCALE;
-        (-world_dir[1] * r, -world_dir[2] * r)
-    }
-
-    fn project_radius(&self, _pose: Pose, radius: f32) -> f32 {
-        radius * DANCE_SCALE
-    }
-
-    fn project_width(&self, _width: f32) -> f32 {
-        FIGURE_STROKE_PX as f32
-    }
-}
-
-/// Adapts a [`PixelTarget`] tile to the embedded-graphics [`DrawTarget`] interface,
-/// applying the tile origin offset. Colors are forwarded as-is from each pixel.
-struct DanceTargetAdapter<'a, T: PixelTarget> {
-    target: &'a mut T,
-    tile_origin: Point,
-}
-
-impl<T: PixelTarget> DrawTarget for DanceTargetAdapter<'_, T> {
-    type Color = Rgb888;
-    type Error = Infallible;
-
-    fn draw_iter<I: IntoIterator<Item = Pixel<Rgb888>>>(
-        &mut self,
-        pixels: I,
-    ) -> Result<(), Infallible> {
-        for Pixel(point, color) in pixels {
-            put_pixel(self.target, point.x, point.y, self.tile_origin, color);
-        }
-        Ok(())
-    }
-}
-
-impl<T: PixelTarget> OriginDimensions for DanceTargetAdapter<'_, T> {
-    fn size(&self) -> Size {
-        Size::new(self.target.width() as u32, self.target.height() as u32)
-    }
-}
-
-/// Wraps a [`PixelTarget`] tile as a [`DrawSurface`], applying the tile origin offset.
-struct DanceSurface<'a, T: PixelTarget> {
-    target: &'a mut T,
-    tile_origin: Point,
-}
-
-impl<'a, T: PixelTarget> DanceSurface<'a, T> {
-    fn adapter(&mut self) -> DanceTargetAdapter<'_, T> {
-        DanceTargetAdapter { target: self.target, tile_origin: self.tile_origin }
-    }
-}
-
-impl<T: PixelTarget> DrawSurface for DanceSurface<'_, T> {
-    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
-        let width = (pixel_width + 0.5) as u32;
-        Line::new(to_point(start), to_point(end))
-            .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
-            .draw(&mut self.adapter())
-            .unwrap();
-    }
-
-    fn filled_ellipse(
-        &mut self,
-        center: (f32, f32),
-        axis_a: (f32, f32),
-        axis_b: (f32, f32),
-        color: Rgb888,
-    ) {
-        let tile_origin = self.tile_origin;
-        let target = &mut *self.target;
-        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
-            put_pixel(target, x, y, tile_origin, color);
-        });
-    }
-
-    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
-        let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
-        Circle::with_center(to_point(center), diameter.max(1))
-            .into_styled(PrimitiveStyle::with_fill(color))
-            .draw(&mut self.adapter())
-            .unwrap();
-    }
-}
-
 pub fn render_tile<T: PixelTarget>(
-    target: &mut T,
+    surface: &mut PixelSurface<'_, T>,
     params: &[f32; 3],
-    tile_origin: Point,
     hours: u8,
     minutes: u8,
 ) {
     // Faint dial marks first, so the figure and placards draw over them.
-    draw_dial(target, tile_origin);
+    draw_dial(surface);
 
     let dance_view = DANCE.view();
     let mut iter: DrawItemIter<3, 6> = dance_view.draw_items(params);
-    render_draw_items(
-        &DanceProjection,
-        &mut DanceSurface { target, tile_origin },
-        &mut iter,
-    );
+    render_draw_items(&DANCE_PROJECTION, surface, &mut iter);
 
     // Hanging placards use the hand marks only as anchor points; they hang
     // straight down in screen coordinates and do not inherit hand rotation.
@@ -350,18 +243,8 @@ pub fn render_tile<T: PixelTarget>(
     let left_hand_pose = iter
         .marked_pose("lMid2")
         .expect("lMid2 mark missing from DANCE");
-    draw_hanging_placard(
-        target,
-        pose_to_point(left_hand_pose),
-        tile_origin,
-        hour_display as u32,
-    );
-    draw_hanging_placard(
-        target,
-        pose_to_point(right_hand_pose),
-        tile_origin,
-        minutes as u32,
-    );
+    draw_hanging_placard(surface, pose_to_point(left_hand_pose), hour_display as u32);
+    draw_hanging_placard(surface, pose_to_point(right_hand_pose), minutes as u32);
 }
 
 // Placard ("hanging sign") styling.  Fill is a darker, richer color than the
@@ -405,10 +288,9 @@ const DIGIT_BITMAPS: [u16; 10] = [
 ];
 
 fn draw_digit<T: PixelTarget>(
-    target: &mut T,
+    surface: &mut PixelSurface<'_, T>,
     digit: u32,
     origin: Point,
-    tile_origin: Point,
     color: Rgb888,
     scale: i32,
 ) {
@@ -419,11 +301,9 @@ fn draw_digit<T: PixelTarget>(
             if (bits >> bit) & 1 == 1 {
                 for scale_y in 0..scale {
                     for scale_x in 0..scale {
-                        put_pixel(
-                            target,
+                        surface.put_pixel(
                             origin.x + col * scale + scale_x,
                             origin.y + row * scale + scale_y,
-                            tile_origin,
                             color,
                         );
                     }
@@ -435,10 +315,9 @@ fn draw_digit<T: PixelTarget>(
 
 /// Draw a 1- or 2-digit number centered on `center`, at the given pixel scale.
 fn draw_number_centered<T: PixelTarget>(
-    target: &mut T,
+    surface: &mut PixelSurface<'_, T>,
     number: u32,
     center: Point,
-    tile_origin: Point,
     color: Rgb888,
     scale: i32,
 ) {
@@ -449,31 +328,16 @@ fn draw_number_centered<T: PixelTarget>(
     let left = center.x - total_w / 2;
     let top = center.y - glyph_h / 2;
     if digit_count == 2 {
+        draw_digit(surface, number / 10, Point::new(left, top), color, scale);
         draw_digit(
-            target,
-            number / 10,
-            Point::new(left, top),
-            tile_origin,
-            color,
-            scale,
-        );
-        draw_digit(
-            target,
+            surface,
             number % 10,
             Point::new(left + glyph_w + DIGIT_GAP, top),
-            tile_origin,
             color,
             scale,
         );
     } else {
-        draw_digit(
-            target,
-            number,
-            Point::new(left, top),
-            tile_origin,
-            color,
-            scale,
-        );
+        draw_digit(surface, number, Point::new(left, top), color, scale);
     }
 }
 
@@ -483,9 +347,8 @@ fn draw_number_centered<T: PixelTarget>(
 /// splays out to the sign's two top corners.  The sign never rotates with the
 /// hand.  `number` is shown modulo 100 (00–99).
 fn draw_hanging_placard<T: PixelTarget>(
-    target: &mut T,
+    surface: &mut PixelSurface<'_, T>,
     anchor: Point,
-    tile_origin: Point,
     number: u32,
 ) {
     let card_left = anchor.x - PLACARD_W / 2;
@@ -495,44 +358,13 @@ fn draw_hanging_placard<T: PixelTarget>(
     // Short vertical hook straight down from the hand, then a triangle out to
     // the sign's top corners.
     let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
-    draw_segment(target, anchor, apex, tile_origin, PLACARD_BORDER, HANGER_PX);
-    draw_segment(
-        target,
-        apex,
-        Point::new(card_left, card_top),
-        tile_origin,
-        PLACARD_BORDER,
-        HANGER_PX,
-    );
-    draw_segment(
-        target,
-        apex,
-        Point::new(card_right, card_top),
-        tile_origin,
-        PLACARD_BORDER,
-        HANGER_PX,
-    );
+    draw_segment(surface, anchor, apex, PLACARD_BORDER, HANGER_PX);
+    draw_segment(surface, apex, Point::new(card_left, card_top), PLACARD_BORDER, HANGER_PX);
+    draw_segment(surface, apex, Point::new(card_right, card_top), PLACARD_BORDER, HANGER_PX);
 
     // Sign face then frame.
-    fill_rect(
-        target,
-        card_left,
-        card_top,
-        PLACARD_W,
-        PLACARD_H,
-        tile_origin,
-        PLACARD_FILL,
-    );
-    draw_rect_border(
-        target,
-        card_left,
-        card_top,
-        PLACARD_W,
-        PLACARD_H,
-        PLACARD_BORDER_PX,
-        tile_origin,
-        PLACARD_BORDER,
-    );
+    fill_rect(surface, card_left, card_top, PLACARD_W, PLACARD_H, PLACARD_FILL);
+    draw_rect_border(surface, card_left, card_top, PLACARD_W, PLACARD_H, PLACARD_BORDER_PX, PLACARD_BORDER);
 
     // Centered two-digit number (always padded, e.g. "05").
     let glyph_w = DIGIT_W * DIGIT_SCALE;
@@ -541,19 +373,11 @@ fn draw_hanging_placard<T: PixelTarget>(
     let text_left = card_left + (PLACARD_W - total_w) / 2;
     let text_top = card_top + (PLACARD_H - glyph_h) / 2;
     let value = number % 100;
+    draw_digit(surface, value / 10, Point::new(text_left, text_top), PLACARD_TEXT, DIGIT_SCALE);
     draw_digit(
-        target,
-        value / 10,
-        Point::new(text_left, text_top),
-        tile_origin,
-        PLACARD_TEXT,
-        DIGIT_SCALE,
-    );
-    draw_digit(
-        target,
+        surface,
         value % 10,
         Point::new(text_left + glyph_w + DIGIT_GAP, text_top),
-        tile_origin,
         PLACARD_TEXT,
         DIGIT_SCALE,
     );
@@ -561,7 +385,7 @@ fn draw_hanging_placard<T: PixelTarget>(
 
 /// Draw the faint clock-face marks (12 at top, 3 right, 6 bottom, 9 left) behind
 /// the figure.  Dim and subtle so they support rather than compete.
-fn draw_dial<T: PixelTarget>(target: &mut T, tile_origin: Point) {
+fn draw_dial<T: PixelTarget>(surface: &mut PixelSurface<'_, T>) {
     // Convert the screen-space dial center into dance space (the space that
     // pose_to_point and put_pixel use), which is offset by DANCE_TOP_LEFT.
     let center_x = DIAL_CENTER_SCREEN.x - DANCE_TOP_LEFT.x;
@@ -570,36 +394,34 @@ fn draw_dial<T: PixelTarget>(target: &mut T, tile_origin: Point) {
     let bottom = Point::new(center_x, center_y + DIAL_RADIUS_Y);
     let right = Point::new(center_x + DIAL_RADIUS_X, center_y);
     let left = Point::new(center_x - DIAL_RADIUS_X, center_y);
-    draw_number_centered(target, 12, top, tile_origin, DIAL_COLOR, DIAL_SCALE);
-    draw_number_centered(target, 3, right, tile_origin, DIAL_COLOR, DIAL_SCALE);
-    draw_number_centered(target, 6, bottom, tile_origin, DIAL_COLOR, DIAL_SCALE);
-    draw_number_centered(target, 9, left, tile_origin, DIAL_COLOR, DIAL_SCALE);
+    draw_number_centered(surface, 12, top, DIAL_COLOR, DIAL_SCALE);
+    draw_number_centered(surface, 3, right, DIAL_COLOR, DIAL_SCALE);
+    draw_number_centered(surface, 6, bottom, DIAL_COLOR, DIAL_SCALE);
+    draw_number_centered(surface, 9, left, DIAL_COLOR, DIAL_SCALE);
 }
 
 fn fill_rect<T: PixelTarget>(
-    target: &mut T,
+    surface: &mut PixelSurface<'_, T>,
     left: i32,
     top: i32,
     width: i32,
     height: i32,
-    tile_origin: Point,
     color: Rgb888,
 ) {
     for dy in 0..height {
         for dx in 0..width {
-            put_pixel(target, left + dx, top + dy, tile_origin, color);
+            surface.put_pixel(left + dx, top + dy, color);
         }
     }
 }
 
 fn draw_rect_border<T: PixelTarget>(
-    target: &mut T,
+    surface: &mut PixelSurface<'_, T>,
     left: i32,
     top: i32,
     width: i32,
     height: i32,
     thickness: i32,
-    tile_origin: Point,
     color: Rgb888,
 ) {
     for dy in 0..height {
@@ -609,17 +431,16 @@ fn draw_rect_border<T: PixelTarget>(
                 || dy < thickness
                 || dy >= height - thickness;
             if on_border {
-                put_pixel(target, left + dx, top + dy, tile_origin, color);
+                surface.put_pixel(left + dx, top + dy, color);
             }
         }
     }
 }
 
 fn draw_segment<T: PixelTarget>(
-    target: &mut T,
+    surface: &mut PixelSurface<'_, T>,
     start: Point,
     end: Point,
-    tile_origin: Point,
     color: Rgb888,
     thickness: i32,
 ) {
@@ -640,7 +461,7 @@ fn draw_segment<T: PixelTarget>(
         while dy <= brush_high {
             let mut dx = brush_low;
             while dx <= brush_high {
-                put_pixel(target, current_x + dx, current_y + dy, tile_origin, color);
+                surface.put_pixel(current_x + dx, current_y + dy, color);
                 dx += 1;
             }
             dy += 1;
@@ -660,34 +481,6 @@ fn draw_segment<T: PixelTarget>(
     }
 }
 
-fn put_pixel<T: PixelTarget>(target: &mut T, x: i32, y: i32, tile_origin: Point, color: Rgb888) {
-    let x = x - tile_origin.x;
-    let y = y - tile_origin.y;
-    if x < 0 || y < 0 {
-        return;
-    }
-
-    let x = x as usize;
-    let y = y as usize;
-    if x >= target.width() || y >= target.height() {
-        return;
-    }
-
-    target.put_pixel(x, y, color);
-}
-
 fn pose_to_point(pose: Pose) -> Point {
-    let position = pose.position();
-    Point::new(
-        DANCE_CENTER_X - round_to_i32(position[1] * DANCE_SCALE),
-        DANCE_BASELINE_Y - round_to_i32(position[2] * DANCE_SCALE),
-    )
-}
-
-fn round_to_i32(value: f32) -> i32 {
-    if value >= 0.0 {
-        (value + 0.5) as i32
-    } else {
-        (value - 0.5) as i32
-    }
+    to_point(DANCE_PROJECTION.project_pos(pose))
 }

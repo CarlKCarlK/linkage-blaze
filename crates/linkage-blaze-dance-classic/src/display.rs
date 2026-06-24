@@ -14,6 +14,7 @@ use embedded_graphics::{
 use esp_hal::time::Instant;
 use linkage_blaze_core::Rgb888;
 use linkage_blaze_cyd::{Cyd, CydError, PixelBuffer, RectPixels, RectView};
+use linkage_blaze_core::PixelSurface;
 use linkage_blaze_dance_classic::dance_render::{
     BACKGROUND, DANCE_HEIGHT, DANCE_TILE_HEIGHT, DANCE_TILE_PIXELS, DANCE_TILE_WIDTH, DANCE_WIDTH,
     DanceClock, DanceTileSink, PixelTarget, SCREEN_WIDTH, TEXT, TileFlush, WIFI_TEXT_TOP_LEFT,
@@ -210,7 +211,12 @@ impl DanceTileSink for EspDanceTileSink<'_> {
         let mut target = RectViewTarget {
             rect_view: &mut dance_buffer,
         };
-        render_tile(&mut target, params, tile_flush.origin, hours, minutes);
+        render_tile(
+            &mut PixelSurface { target: &mut target, tile_origin: tile_flush.origin },
+            params,
+            hours,
+            minutes,
+        );
         self.result = self
             .cyd
             .flush(&dance_buffer, tile_flush.top_left)
