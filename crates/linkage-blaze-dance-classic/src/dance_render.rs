@@ -55,10 +55,11 @@ pub fn format_clock_12h(hours: u8, minutes: u8, seconds: u8) -> heapless::String
     };
     let suffix = if hours % 24 < 12 { "AM" } else { "PM" };
     let mut text = heapless::String::new();
-    let _ = core::fmt::write(
+    core::fmt::write(
         &mut text,
         format_args!("{hour12:>2}:{minutes:02}:{seconds:02} {suffix}"),
-    );
+    )
+    .expect("clock string fits in 16 bytes");
     text
 }
 pub const DANCE: LinkageFixed<3, 6, 400> = {
