@@ -118,6 +118,7 @@ impl Projection for BalletProjection {
     }
 }
 
+// todo0000 move out of here.
 /// Wraps a [`PixelTarget`] as a [`DrawSurface`] using ballet-style drawing.
 pub struct BalletSurface<'a, T: PixelTarget>(pub &'a mut T);
 
@@ -127,7 +128,7 @@ impl<T: PixelTarget> DrawSurface for BalletSurface<'_, T> {
         Line::new(to_point(start), to_point(end))
             .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
             .draw(&mut PixelTargetAdapter(self.0))
-            .ok();
+            .unwrap();
     }
 
     fn filled_ellipse(
@@ -138,7 +139,9 @@ impl<T: PixelTarget> DrawSurface for BalletSurface<'_, T> {
         color: Rgb888,
     ) {
         let target = &mut *self.0;
-        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| put_pixel(target, x, y, color));
+        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
+            put_pixel(target, x, y, color)
+        });
     }
 
     fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
@@ -146,7 +149,7 @@ impl<T: PixelTarget> DrawSurface for BalletSurface<'_, T> {
         Circle::with_center(to_point(center), diameter.max(1))
             .into_styled(PrimitiveStyle::with_fill(color))
             .draw(&mut PixelTargetAdapter(self.0))
-            .ok();
+            .unwrap();
     }
 }
 

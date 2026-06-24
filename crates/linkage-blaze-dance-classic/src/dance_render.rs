@@ -66,7 +66,7 @@ pub fn format_clock_12h(hours: u8, minutes: u8, seconds: u8) -> heapless::String
 pub const DANCE: LinkageFixed<3, 6, 400> = {
     const WITH_PEN: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
         .pen_width(3.5)
-        .pen_color(Rgb888::CSS_IVORY)
+        .pen_color(FIGURE_COLOR)
         .combine(linkage_fixed!(
             "../../linkage-blaze-mocap/samples/pirouette.lb.rs",
             132,
@@ -257,11 +257,10 @@ impl Projection for DanceProjection {
 }
 
 /// Adapts a [`PixelTarget`] tile to the embedded-graphics [`DrawTarget`] interface,
-/// applying the tile origin offset and overriding all pixel colors with `override_color`.
+/// applying the tile origin offset. Colors are forwarded as-is from each pixel.
 struct DanceTargetAdapter<'a, T: PixelTarget> {
     target: &'a mut T,
     tile_origin: Point,
-    override_color: Rgb888,
 }
 
 impl<T: PixelTarget> DrawTarget for DanceTargetAdapter<'_, T> {
@@ -272,8 +271,8 @@ impl<T: PixelTarget> DrawTarget for DanceTargetAdapter<'_, T> {
         &mut self,
         pixels: I,
     ) -> Result<(), Infallible> {
-        for Pixel(point, _) in pixels {
-            put_pixel(self.target, point.x, point.y, self.tile_origin, self.override_color);
+        for Pixel(point, color) in pixels {
+            put_pixel(self.target, point.x, point.y, self.tile_origin, color);
         }
         Ok(())
     }
@@ -285,8 +284,7 @@ impl<T: PixelTarget> OriginDimensions for DanceTargetAdapter<'_, T> {
     }
 }
 
-/// Wraps a [`PixelTarget`] tile as a [`DrawSurface`], applying the tile origin offset
-/// and overriding all colors with [`FIGURE_COLOR`].
+/// Wraps a [`PixelTarget`] tile as a [`DrawSurface`], applying the tile origin offset.
 struct DanceSurface<'a, T: PixelTarget> {
     target: &'a mut T,
     tile_origin: Point,
@@ -294,21 +292,17 @@ struct DanceSurface<'a, T: PixelTarget> {
 
 impl<'a, T: PixelTarget> DanceSurface<'a, T> {
     fn adapter(&mut self) -> DanceTargetAdapter<'_, T> {
-        DanceTargetAdapter {
-            target: self.target,
-            tile_origin: self.tile_origin,
-            override_color: FIGURE_COLOR,
-        }
+        DanceTargetAdapter { target: self.target, tile_origin: self.tile_origin }
     }
 }
 
 impl<T: PixelTarget> DrawSurface for DanceSurface<'_, T> {
-    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), _color: Rgb888, pixel_width: f32) {
+    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
         let width = (pixel_width + 0.5) as u32;
         Line::new(to_point(start), to_point(end))
-            .into_styled(PrimitiveStyle::with_stroke(FIGURE_COLOR, width.max(1)))
+            .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
             .draw(&mut self.adapter())
-            .ok();
+            .unwrap();
     }
 
     fn filled_ellipse(
@@ -316,21 +310,21 @@ impl<T: PixelTarget> DrawSurface for DanceSurface<'_, T> {
         center: (f32, f32),
         axis_a: (f32, f32),
         axis_b: (f32, f32),
-        _color: Rgb888,
+        color: Rgb888,
     ) {
         let tile_origin = self.tile_origin;
         let target = &mut *self.target;
         fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
-            put_pixel(target, x, y, tile_origin, FIGURE_COLOR);
+            put_pixel(target, x, y, tile_origin, color);
         });
     }
 
-    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, _color: Rgb888) {
+    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
         let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
         Circle::with_center(to_point(center), diameter.max(1))
-            .into_styled(PrimitiveStyle::with_fill(FIGURE_COLOR))
+            .into_styled(PrimitiveStyle::with_fill(color))
             .draw(&mut self.adapter())
-            .ok();
+            .unwrap();
     }
 }
 
