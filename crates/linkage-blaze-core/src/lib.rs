@@ -29,6 +29,7 @@ extern crate std;
 extern crate alloc;
 
 mod math;
+pub mod bvh_parse;
 
 #[cfg(feature = "alloc")]
 use alloc::borrow::ToOwned;
