@@ -14,30 +14,27 @@ pub const BALLET_FRAME_COUNT: usize = 592;
 #[cfg(feature = "const-parse")]
 #[allow(long_running_const_eval)]
 pub const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] = {
-    normalize(crate::bvh_parse::parse_bvh_motion_section::<BALLET_DOF, BALLET_FRAME_COUNT>(
-        include_bytes!("../../linkage-blaze-mocap/samples/pirouette.bvh"),
-    ))
+    normalize(crate::bvh_parse::parse_bvh_motion_section::<
+        BALLET_DOF,
+        BALLET_FRAME_COUNT,
+    >(include_bytes!(
+        "../../linkage-blaze-mocap/samples/pirouette.bvh"
+    )))
 };
 
-#[cfg(feature = "const-parse")]
-const POSITION_CHANNELS: usize = 3;
-#[cfg(feature = "const-parse")]
-const POSITION_LOW: f32 = -300.0;
-#[cfg(feature = "const-parse")]
-const POSITION_RANGE: f32 = 600.0;
-#[cfg(feature = "const-parse")]
-const ROTATION_LOW: f32 = -720.0;
-#[cfg(feature = "const-parse")]
-const ROTATION_RANGE: f32 = 1440.0;
-#[cfg(feature = "const-parse")]
-const SNAP_CENTER: f32 = 0.5;
-#[cfg(feature = "const-parse")]
-const SNAP_EPSILON: f32 = 0.01;
-
+// todo0000 wat?
 #[cfg(feature = "const-parse")]
 const fn normalize(
     raw: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT],
 ) -> [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] {
+    const POSITION_CHANNELS: usize = 3;
+    const POSITION_LOW: f32 = -300.0;
+    const POSITION_RANGE: f32 = 600.0;
+    const ROTATION_LOW: f32 = -720.0;
+    const ROTATION_RANGE: f32 = 1440.0;
+    const SNAP_CENTER: f32 = 0.5;
+    const SNAP_EPSILON: f32 = 0.01;
+
     let mut out = [[0.0f32; BALLET_DOF]; BALLET_FRAME_COUNT];
     let mut frame = 0;
     while frame < BALLET_FRAME_COUNT {
@@ -55,7 +52,11 @@ const fn normalize(
             } else {
                 SNAP_CENTER - norm
             };
-            out[frame][ch] = if diff <= SNAP_EPSILON { SNAP_CENTER } else { norm };
+            out[frame][ch] = if diff <= SNAP_EPSILON {
+                SNAP_CENTER
+            } else {
+                norm
+            };
             ch += 1;
         }
         frame += 1;
