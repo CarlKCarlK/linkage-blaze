@@ -308,13 +308,6 @@ enum Primitive {
         width: f32,
         color: Color,
     },
-    Ring {
-        center: Vec3,
-        normal: Vec3,
-        radius: f32,
-        width: f32,
-        color: Color,
-    },
     Sphere {
         center: Vec3,
         radius: f32,
@@ -337,13 +330,6 @@ impl From<DrawItem> for Primitive {
                 radius: disk.radius(),
                 width: 0.0,
                 color: Color::from_rgb888(disk.color()),
-            },
-            DrawItem::Ring(ring) => Self::Ring {
-                center: Vec3::from(ring.pose().position().into_array()),
-                normal: Vec3::from(ring.pose().orientation().up().into_array()),
-                radius: ring.radius(),
-                width: ring.width(),
-                color: Color::from_rgb888(ring.color()),
             },
             DrawItem::Sphere(sphere) => Self::Sphere {
                 center: Vec3::from(sphere.pose().position().into_array()),
@@ -381,25 +367,6 @@ impl Primitive {
                 color,
             } => {
                 json.push_str("{\"type\":\"disk\",\"center\":");
-                center.push_json(json);
-                json.push_str(",\"normal\":");
-                normal.push_json(json);
-                json.push_str(",\"radius\":");
-                push_float(json, radius);
-                json.push_str(",\"width\":");
-                push_float(json, width);
-                json.push_str(",\"color\":[");
-                color.push_json(json);
-                json.push_str("]}");
-            }
-            Self::Ring {
-                center,
-                normal,
-                radius,
-                width,
-                color,
-            } => {
-                json.push_str("{\"type\":\"ring\",\"center\":");
                 center.push_json(json);
                 json.push_str(",\"normal\":");
                 normal.push_json(json);

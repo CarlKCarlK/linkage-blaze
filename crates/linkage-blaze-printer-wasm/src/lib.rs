@@ -136,7 +136,6 @@ impl Default for PrinterSimWasm {
 /// - type 0 = Stroke (x0..z0 = start, x1..z1 = end, size1 = width)
 /// - type 1 = Sphere (x0..z0 = center, size1 = radius)
 /// - type 2 = Disk   (x0..z0 = center, size1 = radius)
-/// - type 3 = Ring   (x0..z0 = center, size1 = radius, size2 = width)
 #[wasm_bindgen(js_name = printerDrawItems)]
 pub fn printer_draw_items(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
     draw_items_from(x_mm, y_mm, z_mm)

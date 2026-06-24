@@ -17,12 +17,12 @@ const PRINTER: LinkageFixed<3, 5, 180> = linkage_fixed!("linkages/printer.lb.rs"
 /// Returns printer draw items encoded as flat `[type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2, ...]`.
 ///
 /// Each item is 12 floats:
-/// - type: 0 = Stroke, 1 = Sphere, 2 = Disk, 3 = Ring
+/// - type: 0 = Stroke, 1 = Sphere, 2 = Disk
 /// - x0,y0,z0: position or stroke start
 /// - x1,y1,z1: stroke end (0,0,0 for non-strokes)
 /// - r,g,b: color (0–255)
-/// - size1: stroke width or sphere/disk/ring radius
-/// - size2: ring inner radius (0 for others)
+/// - size1: stroke width or sphere/disk radius
+/// - size2: unused (0)
 pub fn draw_items_from(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
     let params = [x_mm / BUILD_X_MM, y_mm / BUILD_Y_MM, z_mm / BUILD_Z_MM];
     PRINTER
@@ -70,19 +70,6 @@ pub fn draw_items_from(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
                     record[8] = c.g() as f32;
                     record[9] = c.b() as f32;
                     record[10] = d.radius();
-                }
-                DrawItem::Ring(r_item) => {
-                    record[0] = 3.0;
-                    let [x, y, z] = r_item.pose().position().into_array();
-                    record[1] = x;
-                    record[2] = y;
-                    record[3] = z;
-                    let c = r_item.color();
-                    record[7] = c.r() as f32;
-                    record[8] = c.g() as f32;
-                    record[9] = c.b() as f32;
-                    record[10] = r_item.radius();
-                    record[11] = r_item.width();
                 }
             }
             record

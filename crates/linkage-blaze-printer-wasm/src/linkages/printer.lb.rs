@@ -71,9 +71,6 @@ linkage![
     .mark("base_center")
     .pen_color(Rgb888::CSS_LIGHT_GRAY)
     .disk(205.0)
-    .pen_color(Rgb888::CSS_LIGHT_SLATE_GRAY)
-    .pen_width(5.0)
-    .ring(205.0)
     // Fixed Y rails under the moving bed.
     .restore("base_center")
     .up(5.0)

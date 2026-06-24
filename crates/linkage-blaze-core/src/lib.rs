@@ -85,10 +85,6 @@ pub enum Step {
     Disk(f32),
     /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
     DiskParam(VariableArg),
-    /// Add a ring at the current pose, in the local +X/+Y plane. Stroke width is current pen width.
-    Ring(f32),
-    /// Add a ring at the current pose; radius is driven by a degree-of-freedom parameter.
-    RingParam(VariableArg),
     /// Add a sphere centered at the current pose.
     Sphere(f32),
     /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
@@ -437,8 +433,6 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
                 }
                 Step::Disk(radius) => push_fixed_step(&mut source, "disk", radius),
                 Step::DiskParam(arg) => push_variable_step(self, &mut source, "disk_param", arg),
-                Step::Ring(radius) => push_fixed_step(&mut source, "ring", radius),
-                Step::RingParam(arg) => push_variable_step(self, &mut source, "ring_param", arg),
                 Step::Sphere(radius) => push_fixed_step(&mut source, "sphere", radius),
                 Step::SphereParam(arg) => {
                     push_variable_step(self, &mut source, "sphere_param", arg);
@@ -867,11 +861,6 @@ fn apply_parsed_method<const DOF: usize, const MARKS: usize>(
             Ok(linkage.disk(parse_radius(line_number, method_call, 0)?))
         }
         "disk_param" => apply_radius_param(line_number, linkage, method_call, "disk"),
-        "ring" => {
-            expect_arg_count(line_number, method_call, 1)?;
-            Ok(linkage.ring(parse_radius(line_number, method_call, 0)?))
-        }
-        "ring_param" => apply_radius_param(line_number, linkage, method_call, "ring"),
         "sphere" => {
             expect_arg_count(line_number, method_call, 1)?;
             Ok(linkage.sphere(parse_radius(line_number, method_call, 0)?))
@@ -941,7 +930,6 @@ fn apply_radius_param<const DOF: usize, const MARKS: usize>(
     }
     match shape {
         "disk" => Ok(linkage.disk_param(name, low, high)),
-        "ring" => Ok(linkage.ring_param(name, low, high)),
         "sphere" => Ok(linkage.sphere_param(name, low, high)),
         _ => unreachable!(),
     }
@@ -1167,9 +1155,6 @@ macro_rules! emit_fixed_step_methods {
         pub const fn disk(self, radius: f32) -> Self {
             self.push(Step::Disk(radius))
         }
-        pub const fn ring(self, radius: f32) -> Self {
-            self.push(Step::Ring(radius))
-        }
         pub const fn sphere(self, radius: f32) -> Self {
             self.push(Step::Sphere(radius))
         }
@@ -1212,10 +1197,6 @@ macro_rules! emit_fixed_step_methods {
         pub const fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::DiskParam(VariableArg::new(index, low, high)))
-        }
-        pub const fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
-            let index = self.expect_param_index(name);
-            self.push(Step::RingParam(VariableArg::new(index, low, high)))
         }
         pub const fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
@@ -1275,9 +1256,6 @@ macro_rules! emit_buf_step_methods {
         pub fn disk(self, radius: f32) -> Self {
             self.push_step(Step::Disk(radius))
         }
-        pub fn ring(self, radius: f32) -> Self {
-            self.push_step(Step::Ring(radius))
-        }
         pub fn sphere(self, radius: f32) -> Self {
             self.push_step(Step::Sphere(radius))
         }
@@ -1320,10 +1298,6 @@ macro_rules! emit_buf_step_methods {
         pub fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::DiskParam(VariableArg::new(index, low, high)))
-        }
-        pub fn ring_param(self, name: &str, low: f32, high: f32) -> Self {
-            let index = self.expect_param_index(name);
-            self.push_step(Step::RingParam(VariableArg::new(index, low, high)))
         }
         pub fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
@@ -2955,7 +2929,6 @@ impl Step {
             Self::Left(arg) => Self::Left(arg.offset_param(param_offset)),
             Self::Up(arg) => Self::Up(arg.offset_param(param_offset)),
             Self::DiskParam(v) => Self::DiskParam(v.offset(param_offset)),
-            Self::RingParam(v) => Self::RingParam(v.offset(param_offset)),
             Self::SphereParam(v) => Self::SphereParam(v.offset(param_offset)),
             Self::Mark { index } => Self::Mark {
                 index: index + remember_offset,
@@ -3113,24 +3086,6 @@ const fn rewrite_step_for_freeze(
                 })
             }
         }
-        Step::RingParam(variable_arg) => {
-            if is_frozen[variable_arg.index] {
-                let physical = frozen_physical_value(
-                    variable_arg,
-                    frozen_at_default,
-                    frozen_raw,
-                    params,
-                    false,
-                );
-                Step::Ring(physical)
-            } else {
-                Step::RingParam(VariableArg {
-                    index: new_param_index[variable_arg.index],
-                    low: variable_arg.low,
-                    span: variable_arg.span,
-                })
-            }
-        }
         Step::SphereParam(variable_arg) => {
             if is_frozen[variable_arg.index] {
                 let physical = frozen_physical_value(
@@ -3210,8 +3165,6 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenWidth(_)
         | Step::Disk(_)
         | Step::DiskParam(_)
-        | Step::Ring(_)
-        | Step::RingParam(_)
         | Step::Sphere(_)
         | Step::SphereParam(_)
         | Step::Mark { .. }
@@ -3231,8 +3184,6 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         | Step::PenWidth(_)
         | Step::Disk(_)
         | Step::DiskParam(_)
-        | Step::Ring(_)
-        | Step::RingParam(_)
         | Step::Sphere(_)
         | Step::SphereParam(_)
         | Step::Mark { .. }
@@ -3303,8 +3254,6 @@ impl PenStyle {
             | Step::Up(_)
             | Step::Disk(_)
             | Step::DiskParam(_)
-            | Step::Ring(_)
-            | Step::RingParam(_)
             | Step::Sphere(_)
             | Step::SphereParam(_)
             | Step::Mark { .. }
@@ -3381,8 +3330,6 @@ impl Pose {
             | Step::PenWidth(_)
             | Step::Disk(_)
             | Step::DiskParam(_)
-            | Step::Ring(_)
-            | Step::RingParam(_)
             | Step::Sphere(_)
             | Step::SphereParam(_)
             | Step::Mark { .. }
@@ -3642,22 +3589,6 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemIter<'_, DOF, MA
                         color: pen_style.color(),
                     }));
                 }
-                Step::Ring(radius) => {
-                    return Some(DrawItem::Ring(RingItem {
-                        pose: start_pose,
-                        radius: *radius,
-                        color: pen_style.color(),
-                        width: pen_style.width(),
-                    }));
-                }
-                Step::RingParam(var_arg) => {
-                    return Some(DrawItem::Ring(RingItem {
-                        pose: start_pose,
-                        radius: var_arg.resolve(self.params),
-                        color: pen_style.color(),
-                        width: pen_style.width(),
-                    }));
-                }
                 Step::Sphere(radius) => {
                     return Some(DrawItem::Sphere(SphereItem {
                         pose: start_pose,
@@ -3703,34 +3634,6 @@ impl DiskItem {
     }
 }
 
-/// A ring shape yielded by a linkage at the current pose. Stroke width is the pen width at that step.
-#[derive(Clone, Copy, Debug)]
-pub struct RingItem {
-    pose: Pose,
-    radius: f32,
-    color: Rgb888,
-    width: f32,
-}
-
-impl RingItem {
-    #[must_use]
-    pub const fn pose(self) -> Pose {
-        self.pose
-    }
-    #[must_use]
-    pub const fn radius(self) -> f32 {
-        self.radius
-    }
-    #[must_use]
-    pub const fn color(self) -> Rgb888 {
-        self.color
-    }
-    #[must_use]
-    pub const fn width(self) -> f32 {
-        self.width
-    }
-}
-
 /// A sphere shape yielded by a linkage at the current pose.
 #[derive(Clone, Copy, Debug)]
 pub struct SphereItem {
@@ -3754,12 +3657,11 @@ impl SphereItem {
     }
 }
 
-/// A draw item produced by a linkage: a line stroke, a filled disk, a ring, or a sphere.
+/// A draw item produced by a linkage: a line stroke, a filled disk, or a sphere.
 #[derive(Clone, Copy, Debug)]
 pub enum DrawItem {
     Stroke(StrokeSegment),
     Disk(DiskItem),
-    Ring(RingItem),
     Sphere(SphereItem),
 }
 
@@ -4844,11 +4746,6 @@ mod tests {
             (DrawItem::Disk(left), DrawItem::Disk(right)) => {
                 assert_pose_close(left.pose(), right.pose(), tolerance);
                 assert!((left.radius() - right.radius()).abs() <= tolerance);
-            }
-            (DrawItem::Ring(left), DrawItem::Ring(right)) => {
-                assert_pose_close(left.pose(), right.pose(), tolerance);
-                assert!((left.radius() - right.radius()).abs() <= tolerance);
-                assert!((left.width() - right.width()).abs() <= tolerance);
             }
             (DrawItem::Sphere(left), DrawItem::Sphere(right)) => {
                 assert_pose_close(left.pose(), right.pose(), tolerance);
