@@ -15,32 +15,20 @@ use embedded_graphics::{
 use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
 
+use linkage_blaze_core::{
+    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_frames, linkage,
+    linkage_fixed, render_draw_items,
+};
+
 const BALLET_DOF: usize = 132;
 const BALLET_FRAME_COUNT: usize = 592;
 
-const BVH_BYTES: &[u8] = include_bytes!("../../linkage-blaze-mocap/samples/pirouette.bvh");
-
 #[allow(long_running_const_eval)]
-const RAW_BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
-    linkage_blaze_ballet::bvh_parse::parse_bvh_motion_section::<BALLET_DOF, BALLET_FRAME_COUNT>(
-        BVH_BYTES,
-    );
-
-const BALLET_CHANNEL_IS_POSITION: [bool; BALLET_DOF] =
-    linkage_blaze_ballet::bvh_parse::parse_bvh_channel_is_position::<BALLET_DOF>(BVH_BYTES);
-
-#[allow(long_running_const_eval)]
-const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
-    linkage_blaze_ballet::bvh_parse::normalize_bvh_motion::<BALLET_DOF, BALLET_FRAME_COUNT>(
-        RAW_BALLET_FRAMES,
-        BALLET_CHANNEL_IS_POSITION,
-        linkage_blaze_ballet::bvh_parse::BvhNormalizePolicy::LINKAGE_BLAZE,
-    );
-
-use linkage_blaze_core::{
-    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, linkage, linkage_fixed,
-    render_draw_items,
-};
+const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] = bvh_frames!(
+    "../../linkage-blaze-mocap/samples/pirouette.bvh",
+    BALLET_DOF,
+    BALLET_FRAME_COUNT
+);
 
 // todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.

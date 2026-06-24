@@ -35,6 +35,29 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 
 // ── public API ───────────────────────────────────────────────────────────────
 
+/// Parse and normalize a BVH file embedded at compile time.
+///
+/// The path is resolved relative to the file that invokes the macro, exactly
+/// like a bare `include_bytes!`.  `DOF` and `FRAMES` must match the channel
+/// count and frame count in the file; a mismatch panics at compile time with a
+/// descriptive message.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// #[allow(long_running_const_eval)]
+/// const FRAMES: [[f32; 132]; 592] =
+///     linkage_blaze_core::bvh_frames!("path/to/motion.bvh", 132, 592);
+/// ```
+#[macro_export]
+macro_rules! bvh_frames {
+    ($file:expr, $dof:expr, $frames:expr) => {
+        $crate::bvh_parse::parse_and_normalize_bvh_motion::<$dof, $frames>(include_bytes!(
+            $file
+        ))
+    };
+}
+
 /// Parse the MOTION section of a BVH file into a `FRAMES × DOF` array of raw
 /// `f32` values.
 ///
@@ -192,6 +215,15 @@ pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
         exp += 1;
     }
     value
+}
+
+/// Parse and normalize a BVH file's motion section in one step.
+pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const FRAMES: usize>(
+    bytes: &[u8],
+) -> [[f32; DOF]; FRAMES] {
+    let raw = parse_bvh_motion_section::<DOF, FRAMES>(bytes);
+    let channel_is_position = parse_bvh_channel_is_position::<DOF>(bytes);
+    normalize_bvh_motion::<DOF, FRAMES>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE)
 }
 
 // ── normalization policy and helper ──────────────────────────────────────────
