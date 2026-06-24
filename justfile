@@ -187,7 +187,7 @@ run-dance-wasm port=_dance_wasm_port:
 
 # ── linkage-blaze-ballet ───────────────────────────────────────────────
 
-_ballet_args := _classic_args + " --features const-parse"
+_ballet_args := _classic_args
 
 generate-ballet:
     cargo run -p linkage-blaze-mocap --example generate_ballet

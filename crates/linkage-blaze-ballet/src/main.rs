@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![cfg_attr(feature = "const-parse", allow(long_running_const_eval))]
 
 use core::{convert::Infallible, fmt::Write};
 
@@ -15,44 +14,21 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
-// Feature `const-parse`: parse pirouette.bvh at compile time via const fn (~8 s).
-// Default (no feature): include a pre-generated snapshot; regenerate with `just generate-ballet`.
 
 const BALLET_DOF: usize = 132;
 const BALLET_FRAME_COUNT: usize = 592;
 
-// ── const-parse path ─────────────────────────────────────────────────────────
-//
-// Three compile-time products, each independently named so they can be
-// inspected or reused:
-//   RAW_BALLET_FRAMES          — flat f32 values straight from the BVH file.
-//   BALLET_CHANNEL_IS_POSITION — which channels are position vs rotation.
-//   BALLET_FRAMES              — normalized [0, 1] Linkage parameters.
-//
-// Normalization ranges are Linkage Blaze parameter-encoding policy, not BVH
-// facts. They live in BvhNormalizePolicy::LINKAGE_BLAZE inside bvh_parse.rs.
-// Values within ±0.01 of 0.5 after normalization snap to exactly 0.5,
-// matching the runtime behavior of linkage-blaze-mocap's `snap_centered_default`.
-//
-// todo0000 article: Consider making BvhNormalizePolicy an explicit caller
-// argument so the const parser is clearly separated from Linkage Blaze's
-// parameter-range policy when used in other projects.
-
-#[cfg(feature = "const-parse")]
 const BVH_BYTES: &[u8] = include_bytes!("../../linkage-blaze-mocap/samples/pirouette.bvh");
 
-#[cfg(feature = "const-parse")]
 #[allow(long_running_const_eval)]
 const RAW_BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
     linkage_blaze_ballet::bvh_parse::parse_bvh_motion_section::<BALLET_DOF, BALLET_FRAME_COUNT>(
         BVH_BYTES,
     );
 
-#[cfg(feature = "const-parse")]
 const BALLET_CHANNEL_IS_POSITION: [bool; BALLET_DOF] =
     linkage_blaze_ballet::bvh_parse::parse_bvh_channel_is_position::<BALLET_DOF>(BVH_BYTES);
 
-#[cfg(feature = "const-parse")]
 #[allow(long_running_const_eval)]
 const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
     linkage_blaze_ballet::bvh_parse::normalize_bvh_motion::<BALLET_DOF, BALLET_FRAME_COUNT>(
@@ -61,17 +37,40 @@ const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
         linkage_blaze_ballet::bvh_parse::BvhNormalizePolicy::LINKAGE_BLAZE,
     );
 
-// ── pre-generated path ───────────────────────────────────────────────────────
+use linkage_blaze_core::{
+    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, linkage, linkage_fixed,
+    render_draw_items,
+};
 
-#[cfg(not(feature = "const-parse"))]
-include!("ballet_frames_precomputed.rs");
+// todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
+// todo00 audit the existing numeric color backlog and add approximate color-name comments.
+// todo000 every numeric color should have a comment telling what it is. (and named colors are better)
+const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36); // very dark blue-green
+const FIGURE_COLOR: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
+const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 
-use linkage_blaze_ballet::ballet_render::{BACKGROUND, BALLET, BALLET_PROJECTION, TEXT};
-use linkage_blaze_core::{PixelSurface, render_draw_items};
+// todo000 these could be OK, but there are a lot of them. Can't some be done via math?
+const BALLET_CENTER_X: i32 = 84;
+const BALLET_BASELINE_Y: i32 = 300;
+const BALLET_SCALE: f32 = 1.575;
+
+// todo0000 interesting.
+const BALLET: LinkageFixed<BALLET_DOF, 6, 540> = {
+    const INNER: LinkageFixed<BALLET_DOF, 6, 538> =
+        linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
+    LinkageFixed::<0, 0, 3>::start()
+        .pen_color(FIGURE_COLOR)
+        .pen_width(3.2)
+        .combine(INNER)
+};
+
+const BALLET_PROJECTION: NegXProjection = NegXProjection {
+    center_x: BALLET_CENTER_X as f32,
+    baseline_y: BALLET_BASELINE_Y as f32,
+    scale: BALLET_SCALE,
+};
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
 use log::info;
-
-// todo000 I'm not happy with all this noise.
 
 // todo000 this seems unmotivated.
 const SOURCE_FPS_X10: u32 = 1200;
