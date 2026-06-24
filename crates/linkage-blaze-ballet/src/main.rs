@@ -97,9 +97,6 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
-            // todo000 proj is too short
-            // todo000 a free-floating function?
-            // todo000 understand the inputs.
             for draw_item in linkage.draw_items(&params) {
                 draw_item.project(&PROJECTION).draw(&mut cyd_frame);
             }
