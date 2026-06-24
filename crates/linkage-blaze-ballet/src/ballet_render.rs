@@ -1,20 +1,11 @@
-use core::convert::Infallible;
 use embedded_graphics::{
-    Drawable, Pixel,
-    draw_target::DrawTarget,
-    geometry::{OriginDimensions, Size},
-    prelude::Point,
+    Drawable,
     primitives::{Circle, Line, Primitive, PrimitiveStyle},
 };
 use linkage_blaze_core::{
-    DrawSurface, LinkageFixed, Pose, Projection, Rgb888, Vec3, WebColors, fill_ellipse_pixels,
-    linkage, linkage_fixed,
+    DrawSurface, LinkageFixed, PixelTarget, PixelTargetAdapter, Pose, Projection, Rgb888, Vec3,
+    WebColors, fill_ellipse_pixels, linkage, linkage_fixed, pixel_put, to_point,
 };
-
-#[cfg(target_os = "none")]
-use embedded_graphics::pixelcolor::IntoStorage;
-#[cfg(target_os = "none")]
-use linkage_blaze_cyd::{Cyd, CydFrame};
 
 // todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
 const BALLET_DOF: usize = 132;
@@ -40,56 +31,6 @@ pub const BALLET: LinkageFixed<BALLET_DOF, 6, 540> = {
         .pen_width(3.2)
         .combine(INNER)
 };
-
-// todo0000 review this
-pub trait PixelTarget {
-    fn width(&self) -> usize;
-    fn height(&self) -> usize;
-    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888);
-}
-
-#[cfg(target_os = "none")]
-impl PixelTarget for CydFrame<'_> {
-    fn width(&self) -> usize {
-        self.width()
-    }
-
-    fn height(&self) -> usize {
-        self.height()
-    }
-
-    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        if x >= self.width() || y >= self.height() {
-            return;
-        }
-        let stride = self.width();
-        self.raw_pixels_mut()[y * stride + x] = Cyd::rgb565(color).into_storage();
-    }
-}
-
-/// Adapts a [`PixelTarget`] to the embedded-graphics [`DrawTarget`] interface.
-struct PixelTargetAdapter<'a, T: PixelTarget>(&'a mut T);
-
-impl<T: PixelTarget> DrawTarget for PixelTargetAdapter<'_, T> {
-    type Color = Rgb888;
-    type Error = Infallible;
-
-    fn draw_iter<I: IntoIterator<Item = Pixel<Rgb888>>>(
-        &mut self,
-        pixels: I,
-    ) -> Result<(), Infallible> {
-        for Pixel(point, color) in pixels {
-            put_pixel(self.0, point.x, point.y, color);
-        }
-        Ok(())
-    }
-}
-
-impl<T: PixelTarget> OriginDimensions for PixelTargetAdapter<'_, T> {
-    fn size(&self) -> Size {
-        Size::new(self.0.width() as u32, self.0.height() as u32)
-    }
-}
 
 /// Orthographic projection for the ballet renderer.
 /// View: looking along -X; screen_x ← -world_Y, screen_y ← -world_Z.
@@ -139,9 +80,7 @@ impl<T: PixelTarget> DrawSurface for BalletSurface<'_, T> {
         color: Rgb888,
     ) {
         let target = &mut *self.0;
-        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
-            put_pixel(target, x, y, color)
-        });
+        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| pixel_put(target, x, y, color));
     }
 
     fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
@@ -151,20 +90,4 @@ impl<T: PixelTarget> DrawSurface for BalletSurface<'_, T> {
             .draw(&mut PixelTargetAdapter(self.0))
             .unwrap();
     }
-}
-
-fn put_pixel<T: PixelTarget>(target: &mut T, x: i32, y: i32, color: Rgb888) {
-    if x < 0 || y < 0 {
-        return;
-    }
-    let x = x as usize;
-    let y = y as usize;
-    if x >= target.width() || y >= target.height() {
-        return;
-    }
-    target.put_pixel(x, y, color);
-}
-
-fn to_point(xy: (f32, f32)) -> Point {
-    Point::new(xy.0 as i32, xy.1 as i32)
 }

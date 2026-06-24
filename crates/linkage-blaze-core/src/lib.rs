@@ -3760,6 +3760,61 @@ pub fn fill_ellipse_pixels(
     }
 }
 
+// ── PixelTarget and adapter ──────────────────────────────────────────────────
+
+/// A raw pixel sink: a flat RGBA or similar framebuffer that accepts individual
+/// pixel writes by integer coordinates.  Implemented by hardware frame buffers
+/// and in-memory tile buffers.
+pub trait PixelTarget {
+    fn width(&self) -> usize;
+    fn height(&self) -> usize;
+    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888);
+}
+
+/// Bounds-checked pixel write for a [`PixelTarget`].  Out-of-bounds writes are
+/// silently discarded.
+pub fn pixel_put<T: PixelTarget>(target: &mut T, x: i32, y: i32, color: Rgb888) {
+    if x < 0 || y < 0 {
+        return;
+    }
+    let x = x as usize;
+    let y = y as usize;
+    if x >= target.width() || y >= target.height() {
+        return;
+    }
+    target.put_pixel(x, y, color);
+}
+
+/// Bridges a [`PixelTarget`] to the embedded-graphics [`DrawTarget`] interface.
+/// Colors are forwarded as-is from each pixel; no offset or color override.
+pub struct PixelTargetAdapter<'a, T: PixelTarget>(pub &'a mut T);
+
+impl<T: PixelTarget> embedded_graphics::draw_target::DrawTarget for PixelTargetAdapter<'_, T> {
+    type Color = Rgb888;
+    type Error = core::convert::Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = embedded_graphics::Pixel<Rgb888>>,
+    {
+        for embedded_graphics::Pixel(point, color) in pixels {
+            pixel_put(self.0, point.x, point.y, color);
+        }
+        Ok(())
+    }
+}
+
+impl<T: PixelTarget> embedded_graphics::geometry::OriginDimensions for PixelTargetAdapter<'_, T> {
+    fn size(&self) -> embedded_graphics::geometry::Size {
+        embedded_graphics::geometry::Size::new(self.0.width() as u32, self.0.height() as u32)
+    }
+}
+
+/// Converts a `(f32, f32)` screen coordinate to an embedded-graphics [`Point`].
+pub fn to_point(xy: (f32, f32)) -> embedded_graphics::prelude::Point {
+    embedded_graphics::prelude::Point::new(xy.0 as i32, xy.1 as i32)
+}
+
 // ── .lb.rs include macros ────────────────────────────────────────────────────
 //
 // A `.lb.rs` file is a complete Rust expression.

@@ -13,10 +13,11 @@ use device_envoy_esp::{
 };
 use embedded_graphics::{
     Pixel,
-    pixelcolor::{Rgb565, Rgb888},
+    pixelcolor::{IntoStorage, Rgb565, Rgb888},
     prelude::{DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
 };
+use linkage_blaze_core::PixelTarget;
 use static_cell::StaticCell;
 
 pub use buffer::{DynPixelBuffer, PixelBuffer, RectBuffer, RectPixels, RectView};
@@ -133,6 +134,24 @@ impl DrawTarget for CydFrame<'_> {
 impl OriginDimensions for CydFrame<'_> {
     fn size(&self) -> Size {
         self.view.size()
+    }
+}
+
+impl PixelTarget for CydFrame<'_> {
+    fn width(&self) -> usize {
+        self.width()
+    }
+
+    fn height(&self) -> usize {
+        self.height()
+    }
+
+    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
+        if x >= self.width() || y >= self.height() {
+            return;
+        }
+        let stride = self.width();
+        self.raw_pixels_mut()[y * stride + x] = Cyd::rgb565(color).into_storage();
     }
 }
 

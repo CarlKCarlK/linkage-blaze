@@ -8,8 +8,9 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{
     DrawItemIter, DrawSurface, LinkageFixed, Pose, Projection, Rgb888, Vec3, WebColors,
-    fill_ellipse_pixels, linkage, linkage_fixed, render_draw_items,
+    fill_ellipse_pixels, linkage, linkage_fixed, render_draw_items, to_point,
 };
+pub use linkage_blaze_core::PixelTarget;
 
 pub const SCREEN_WIDTH: usize = 240;
 pub const SCREEN_HEIGHT: usize = 320;
@@ -85,12 +86,6 @@ const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
 const EYES_FORWARD_PARAM: f32 = 0.5;
 const RIGHT_ARM_12_PARAM: f32 = 0.4375;
 const LEFT_ARM_12_PARAM: f32 = 0.5625;
-
-pub trait PixelTarget {
-    fn width(&self) -> usize;
-    fn height(&self) -> usize;
-    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888);
-}
 
 pub trait DanceTileSink {
     fn draw_tile(&mut self, tile_flush: TileFlush, params: &[f32; 3], hours: u8, minutes: u8);
@@ -687,10 +682,6 @@ fn pose_to_point(pose: Pose) -> Point {
         DANCE_CENTER_X - round_to_i32(position[1] * DANCE_SCALE),
         DANCE_BASELINE_Y - round_to_i32(position[2] * DANCE_SCALE),
     )
-}
-
-fn to_point(xy: (f32, f32)) -> Point {
-    Point::new(xy.0 as i32, xy.1 as i32)
 }
 
 fn round_to_i32(value: f32) -> i32 {
