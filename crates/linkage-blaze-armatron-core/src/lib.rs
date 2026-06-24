@@ -212,7 +212,7 @@ impl CydSim {
         target: &mut D,
     ) -> Result<(), D::Error> {
         target.clear(rgb565_from_rgb888(BLACK))?;
-        self.draw_linkage(LINKAGE.view(), target);
+        self.draw_linkage(LINKAGE.view(), target)?;
         Ok(())
     }
 
@@ -609,61 +609,58 @@ impl CydSim {
         }
     }
 
-    fn draw_linkage(
+    fn draw_linkage<D: DrawTarget<Color = Rgb565>>(
         &self,
         linkage: LinkageView<'_, 15, 4>,
-        buffer: &mut impl DrawTarget<Color = Rgb565>,
-    ) {
+        buffer: &mut D,
+    ) -> Result<(), D::Error> {
+        let mut surface = ArmatronSurface {
+            buffer,
+            result: Ok(()),
+        };
         render_draw_items(
             &self.projection(),
-            &mut ArmatronSurface { buffer },
+            &mut surface,
             linkage.draw_items(&self.params),
         );
+        surface.result
     }
 
-    fn draw_sliders(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_sliders<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
         let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(WHITE));
         let mut target_label = TargetLabel::new();
 
         // z (base pitch) slider
-        Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
-            .draw(buffer)
-            .ok();
+        Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top).draw(buffer)?;
         Line::new(
             Point::new(TILT_X, TILT_TOP),
             Point::new(TILT_X, TILT_BOTTOM),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         let tilt_knob_y = TILT_TOP
             + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[BASE_PITCH_PARAM]));
         Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
             .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_PITCH_PARAM)))
-            .draw(buffer)
-            .ok();
+            .draw(buffer)?;
 
         // dolly slider (disconnected — shown in gray)
-        Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top)
-            .draw(buffer)
-            .ok();
+        Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top).draw(buffer)?;
         Line::new(
             Point::new(DOLLY_X, DOLLY_TOP),
             Point::new(DOLLY_X, DOLLY_BOTTOM),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         let dolly_knob_y =
             DOLLY_TOP + round_to_i32((DOLLY_BOTTOM - DOLLY_TOP) as f32 * self.params[DOLLY_PARAM]);
         Circle::with_center(Point::new(DOLLY_X, dolly_knob_y), 9)
             .into_styled(fill_style(YELLOW))
-            .draw(buffer)
-            .ok();
+            .draw(buffer)?;
 
-        self.draw_reverse_kinematics_run_button(buffer);
-        self.draw_reverse_kinematics_step_button(buffer);
-        self.draw_calibrate_button(buffer);
+        self.draw_reverse_kinematics_run_button(buffer)?;
+        self.draw_reverse_kinematics_step_button(buffer)?;
+        self.draw_calibrate_button(buffer)?;
 
         // target prev/next/label
         Rectangle::new(
@@ -671,8 +668,7 @@ impl CydSim {
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Text::with_baseline(
             "prev",
             Point::new(
@@ -682,23 +678,20 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Text::with_baseline(
             target_label.as_str(self.target_seed),
             Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2),
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Rectangle::new(
             Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
             Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Text::with_baseline(
             "next",
             Point::new(
@@ -708,8 +701,7 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
 
         // 6 arm param sliders (right side)
         for slider_offset in 0..ARM_PARAM_COUNT {
@@ -723,23 +715,20 @@ impl CydSim {
                 text_style,
                 Baseline::Top,
             )
-            .draw(buffer)
-            .ok();
+            .draw(buffer)?;
 
             Line::new(
                 Point::new(SLIDER_TRACK_LEFT, slider_y + 8),
                 Point::new(SLIDER_RIGHT, slider_y + 8),
             )
             .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-            .draw(buffer)
-            .ok();
+            .draw(buffer)?;
 
             let knob_x =
                 SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
             Circle::with_center(Point::new(knob_x, slider_y + 8), 9)
                 .into_styled(self.knob_fill_style(ControlledKnob::Param(param_index)))
-                .draw(buffer)
-                .ok();
+                .draw(buffer)?;
         }
 
         // x/y view (base yaw) slider
@@ -749,53 +738,55 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Line::new(
             Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
             Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         let view_knob_x = VIEW_SLIDER_LEFT
             + round_to_i32(
                 (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.params[BASE_YAW_PARAM],
             );
         Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
             .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_YAW_PARAM)))
-            .draw(buffer)
-            .ok();
+            .draw(buffer)?;
+        Ok(())
     }
 
-    fn draw_calibrate_button(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_calibrate_button<D: DrawTarget<Color = Rgb565>>(
+        &self,
+        buffer: &mut D,
+    ) -> Result<(), D::Error> {
         let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(WHITE));
         Rectangle::new(
             Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
             Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Text::with_baseline(
             "cal",
             Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
+        Ok(())
     }
 
-    fn draw_reverse_kinematics_run_button(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_reverse_kinematics_run_button<D: DrawTarget<Color = Rgb565>>(
+        &self,
+        buffer: &mut D,
+    ) -> Result<(), D::Error> {
         if self.is_reverse_kinematics_running() {
             Rectangle::new(
                 Point::new(RK_RUN_LEFT + 4, RK_CONTROL_TOP + 4),
                 Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
             )
             .into_styled(fill_style(WHITE))
-            .draw(buffer)
-            .ok();
+            .draw(buffer)?;
         } else {
             Triangle::new(
                 Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
@@ -806,19 +797,21 @@ impl CydSim {
                 ),
             )
             .into_styled(fill_style(GREEN))
-            .draw(buffer)
-            .ok();
+            .draw(buffer)?;
         }
+        Ok(())
     }
 
-    fn draw_reverse_kinematics_step_button(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_reverse_kinematics_step_button<D: DrawTarget<Color = Rgb565>>(
+        &self,
+        buffer: &mut D,
+    ) -> Result<(), D::Error> {
         Rectangle::new(
             Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
             Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
         )
         .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Rectangle::new(
             Point::new(
                 RK_STEP_LEFT + RK_BUTTON_SIZE - 5,
@@ -827,8 +820,7 @@ impl CydSim {
             Size::new(2, 10),
         )
         .into_styled(fill_style(WHITE))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
         Triangle::new(
             Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + 4),
             Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + RK_BUTTON_SIZE - 4),
@@ -838,11 +830,11 @@ impl CydSim {
             ),
         )
         .into_styled(fill_style(GREEN))
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
+        Ok(())
     }
 
-    fn draw_report(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_report<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
         let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(WHITE));
         let mut report = DistanceReport::new();
         Text::with_baseline(
@@ -851,13 +843,13 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
+        Ok(())
     }
 
-    fn draw_fps(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_fps<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
         if !self.show_fps {
-            return;
+            return Ok(());
         }
 
         let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
@@ -868,11 +860,11 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
+        Ok(())
     }
 
-    fn draw_version(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_version<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
         let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
         Text::with_baseline(
             VERSION_TEXT,
@@ -880,11 +872,14 @@ impl CydSim {
             text_style,
             Baseline::Top,
         )
-        .draw(buffer)
-        .ok();
+        .draw(buffer)?;
+        Ok(())
     }
 
-    fn draw_touch_cursor(&self, buffer: &mut impl DrawTarget<Color = Rgb565>) {
+    fn draw_touch_cursor<D: DrawTarget<Color = Rgb565>>(
+        &self,
+        buffer: &mut D,
+    ) -> Result<(), D::Error> {
         if let Some((x, y)) = self.touch_cursor {
             let x = x as i32;
             let y = y as i32;
@@ -892,9 +887,9 @@ impl CydSim {
             let cursor_style = PrimitiveStyle::with_fill(rgb565_from_rgb888(CYAN));
             Circle::new(Point::new(x - radius, y - radius), (radius * 2 + 1) as u32)
                 .into_styled(cursor_style)
-                .draw(buffer)
-                .ok();
+                .draw(buffer)?;
         }
+        Ok(())
     }
 
     //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
@@ -914,21 +909,25 @@ impl Default for CydSim {
     }
 }
 
-
 struct ArmatronSurface<'a, T: DrawTarget<Color = Rgb565>> {
     buffer: &'a mut T,
+    /// First error produced by any draw, or `Ok(())` if every draw succeeded.
+    /// Once an error is recorded, later draws are skipped so the first failure wins.
+    result: Result<(), T::Error>,
 }
 
 impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
     fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
+        if self.result.is_err() {
+            return;
+        }
         let start = Point::new(start.0 as i32, start.1 as i32);
         let end = Point::new(end.0 as i32, end.1 as i32);
         let width = round_to_u32(pixel_width).max(1);
         let color = rgb565_from_rgb888(color);
-        Line::new(start, end)
+        self.result = Line::new(start, end)
             .into_styled(PrimitiveStyle::with_stroke(color, width))
-            .draw(self.buffer)
-            .ok();
+            .draw(self.buffer);
     }
 
     fn filled_ellipse(
@@ -938,6 +937,9 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
         axis_b: (f32, f32),
         color: Rgb888,
     ) {
+        if self.result.is_err() {
+            return;
+        }
         let cx = center.0 as i32;
         let cy = center.1 as i32;
         let (ax, ay) = axis_a;
@@ -954,24 +956,25 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
         let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
         let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
         let color = rgb565_from_rgb888(color);
-        self.buffer
-            .draw_iter((y0..=y1).flat_map(move |y| {
-                (x0..=x1).filter_map(move |x| {
-                    let dx = x as f32 - cx as f32;
-                    let dy = y as f32 - cy as f32;
-                    let u = by * dx - bx * dy;
-                    let v = ax * dy - ay * dx;
-                    if u * u + v * v <= det_sq {
-                        Some(Pixel(Point::new(x, y), color))
-                    } else {
-                        None
-                    }
-                })
-            }))
-            .ok();
+        self.result = self.buffer.draw_iter((y0..=y1).flat_map(move |y| {
+            (x0..=x1).filter_map(move |x| {
+                let dx = x as f32 - cx as f32;
+                let dy = y as f32 - cy as f32;
+                let u = by * dx - bx * dy;
+                let v = ax * dy - ay * dx;
+                if u * u + v * v <= det_sq {
+                    Some(Pixel(Point::new(x, y), color))
+                } else {
+                    None
+                }
+            })
+        }));
     }
 
     fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
+        if self.result.is_err() {
+            return;
+        }
         if pixel_radius <= 0.0 {
             return;
         }
@@ -979,10 +982,9 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
         if diameter == 0 {
             return;
         }
-        Circle::with_center(Point::new(center.0 as i32, center.1 as i32), diameter)
+        self.result = Circle::with_center(Point::new(center.0 as i32, center.1 as i32), diameter)
             .into_styled(PrimitiveStyle::with_fill(rgb565_from_rgb888(color)))
-            .draw(self.buffer)
-            .ok();
+            .draw(self.buffer);
     }
 }
 
@@ -1519,12 +1521,12 @@ impl Drawable for CydSim {
         D: DrawTarget<Color = Self::Color>,
     {
         target.clear(rgb565_from_rgb888(BLACK))?;
-        self.draw_linkage(LINKAGE.view(), target);
-        self.draw_sliders(target);
-        self.draw_report(target);
-        self.draw_version(target);
-        self.draw_fps(target);
-        self.draw_touch_cursor(target);
+        self.draw_linkage(LINKAGE.view(), target)?;
+        self.draw_sliders(target)?;
+        self.draw_report(target)?;
+        self.draw_version(target)?;
+        self.draw_fps(target)?;
+        self.draw_touch_cursor(target)?;
         Ok(())
     }
 }
