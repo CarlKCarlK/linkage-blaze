@@ -15,12 +15,60 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
-use linkage_blaze_ballet::{
-    ballet_frames::{BALLET_FRAME_COUNT, BALLET_FRAMES},
-    ballet_render::{
-        BACKGROUND, BALLET, FIGURE_COLOR, FIGURE_STROKE_PX, TEXT, draw_filled_circle, draw_ring,
-        draw_segment, pose_to_point,
-    },
+// Feature `const-parse`: parse pirouette.bvh at compile time via const fn (~8 s).
+// Default (no feature): include a pre-generated snapshot; regenerate with `just generate-ballet`.
+
+const BALLET_DOF: usize = 132;
+const BALLET_FRAME_COUNT: usize = 592;
+
+// ── const-parse path ─────────────────────────────────────────────────────────
+//
+// Three compile-time products, each independently named so they can be
+// inspected or reused:
+//   RAW_BALLET_FRAMES          — flat f32 values straight from the BVH file.
+//   BALLET_CHANNEL_IS_POSITION — which channels are position vs rotation.
+//   BALLET_FRAMES              — normalized [0, 1] Linkage parameters.
+//
+// Normalization ranges are Linkage Blaze parameter-encoding policy, not BVH
+// facts. They live in BvhNormalizePolicy::LINKAGE_BLAZE inside bvh_parse.rs.
+// Values within ±0.01 of 0.5 after normalization snap to exactly 0.5,
+// matching the runtime behavior of linkage-blaze-mocap's `snap_centered_default`.
+//
+// todo0000 article: Consider making BvhNormalizePolicy an explicit caller
+// argument so the const parser is clearly separated from Linkage Blaze's
+// parameter-range policy when used in other projects.
+
+#[cfg(feature = "const-parse")]
+const BVH_BYTES: &[u8] = include_bytes!("../../linkage-blaze-mocap/samples/pirouette.bvh");
+
+#[cfg(feature = "const-parse")]
+#[allow(long_running_const_eval)]
+const RAW_BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
+    linkage_blaze_ballet::bvh_parse::parse_bvh_motion_section::<BALLET_DOF, BALLET_FRAME_COUNT>(
+        BVH_BYTES,
+    );
+
+#[cfg(feature = "const-parse")]
+const BALLET_CHANNEL_IS_POSITION: [bool; BALLET_DOF] =
+    linkage_blaze_ballet::bvh_parse::parse_bvh_channel_is_position::<BALLET_DOF>(BVH_BYTES);
+
+#[cfg(feature = "const-parse")]
+#[allow(long_running_const_eval)]
+const BALLET_FRAMES: [[f32; BALLET_DOF]; BALLET_FRAME_COUNT] =
+    linkage_blaze_ballet::bvh_parse::normalize_bvh_motion::<BALLET_DOF, BALLET_FRAME_COUNT>(
+        RAW_BALLET_FRAMES,
+        BALLET_CHANNEL_IS_POSITION,
+        linkage_blaze_ballet::bvh_parse::BvhNormalizePolicy::LINKAGE_BLAZE,
+    );
+
+// ── pre-generated path ───────────────────────────────────────────────────────
+
+#[cfg(not(feature = "const-parse"))]
+include!("ballet_frames_precomputed.rs");
+
+use linkage_blaze_ballet::ballet_render::{
+    BACKGROUND, BALLET, FIGURE_COLOR, FIGURE_STROKE_PX, TEXT, draw_filled_circle, draw_ring,
+    draw_segment, pose_to_point,
 };
 use linkage_blaze_core::DrawItem;
 use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
@@ -72,6 +120,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     // todo000 agent, remember to never delete my todo's.
     info!("CYD display initialized");
 
+    let linkage = BALLET.view();
     let mut last_frame_duration = None;
     loop {
         info!("starting ballet cycle");
@@ -81,10 +130,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
             // todo000 pull this out of the loops?
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
-            let ballet_view = BALLET.view();
-            // todo000 move iterator into for line.
-            let mut draw_items = ballet_view.draw_items(params);
-            for draw_item in &mut draw_items {
+            for draw_item in &mut linkage.draw_items(params) {
                 match draw_item {
                     // todo understand pose_to_point
                     DrawItem::Stroke(stroke) => {
