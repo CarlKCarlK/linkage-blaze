@@ -17,22 +17,10 @@ use esp_hal::time::{Duration, Instant};
 
 use linkage_blaze_core::bvh_parse::BvhMotion;
 use linkage_blaze_core::{
-    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_frames, linkage,
+    LinkageFixed, NegXProjection, PixelSurface, Rgb888, WebColors, bvh_motion, linkage,
     linkage_fixed, render_draw_items,
 };
 
-//todo000 is frame the best name?
-const BALLET_DOF: usize = 132;
-const BALLET_FRAME_COUNT: usize = 592;
-
-#[allow(long_running_const_eval)]
-const BALLET_FRAMES: BvhMotion<BALLET_DOF, BALLET_FRAME_COUNT> = bvh_frames!(
-    "../../linkage-blaze-mocap/samples/pirouette.bvh",
-    BALLET_DOF,
-    BALLET_FRAME_COUNT
-);
-
-// todo000 this should be hard coded in the reader and then read a as const after that. It should not be here.
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)
 const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36); // very dark blue-green
@@ -44,15 +32,14 @@ const BALLET_CENTER_X: i32 = 84;
 const BALLET_BASELINE_Y: i32 = 300;
 const BALLET_SCALE: f32 = 1.575;
 
-// todo0000 interesting.
-const BALLET: LinkageFixed<BALLET_DOF, 6, 540> = {
-    const INNER: LinkageFixed<BALLET_DOF, 6, 538> =
-        linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
-    LinkageFixed::<0, 0, 3>::start()
-        .pen_color(FIGURE_COLOR)
-        .pen_width(3.2)
-        .combine(INNER)
-};
+#[allow(long_running_const_eval)]
+const MOTION: BvhMotion<132, 592> = bvh_motion!("../../linkage-blaze-mocap/samples/pirouette.bvh");
+const LINKAGE_INNER: LinkageFixed<{ MOTION.dof() }, 6, 538> =
+    linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
+const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>::start()
+    .pen_color(FIGURE_COLOR)
+    .pen_width(3.2)
+    .combine(LINKAGE_INNER);
 
 const BALLET_PROJECTION: NegXProjection = NegXProjection {
     center_x: BALLET_CENTER_X as f32,
@@ -106,14 +93,13 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     // todo000 agent, remember to never delete my todo's.
     info!("CYD display initialized");
 
-    let linkage = BALLET.view();
-    let mut params = [0.0f32; BALLET_DOF];
+    let linkage = LINKAGE.view();
+    let mut params = [0.0f32; MOTION.dof()];
     let mut last_frame_duration = None;
     loop {
         info!("starting ballet cycle");
-        // todo000 We don't expect BALLET_DOF to be a free-floating constant.
-        for frame_index in 0..BALLET_FRAME_COUNT {
-            BALLET_FRAMES.frame_into(frame_index, &mut params);
+        for frame_index in 0..MOTION.frame_count() {
+            MOTION.frame_into(frame_index, &mut params);
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
             cyd_frame.clear(background565);
@@ -157,7 +143,7 @@ fn draw_status<D>(
             format_args!(
                 "{}/{}  fps {}.{}  slow {}.{}x",
                 frame_index + 1,
-                BALLET_FRAME_COUNT,
+                MOTION.frame_count(),
                 fps_x10 / 10,
                 fps_x10 % 10,
                 slomo_x10 / 10,
@@ -171,7 +157,7 @@ fn draw_status<D>(
             format_args!(
                 "{}/{}  fps --.-  slow --.-x",
                 frame_index + 1,
-                BALLET_FRAME_COUNT
+                MOTION.frame_count()
             ),
         )
         .ok();
