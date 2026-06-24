@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(any(target_os = "none", target_arch = "wasm32"), no_std)]
 
 pub mod dance_render;
 
