@@ -87,12 +87,13 @@ const PROJECTION: NegXProjection = NegXProjection {
 
 // ── Linkage constants ─────────────────────────────────────────────────────────
 
+// todo0000 build it up in 3 steps
 const LINKAGE_INNER: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
     .pen_width(3.5)
     .pen_color(FIGURE)
     .combine(linkage_fixed!(
         "../../linkage-blaze-mocap/samples/pirouette.lb.rs",
-        132, // todo000 kill?
+        132,
         6,
         600
     ));
@@ -372,6 +373,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     let background565 = Cyd::rgb565(BACKGROUND);
     let text565 = Cyd::rgb565(TEXT);
+    let linkage_view = LINKAGE.view();
 
     loop {
         let tick = clock_sync.wait_for_tick().await;
@@ -384,15 +386,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = dance_params(hours, minutes, seconds);
         let time_text = format_clock_12h(hours, minutes, seconds);
 
-        let mut cyd_tile = cyd.frame_mut(TEXT_BAND.size);
-        cyd_tile.clear(background565);
+        let mut text_band_frame = cyd.frame_mut(TEXT_BAND.size);
+        text_band_frame.clear(background565);
         Text::with_baseline(
             "WiFi OK",
             WIFI_TEXT_TOP_LEFT,
             MonoTextStyle::new(&FONT_6X10, text565),
             Baseline::Top,
         )
-        .draw(&mut cyd_tile)
+        .draw(&mut text_band_frame)
         .expect("drawing to an Infallible frame cannot fail");
         Text::with_baseline(
             time_text.as_str(),
@@ -400,29 +402,28 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             MonoTextStyle::new(&FONT_9X15_BOLD, text565),
             Baseline::Top,
         )
-        .draw(&mut cyd_tile)
+        .draw(&mut text_band_frame)
         .expect("drawing to an Infallible frame cannot fail");
-        cyd_tile.flush()?;
+        text_band_frame.flush()?;
 
         let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
+        // Shared linkage rendering path, identical to the ballet app.
 
         for tile in BODY_TILES.tiles() {
-            let mut cyd_tile = cyd.frame_mut(tile.size);
-            cyd_tile.clear(background565);
+            let mut time_frame = cyd.frame_mut(tile.size);
+            time_frame.clear(background565);
 
             // Dance-specific background overlay.
             {
-                let mut target = TranslatedDrawTarget::new(&mut cyd_tile, tile.top_left);
+                let mut target = TranslatedDrawTarget::new(&mut time_frame, tile.top_left);
                 draw_dial(&mut target);
             }
 
-            // Shared linkage rendering path, identical to the ballet app.
-            let linkage_view = LINKAGE.view();
             let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
             for draw_item in &mut iter {
                 draw_item
                     .project(&PROJECTION)
-                    .draw_offset(&mut cyd_tile, tile.top_left);
+                    .draw_offset(&mut time_frame, tile.top_left);
             }
 
             // Dance-specific foreground overlay: placards hang from hand marks.
@@ -432,7 +433,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             let left_hand_pose = iter
                 .marked_pose("lMid2")
                 .expect("lMid2 mark missing from LINKAGE");
-            let mut target = TranslatedDrawTarget::new(&mut cyd_tile, tile.top_left);
+            let mut target = TranslatedDrawTarget::new(&mut time_frame, tile.top_left);
             draw_hanging_placard(
                 &mut target,
                 pose_to_point(left_hand_pose),
@@ -440,7 +441,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             );
             draw_hanging_placard(&mut target, pose_to_point(right_hand_pose), minutes as u32);
 
-            cyd_tile.flush_at(tile.top_left)?;
+            time_frame.flush_at(tile.top_left)?;
         }
     }
 }
