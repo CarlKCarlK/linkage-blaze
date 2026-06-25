@@ -3,6 +3,7 @@
 mod buffer;
 mod calibration;
 mod display;
+pub mod tiling;
 mod touch;
 
 use core::{convert::Infallible, fmt};
