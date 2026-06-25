@@ -178,11 +178,8 @@ mod tests {
 
     // Body region used by the dance app: 240×286 starting just below a 34 px
     // text band, tiled in 80×96 cells.
-    const BODY_GRID: TileGrid = TileGrid::new(
-        Point::new(0, 34),
-        Size::new(240, 286),
-        Size::new(80, 96),
-    );
+    const BODY_GRID: TileGrid =
+        TileGrid::new(Point::new(0, 34), Size::new(240, 286), Size::new(80, 96));
 
     #[test]
     fn exact_fit_columns_and_rows() {

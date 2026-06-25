@@ -5,6 +5,7 @@ mod calibration;
 mod display;
 pub mod tiling;
 mod touch;
+mod translated;
 
 use core::{convert::Infallible, fmt};
 
@@ -29,6 +30,7 @@ pub use display::{
 };
 pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH};
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
+pub use translated::TranslatedDrawTarget;
 
 /// A [`PixelBuffer`] sized to the whole CYD panel.
 pub type PixelBufferFull = PixelBuffer<{ Cyd::SCREEN_PIXELS }>;

@@ -25,16 +25,18 @@ use embedded_graphics::{
         MonoTextStyle,
         ascii::{FONT_6X10, FONT_9X15_BOLD},
     },
-    prelude::{Point, Size},
-    text::{Baseline, Text},
+    pixelcolor::Rgb565,
+    prelude::{DrawTarget, Point, Primitive, Size},
+    primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
+    text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use esp_backtrace as _;
 use linkage_blaze_core::{
-    DrawItemIter, LinkageFixed, NegXProjection, PixelTarget, Pose, Projection, Rgb888, WebColors,
-    linkage, linkage_fixed, to_point,
+    DrawItemIter, LinkageFixed, NegXProjection, Pose, Projection, Rgb888, WebColors, linkage,
+    linkage_fixed, to_point,
 };
 use linkage_blaze_cyd::{
-    Cyd, CydDisplayConfig, CydStatic, PixelBuffer,
+    Cyd, CydDisplayConfig, CydStatic, PixelBuffer, TranslatedDrawTarget,
     tiling::{Region, TileGrid, max_usize},
 };
 use log::info;
@@ -73,13 +75,6 @@ const BODY_TILES: TileGrid = TileGrid::new(
 
 // The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
 const WORKSPACE_PIXELS: usize = max_usize(TEXT_BAND.pixel_count(), BODY_TILES.max_tile_pixels());
-
-// ── Digit glyph metrics (shared across draw_digit / draw_number_centered) ────
-
-const DIGIT_W: i32 = 3; // 3×5 pixel cell width
-const DIGIT_H: i32 = 5; // 3×5 pixel cell height
-const DIGIT_SCALE: i32 = 2; // 3×5 cells become 6×10 px glyphs
-const DIGIT_GAP: i32 = 2; // gap between the two digits of a placard
 
 // ── Projection ───────────────────────────────────────────────────────────────
 
@@ -165,230 +160,126 @@ fn wrap_param(value: f32) -> f32 {
 
 // ── Dance-specific overlay drawing ───────────────────────────────────────────
 
-/// Wraps a tile buffer and its screen-space origin for 2D overlay drawing.
-///
-/// All coordinate arguments to drawing methods are in screen coordinates.
-/// The struct subtracts the tile origin to produce tile-local buffer coordinates.
-struct DanceOverlay<'a, T: PixelTarget> {
-    target: &'a mut T,
-    tile_origin: Point,
+// All overlay drawing happens against a `DrawTarget` whose coordinates are in
+// physical-screen space; a `TranslatedDrawTarget` subtracts the tile origin so
+// these functions never need to know they are rendering into a tile.
+
+/// Draw a short number string centered (both axes) on `center`.
+fn draw_centered_number<D>(target: &mut D, text: &str, center: Point, color: Rgb565)
+where
+    D: DrawTarget<Color = Rgb565, Error = Infallible>,
+{
+    let text_style = TextStyleBuilder::new()
+        .alignment(Alignment::Center)
+        .baseline(Baseline::Middle)
+        .build();
+    Text::with_text_style(
+        text,
+        center,
+        MonoTextStyle::new(&FONT_6X10, color),
+        text_style,
+    )
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
 }
 
-impl<'a, T: PixelTarget> DanceOverlay<'a, T> {
-    fn new(target: &'a mut T, tile_origin: Point) -> Self {
-        Self {
-            target,
-            tile_origin,
-        }
-    }
+/// Draw the clock dial's 12 / 3 / 6 / 9 hour markers around the figure.
+fn draw_dial<D>(target: &mut D)
+where
+    D: DrawTarget<Color = Rgb565, Error = Infallible>,
+{
+    const DIAL_COLOR: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray (47, 79, 79)
+    const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
+    const DIAL_RADIUS_X: i32 = 100;
+    const DIAL_RADIUS_Y: i32 = 118;
 
-    fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888) {
-        let bx = x - self.tile_origin.x;
-        let by = y - self.tile_origin.y;
-        if bx < 0 || by < 0 {
-            return;
-        }
-        self.target.put_pixel(bx as usize, by as usize, color);
-    }
+    let dial565 = Cyd::rgb565(DIAL_COLOR);
+    let center_x = DIAL_CENTER_SCREEN.x;
+    let center_y = DIAL_CENTER_SCREEN.y;
+    draw_centered_number(
+        target,
+        "12",
+        Point::new(center_x, center_y - DIAL_RADIUS_Y),
+        dial565,
+    );
+    draw_centered_number(
+        target,
+        "3",
+        Point::new(center_x + DIAL_RADIUS_X, center_y),
+        dial565,
+    );
+    draw_centered_number(
+        target,
+        "6",
+        Point::new(center_x, center_y + DIAL_RADIUS_Y),
+        dial565,
+    );
+    draw_centered_number(
+        target,
+        "9",
+        Point::new(center_x - DIAL_RADIUS_X, center_y),
+        dial565,
+    );
+}
 
-    fn draw_digit(&mut self, digit: u32, at: Point, color: Rgb888, scale: i32) {
-        // Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
-        #[rustfmt::skip]
-        const DIGIT_BITMAPS: [u16; 10] = [
-            0b111_101_101_101_111, // 0
-            0b010_110_010_010_111, // 1
-            0b111_001_111_100_111, // 2
-            0b111_001_111_001_111, // 3
-            0b101_101_111_001_001, // 4
-            0b111_100_111_001_111, // 5
-            0b111_100_111_101_111, // 6
-            0b111_001_001_001_001, // 7
-            0b111_101_111_101_111, // 8
-            0b111_101_111_001_111, // 9
-        ];
-        let bits = DIGIT_BITMAPS[(digit % 10) as usize];
-        for row in 0..DIGIT_H {
-            for col in 0..DIGIT_W {
-                let bit = 14 - (row * DIGIT_W + col);
-                if (bits >> bit) & 1 == 1 {
-                    for scale_y in 0..scale {
-                        for scale_x in 0..scale {
-                            self.put_pixel(
-                                at.x + col * scale + scale_x,
-                                at.y + row * scale + scale_y,
-                                color,
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
+/// Draw a hanging number sign anchored at `anchor` (a hand mark in dance
+/// coordinates).  The sign is a fixed size and always shows two digits.  It
+/// hangs straight down via a short vertical hook from the hand, then a triangle
+/// splays out to the sign's two top corners.  `number` is shown modulo 100.
+fn draw_hanging_placard<D>(target: &mut D, anchor: Point, number: u32)
+where
+    D: DrawTarget<Color = Rgb565, Error = Infallible>,
+{
+    const PLACARD_W: i32 = 34;
+    const PLACARD_H: i32 = 20;
+    const PLACARD_BORDER_PX: i32 = 2;
+    const HANGER_PX: i32 = 2;
+    const HANGER_HOOK: i32 = 7;
+    const HANGER_TRIANGLE: i32 = 22;
 
-    fn fill_rect(&mut self, left: i32, top: i32, width: i32, height: i32, color: Rgb888) {
-        for dy in 0..height {
-            for dx in 0..width {
-                self.put_pixel(left + dx, top + dy, color);
-            }
-        }
-    }
+    let placard_border = Cyd::rgb565(FIGURE);
+    let placard_text = Cyd::rgb565(FIGURE);
+    let placard_fill = Cyd::rgb565(PLACARD_FILL);
 
-    fn draw_rect_border(
-        &mut self,
-        left: i32,
-        top: i32,
-        width: i32,
-        height: i32,
-        thickness: i32,
-        color: Rgb888,
-    ) {
-        for dy in 0..height {
-            for dx in 0..width {
-                let on_border = dx < thickness
-                    || dx >= width - thickness
-                    || dy < thickness
-                    || dy >= height - thickness;
-                if on_border {
-                    self.put_pixel(left + dx, top + dy, color);
-                }
-            }
-        }
-    }
+    let card_left = anchor.x - PLACARD_W / 2;
+    let card_top = anchor.y + HANGER_HOOK + HANGER_TRIANGLE;
+    let card_right = card_left + PLACARD_W;
+    let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
 
-    fn draw_segment(&mut self, start: Point, end: Point, color: Rgb888, thickness: i32) {
-        // Brush spans `thickness` pixels, supporting both even and odd widths.
-        let brush_low = -(thickness / 2);
-        let brush_high = brush_low + thickness - 1;
-        let mut current_x = start.x;
-        let mut current_y = start.y;
-        let delta_x = (end.x - start.x).abs();
-        let delta_y = -(end.y - start.y).abs();
-        let step_x = if start.x < end.x { 1 } else { -1 };
-        let step_y = if start.y < end.y { 1 } else { -1 };
-        let mut error = delta_x + delta_y;
+    let hanger_style = PrimitiveStyle::with_stroke(placard_border, HANGER_PX as u32);
+    Line::new(anchor, apex)
+        .into_styled(hanger_style)
+        .draw(target)
+        .expect("drawing to an Infallible target cannot fail");
+    Line::new(apex, Point::new(card_left, card_top))
+        .into_styled(hanger_style)
+        .draw(target)
+        .expect("drawing to an Infallible target cannot fail");
+    Line::new(apex, Point::new(card_right, card_top))
+        .into_styled(hanger_style)
+        .draw(target)
+        .expect("drawing to an Infallible target cannot fail");
 
-        loop {
-            for dy in brush_low..=brush_high {
-                for dx in brush_low..=brush_high {
-                    self.put_pixel(current_x + dx, current_y + dy, color);
-                }
-            }
-            if current_x == end.x && current_y == end.y {
-                break;
-            }
-            let doubled_error = error * 2;
-            if doubled_error >= delta_y {
-                error += delta_y;
-                current_x += step_x;
-            }
-            if doubled_error <= delta_x {
-                error += delta_x;
-                current_y += step_y;
-            }
-        }
-    }
+    // Fill plus an inside-aligned stroke reproduces the original 2 px inner border.
+    let card_style = PrimitiveStyleBuilder::new()
+        .fill_color(placard_fill)
+        .stroke_color(placard_border)
+        .stroke_width(PLACARD_BORDER_PX as u32)
+        .stroke_alignment(StrokeAlignment::Inside)
+        .build();
+    Rectangle::new(
+        Point::new(card_left, card_top),
+        Size::new(PLACARD_W as u32, PLACARD_H as u32),
+    )
+    .into_styled(card_style)
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
 
-    fn draw_number_centered(&mut self, number: u32, center: Point, color: Rgb888, scale: i32) {
-        let glyph_w = DIGIT_W * scale;
-        let glyph_h = DIGIT_H * scale;
-        let digit_count = if number >= 10 { 2 } else { 1 };
-        let total_w = digit_count * glyph_w + (digit_count - 1) * DIGIT_GAP;
-        let left = center.x - total_w / 2;
-        let top = center.y - glyph_h / 2;
-        if digit_count == 2 {
-            self.draw_digit(number / 10, Point::new(left, top), color, scale);
-            self.draw_digit(
-                number % 10,
-                Point::new(left + glyph_w + DIGIT_GAP, top),
-                color,
-                scale,
-            );
-        } else {
-            self.draw_digit(number, Point::new(left, top), color, scale);
-        }
-    }
-
-    fn draw_dial(&mut self) {
-        const DIAL_COLOR: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray (47, 79, 79)
-        const DIAL_SCALE: i32 = 2;
-        const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
-        const DIAL_RADIUS_X: i32 = 100;
-        const DIAL_RADIUS_Y: i32 = 118;
-
-        let center_x = DIAL_CENTER_SCREEN.x;
-        let center_y = DIAL_CENTER_SCREEN.y;
-        let top = Point::new(center_x, center_y - DIAL_RADIUS_Y);
-        let bottom = Point::new(center_x, center_y + DIAL_RADIUS_Y);
-        let right = Point::new(center_x + DIAL_RADIUS_X, center_y);
-        let left = Point::new(center_x - DIAL_RADIUS_X, center_y);
-        self.draw_number_centered(12, top, DIAL_COLOR, DIAL_SCALE);
-        self.draw_number_centered(3, right, DIAL_COLOR, DIAL_SCALE);
-        self.draw_number_centered(6, bottom, DIAL_COLOR, DIAL_SCALE);
-        self.draw_number_centered(9, left, DIAL_COLOR, DIAL_SCALE);
-    }
-
-    /// Draw a hanging number sign anchored at `anchor` (a hand mark in dance
-    /// coordinates).  The sign is a fixed size and always shows two digits.  It
-    /// hangs straight down via a short vertical hook from the hand, then a triangle
-    /// splays out to the sign's two top corners.  `number` is shown modulo 100.
-    fn draw_hanging_placard(&mut self, anchor: Point, number: u32) {
-        const PLACARD_BORDER: Rgb888 = FIGURE;
-        const PLACARD_TEXT: Rgb888 = FIGURE;
-        const PLACARD_W: i32 = 34;
-        const PLACARD_H: i32 = 20;
-        const PLACARD_BORDER_PX: i32 = 2;
-        const HANGER_PX: i32 = 2;
-        const HANGER_HOOK: i32 = 7;
-        const HANGER_TRIANGLE: i32 = 22;
-
-        let card_left = anchor.x - PLACARD_W / 2;
-        let card_top = anchor.y + HANGER_HOOK + HANGER_TRIANGLE;
-        let card_right = card_left + PLACARD_W;
-
-        let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
-        self.draw_segment(anchor, apex, PLACARD_BORDER, HANGER_PX);
-        self.draw_segment(
-            apex,
-            Point::new(card_left, card_top),
-            PLACARD_BORDER,
-            HANGER_PX,
-        );
-        self.draw_segment(
-            apex,
-            Point::new(card_right, card_top),
-            PLACARD_BORDER,
-            HANGER_PX,
-        );
-
-        self.fill_rect(card_left, card_top, PLACARD_W, PLACARD_H, PLACARD_FILL);
-        self.draw_rect_border(
-            card_left,
-            card_top,
-            PLACARD_W,
-            PLACARD_H,
-            PLACARD_BORDER_PX,
-            PLACARD_BORDER,
-        );
-
-        let glyph_w = DIGIT_W * DIGIT_SCALE;
-        let glyph_h = DIGIT_H * DIGIT_SCALE;
-        let total_w = 2 * glyph_w + DIGIT_GAP;
-        let text_left = card_left + (PLACARD_W - total_w) / 2;
-        let text_top = card_top + (PLACARD_H - glyph_h) / 2;
-        let value = number % 100;
-        self.draw_digit(
-            value / 10,
-            Point::new(text_left, text_top),
-            PLACARD_TEXT,
-            DIGIT_SCALE,
-        );
-        self.draw_digit(
-            value % 10,
-            Point::new(text_left + glyph_w + DIGIT_GAP, text_top),
-            PLACARD_TEXT,
-            DIGIT_SCALE,
-        );
-    }
+    let mut value_text = heapless::String::<4>::new();
+    core::fmt::write(&mut value_text, format_args!("{:02}", number % 100))
+        .expect("two-digit placard value fits in 4 bytes");
+    let card_center = Point::new(card_left + PLACARD_W / 2, card_top + PLACARD_H / 2);
+    draw_centered_number(target, &value_text, card_center, placard_text);
 }
 
 // todo0000 shouldn't be needed.
@@ -520,7 +411,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             cyd_tile.clear(background565);
 
             // Dance-specific background overlay.
-            DanceOverlay::new(&mut cyd_tile, tile.top_left).draw_dial();
+            {
+                let mut target = TranslatedDrawTarget::new(&mut cyd_tile, tile.top_left);
+                draw_dial(&mut target);
+            }
 
             // Shared linkage rendering path, identical to the ballet app.
             let linkage_view = LINKAGE.view();
@@ -538,9 +432,13 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             let left_hand_pose = iter
                 .marked_pose("lMid2")
                 .expect("lMid2 mark missing from LINKAGE");
-            let mut overlay = DanceOverlay::new(&mut cyd_tile, tile.top_left);
-            overlay.draw_hanging_placard(pose_to_point(left_hand_pose), hour_display as u32);
-            overlay.draw_hanging_placard(pose_to_point(right_hand_pose), minutes as u32);
+            let mut target = TranslatedDrawTarget::new(&mut cyd_tile, tile.top_left);
+            draw_hanging_placard(
+                &mut target,
+                pose_to_point(left_hand_pose),
+                hour_display as u32,
+            );
+            draw_hanging_placard(&mut target, pose_to_point(right_hand_pose), minutes as u32);
 
             cyd_tile.flush_at(tile.top_left)?;
         }
