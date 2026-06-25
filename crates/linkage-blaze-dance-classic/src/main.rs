@@ -3,6 +3,7 @@
 
 // todo000 wifi status is missing.
 // todo000 we need to use color and/or size to tell hours from minutes
+// todo000 we need some wasm preview
 
 use core::convert::Infallible;
 
@@ -45,17 +46,26 @@ const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 const DISPLAY_WIDTH: usize = 240; // portrait CYD screen width
 const DISPLAY_HEIGHT: usize = 320; // portrait CYD screen height
-const TEXT_BAND_HEIGHT: i32 = 34;
+const TEXT_BAND_HEIGHT: usize = 34;
 const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
 const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
 
-// Dance figure is rendered into a virtual 375×500 canvas offset from (0,0).
-const TOP_LEFT: Point = Point::new(-68, -170);
+const BODY_TOP: usize = TEXT_BAND_HEIGHT; // first row of the dance area (286 px tall)
+
+// 3×80 = 240 covers display width exactly; 3×96 = 288 covers body height (286) with 2 px clip on the last row.
 const TILE_COLUMNS: usize = 3;
-const TILE_ROWS: usize = 4;
-const TILE_WIDTH: usize = 125;
-const TILE_HEIGHT: usize = 125;
+const TILE_ROWS: usize = 3;
+const TILE_WIDTH: usize = 80;
+const TILE_HEIGHT: usize = 96;
+
+// The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
 const TILE_PIXELS: usize = TILE_WIDTH * TILE_HEIGHT;
+const TEXT_BAND_PIXELS: usize = DISPLAY_WIDTH * TEXT_BAND_HEIGHT;
+const WORKSPACE_PIXELS: usize = if TILE_PIXELS > TEXT_BAND_PIXELS {
+    TILE_PIXELS
+} else {
+    TEXT_BAND_PIXELS
+};
 
 // ── Digit glyph metrics (shared across draw_digit / draw_number_centered) ────
 
@@ -68,9 +78,9 @@ const DIGIT_GAP: i32 = 2; // gap between the two digits of a placard
 
 //todo000 review projections.
 const PROJECTION: NegXProjection = NegXProjection {
-    center_x: 207.0,
-    baseline_y: 480.0,
-    scale: 1.35,
+    center_x: 120.0,
+    baseline_y: 300.0,
+    scale: 1.25,
 };
 
 // ── Linkage constants ─────────────────────────────────────────────────────────
@@ -95,40 +105,27 @@ const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE_INNER
     .merge_adjacent_fixed::<400>()
     .strip_fixed_noops::<400>();
 
-// ── TileFlush ────────────────────────────────────────────────────────────────
+// ── TileRect ─────────────────────────────────────────────────────────────────
 
-// todo000 seems overly complex.
-struct TileFlush {
+struct TileRect {
     top_left: Point,
-    origin: Point,
     width: usize,
     height: usize,
 }
 
-impl TileFlush {
-    fn new(tile_origin: Point, tile_width: usize, tile_height: usize) -> Option<Self> {
-        let tile_top_left = Point::new(TOP_LEFT.x + tile_origin.x, TOP_LEFT.y + tile_origin.y);
-        let tile_bottom_right = Point::new(
-            tile_top_left.x + tile_width as i32,
-            tile_top_left.y + tile_height as i32,
-        );
-        let visible_left = tile_top_left.x.max(0);
-        let visible_top = tile_top_left.y.max(TEXT_BAND_HEIGHT);
-        let visible_right = tile_bottom_right.x.min(DISPLAY_WIDTH as i32);
-        let visible_bottom = tile_bottom_right.y.min(DISPLAY_HEIGHT as i32);
+impl TileRect {
+    fn new(tile_column: usize, tile_row: usize) -> Option<Self> {
+        let left = tile_column * TILE_WIDTH;
+        let top = BODY_TOP + tile_row * TILE_HEIGHT;
 
-        if visible_left >= visible_right || visible_top >= visible_bottom {
+        if left >= DISPLAY_WIDTH || top >= DISPLAY_HEIGHT {
             return None;
         }
 
         Some(Self {
-            top_left: Point::new(visible_left, visible_top),
-            origin: Point::new(
-                tile_origin.x + visible_left - tile_top_left.x,
-                tile_origin.y + visible_top - tile_top_left.y,
-            ),
-            width: (visible_right - visible_left) as usize,
-            height: (visible_bottom - visible_top) as usize,
+            top_left: Point::new(left as i32, top as i32),
+            width: TILE_WIDTH.min(DISPLAY_WIDTH - left),
+            height: TILE_HEIGHT.min(DISPLAY_HEIGHT - top),
         })
     }
 }
@@ -186,11 +183,10 @@ fn wrap_param(value: f32) -> f32 {
 
 // ── Dance-specific overlay drawing ───────────────────────────────────────────
 
-/// Wraps a tile buffer and its dance-space origin for 2D overlay drawing.
+/// Wraps a tile buffer and its screen-space origin for 2D overlay drawing.
 ///
-/// All coordinate arguments to drawing methods are in dance space (the virtual
-/// 375×500 canvas).  The struct translates them to tile-local buffer coordinates
-/// before writing pixels.
+/// All coordinate arguments to drawing methods are in screen coordinates.
+/// The struct subtracts the tile origin to produce tile-local buffer coordinates.
 struct DanceOverlay<'a, T: PixelTarget> {
     target: &'a mut T,
     tile_origin: Point,
@@ -337,9 +333,8 @@ impl<'a, T: PixelTarget> DanceOverlay<'a, T> {
         const DIAL_RADIUS_X: i32 = 100;
         const DIAL_RADIUS_Y: i32 = 118;
 
-        // Convert screen-space dial center to dance space (offset by TOP_LEFT).
-        let center_x = DIAL_CENTER_SCREEN.x - TOP_LEFT.x;
-        let center_y = DIAL_CENTER_SCREEN.y - TOP_LEFT.y;
+        let center_x = DIAL_CENTER_SCREEN.x;
+        let center_y = DIAL_CENTER_SCREEN.y;
         let top = Point::new(center_x, center_y - DIAL_RADIUS_Y);
         let bottom = Point::new(center_x, center_y + DIAL_RADIUS_Y);
         let right = Point::new(center_x + DIAL_RADIUS_X, center_y);
@@ -444,7 +439,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD dance with WiFi");
 
-    static CYD_STATIC: CydStatic<PixelBuffer<TILE_PIXELS>> = CydStatic::new();
+    static CYD_STATIC: CydStatic<PixelBuffer<WORKSPACE_PIXELS>> = CydStatic::new();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
@@ -516,7 +511,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = dance_params(hours, minutes, seconds);
         let time_text = format_clock_12h(hours, minutes, seconds);
 
-        let mut cyd_tile = cyd.frame_mut(Size::new(DISPLAY_WIDTH as u32, TEXT_BAND_HEIGHT as u32));
+        let mut cyd_tile =
+            cyd.frame_mut(Size::new(DISPLAY_WIDTH as u32, TEXT_BAND_HEIGHT as u32));
         cyd_tile.clear(background565);
         Text::with_baseline(
             "WiFi OK",
@@ -540,19 +536,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
         for tile_row in 0..TILE_ROWS {
             for tile_column in 0..TILE_COLUMNS {
-                let tile_origin = Point::new(
-                    (tile_column * TILE_WIDTH) as i32,
-                    (tile_row * TILE_HEIGHT) as i32,
-                );
-                let Some(tile_flush) = TileFlush::new(tile_origin, TILE_WIDTH, TILE_HEIGHT) else {
+                let Some(tile) = TileRect::new(tile_column, tile_row) else {
                     continue;
                 };
                 let mut cyd_tile =
-                    cyd.frame_mut(Size::new(tile_flush.width as u32, tile_flush.height as u32));
+                    cyd.frame_mut(Size::new(tile.width as u32, tile.height as u32));
                 cyd_tile.clear(background565);
 
                 // Dance-specific background overlay.
-                DanceOverlay::new(&mut cyd_tile, tile_flush.origin).draw_dial();
+                DanceOverlay::new(&mut cyd_tile, tile.top_left).draw_dial();
 
                 // Shared linkage rendering path, identical to the ballet app.
                 let linkage_view = LINKAGE.view();
@@ -560,7 +552,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 for draw_item in &mut iter {
                     draw_item
                         .project(&PROJECTION)
-                        .draw_offset(&mut cyd_tile, tile_flush.origin);
+                        .draw_offset(&mut cyd_tile, tile.top_left);
                 }
 
                 // Dance-specific foreground overlay: placards hang from hand marks.
@@ -570,11 +562,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 let left_hand_pose = iter
                     .marked_pose("lMid2")
                     .expect("lMid2 mark missing from LINKAGE");
-                let mut overlay = DanceOverlay::new(&mut cyd_tile, tile_flush.origin);
+                let mut overlay = DanceOverlay::new(&mut cyd_tile, tile.top_left);
                 overlay.draw_hanging_placard(pose_to_point(left_hand_pose), hour_display as u32);
                 overlay.draw_hanging_placard(pose_to_point(right_hand_pose), minutes as u32);
 
-                cyd_tile.flush_at(tile_flush.top_left)?;
+                cyd_tile.flush_at(tile.top_left)?;
             }
         }
     }
