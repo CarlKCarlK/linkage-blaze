@@ -20,8 +20,7 @@ use esp_hal::{
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use linkage_blaze_cyd::{
-    Cyd, CydDisplayConfig, CydError, CydStatic, PixelBuffer, RectBuffer, SCREEN_HEIGHT,
-    SCREEN_WIDTH,
+    Cyd, CydError, CydStatic, Orientation, PixelBuffer, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 
@@ -143,7 +142,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         p.GPIO4,
         p.GPIO5,
         p.GPIO7,
-        CydDisplayConfig::LANDSCAPE,
+        Orientation::Landscape,
     )?;
     static SCREEN_BUFFER: StaticCell<ScreenBuffer> = StaticCell::new();
     let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);

@@ -25,7 +25,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBuffer};
+use linkage_blaze_cyd::{Cyd, CydStatic, Orientation, PixelBuffer};
 use log::info;
 use static_cell::StaticCell;
 
@@ -79,7 +79,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO2,
         p.GPIO4,
         p.GPIO21,
-        CydDisplayConfig::LANDSCAPE,
+        Orientation::Landscape,
     )?;
     cyd.clear(Cyd::rgb565(BLACK))?;
     static DISPLAY: StaticCell<RefCell<CydClockDisplay>> = StaticCell::new();

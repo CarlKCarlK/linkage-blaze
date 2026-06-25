@@ -311,7 +311,7 @@ pub fn parse_bvh(source: &str) -> Result<BvhClip, MocapParseError> {
     parser.expect("MOTION")?;
     parser.expect("Frames:")?;
     let sample_count = parser.next_usize("sample count")?;
-    parser.expect("Frame")?;   // BVH file syntax: "Frame Time:"
+    parser.expect("Frame")?; // BVH file syntax: "Frame Time:"
     parser.expect("Time:")?;
     let sample_time = parser.next_f32("sample time")?;
 
@@ -856,7 +856,8 @@ Frame Time: 0.0333333
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
             build_bvh_linkage_buf::<32, 8>(&clip, &layout, &[]).expect("BVH linkage should build");
-        let params = bvh_sample_params::<32>(&layout, &clip.samples[1]).expect("params should build");
+        let params =
+            bvh_sample_params::<32>(&layout, &clip.samples[1]).expect("params should build");
 
         assert_eq!(layout.len(), 15);
         assert_eq!(params[0], 0.5);
@@ -919,7 +920,8 @@ Frame Time: 0.0333333
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
             build_bvh_linkage_buf::<1, 4>(&clip, &layout, &[]).expect("BVH linkage should build");
-        let params = bvh_sample_params::<1>(&layout, &clip.samples[0]).expect("params should build");
+        let params =
+            bvh_sample_params::<1>(&layout, &clip.samples[0]).expect("params should build");
         let stroke = linkage
             .view()
             .draw_items(&params)
