@@ -35,7 +35,7 @@ use linkage_blaze_core::{
 };
 use linkage_blaze_cyd::{
     Cyd, CydError, CydStatic, Orientation, TranslatedDrawTarget,
-    tiling::{Region, TileGrid, max_usize},
+    tiling::{TileGrid, max_usize},
 };
 use log::info;
 use time::OffsetDateTime;
@@ -50,44 +50,23 @@ const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 // This app always runs portrait; the screen size is derived from the config.
 const ORIENTATION: Orientation = Orientation::Portrait;
+const SCREEN_WIDTH: u32 = ORIENTATION.width() as u32;
+const SCREEN_HEIGHT: u32 = ORIENTATION.height() as u32;
 
-// todo000 this is a bit verbose. Ideas: do nothing, define a struct, move some of these closer to their use. (may no longer apply)
-/// The dance app's named screen layout: a full-width status band across the top
-/// (Wi-Fi status on the left, time on the right) and a tiled figure region
-/// filling the rest of the screen below it.
-struct DanceLayout {
-    /// Full-width status band running across the top of the screen.
-    text_band: Region,
-    /// Top-left of the Wi-Fi status text within the band.
-    wifi_text_top_left: Point,
-    /// Top-left of the time text within the band.
-    time_text_top_left: Point,
-    /// Tile grid covering the dance figure below the band. `TileGrid` computes
-    /// tile sizes and clips the final row/column.
-    figure_tiles: TileGrid,
-}
+// Full-width status band across the top: Wi-Fi status on the left, time on the right.
+const TEXT_BAND_HEIGHT: u32 = 34;
+const WIFI_STATUS_SIZE: Size = Size::new(SCREEN_WIDTH, TEXT_BAND_HEIGHT);
+const WIFI_STATUS_POINT: Point = Point::new(8, 12);
+const TIME_POINT: Point = Point::new(166, 12);
 
-impl DanceLayout {
-    /// Build the portrait layout for the given screen orientation.
-    const fn portrait(orientation: Orientation) -> Self {
-        const TEXT_BAND_HEIGHT: u32 = 34;
-        let screen_width = orientation.width() as u32;
-        let screen_height = orientation.height() as u32;
-        Self {
-            text_band: Region::new(Point::new(0, 0), Size::new(screen_width, TEXT_BAND_HEIGHT)),
-            wifi_text_top_left: Point::new(8, 12),
-            time_text_top_left: Point::new(166, 12),
-            figure_tiles: TileGrid::new(
-                Point::new(0, TEXT_BAND_HEIGHT as i32),
-                Size::new(screen_width, screen_height - TEXT_BAND_HEIGHT),
-                3,
-                3,
-            ),
-        }
-    }
-}
-
-const LAYOUT: DanceLayout = DanceLayout::portrait(ORIENTATION);
+// Tile grid covering the dance figure below the band. `TileGrid` computes tile
+// sizes and clips the final row/column.
+const FIGURE_TILES: TileGrid = TileGrid::new(
+    Point::new(0, TEXT_BAND_HEIGHT as i32),
+    Size::new(SCREEN_WIDTH, SCREEN_HEIGHT - TEXT_BAND_HEIGHT),
+    3,
+    3,
+);
 
 // ── Projection ───────────────────────────────────────────────────────────────
 
@@ -144,8 +123,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
     const BUFFER_PIXEL_COUNT: usize = max_usize(
-        LAYOUT.text_band.pixel_count(),
-        LAYOUT.figure_tiles.max_tile_pixel_count(),
+        (WIFI_STATUS_SIZE.width * WIFI_STATUS_SIZE.height) as usize,
+        FIGURE_TILES.max_tile_pixel_count(),
     );
     static CYD_STATIC: CydStatic<BUFFER_PIXEL_COUNT> = Cyd::new_static();
     let cyd = Cyd::new_display_only(
@@ -193,16 +172,22 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 // Draw the Wi-Fi status into the top band, leaving the time slot
                 // blank, until the clock loop below takes over the band.
                 let mut cyd = cyd_cell.borrow_mut();
-                let mut text_band_frame = cyd.frame_mut(LAYOUT.text_band.size);
-                text_band_frame.write_text(message, LAYOUT.wifi_text_top_left);
-                text_band_frame
+                let mut wifi_status_frame = cyd.frame_mut(WIFI_STATUS_SIZE);
+                wifi_status_frame.write_text(message, WIFI_STATUS_POINT);
+                wifi_status_frame
                     .flush()
+                    //todo0000 try to understand and convert this error.
                     .expect("drawing Wi-Fi status to the CYD text band failed");
                 Ok(())
             }
         })
         .await?;
     let mut cyd = cyd_cell.into_inner();
+
+    let mut wifi_status_frame = cyd.frame_mut(WIFI_STATUS_SIZE);
+    wifi_status_frame.write_text("WiFi OK", WIFI_STATUS_POINT);
+    wifi_status_frame.flush()?;
+
     info!("WiFi connected");
 
     let timezone_offset_minutes = timezone_field
@@ -232,15 +217,13 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = clock.linkage_params();
         let time_text = clock.text_12h();
 
-        let mut text_band_frame = cyd.frame_mut(LAYOUT.text_band.size);
-        //todo000 ugly and the wifi part never changes and yet is in a loop.
-        text_band_frame.write_text("WiFi OK", LAYOUT.wifi_text_top_left);
-        text_band_frame.write_text(time_text.as_str(), LAYOUT.time_text_top_left);
-        text_band_frame.flush()?;
+        let mut TIME_FRAME = cyd.frame_mut(TIME_SIZE);
+        TIME_FRAME.write_text(time_text.as_str(), TIME_POINT);
+        TIME_FRAME.flush()?;
 
         // Shared linkage rendering path, tiled for CYD.
 
-        for tile in LAYOUT.figure_tiles.tiles() {
+        for tile in FIGURE_TILES.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
 
             // Dance-specific background overlay.
