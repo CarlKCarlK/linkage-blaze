@@ -12,6 +12,7 @@ use core::convert::Infallible;
 
 use device_envoy_esp::button::{Button as _, ButtonEsp, PressedTo};
 use embassy_time::Instant;
+use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
 use esp_hal::{
     Config,
@@ -20,7 +21,7 @@ use esp_hal::{
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use linkage_blaze_cyd::{
-    Cyd, CydError, CydStatic, Orientation, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    Cyd, CydError, CydStatic, DEFAULT_FONT, Orientation, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 
@@ -143,6 +144,9 @@ fn inner_main() -> Result<Infallible, MainError> {
         p.GPIO5,
         p.GPIO7,
         Orientation::Landscape,
+        Rgb888::CSS_BLACK, // black
+        Rgb888::CSS_WHITE, // white
+        &DEFAULT_FONT,
     )?;
     static SCREEN_BUFFER: StaticCell<ScreenBuffer> = StaticCell::new();
     let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);

@@ -84,8 +84,10 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO21,
         // todo000 are there 4 orientations?
         Orientation::Portrait,
+        BACKGROUND,
+        TEXT,
+        &FONT_6X10,
     )?;
-    let background565 = Cyd::rgb565(BACKGROUND);
     let text565 = Cyd::rgb565(TEXT);
     // todo000 agent, remember to never delete my todo's.
     info!("CYD display initialized");
@@ -97,7 +99,6 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         for (sample_index, params) in MOTION.samples().enumerate() {
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
-            cyd_frame.clear(background565);
             for draw_item in linkage.draw_items(&params) {
                 draw_item.project(&PROJECTION).draw(&mut cyd_frame);
             }

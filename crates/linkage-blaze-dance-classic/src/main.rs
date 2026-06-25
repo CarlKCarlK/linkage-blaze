@@ -22,10 +22,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::{
     Drawable,
-    mono_font::{
-        MonoTextStyle,
-        ascii::{FONT_6X10, FONT_9X15_BOLD},
-    },
+    mono_font::{MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::Rgb565,
     prelude::{DrawTarget, Point, Primitive, Size},
     primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
@@ -47,7 +44,7 @@ use time::OffsetDateTime;
 
 const BACKGROUND: Rgb888 = Rgb888::CSS_MIDNIGHT_BLUE; // deep night blue (25, 25, 112)
 const FIGURE: Rgb888 = Rgb888::CSS_WHEAT; // warm pale bone-like tan (245, 222, 179)
-const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
+const FOREGROUND: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
 const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
@@ -77,10 +74,7 @@ impl DanceLayout {
         let screen_width = orientation.width() as u32;
         let screen_height = orientation.height() as u32;
         Self {
-            text_band: Region::new(
-                Point::new(0, 0),
-                Size::new(screen_width, TEXT_BAND_HEIGHT),
-            ),
+            text_band: Region::new(Point::new(0, 0), Size::new(screen_width, TEXT_BAND_HEIGHT)),
             wifi_text_top_left: Point::new(8, 12),
             time_text_top_left: Point::new(166, 12),
             figure_tiles: TileGrid::new(
@@ -117,14 +111,10 @@ const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
     .combine(LINKAGE0);
 
 // Keep only the three clock-driven parameters, then optimize the fixed linkage.
-// todo000 can we kill or reduce the optimization steps?
 const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE1
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
-    .freeze_param_name_at_default::<130>("abdomen_xrotation")
     .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
-    .strip_fixed_noops::<400>()
-    .merge_adjacent_fixed::<400>()
-    .strip_fixed_noops::<400>();
+    .compact::<400>();
 
 // ── Binary entry point ────────────────────────────────────────────────────────
 
@@ -158,7 +148,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         LAYOUT.figure_tiles.max_tile_pixel_count(),
     );
     static CYD_STATIC: CydStatic<BUFFER_PIXEL_COUNT> = Cyd::new_static();
-    let mut cyd = Cyd::new_display_only(
+    let cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
@@ -169,9 +159,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO4,
         p.GPIO21,
         ORIENTATION,
+        BACKGROUND,
+        FOREGROUND,
+        &FONT_6X10,
     )?;
     info!("CYD display initialized");
-    cyd.clear(Cyd::rgb565(BACKGROUND))?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
@@ -187,24 +179,30 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,
     )?;
 
-    let cyd = RefCell::new(cyd);
+    let cyd_cell = RefCell::new(cyd);
     let stack = wifi_auto
         .connect(&mut force_portal_button, |wifi_auto_event| {
-            let cyd_ref = &cyd;
+            let cyd_cell = &cyd_cell;
             async move {
-                let wifi_mode = match wifi_auto_event {
+                let message = match wifi_auto_event {
                     WifiAutoEvent::CaptivePortalReady => "setup CydDance",
                     WifiAutoEvent::Connecting { .. } => "connecting",
                     WifiAutoEvent::ConnectionFailed => "connect failed",
                 };
-                info!("WiFi: {wifi_mode}");
-                draw_wifi_status(&mut cyd_ref.borrow_mut(), wifi_mode)
-                    .expect("drawing Wi-Fi status to the CYD text band cannot fail");
+                info!("WiFi: {message}");
+                // Draw the Wi-Fi status into the top band, leaving the time slot
+                // blank, until the clock loop below takes over the band.
+                let mut cyd = cyd_cell.borrow_mut();
+                let mut text_band_frame = cyd.frame_mut(LAYOUT.text_band.size);
+                text_band_frame.write_text(message, LAYOUT.wifi_text_top_left);
+                text_band_frame
+                    .flush()
+                    .expect("drawing Wi-Fi status to the CYD text band failed");
                 Ok(())
             }
         })
         .await?;
-    let mut cyd = cyd.into_inner();
+    let mut cyd = cyd_cell.into_inner();
     info!("WiFi connected");
 
     let timezone_offset_minutes = timezone_field
@@ -223,8 +221,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // todo000 should shared/generic code with wasm start here?
 
-    let background565 = Cyd::rgb565(BACKGROUND);
-    let text565 = Cyd::rgb565(TEXT);
     let linkage_view = LINKAGE.view();
 
     loop {
@@ -237,31 +233,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let time_text = clock.text_12h();
 
         let mut text_band_frame = cyd.frame_mut(LAYOUT.text_band.size);
-        text_band_frame.clear(background565);
         //todo000 ugly and the wifi part never changes and yet is in a loop.
-        Text::with_baseline(
-            "WiFi OK",
-            LAYOUT.wifi_text_top_left,
-            MonoTextStyle::new(&FONT_6X10, text565),
-            Baseline::Top,
-        )
-        .draw(&mut text_band_frame)
-        .expect("drawing to an Infallible frame cannot fail");
-        Text::with_baseline(
-            time_text.as_str(),
-            LAYOUT.time_text_top_left,
-            MonoTextStyle::new(&FONT_9X15_BOLD, text565),
-            Baseline::Top,
-        )
-        .draw(&mut text_band_frame)
-        .expect("drawing to an Infallible frame cannot fail");
+        text_band_frame.write_text("WiFi OK", LAYOUT.wifi_text_top_left);
+        text_band_frame.write_text(time_text.as_str(), LAYOUT.time_text_top_left);
         text_band_frame.flush()?;
 
         // Shared linkage rendering path, tiled for CYD.
 
         for tile in LAYOUT.figure_tiles.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
-            tile_frame.clear(background565);
 
             // Dance-specific background overlay.
             {
@@ -297,24 +277,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             tile_frame.flush_at(tile.top_left)?;
         }
     }
-}
-
-/// Draw a Wi-Fi status message into the top text band, leaving the time slot
-/// blank. Used while [`inner_main`] is still connecting, before the clock loop
-/// takes over the band.
-fn draw_wifi_status(cyd: &mut Cyd, message: &str) -> Result<(), CydError> {
-    let mut text_band_frame = cyd.frame_mut(LAYOUT.text_band.size);
-    text_band_frame.clear(Cyd::rgb565(BACKGROUND));
-    Text::with_baseline(
-        message,
-        LAYOUT.wifi_text_top_left,
-        MonoTextStyle::new(&FONT_6X10, Cyd::rgb565(TEXT)),
-        Baseline::Top,
-    )
-    .draw(&mut text_band_frame)
-    .expect("drawing to an Infallible frame cannot fail");
-    text_band_frame.flush()?;
-    Ok(())
 }
 
 // ── Clock time ────────────────────────────────────────────────────────────────
