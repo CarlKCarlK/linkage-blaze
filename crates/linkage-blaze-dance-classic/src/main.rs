@@ -108,47 +108,90 @@ const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE_INNER
     .merge_adjacent_fixed::<400>()
     .strip_fixed_noops::<400>();
 
-// ── Time / param helpers ─────────────────────────────────────────────────────
+// ── Clock time ────────────────────────────────────────────────────────────────
 
-/// Format a 12-hour clock string with AM/PM, right-justified to 11 characters
-/// (e.g. " 5:04:32 PM" or "12:04:32 PM"). No alloc.
-fn format_clock_12h(hours: u8, minutes: u8, seconds: u8) -> heapless::String<16> {
-    let hour12 = match hours % 12 {
-        0 => 12,
-        other => other,
-    };
-    let suffix = if hours % 24 < 12 { "AM" } else { "PM" };
-    let mut text = heapless::String::new();
-    core::fmt::write(
-        &mut text,
-        format_args!("{hour12:>2}:{minutes:02}:{seconds:02} {suffix}"),
-    )
-    .expect("clock string fits in 16 bytes");
-    text
+/// App-local wall-clock time. Collects the time-derived behavior the dance
+/// needs: 12-hour display, formatted strings, and the normalized linkage
+/// parameters. No alloc.
+struct ClockTime {
+    hours: u8,
+    minutes: u8,
+    seconds: u8,
 }
 
-// todo000 seems overly complex.
-fn dance_params(hours: u8, minutes: u8, seconds: u8) -> [f32; 3] {
-    const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
-    const EYES_FORWARD_PARAM: f32 = 0.5;
-    const RIGHT_ARM_12_PARAM: f32 = 0.4375;
-    const LEFT_ARM_12_PARAM: f32 = 0.5625;
-    let second_phase = seconds as f32 / 60.0;
-    let minute_phase = (minutes as f32 + second_phase) / 60.0;
-    let hour_phase = ((hours % 12) as f32 + minute_phase) / 12.0;
-    let signed_hour_phase = signed_phase_from_twelve(hour_phase);
-    [
-        wrap_param(EYES_FORWARD_PARAM + second_phase * CLOCK_HAND_PARAM_TURN),
-        wrap_param(RIGHT_ARM_12_PARAM + minute_phase * CLOCK_HAND_PARAM_TURN),
-        wrap_param(LEFT_ARM_12_PARAM + signed_hour_phase * CLOCK_HAND_PARAM_TURN),
-    ]
+impl ClockTime {
+    fn new(hours: u8, minutes: u8, seconds: u8) -> Self {
+        Self {
+            hours,
+            minutes,
+            seconds,
+        }
+    }
+
+    /// 12 for midnight/noon, 1–11 otherwise.
+    fn hour_12(&self) -> u8 {
+        match self.hours % 12 {
+            0 => 12,
+            other => other,
+        }
+    }
+
+    fn minute(&self) -> u8 {
+        self.minutes
+    }
+
+    /// Format a 12-hour clock string with AM/PM, right-justified to 11
+    /// characters (e.g. " 5:04:32 PM" or "12:04:32 PM").
+    fn text_12h(&self) -> heapless::String<16> {
+        let suffix = if self.hours % 24 < 12 { "AM" } else { "PM" };
+        let mut text = heapless::String::new();
+        core::fmt::write(
+            &mut text,
+            format_args!(
+                "{:>2}:{:02}:{:02} {suffix}",
+                self.hour_12(),
+                self.minutes,
+                self.seconds
+            ),
+        )
+        .expect("clock string fits in 16 bytes");
+        text
+    }
+
+    /// Format a 24-hour `HH:MM:SS` clock string.
+    fn text_24h(&self) -> heapless::String<9> {
+        let mut text = heapless::String::new();
+        core::fmt::write(
+            &mut text,
+            format_args!("{:02}:{:02}:{:02}", self.hours, self.minutes, self.seconds),
+        )
+        .expect("clock string fits in 9 bytes");
+        text
+    }
+
+    // todo000 seems overly complex.
+    fn linkage_params(&self) -> [f32; 3] {
+        const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
+        const EYES_FORWARD_PARAM: f32 = 0.5;
+        const RIGHT_ARM_12_PARAM: f32 = 0.4375;
+        const LEFT_ARM_12_PARAM: f32 = 0.5625;
+        let second_phase = self.seconds as f32 / 60.0;
+        let minute_phase = (self.minutes as f32 + second_phase) / 60.0;
+        let hour_phase = ((self.hours % 12) as f32 + minute_phase) / 12.0;
+        let signed_hour_phase = signed_clock_phase(hour_phase);
+        [
+            wrap_unit(EYES_FORWARD_PARAM + second_phase * CLOCK_HAND_PARAM_TURN),
+            wrap_unit(RIGHT_ARM_12_PARAM + minute_phase * CLOCK_HAND_PARAM_TURN),
+            wrap_unit(LEFT_ARM_12_PARAM + signed_hour_phase * CLOCK_HAND_PARAM_TURN),
+        ]
+    }
 }
 
-fn signed_phase_from_twelve(phase: f32) -> f32 {
+fn signed_clock_phase(phase: f32) -> f32 {
     if phase > 0.5 { phase - 1.0 } else { phase }
 }
 
-fn wrap_param(value: f32) -> f32 {
+fn wrap_unit(value: f32) -> f32 {
     let mut value = value;
     while value >= 1.0 {
         value -= 1.0;
@@ -378,13 +421,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     loop {
         let tick = clock_sync.wait_for_tick().await;
         let local_time = tick.local_time;
-        let hours = local_time.hour();
-        let minutes = local_time.minute();
-        let seconds = local_time.second();
-        info!("tick {:02}:{:02}:{:02}", hours, minutes, seconds);
+        let clock = ClockTime::new(local_time.hour(), local_time.minute(), local_time.second());
+        info!("tick {}", clock.text_24h());
 
-        let params = dance_params(hours, minutes, seconds);
-        let time_text = format_clock_12h(hours, minutes, seconds);
+        let params = clock.linkage_params();
+        let time_text = clock.text_12h();
 
         let mut text_band_frame = cyd.frame_mut(TEXT_BAND.size);
         text_band_frame.clear(background565);
@@ -406,16 +447,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         .expect("drawing to an Infallible frame cannot fail");
         text_band_frame.flush()?;
 
-        let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
-        // Shared linkage rendering path, identical to the ballet app.
+        // Shared linkage rendering path, tiled for CYD.
 
         for tile in BODY_TILES.tiles() {
-            let mut time_frame = cyd.frame_mut(tile.size);
-            time_frame.clear(background565);
+            let mut tile_frame = cyd.frame_mut(tile.size);
+            tile_frame.clear(background565);
 
             // Dance-specific background overlay.
             {
-                let mut target = TranslatedDrawTarget::new(&mut time_frame, tile.top_left);
+                let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
                 draw_dial(&mut target);
             }
 
@@ -423,7 +463,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             for draw_item in &mut iter {
                 draw_item
                     .project(&PROJECTION)
-                    .draw_offset(&mut time_frame, tile.top_left);
+                    .draw_offset(&mut tile_frame, tile.top_left);
             }
 
             // Dance-specific foreground overlay: placards hang from hand marks.
@@ -433,15 +473,19 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             let left_hand_pose = iter
                 .marked_pose("lMid2")
                 .expect("lMid2 mark missing from LINKAGE");
-            let mut target = TranslatedDrawTarget::new(&mut time_frame, tile.top_left);
+            let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
             draw_hanging_placard(
                 &mut target,
                 pose_to_point(left_hand_pose),
-                hour_display as u32,
+                clock.hour_12() as u32,
             );
-            draw_hanging_placard(&mut target, pose_to_point(right_hand_pose), minutes as u32);
+            draw_hanging_placard(
+                &mut target,
+                pose_to_point(right_hand_pose),
+                clock.minute() as u32,
+            );
 
-            time_frame.flush_at(tile.top_left)?;
+            tile_frame.flush_at(tile.top_left)?;
         }
     }
 }
