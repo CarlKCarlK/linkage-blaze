@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 
+// todo000 wifi status is missing.
+// todo000 we need to use color and/or size to tell hours from minutes
+
 use core::convert::Infallible;
 
 use device_envoy_esp::{
@@ -26,12 +29,10 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use linkage_blaze_core::{
-    DrawItem, DrawItemIter, DrawSurface, LinkageFixed, NegXProjection, PixelSurface, PixelTarget,
-    Pose, Projection, Rgb888, WebColors, linkage, linkage_fixed, to_point,
+    DrawItemIter, LinkageFixed, NegXProjection, PixelTarget, Pose, Projection, Rgb888, WebColors,
+    linkage, linkage_fixed, to_point,
 };
-use linkage_blaze_cyd::{
-    Cyd, CydDisplayConfig, CydStatic, PixelBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
-};
+use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBuffer};
 use log::info;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
@@ -42,6 +43,8 @@ const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196,
 const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
+const DISPLAY_WIDTH: usize = 240; // portrait CYD screen width
+const DISPLAY_HEIGHT: usize = 320; // portrait CYD screen height
 const TEXT_BAND_HEIGHT: i32 = 34;
 const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
 const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
@@ -111,8 +114,8 @@ impl TileFlush {
         );
         let visible_left = tile_top_left.x.max(0);
         let visible_top = tile_top_left.y.max(TEXT_BAND_HEIGHT);
-        let visible_right = tile_bottom_right.x.min(SCREEN_WIDTH as i32);
-        let visible_bottom = tile_bottom_right.y.min(SCREEN_HEIGHT as i32);
+        let visible_right = tile_bottom_right.x.min(DISPLAY_WIDTH as i32);
+        let visible_bottom = tile_bottom_right.y.min(DISPLAY_HEIGHT as i32);
 
         if visible_left >= visible_right || visible_top >= visible_bottom {
             return None;
@@ -181,12 +184,36 @@ fn wrap_param(value: f32) -> f32 {
     value
 }
 
-// ── Surface drawing extension trait ──────────────────────────────────────────
+// ── Dance-specific overlay drawing ───────────────────────────────────────────
 
-trait DanceSurface {
-    fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888);
+/// Wraps a tile buffer and its dance-space origin for 2D overlay drawing.
+///
+/// All coordinate arguments to drawing methods are in dance space (the virtual
+/// 375×500 canvas).  The struct translates them to tile-local buffer coordinates
+/// before writing pixels.
+struct DanceOverlay<'a, T: PixelTarget> {
+    target: &'a mut T,
+    tile_origin: Point,
+}
 
-    fn draw_digit(&mut self, digit: u32, origin: Point, color: Rgb888, scale: i32) {
+impl<'a, T: PixelTarget> DanceOverlay<'a, T> {
+    fn new(target: &'a mut T, tile_origin: Point) -> Self {
+        Self {
+            target,
+            tile_origin,
+        }
+    }
+
+    fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888) {
+        let bx = x - self.tile_origin.x;
+        let by = y - self.tile_origin.y;
+        if bx < 0 || by < 0 {
+            return;
+        }
+        self.target.put_pixel(bx as usize, by as usize, color);
+    }
+
+    fn draw_digit(&mut self, digit: u32, at: Point, color: Rgb888, scale: i32) {
         // Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
         #[rustfmt::skip]
         const DIGIT_BITMAPS: [u16; 10] = [
@@ -209,8 +236,8 @@ trait DanceSurface {
                     for scale_y in 0..scale {
                         for scale_x in 0..scale {
                             self.put_pixel(
-                                origin.x + col * scale + scale_x,
-                                origin.y + row * scale + scale_y,
+                                at.x + col * scale + scale_x,
+                                at.y + row * scale + scale_y,
                                 color,
                             );
                         }
@@ -323,7 +350,7 @@ trait DanceSurface {
         self.draw_number_centered(9, left, DIAL_COLOR, DIAL_SCALE);
     }
 
-    /// Draw a hanging number sign anchored at `anchor` (a hand mark in screen
+    /// Draw a hanging number sign anchored at `anchor` (a hand mark in dance
     /// coordinates).  The sign is a fixed size and always shows two digits.  It
     /// hangs straight down via a short vertical hook from the hand, then a triangle
     /// splays out to the sign's two top corners.  `number` is shown modulo 100.
@@ -343,8 +370,18 @@ trait DanceSurface {
 
         let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
         self.draw_segment(anchor, apex, PLACARD_BORDER, HANGER_PX);
-        self.draw_segment(apex, Point::new(card_left, card_top), PLACARD_BORDER, HANGER_PX);
-        self.draw_segment(apex, Point::new(card_right, card_top), PLACARD_BORDER, HANGER_PX);
+        self.draw_segment(
+            apex,
+            Point::new(card_left, card_top),
+            PLACARD_BORDER,
+            HANGER_PX,
+        );
+        self.draw_segment(
+            apex,
+            Point::new(card_right, card_top),
+            PLACARD_BORDER,
+            HANGER_PX,
+        );
 
         self.fill_rect(card_left, card_top, PLACARD_W, PLACARD_H, PLACARD_FILL);
         self.draw_rect_border(
@@ -362,19 +399,18 @@ trait DanceSurface {
         let text_left = card_left + (PLACARD_W - total_w) / 2;
         let text_top = card_top + (PLACARD_H - glyph_h) / 2;
         let value = number % 100;
-        self.draw_digit(value / 10, Point::new(text_left, text_top), PLACARD_TEXT, DIGIT_SCALE);
+        self.draw_digit(
+            value / 10,
+            Point::new(text_left, text_top),
+            PLACARD_TEXT,
+            DIGIT_SCALE,
+        );
         self.draw_digit(
             value % 10,
             Point::new(text_left + glyph_w + DIGIT_GAP, text_top),
             PLACARD_TEXT,
             DIGIT_SCALE,
         );
-    }
-}
-
-impl<T: PixelTarget> DanceSurface for PixelSurface<'_, T> {
-    fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888) {
-        PixelSurface::put_pixel(self, x, y, color)
     }
 }
 
@@ -480,7 +516,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = dance_params(hours, minutes, seconds);
         let time_text = format_clock_12h(hours, minutes, seconds);
 
-        let mut cyd_tile = cyd.frame_mut(Size::new(SCREEN_WIDTH as u32, TEXT_BAND_HEIGHT as u32));
+        let mut cyd_tile = cyd.frame_mut(Size::new(DISPLAY_WIDTH as u32, TEXT_BAND_HEIGHT as u32));
         cyd_tile.clear(background565);
         Text::with_baseline(
             "WiFi OK",
@@ -500,6 +536,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         .expect("drawing to an Infallible frame cannot fail");
         cyd_tile.flush()?;
 
+        let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
+
         for tile_row in 0..TILE_ROWS {
             for tile_column in 0..TILE_COLUMNS {
                 let tile_origin = Point::new(
@@ -512,52 +550,30 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 let mut cyd_tile =
                     cyd.frame_mut(Size::new(tile_flush.width as u32, tile_flush.height as u32));
                 cyd_tile.clear(background565);
-                {
-                    let mut surface =
-                        PixelSurface { target: &mut cyd_tile, tile_origin: tile_flush.origin };
 
-                    // Faint dial marks first, so the figure and placards draw over them.
-                    surface.draw_dial();
+                // Dance-specific background overlay.
+                DanceOverlay::new(&mut cyd_tile, tile_flush.origin).draw_dial();
 
-                    let linkage_view = LINKAGE.view();
-                    let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
-                    for item in &mut iter {
-                        match item {
-                            DrawItem::Stroke(s) => surface.stroke(
-                                PROJECTION.project_pos(s.start()),
-                                PROJECTION.project_pos(s.end()),
-                                s.color(),
-                                PROJECTION.project_width(s.width()),
-                            ),
-                            DrawItem::Disk(d) => {
-                                let orient = d.pose().orientation();
-                                surface.filled_ellipse(
-                                    PROJECTION.project_pos(d.pose()),
-                                    PROJECTION.project_dir(d.pose(), orient.forward(), d.radius()),
-                                    PROJECTION.project_dir(d.pose(), orient.left(), d.radius()),
-                                    d.color(),
-                                );
-                            }
-                            DrawItem::Sphere(s) => surface.filled_circle(
-                                PROJECTION.project_pos(s.pose()),
-                                PROJECTION.project_radius(s.pose(), s.radius()),
-                                s.color(),
-                            ),
-                        }
-                    }
-
-                    // Hanging placards use the hand marks only as anchor points; they hang
-                    // straight down in screen coordinates and do not inherit hand rotation.
-                    let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
-                    let right_hand_pose = iter
-                        .marked_pose("rMid2")
-                        .expect("rMid2 mark missing from LINKAGE");
-                    let left_hand_pose = iter
-                        .marked_pose("lMid2")
-                        .expect("lMid2 mark missing from LINKAGE");
-                    surface.draw_hanging_placard(pose_to_point(left_hand_pose), hour_display as u32);
-                    surface.draw_hanging_placard(pose_to_point(right_hand_pose), minutes as u32);
+                // Shared linkage rendering path, identical to the ballet app.
+                let linkage_view = LINKAGE.view();
+                let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
+                for draw_item in &mut iter {
+                    draw_item
+                        .project(&PROJECTION)
+                        .draw_offset(&mut cyd_tile, tile_flush.origin);
                 }
+
+                // Dance-specific foreground overlay: placards hang from hand marks.
+                let right_hand_pose = iter
+                    .marked_pose("rMid2")
+                    .expect("rMid2 mark missing from LINKAGE");
+                let left_hand_pose = iter
+                    .marked_pose("lMid2")
+                    .expect("lMid2 mark missing from LINKAGE");
+                let mut overlay = DanceOverlay::new(&mut cyd_tile, tile_flush.origin);
+                overlay.draw_hanging_placard(pose_to_point(left_hand_pose), hour_display as u32);
+                overlay.draw_hanging_placard(pose_to_point(right_hand_pose), minutes as u32);
+
                 cyd_tile.flush_at(tile_flush.top_left)?;
             }
         }
