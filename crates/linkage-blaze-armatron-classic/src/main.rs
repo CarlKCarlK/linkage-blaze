@@ -23,8 +23,9 @@ use static_cell::StaticCell;
 
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCyd, CalibrationConfig, Cyd, CydError, CydStatic, Orientation, RawPoint,
-    RawTouchEvent, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
+    CalibratedCyd, CalibrationConfig, Cyd, CydError, CydStatic, DEFAULT_FONT, Orientation,
+    RawPoint, RawTouchEvent, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    TouchInputEvent as CydTouchInputEvent,
 };
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -128,6 +129,9 @@ fn inner_main() -> Result<Infallible, MainError> {
         p.GPIO4,  // display reset
         p.GPIO21, // display backlight
         Orientation::Landscape,
+        BLACK,                   // default background
+        WHITE,                   // default foreground
+        &DEFAULT_FONT,           // default font
         p.SPI3,                  // touch SPI
         p.GPIO25,                // touch SCK
         p.GPIO32,                // touch MOSI

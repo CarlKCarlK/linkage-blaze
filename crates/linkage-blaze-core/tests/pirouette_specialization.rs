@@ -23,12 +23,9 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, 538> = PIROUETTE
     ]);
 
 // Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
-// steps.  N (capacity) shrinks toward ~384; merge is a no-op here (no adjacent
-// same-type fixed steps remain after stripping), but is included to demonstrate
-// the pipeline.  This must evaluate identically to PIROUETTE_BODY at every input.
-const PIROUETTE_BODY_OPT: LinkageFixed<4, 6, 400> = PIROUETTE_BODY
-    .strip_fixed_noops::<400>()
-    .merge_adjacent_fixed::<400>();
+// steps, strip again.  N (capacity) shrinks toward ~384.  This must evaluate
+// identically to PIROUETTE_BODY at every input.
+const PIROUETTE_BODY_OPT: LinkageFixed<4, 6, 400> = PIROUETTE_BODY.compact::<400>();
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
@@ -140,10 +137,7 @@ fn pirouette_body_optimized_matches_original() {
 #[test]
 fn pirouette_body_const_opt_matches_buf_opt() {
     // Build the same pipeline through LinkageBuf and verify identical evaluation.
-    let buf_result = LinkageBuf::<4, 6>::from(&PIROUETTE_BODY)
-        .strip_fixed_noops()
-        .merge_adjacent_fixed()
-        .strip_fixed_noops();
+    let buf_result = LinkageBuf::<4, 6>::from(&PIROUETTE_BODY).compact();
 
     assert_eq!(buf_result.view().len(), PIROUETTE_BODY_OPT.view().len());
 

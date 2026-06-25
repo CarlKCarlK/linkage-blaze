@@ -25,7 +25,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{Cyd, CydStatic, Orientation};
+use linkage_blaze_cyd::{Cyd, CydStatic, DEFAULT_FONT, Orientation};
 use log::info;
 use static_cell::StaticCell;
 
@@ -33,7 +33,10 @@ mod display;
 
 use display::{ClockTime, CydClockDisplay, CydClockDisplayError};
 
-const BLACK: Rgb888 = Rgb888::CSS_BLACK;
+// The clock face is drawn on this background; it must match the per-frame clear
+// color used by `CydClockDisplay`.
+const BACKGROUND: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE; // pale parchment
+const TEXT: Rgb888 = Rgb888::CSS_NAVY; // dark blue clock text
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -69,7 +72,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     // Cyd-owned buffer is zero-sized. Look at moving the glyph rendering onto the
     // single Cyd-owned buffer via cyd.frame_mut.
     static CYD_STATIC: CydStatic<0> = Cyd::new_static();
-    let mut cyd = Cyd::new_display_only(
+    let cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
@@ -80,8 +83,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO4,
         p.GPIO21,
         Orientation::Landscape,
+        BACKGROUND,
+        TEXT,
+        &DEFAULT_FONT,
     )?;
-    cyd.clear(Cyd::rgb565(BLACK))?;
     static DISPLAY: StaticCell<RefCell<CydClockDisplay>> = StaticCell::new();
     let display = &*DISPLAY.init(RefCell::new(CydClockDisplay::new(cyd)));
     info!("CYD display initialized");

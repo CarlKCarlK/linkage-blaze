@@ -1631,30 +1631,6 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         self.freeze_with_map(is_frozen, frozen_at_default, frozen_raw)
     }
 
-    /// Freeze the uniquely named parameter slot at its normalized default.
-    ///
-    /// Panics if no parameter has `name`, or if more than one parameter has that
-    /// name.
-    pub const fn freeze_param_name_at_default<const OUT_DOF: usize>(
-        self,
-        name: &'static str,
-    ) -> LinkageFixed<OUT_DOF, MARKS, N> {
-        let mut found_index = 0usize;
-        let mut found_count = 0usize;
-        let mut param_index = 0;
-        while param_index < self.param_len {
-            if str_eq(self.params[param_index].name, name) {
-                found_index = param_index;
-                found_count += 1;
-            }
-            param_index += 1;
-        }
-        assert!(found_count > 0, "freeze name not found in params");
-        assert!(found_count == 1, "freeze name is ambiguous");
-
-        self.freeze_param_index_at_default(found_index)
-    }
-
     /// Retain exactly the listed parameter slots and freeze all others at their defaults.
     ///
     /// Retained slots are reindexed densely in original parameter-slot order, not
@@ -1846,11 +1822,18 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             .strip_fixed_noops_same_capacity()
     }
 
-    /// Remove steps that are provably identity operations under any input.
+    /// Optimize the fixed steps for the device.
     ///
-    /// See [`LinkageBuf::strip_fixed_noops`] for semantics. `OUT_N` must equal
-    /// the number of steps remaining after no-op removal; the function asserts
-    /// this at const-eval time.
+    /// Runs the const peephole pipeline applied after parameter specialization
+    /// ([`freeze_param_name`](Self::freeze_param_name),
+    /// [`retain_param_names`](Self::retain_param_names)): strip provable no-ops,
+    /// merge runs of adjacent same-type fixed steps, then strip again to remove
+    /// any merged steps whose sum is zero. The result evaluates identically to
+    /// the input at every set of parameters, with fewer steps.
+    ///
+    /// `OUT_N` (the step capacity of the returned linkage) must equal the number
+    /// of steps remaining after optimization; the function asserts this at
+    /// const-eval time.
     ///
     /// # Examples
     ///
@@ -1860,34 +1843,13 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///     .yaw(0.0)
     ///     .forward(1.0);
     ///
-    /// const STRIPPED: LinkageFixed<0, 0, 2> = L.strip_fixed_noops();
+    /// const C: LinkageFixed<0, 0, 2> = L.compact();
     /// ```
-    pub const fn strip_fixed_noops<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
-        let stripped = self.strip_fixed_noops_same_capacity();
-        stripped.resize_steps()
-    }
-
-    /// Merge runs of consecutive fixed-value steps of the same motion type.
-    ///
-    /// See [`LinkageBuf::merge_adjacent_fixed`] for semantics. `OUT_N` must
-    /// equal the number of steps remaining after all merges; the function
-    /// asserts this at const-eval time.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// # use linkage_blaze_core::LinkageFixed;
-    /// // Start (1) + Yaw (1) + Yaw (1) = 3 steps.
-    /// const L: LinkageFixed<0, 0, 3> = LinkageFixed::start()
-    ///     .yaw(57.6_f32.to_radians())
-    ///     .yaw((-171.87_f32).to_radians());
-    ///
-    /// // Two consecutive yaws fold into one: Start + Yaw = 2 steps.
-    /// const M: LinkageFixed<0, 0, 2> = L.merge_adjacent_fixed();
-    /// ```
-    pub const fn merge_adjacent_fixed<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
-        let merged = self.merge_adjacent_fixed_same_capacity();
-        merged.resize_steps()
+    pub const fn compact<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
+        self.strip_fixed_noops_same_capacity()
+            .merge_adjacent_fixed_same_capacity()
+            .strip_fixed_noops_same_capacity()
+            .resize_steps()
     }
 
     const fn resize_steps<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
@@ -2601,27 +2563,6 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
         self.freeze_with_map(is_frozen, frozen_at_default, frozen_raw)
     }
 
-    /// Freeze the uniquely named parameter slot at its normalized default.
-    pub fn freeze_param_name_at_default<const OUT_DOF: usize>(
-        self,
-        name: &'static str,
-    ) -> LinkageBuf<OUT_DOF, MARKS> {
-        let mut found_index = 0usize;
-        let mut found_count = 0usize;
-        let mut param_index = 0;
-        while param_index < self.param_len {
-            if str_eq(self.params[param_index].name, name) {
-                found_index = param_index;
-                found_count += 1;
-            }
-            param_index += 1;
-        }
-        assert!(found_count > 0, "freeze name not found in params");
-        assert!(found_count == 1, "freeze name is ambiguous");
-
-        self.freeze_param_index_at_default(found_index)
-    }
-
     /// Retain exactly the listed parameter slots and freeze all others at their defaults.
     pub fn retain_param_indexes<const OUT_DOF: usize>(
         self,
@@ -2803,7 +2744,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// Only unconditionally-zero fixed steps are removed; variable-arg steps and
     /// non-motion steps (`Mark`, `Restore`, `PenUp`, `PenDown`, `Disk`, etc.)
     /// are left untouched.
-    pub fn strip_fixed_noops(mut self) -> Self {
+    pub(crate) fn strip_fixed_noops(mut self) -> Self {
         self.steps.retain(|&step| !is_fixed_noop(step));
         self
     }
@@ -2818,9 +2759,9 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// `Fixed` arguments are merged. Variable-arg steps and non-motion steps
     /// break a run.
     ///
-    /// Combine with [`strip_fixed_noops`](Self::strip_fixed_noops) afterward
+    /// Combined with no-op stripping (see [`compact`](Self::compact)) afterward
     /// to also remove any merged steps whose sum is zero.
-    pub fn merge_adjacent_fixed(self) -> Self {
+    pub(crate) fn merge_adjacent_fixed(self) -> Self {
         let mut out = Vec::with_capacity(self.steps.len());
         let mut i = 0;
         while i < self.steps.len() {
@@ -2910,6 +2851,18 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             mark_names: self.mark_names,
             mark_len: self.mark_len,
         }
+    }
+
+    /// Optimize the fixed steps for the device.
+    ///
+    /// Runtime counterpart of [`LinkageFixed::compact`]: strip provable no-ops,
+    /// merge runs of adjacent same-type fixed steps, then strip again to remove
+    /// any merged steps whose sum is zero. The result evaluates identically to
+    /// the input at every set of parameters, with fewer steps.
+    pub fn compact(self) -> Self {
+        self.strip_fixed_noops()
+            .merge_adjacent_fixed()
+            .strip_fixed_noops()
     }
 }
 
@@ -4783,7 +4736,7 @@ mod tests {
             .forward_param("dist", 0.0, 8.0);
 
         const FROZEN_BY_NAME: LinkageFixed<1, 0, 5> = BASE.freeze_param_name("yaw", 45.0);
-        const FROZEN_BY_DEFAULT: LinkageFixed<1, 0, 5> = BASE.freeze_param_name_at_default("yaw");
+        const FROZEN_BY_DEFAULT: LinkageFixed<1, 0, 5> = BASE.freeze_param_index_at_default(0);
 
         let pos_by_name = FROZEN_BY_NAME.view().final_pose(&[0.5]).position();
         let pos_by_default = FROZEN_BY_DEFAULT.view().final_pose(&[0.5]).position();
@@ -5166,14 +5119,14 @@ mod tests {
     }
 
     #[test]
-    fn linkage_fixed_strip_fixed_noops_removes_identity_motion_steps() {
+    fn linkage_fixed_compact_removes_identity_motion_steps() {
         const BASE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
             .yaw(0.0)
             .forward(2.0)
             .left(0.0)
             .up(1.0);
 
-        const STRIPPED: LinkageFixed<0, 0, 3> = BASE.strip_fixed_noops();
+        const STRIPPED: LinkageFixed<0, 0, 3> = BASE.compact();
 
         let steps = STRIPPED.view().steps();
         assert_eq!(steps.len(), 3);
@@ -5192,7 +5145,7 @@ mod tests {
             .left_param("t", -2.0, 2.0)
             .up(1.0);
 
-        const FROZEN: LinkageFixed<0, 0, 6> = BASE.freeze_param_name_at_default("t");
+        const FROZEN: LinkageFixed<0, 0, 6> = BASE.freeze_param_index_at_default(0);
 
         let steps = FROZEN.view().steps();
         assert_eq!(steps.len(), 3);
@@ -5216,7 +5169,7 @@ mod tests {
             .left_param("t", -2.0, 2.0)
             .up(1.0);
 
-        let frozen: LinkageBuf<0, 0> = base.clone().freeze_param_name_at_default("t");
+        let frozen: LinkageBuf<0, 0> = base.clone().freeze_param_index_at_default(0);
 
         let steps = frozen.view().steps();
         assert_eq!(steps.len(), 3);

@@ -3,6 +3,7 @@
 mod buffer;
 mod calibration;
 mod display;
+mod text;
 pub mod tiling;
 mod touch;
 mod translated;
@@ -15,6 +16,7 @@ use device_envoy_esp::{
 };
 use embedded_graphics::{
     Pixel,
+    mono_font::MonoFont,
     pixelcolor::{IntoStorage, Rgb565, Rgb888},
     prelude::{DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
@@ -30,6 +32,7 @@ pub use display::{
     LineSegment, Orientation,
 };
 pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH};
+pub use text::DEFAULT_FONT;
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
 pub use translated::TranslatedDrawTarget;
 
@@ -42,6 +45,15 @@ pub struct Cyd {
     // Every Cyd owns exactly one draw buffer. Apps that don't draw through it
     // pass a zero-sized buffer (e.g. `CydStatic<0>`).
     pixel_buffer: &'static mut dyn DynPixelBuffer,
+    // Default drawing style. Background clears the device at construction and
+    // fills every new frame; foreground and font drive `CydFrame::write_text`.
+    // The `Rgb565` versions are precomputed so the hot drawing paths skip the
+    // per-call conversion.
+    background: Rgb888,
+    foreground: Rgb888,
+    background565: Rgb565,
+    foreground565: Rgb565,
+    font: &'static MonoFont<'static>,
 }
 
 /// Static storage for a [`Cyd`]-owned pixel buffer.
@@ -77,6 +89,10 @@ pub struct CalibratedCyd<'a> {
 pub struct CydFrame<'a> {
     display: &'a mut CydDisplay,
     view: RectView<'a>,
+    // Default foreground color and font, copied from the owning `Cyd`, so
+    // `write_text` can render with the device default style.
+    pub(crate) foreground565: Rgb565,
+    pub(crate) font: &'static MonoFont<'static>,
 }
 
 impl<'a> CydFrame<'a> {
@@ -208,6 +224,9 @@ impl Cyd {
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
         orientation: Orientation,
+        background: Rgb888,
+        foreground: Rgb888,
+        font: &'static MonoFont<'static>,
     ) -> Result<Self, CydError> {
         let pixel_buffer = PixelBuffer::init_static(&statics.pixel_buffer);
         Self::new_inner(
@@ -220,6 +239,9 @@ impl Cyd {
             display_rst_pin,
             display_backlight_pin,
             orientation,
+            background,
+            foreground,
+            font,
             None,
             None,
             None,
@@ -239,6 +261,9 @@ impl Cyd {
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
         orientation: Orientation,
+        background: Rgb888,
+        foreground: Rgb888,
+        font: &'static MonoFont<'static>,
         touch_spi: impl esp_hal::spi::master::Instance + 'static,
         touch_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
         touch_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -268,6 +293,9 @@ impl Cyd {
             display_rst_pin,
             display_backlight_pin,
             orientation,
+            background,
+            foreground,
+            font,
             Some(touch),
             Some(calibration_flash_block),
             Some(calibration_button),
@@ -285,6 +313,9 @@ impl Cyd {
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
         orientation: Orientation,
+        background: Rgb888,
+        foreground: Rgb888,
+        font: &'static MonoFont<'static>,
         touch: Option<CydTouch>,
         calibration_flash_block: Option<FlashBlockEsp>,
         calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
@@ -300,24 +331,48 @@ impl Cyd {
             _ => None,
         };
 
+        let mut display = CydDisplay::new(
+            display_spi,
+            display_sck_pin,
+            display_mosi_pin,
+            display_miso_pin,
+            display_cs_pin,
+            display_dc_pin,
+            display_rst_pin,
+            display_backlight_pin,
+            orientation,
+        )?;
+        // Start every device on a clean background so apps never see boot-time
+        // garbage before their first draw.
+        let background565 = Self::rgb565(background);
+        display.clear(background565)?;
+
         Ok(Self {
-            display: CydDisplay::new(
-                display_spi,
-                display_sck_pin,
-                display_mosi_pin,
-                display_miso_pin,
-                display_cs_pin,
-                display_dc_pin,
-                display_rst_pin,
-                display_backlight_pin,
-                orientation,
-            )?,
+            display,
             touch,
             calibration_config,
             calibration_flash_block,
             calibration_button,
             pixel_buffer,
+            background,
+            foreground,
+            background565,
+            foreground565: Self::rgb565(foreground),
+            font,
         })
+    }
+
+    /// The device default background color (cleared at construction and used to
+    /// clear every new frame from [`Cyd::frame_mut`]).
+    #[must_use]
+    pub fn background(&self) -> Rgb888 {
+        self.background
+    }
+
+    /// The device default foreground/text color (used by [`CydFrame::write_text`]).
+    #[must_use]
+    pub fn foreground(&self) -> Rgb888 {
+        self.foreground
     }
 
     #[must_use]
@@ -387,15 +442,26 @@ impl Cyd {
     }
 
     pub fn frame_mut(&mut self, size: Size) -> CydFrame<'_> {
-        let view = self
+        let mut view = self
             .pixel_buffer
             .view_mut(size.width as usize, size.height as usize);
+        // Every new frame starts cleared to the device background so callers
+        // never have to clear it themselves.
+        view.clear(self.background565);
         CydFrame {
             display: &mut self.display,
             view,
+            foreground565: self.foreground565,
+            font: self.font,
         }
     }
 
+    /// Clear the whole screen to `color`.
+    ///
+    /// Mirrors embedded-graphics' [`DrawTarget::clear`]. The device is already
+    /// cleared to its default background at construction and every frame from
+    /// [`Cyd::frame_mut`] starts cleared, so this is only needed for an explicit
+    /// non-default full-screen fill.
     pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
         Ok(self.display.clear(color)?)
     }
