@@ -23,7 +23,7 @@ use static_cell::StaticCell;
 
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCyd, CalibrationConfig, Cyd, CydError, CydStatic, Orientation, PixelBuffer, RawPoint,
+    CalibratedCyd, CalibrationConfig, Cyd, CydError, CydStatic, Orientation, RawPoint,
     RawTouchEvent, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
 };
 
@@ -116,7 +116,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
     // Cyd-owned buffer is zero-sized. Look at rendering into the single Cyd-owned
     // buffer via cyd.frame_mut instead.
-    static CYD_STATIC: CydStatic<PixelBuffer<0>> = CydStatic::new();
+    static CYD_STATIC: CydStatic<0> = Cyd::new_static();
     let mut cyd = Cyd::new(
         &CYD_STATIC,
         p.SPI2,   // display SPI

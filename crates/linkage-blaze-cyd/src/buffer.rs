@@ -15,12 +15,12 @@ pub trait RectPixels {
 }
 
 // todo000 review this name w.r.t. PixelBuffer.
-pub struct RectBuffer<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> {
-    pixels: [u16; PIXELS],
+pub struct RectBuffer<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> {
+    pixels: [u16; PIXEL_COUNT],
 }
 
-pub struct PixelBuffer<const PIXELS: usize> {
-    pixels: [u16; PIXELS],
+pub struct PixelBuffer<const PIXEL_COUNT: usize> {
+    pixels: [u16; PIXEL_COUNT],
 }
 
 // todo000 review this name w.r.t. PixelBuffer.
@@ -30,20 +30,23 @@ pub struct RectView<'a> {
     pixels: &'a mut [u16],
 }
 
-impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize>
-    RectBuffer<WIDTH, HEIGHT, PIXELS>
+impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize>
+    RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     #[must_use]
     pub fn new() -> Self {
-        assert!(PIXELS == WIDTH * HEIGHT, "PIXELS must equal WIDTH * HEIGHT");
+        assert!(
+            PIXEL_COUNT == WIDTH * HEIGHT,
+            "PIXEL_COUNT must equal WIDTH * HEIGHT"
+        );
         Self {
-            pixels: [0; PIXELS],
+            pixels: [0; PIXEL_COUNT],
         }
     }
 
     pub fn init_static(
         storage: &'static StaticCell<Self>,
-    ) -> &'static mut RectBuffer<WIDTH, HEIGHT, PIXELS> {
+    ) -> &'static mut RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT> {
         storage.init_with(Self::new)
     }
 
@@ -52,21 +55,21 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize>
     }
 
     #[must_use]
-    pub fn raw_pixels(&self) -> &[u16; PIXELS] {
+    pub fn raw_pixels(&self) -> &[u16; PIXEL_COUNT] {
         &self.pixels
     }
 }
 
-impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> Default
-    for RectBuffer<WIDTH, HEIGHT, PIXELS>
+impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> Default
+    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> RectPixels
-    for RectBuffer<WIDTH, HEIGHT, PIXELS>
+impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> RectPixels
+    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     fn width(&self) -> usize {
         WIDTH
@@ -81,8 +84,8 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> RectPixels
     }
 }
 
-impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> DrawTarget
-    for RectBuffer<WIDTH, HEIGHT, PIXELS>
+impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> DrawTarget
+    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     type Color = Rgb565;
     type Error = Infallible;
@@ -111,21 +114,23 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> DrawTarget
     }
 }
 
-impl<const PIXELS: usize> PixelBuffer<PIXELS> {
+impl<const PIXEL_COUNT: usize> PixelBuffer<PIXEL_COUNT> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            pixels: [0; PIXELS],
+            pixels: [0; PIXEL_COUNT],
         }
     }
 
-    pub fn init_static(storage: &'static StaticCell<Self>) -> &'static mut PixelBuffer<PIXELS> {
+    pub fn init_static(
+        storage: &'static StaticCell<Self>,
+    ) -> &'static mut PixelBuffer<PIXEL_COUNT> {
         storage.init_with(Self::new)
     }
 
     pub fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_> {
         let pixel_count = width * height;
-        assert!(pixel_count <= PIXELS, "view must fit in workspace");
+        assert!(pixel_count <= PIXEL_COUNT, "view must fit in workspace");
         RectView {
             width,
             height,
@@ -134,32 +139,24 @@ impl<const PIXELS: usize> PixelBuffer<PIXELS> {
     }
 }
 
-impl<const PIXELS: usize> Default for PixelBuffer<PIXELS> {
+impl<const PIXEL_COUNT: usize> Default for PixelBuffer<PIXEL_COUNT> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 // todo00 understand this code.
-/// A pixel buffer that a [`Cyd`](crate::Cyd) can own: it can be initialized into
-/// a `'static` cell and hand out [`RectView`]s. Implemented for any
-/// [`PixelBuffer<PIXELS>`], so an app picks the size via the buffer type it names
-/// in its [`CydStatic`](crate::CydStatic).
-pub trait DynPixelBuffer: 'static {
-    /// Initialize this buffer inside a `'static` cell, returning a unique reference.
-    fn init_static(cell: &'static StaticCell<Self>) -> &'static mut Self
-    where
-        Self: Sized;
-
+/// Type-erased draw buffer a [`Cyd`](crate::Cyd) can own: it can be initialized
+/// into a `'static` cell and hand out [`RectView`]s. Implemented for every
+/// [`PixelBuffer<PIXEL_COUNT>`] so that `Cyd` can hold a buffer of any size without
+/// itself being generic. Internal only — apps pick the size via the
+/// `PIXEL_COUNT` on their [`CydStatic`](crate::CydStatic).
+pub(crate) trait DynPixelBuffer: 'static {
     /// Borrow a `width`×`height` view out of the buffer (must fit the capacity).
     fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_>;
 }
 
-impl<const PIXELS: usize> DynPixelBuffer for PixelBuffer<PIXELS> {
-    fn init_static(cell: &'static StaticCell<Self>) -> &'static mut Self {
-        cell.init_with(Self::new)
-    }
-
+impl<const PIXEL_COUNT: usize> DynPixelBuffer for PixelBuffer<PIXEL_COUNT> {
     fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_> {
         PixelBuffer::view_mut(self, width, height)
     }
@@ -223,8 +220,8 @@ impl OriginDimensions for RectView<'_> {
     }
 }
 
-impl<const WIDTH: usize, const HEIGHT: usize, const PIXELS: usize> OriginDimensions
-    for RectBuffer<WIDTH, HEIGHT, PIXELS>
+impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> OriginDimensions
+    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     fn size(&self) -> Size {
         Size::new(WIDTH as u32, HEIGHT as u32)

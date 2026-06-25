@@ -20,7 +20,7 @@ use esp_hal::{
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use linkage_blaze_cyd::{
-    Cyd, CydError, CydStatic, Orientation, PixelBuffer, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    Cyd, CydError, CydStatic, Orientation, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 
@@ -131,7 +131,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
     // Cyd-owned buffer is zero-sized. Look at rendering into the single Cyd-owned
     // buffer via cyd.frame_mut instead.
-    static CYD_STATIC: CydStatic<PixelBuffer<0>> = CydStatic::new();
+    static CYD_STATIC: CydStatic<0> = Cyd::new_static();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
