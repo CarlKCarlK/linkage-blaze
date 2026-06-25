@@ -57,7 +57,14 @@ const SCREEN_HEIGHT: u32 = ORIENTATION.height() as u32;
 const TEXT_BAND_HEIGHT: u32 = 34;
 const WIFI_STATUS_SIZE: Size = Size::new(SCREEN_WIDTH, TEXT_BAND_HEIGHT);
 const WIFI_STATUS_POINT: Point = Point::new(8, 12);
+// Screen-space top-left of the clock text. The clock loop redraws only this
+// right-hand slice of the band each tick, so the once-drawn Wi-Fi label on the
+// left is left untouched.
 const TIME_POINT: Point = Point::new(166, 12);
+const TIME_SIZE: Size = Size::new(
+    SCREEN_WIDTH - TIME_POINT.x as u32,
+    TEXT_BAND_HEIGHT - TIME_POINT.y as u32,
+);
 
 // Tile grid covering the dance figure below the band. `TileGrid` computes tile
 // sizes and clips the final row/column.
@@ -217,9 +224,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = clock.linkage_params();
         let time_text = clock.text_12h();
 
-        let mut TIME_FRAME = cyd.frame_mut(TIME_SIZE);
-        TIME_FRAME.write_text(time_text.as_str(), TIME_POINT);
-        TIME_FRAME.flush()?;
+        let mut time_frame = cyd.frame_mut(TIME_SIZE);
+        time_frame.write_text(time_text.as_str(), Point::new(0, 0));
+        time_frame.flush_at(TIME_POINT)?;
 
         // Shared linkage rendering path, tiled for CYD.
 
