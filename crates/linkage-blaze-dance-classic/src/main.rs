@@ -73,9 +73,6 @@ const BODY_TILES: TileGrid = TileGrid::new(
     Size::new(80, 96),
 );
 
-// The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
-const WORKSPACE_PIXELS: usize = max_usize(TEXT_BAND.pixel_count(), BODY_TILES.max_tile_pixels());
-
 // ── Projection ───────────────────────────────────────────────────────────────
 
 //todo000 review projections.
@@ -107,6 +104,168 @@ const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE_INNER
     .strip_fixed_noops::<400>()
     .merge_adjacent_fixed::<400>()
     .strip_fixed_noops::<400>();
+
+// The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
+const WORKSPACE_PIXELS: usize = max_usize(TEXT_BAND.pixel_count(), BODY_TILES.max_tile_pixels());
+
+// ── Binary entry point ────────────────────────────────────────────────────────
+
+esp_bootloader_esp_idf::esp_app_desc!();
+
+// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
+enum MainError {
+    DeviceEnvoy(Error),
+    Core(CoreError),
+    Cyd(linkage_blaze_cyd::CydError),
+}
+
+#[esp_rtos::main]
+async fn main(spawner: Spawner) -> ! {
+    let err = inner_main(spawner).await.unwrap_err();
+    panic!("{err:?}");
+}
+
+async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
+    init_and_start!(p);
+    esp_println::logger::init_logger(log::LevelFilter::Info);
+    info!("Starting CYD dance with WiFi");
+
+    static CYD_STATIC: CydStatic<PixelBuffer<WORKSPACE_PIXELS>> = CydStatic::new();
+    let mut cyd = Cyd::new_display_only(
+        &CYD_STATIC,
+        p.SPI2,
+        p.GPIO14,
+        p.GPIO13,
+        p.GPIO12,
+        p.GPIO15,
+        p.GPIO2,
+        p.GPIO4,
+        p.GPIO21,
+        CydDisplayConfig::PORTRAIT,
+    )?;
+    cyd.clear(Cyd::rgb565(BACKGROUND))?;
+    info!("CYD display initialized");
+
+    let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
+
+    static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
+    let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
+    let mut force_portal_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
+
+    let wifi_auto = WifiAutoEsp::new(
+        p.WIFI,
+        wifi_auto_flash_block,
+        "CydDance",
+        [timezone_field],
+        spawner,
+    )?;
+    // todo000 verify WiFi status events are clearly visible in the serial log now
+    // that the display no longer shows status during the setup/connect phase.
+    let stack = wifi_auto
+        .connect(&mut force_portal_button, |wifi_auto_event| async move {
+            let wifi_mode = match wifi_auto_event {
+                WifiAutoEvent::CaptivePortalReady => "setup CydDance",
+                WifiAutoEvent::Connecting { .. } => "connecting",
+                WifiAutoEvent::ConnectionFailed => "connect failed",
+            };
+            info!("WiFi: {wifi_mode}");
+            Ok(())
+        })
+        .await?;
+    info!("WiFi connected");
+
+    let timezone_offset_minutes = timezone_field
+        .offset_minutes()?
+        .ok_or(Error::MissingCustomWifiAutoField)?;
+
+    static CLOCK_SYNC_STATIC: ClockSyncStaticEsp = ClockSyncEsp::new_static();
+    let clock_sync = ClockSyncEsp::new(
+        &CLOCK_SYNC_STATIC,
+        stack,
+        timezone_offset_minutes,
+        Some(ONE_SECOND),
+        spawner,
+    )?;
+    info!("clock sync ready; entering dance loop");
+
+    let background565 = Cyd::rgb565(BACKGROUND);
+    let text565 = Cyd::rgb565(TEXT);
+    let linkage_view = LINKAGE.view();
+
+    loop {
+        let tick = clock_sync.wait_for_tick().await;
+        let local_time = tick.local_time;
+        let clock = ClockTime::new(local_time.hour(), local_time.minute(), local_time.second());
+        info!("tick {}", clock.text_24h());
+
+        let params = clock.linkage_params();
+        let time_text = clock.text_12h();
+
+        let mut text_band_frame = cyd.frame_mut(TEXT_BAND.size);
+        text_band_frame.clear(background565);
+        Text::with_baseline(
+            "WiFi OK",
+            WIFI_TEXT_TOP_LEFT,
+            MonoTextStyle::new(&FONT_6X10, text565),
+            Baseline::Top,
+        )
+        .draw(&mut text_band_frame)
+        .expect("drawing to an Infallible frame cannot fail");
+        Text::with_baseline(
+            time_text.as_str(),
+            TIME_TEXT_TOP_LEFT,
+            MonoTextStyle::new(&FONT_9X15_BOLD, text565),
+            Baseline::Top,
+        )
+        .draw(&mut text_band_frame)
+        .expect("drawing to an Infallible frame cannot fail");
+        text_band_frame.flush()?;
+
+        // Shared linkage rendering path, tiled for CYD.
+
+        for tile in BODY_TILES.tiles() {
+            let mut tile_frame = cyd.frame_mut(tile.size);
+            tile_frame.clear(background565);
+
+            // Dance-specific background overlay.
+            {
+                let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
+                draw_dial(&mut target);
+            }
+
+            let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
+            for draw_item in &mut iter {
+                draw_item
+                    .project(&PROJECTION)
+                    .draw_offset(&mut tile_frame, tile.top_left);
+            }
+
+            // Dance-specific foreground overlay: placards hang from hand marks.
+            let right_hand_pose = iter
+                .marked_pose("rMid2")
+                .expect("rMid2 mark missing from LINKAGE");
+            let left_hand_pose = iter
+                .marked_pose("lMid2")
+                .expect("lMid2 mark missing from LINKAGE");
+            let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
+            draw_hanging_placard(
+                &mut target,
+                pose_to_point(left_hand_pose),
+                clock.hour_12() as u32,
+            );
+            draw_hanging_placard(
+                &mut target,
+                pose_to_point(right_hand_pose),
+                clock.minute() as u32,
+            );
+
+            tile_frame.flush_at(tile.top_left)?;
+        }
+    }
+}
 
 // ── Clock time ────────────────────────────────────────────────────────────────
 
@@ -329,163 +488,4 @@ where
 // todo0000 shouldn't be needed.
 fn pose_to_point(pose: Pose) -> Point {
     to_point(PROJECTION.project_pos(pose))
-}
-
-// ── Binary entry point ────────────────────────────────────────────────────────
-
-esp_bootloader_esp_idf::esp_app_desc!();
-
-// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
-// derived impls under -D warnings.
-#[allow(dead_code)]
-#[derive(Debug, derive_more::From)]
-enum MainError {
-    DeviceEnvoy(Error),
-    Core(CoreError),
-    Cyd(linkage_blaze_cyd::CydError),
-}
-
-#[esp_rtos::main]
-async fn main(spawner: Spawner) -> ! {
-    let err = inner_main(spawner).await.unwrap_err();
-    panic!("{err:?}");
-}
-
-async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
-    init_and_start!(p);
-    esp_println::logger::init_logger(log::LevelFilter::Info);
-    info!("Starting CYD dance with WiFi");
-
-    static CYD_STATIC: CydStatic<PixelBuffer<WORKSPACE_PIXELS>> = CydStatic::new();
-    let mut cyd = Cyd::new_display_only(
-        &CYD_STATIC,
-        p.SPI2,
-        p.GPIO14,
-        p.GPIO13,
-        p.GPIO12,
-        p.GPIO15,
-        p.GPIO2,
-        p.GPIO4,
-        p.GPIO21,
-        CydDisplayConfig::PORTRAIT,
-    )?;
-    cyd.clear(Cyd::rgb565(BACKGROUND))?;
-    info!("CYD display initialized");
-
-    let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
-
-    static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
-    let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
-    let mut force_portal_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
-
-    let wifi_auto = WifiAutoEsp::new(
-        p.WIFI,
-        wifi_auto_flash_block,
-        "CydDance",
-        [timezone_field],
-        spawner,
-    )?;
-    // todo000 verify WiFi status events are clearly visible in the serial log now
-    // that the display no longer shows status during the setup/connect phase.
-    let stack = wifi_auto
-        .connect(&mut force_portal_button, |wifi_auto_event| async move {
-            let wifi_mode = match wifi_auto_event {
-                WifiAutoEvent::CaptivePortalReady => "setup CydDance",
-                WifiAutoEvent::Connecting { .. } => "connecting",
-                WifiAutoEvent::ConnectionFailed => "connect failed",
-            };
-            info!("WiFi: {wifi_mode}");
-            Ok(())
-        })
-        .await?;
-    info!("WiFi connected");
-
-    let timezone_offset_minutes = timezone_field
-        .offset_minutes()?
-        .ok_or(Error::MissingCustomWifiAutoField)?;
-
-    static CLOCK_SYNC_STATIC: ClockSyncStaticEsp = ClockSyncEsp::new_static();
-    let clock_sync = ClockSyncEsp::new(
-        &CLOCK_SYNC_STATIC,
-        stack,
-        timezone_offset_minutes,
-        Some(ONE_SECOND),
-        spawner,
-    )?;
-    info!("clock sync ready; entering dance loop");
-
-    let background565 = Cyd::rgb565(BACKGROUND);
-    let text565 = Cyd::rgb565(TEXT);
-    let linkage_view = LINKAGE.view();
-
-    loop {
-        let tick = clock_sync.wait_for_tick().await;
-        let local_time = tick.local_time;
-        let clock = ClockTime::new(local_time.hour(), local_time.minute(), local_time.second());
-        info!("tick {}", clock.text_24h());
-
-        let params = clock.linkage_params();
-        let time_text = clock.text_12h();
-
-        let mut text_band_frame = cyd.frame_mut(TEXT_BAND.size);
-        text_band_frame.clear(background565);
-        Text::with_baseline(
-            "WiFi OK",
-            WIFI_TEXT_TOP_LEFT,
-            MonoTextStyle::new(&FONT_6X10, text565),
-            Baseline::Top,
-        )
-        .draw(&mut text_band_frame)
-        .expect("drawing to an Infallible frame cannot fail");
-        Text::with_baseline(
-            time_text.as_str(),
-            TIME_TEXT_TOP_LEFT,
-            MonoTextStyle::new(&FONT_9X15_BOLD, text565),
-            Baseline::Top,
-        )
-        .draw(&mut text_band_frame)
-        .expect("drawing to an Infallible frame cannot fail");
-        text_band_frame.flush()?;
-
-        // Shared linkage rendering path, tiled for CYD.
-
-        for tile in BODY_TILES.tiles() {
-            let mut tile_frame = cyd.frame_mut(tile.size);
-            tile_frame.clear(background565);
-
-            // Dance-specific background overlay.
-            {
-                let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-                draw_dial(&mut target);
-            }
-
-            let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
-            for draw_item in &mut iter {
-                draw_item
-                    .project(&PROJECTION)
-                    .draw_offset(&mut tile_frame, tile.top_left);
-            }
-
-            // Dance-specific foreground overlay: placards hang from hand marks.
-            let right_hand_pose = iter
-                .marked_pose("rMid2")
-                .expect("rMid2 mark missing from LINKAGE");
-            let left_hand_pose = iter
-                .marked_pose("lMid2")
-                .expect("lMid2 mark missing from LINKAGE");
-            let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-            draw_hanging_placard(
-                &mut target,
-                pose_to_point(left_hand_pose),
-                clock.hour_12() as u32,
-            );
-            draw_hanging_placard(
-                &mut target,
-                pose_to_point(right_hand_pose),
-                clock.minute() as u32,
-            );
-
-            tile_frame.flush_at(tile.top_left)?;
-        }
-    }
 }
