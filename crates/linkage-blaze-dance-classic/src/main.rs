@@ -1,10 +1,11 @@
 #![no_std]
 #![no_main]
 
-// todo000 wifi status is missing.
+// todo000 wifi status is missing. (may no longer apply)
 // todo000 we need to use color and/or size to tell hours from minutes
 // todo000 we need some wasm preview
 
+use core::cell::RefCell;
 use core::convert::Infallible;
 
 use device_envoy_esp::{
@@ -36,7 +37,7 @@ use linkage_blaze_core::{
     linkage_fixed, to_point,
 };
 use linkage_blaze_cyd::{
-    Cyd, CydStatic, Orientation, TranslatedDrawTarget,
+    Cyd, CydError, CydStatic, Orientation, TranslatedDrawTarget,
     tiling::{Region, TileGrid, max_usize},
 };
 use log::info;
@@ -115,7 +116,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 enum MainError {
     DeviceEnvoy(Error),
     Core(CoreError),
-    Cyd(linkage_blaze_cyd::CydError),
+    Cyd(CydError),
 }
 
 #[esp_rtos::main]
@@ -163,17 +164,29 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     // todo000 verify WiFi status events are clearly visible in the serial log now
     // that the display no longer shows status during the setup/connect phase.
+    // (may no longer apply: status is again mirrored to the CYD text band below.)
+    //
+    // The auto-connect callback is `FnMut`, so it can't take ownership of `cyd`.
+    // Wrap it in a `RefCell` for the duration of `connect` so each event can
+    // borrow the display, then unwrap it again for the dance loop.
+    let cyd = RefCell::new(cyd);
     let stack = wifi_auto
-        .connect(&mut force_portal_button, |wifi_auto_event| async move {
-            let wifi_mode = match wifi_auto_event {
-                WifiAutoEvent::CaptivePortalReady => "setup CydDance",
-                WifiAutoEvent::Connecting { .. } => "connecting",
-                WifiAutoEvent::ConnectionFailed => "connect failed",
-            };
-            info!("WiFi: {wifi_mode}");
-            Ok(())
+        .connect(&mut force_portal_button, |wifi_auto_event| {
+            let cyd_ref = &cyd;
+            async move {
+                let wifi_mode = match wifi_auto_event {
+                    WifiAutoEvent::CaptivePortalReady => "setup CydDance",
+                    WifiAutoEvent::Connecting { .. } => "connecting",
+                    WifiAutoEvent::ConnectionFailed => "connect failed",
+                };
+                info!("WiFi: {wifi_mode}");
+                draw_wifi_status(&mut cyd_ref.borrow_mut(), wifi_mode)
+                    .expect("drawing Wi-Fi status to the CYD text band cannot fail");
+                Ok(())
+            }
         })
         .await?;
+    let mut cyd = cyd.into_inner();
     info!("WiFi connected");
 
     let timezone_offset_minutes = timezone_field
@@ -264,6 +277,24 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             tile_frame.flush_at(tile.top_left)?;
         }
     }
+}
+
+/// Draw a Wi-Fi status message into the top text band, leaving the time slot
+/// blank. Used while [`inner_main`] is still connecting, before the clock loop
+/// takes over the band.
+fn draw_wifi_status(cyd: &mut Cyd, message: &str) -> Result<(), CydError> {
+    let mut text_band_frame = cyd.frame_mut(TEXT_BAND.size);
+    text_band_frame.clear(Cyd::rgb565(BACKGROUND));
+    Text::with_baseline(
+        message,
+        WIFI_TEXT_TOP_LEFT,
+        MonoTextStyle::new(&FONT_6X10, Cyd::rgb565(TEXT)),
+        Baseline::Top,
+    )
+    .draw(&mut text_band_frame)
+    .expect("drawing to an Infallible frame cannot fail");
+    text_band_frame.flush()?;
+    Ok(())
 }
 
 // ── Clock time ────────────────────────────────────────────────────────────────
