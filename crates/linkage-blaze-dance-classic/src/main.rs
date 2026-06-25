@@ -33,7 +33,7 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use linkage_blaze_core::{
-    DrawItemIter, LinkageFixed, NegXProjection, Pose, Projection, Rgb888, WebColors, linkage,
+    LinkageFixed, MarkError, NegXProjection, Pose, Projection, Rgb888, WebColors, linkage,
     linkage_fixed, to_point,
 };
 use linkage_blaze_cyd::{
@@ -41,6 +41,7 @@ use linkage_blaze_cyd::{
     tiling::{Region, TileGrid, max_usize},
 };
 use log::info;
+use time::OffsetDateTime;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
@@ -52,27 +53,47 @@ const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 // This app always runs portrait; the screen size is derived from the config.
 const ORIENTATION: Orientation = Orientation::Portrait;
-const TEXT_BAND_HEIGHT: usize = 34;
-const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
-const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
 
-// The full-width status band runs across the top of the screen.
-const TEXT_BAND: Region = Region::new(
-    Point::new(0, 0),
-    Size::new(ORIENTATION.width() as u32, TEXT_BAND_HEIGHT as u32),
-);
+// todo000 this is a bit verbose. Ideas: do nothing, define a struct, move some of these closer to their use. (may no longer apply)
+/// The dance app's named screen layout: a full-width status band across the top
+/// (Wi-Fi status on the left, time on the right) and a tiled figure region
+/// filling the rest of the screen below it.
+struct DanceLayout {
+    /// Full-width status band running across the top of the screen.
+    text_band: Region,
+    /// Top-left of the Wi-Fi status text within the band.
+    wifi_text_top_left: Point,
+    /// Top-left of the time text within the band.
+    time_text_top_left: Point,
+    /// Tile grid covering the dance figure below the band. `TileGrid` computes
+    /// tile sizes and clips the final row/column.
+    figure_tiles: TileGrid,
+}
 
-// The dance figure fills the rest of the screen below the text band.
-// Use a 3×3 tile grid; TileGrid computes tile sizes and clips the final row/column.
-const FIGURE_TILES: TileGrid = TileGrid::new(
-    Point::new(0, TEXT_BAND_HEIGHT as i32),
-    Size::new(
-        ORIENTATION.width() as u32,
-        ORIENTATION.height() as u32 - TEXT_BAND_HEIGHT as u32,
-    ),
-    3,
-    3,
-);
+impl DanceLayout {
+    /// Build the portrait layout for the given screen orientation.
+    const fn portrait(orientation: Orientation) -> Self {
+        const TEXT_BAND_HEIGHT: u32 = 34;
+        let screen_width = orientation.width() as u32;
+        let screen_height = orientation.height() as u32;
+        Self {
+            text_band: Region::new(
+                Point::new(0, 0),
+                Size::new(screen_width, TEXT_BAND_HEIGHT),
+            ),
+            wifi_text_top_left: Point::new(8, 12),
+            time_text_top_left: Point::new(166, 12),
+            figure_tiles: TileGrid::new(
+                Point::new(0, TEXT_BAND_HEIGHT as i32),
+                Size::new(screen_width, screen_height - TEXT_BAND_HEIGHT),
+                3,
+                3,
+            ),
+        }
+    }
+}
+
+const LAYOUT: DanceLayout = DanceLayout::portrait(ORIENTATION);
 
 // ── Projection ───────────────────────────────────────────────────────────────
 
@@ -117,6 +138,7 @@ enum MainError {
     DeviceEnvoy(Error),
     Core(CoreError),
     Cyd(CydError),
+    Mark(MarkError),
 }
 
 #[esp_rtos::main]
@@ -131,8 +153,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("Starting CYD dance with WiFi");
 
     // The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
-    const BUFFER_PIXEL_COUNT: usize =
-        max_usize(TEXT_BAND.pixel_count(), FIGURE_TILES.max_tile_pixel_count());
+    const BUFFER_PIXEL_COUNT: usize = max_usize(
+        LAYOUT.text_band.pixel_count(),
+        LAYOUT.figure_tiles.max_tile_pixel_count(),
+    );
     static CYD_STATIC: CydStatic<BUFFER_PIXEL_COUNT> = Cyd::new_static();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
@@ -146,8 +170,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO21,
         ORIENTATION,
     )?;
-    cyd.clear(Cyd::rgb565(BACKGROUND))?;
     info!("CYD display initialized");
+    cyd.clear(Cyd::rgb565(BACKGROUND))?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
@@ -162,13 +186,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         [timezone_field],
         spawner,
     )?;
-    // todo000 verify WiFi status events are clearly visible in the serial log now
-    // that the display no longer shows status during the setup/connect phase.
-    // (may no longer apply: status is again mirrored to the CYD text band below.)
-    //
-    // The auto-connect callback is `FnMut`, so it can't take ownership of `cyd`.
-    // Wrap it in a `RefCell` for the duration of `connect` so each event can
-    // borrow the display, then unwrap it again for the dance loop.
+
     let cyd = RefCell::new(cyd);
     let stack = wifi_auto
         .connect(&mut force_portal_button, |wifi_auto_event| {
@@ -203,24 +221,27 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("clock sync ready; entering dance loop");
 
+    // todo000 should shared/generic code with wasm start here?
+
     let background565 = Cyd::rgb565(BACKGROUND);
     let text565 = Cyd::rgb565(TEXT);
     let linkage_view = LINKAGE.view();
 
     loop {
         let tick = clock_sync.wait_for_tick().await;
-        let local_time = tick.local_time;
-        let clock = ClockTime::new(local_time.hour(), local_time.minute(), local_time.second());
+        // todo could add ClockTime functionality to ClockSyncTick
+        let clock = ClockTime::new(&tick.local_time);
         info!("tick {}", clock.text_24h());
 
         let params = clock.linkage_params();
         let time_text = clock.text_12h();
 
-        let mut text_band_frame = cyd.frame_mut(TEXT_BAND.size);
+        let mut text_band_frame = cyd.frame_mut(LAYOUT.text_band.size);
         text_band_frame.clear(background565);
+        //todo000 ugly and the wifi part never changes and yet is in a loop.
         Text::with_baseline(
             "WiFi OK",
-            WIFI_TEXT_TOP_LEFT,
+            LAYOUT.wifi_text_top_left,
             MonoTextStyle::new(&FONT_6X10, text565),
             Baseline::Top,
         )
@@ -228,7 +249,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         .expect("drawing to an Infallible frame cannot fail");
         Text::with_baseline(
             time_text.as_str(),
-            TIME_TEXT_TOP_LEFT,
+            LAYOUT.time_text_top_left,
             MonoTextStyle::new(&FONT_9X15_BOLD, text565),
             Baseline::Top,
         )
@@ -238,30 +259,29 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
         // Shared linkage rendering path, tiled for CYD.
 
-        for tile in FIGURE_TILES.tiles() {
+        for tile in LAYOUT.figure_tiles.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
             tile_frame.clear(background565);
 
             // Dance-specific background overlay.
             {
+                // todo000 understand TranslatedDrawTarget
                 let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
                 draw_dial(&mut target);
             }
 
-            let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
-            for draw_item in &mut iter {
+            let mut draw_items = linkage_view.draw_items(&params);
+            for draw_item in &mut draw_items {
                 draw_item
                     .project(&PROJECTION)
+                    // todo00 really understand draw_offset
                     .draw_offset(&mut tile_frame, tile.top_left);
             }
 
+            // todo000 explain that after we go through all the items we inspect the poses of the marks.
             // Dance-specific foreground overlay: placards hang from hand marks.
-            let right_hand_pose = iter
-                .marked_pose("rMid2")
-                .expect("rMid2 mark missing from LINKAGE");
-            let left_hand_pose = iter
-                .marked_pose("lMid2")
-                .expect("lMid2 mark missing from LINKAGE");
+            let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
+            let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
             let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
             draw_hanging_placard(
                 &mut target,
@@ -283,11 +303,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 /// blank. Used while [`inner_main`] is still connecting, before the clock loop
 /// takes over the band.
 fn draw_wifi_status(cyd: &mut Cyd, message: &str) -> Result<(), CydError> {
-    let mut text_band_frame = cyd.frame_mut(TEXT_BAND.size);
+    let mut text_band_frame = cyd.frame_mut(LAYOUT.text_band.size);
     text_band_frame.clear(Cyd::rgb565(BACKGROUND));
     Text::with_baseline(
         message,
-        WIFI_TEXT_TOP_LEFT,
+        LAYOUT.wifi_text_top_left,
         MonoTextStyle::new(&FONT_6X10, Cyd::rgb565(TEXT)),
         Baseline::Top,
     )
@@ -309,11 +329,11 @@ struct ClockTime {
 }
 
 impl ClockTime {
-    fn new(hours: u8, minutes: u8, seconds: u8) -> Self {
+    fn new(local_time: &OffsetDateTime) -> Self {
         Self {
-            hours,
-            minutes,
-            seconds,
+            hours: local_time.hour(),
+            minutes: local_time.minute(),
+            seconds: local_time.second(),
         }
     }
 
@@ -376,6 +396,7 @@ impl ClockTime {
     }
 }
 
+// todo000 move these into impl ClockTime as static methods?
 fn signed_clock_phase(phase: f32) -> f32 {
     if phase > 0.5 { phase - 1.0 } else { phase }
 }
