@@ -36,7 +36,7 @@ use linkage_blaze_core::{
     linkage_fixed, to_point,
 };
 use linkage_blaze_cyd::{
-    Cyd, CydStatic, Orientation, PixelBuffer, TranslatedDrawTarget,
+    Cyd, CydStatic, Orientation, TranslatedDrawTarget,
     tiling::{Region, TileGrid, max_usize},
 };
 use log::info;
@@ -61,16 +61,16 @@ const TEXT_BAND: Region = Region::new(
     Size::new(ORIENTATION.width() as u32, TEXT_BAND_HEIGHT as u32),
 );
 
-// The dance body fills the rest of the screen below the text band, tiled in
-// 80×96 cells: 3×80 = 240 covers the width exactly; 3×96 = 288 covers the
-// 286 px body height with a 2 px clip on the last row.
-const BODY_TILES: TileGrid = TileGrid::new(
+// The dance figure fills the rest of the screen below the text band.
+// Use a 3×3 tile grid; TileGrid computes tile sizes and clips the final row/column.
+const FIGURE_TILES: TileGrid = TileGrid::new(
     Point::new(0, TEXT_BAND_HEIGHT as i32),
     Size::new(
         ORIENTATION.width() as u32,
         ORIENTATION.height() as u32 - TEXT_BAND_HEIGHT as u32,
     ),
-    Size::new(80, 96),
+    3,
+    3,
 );
 
 // ── Projection ───────────────────────────────────────────────────────────────
@@ -87,12 +87,14 @@ const PROJECTION: NegXProjection = NegXProjection {
 // Load the raw motion-capture linkage.
 const LINKAGE0: LinkageFixed<132, 6, 600> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
-// Add a pen style to the linkage for drawing.
+
+// Add the drawing style.
 const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
     .pen_width(3.5)
     .pen_color(FIGURE)
     .combine(LINKAGE0);
-// Pick which params to keep.
+
+// Keep only the three clock-driven parameters, then optimize the fixed linkage.
 // todo000 can we kill or reduce the optimization steps?
 const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE1
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
@@ -128,10 +130,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("Starting CYD dance with WiFi");
 
     // The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
-    const WORKSPACE_PIXELS: usize =
-        max_usize(TEXT_BAND.pixel_count(), BODY_TILES.max_tile_pixels());
-    // todo0000 why do we need to see PixelBuffer?
-    static CYD_STATIC: CydStatic<PixelBuffer<WORKSPACE_PIXELS>> = CydStatic::new();
+    const BUFFER_PIXEL_COUNT: usize =
+        max_usize(TEXT_BAND.pixel_count(), FIGURE_TILES.max_tile_pixel_count());
+    static CYD_STATIC: CydStatic<BUFFER_PIXEL_COUNT> = Cyd::new_static();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
@@ -224,7 +225,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
         // Shared linkage rendering path, tiled for CYD.
 
-        for tile in BODY_TILES.tiles() {
+        for tile in FIGURE_TILES.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
             tile_frame.clear(background565);
 

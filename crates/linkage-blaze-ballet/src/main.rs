@@ -19,7 +19,7 @@ use linkage_blaze_core::{
     LinkageFixed, NegXProjection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
     linkage_fixed,
 };
-use linkage_blaze_cyd::{Cyd, CydStatic, Orientation, PixelBufferFull};
+use linkage_blaze_cyd::{Cyd, CydStatic, Orientation};
 use log::info;
 
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
@@ -71,7 +71,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD ballet loop");
 
-    static CYD_STATIC: CydStatic<PixelBufferFull> = Cyd::new_static();
+    static CYD_STATIC: CydStatic<{ Cyd::SCREEN_PIXELS }> = Cyd::new_static();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
         p.SPI2,
