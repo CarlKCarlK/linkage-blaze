@@ -3526,7 +3526,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
 /// Iterator over [`DrawItem`]s produced by evaluating a linkage.
 ///
 /// Obtain via [`LinkageView::draw_items`]. After exhausting the iterator the
-/// [`marked_pose`](DrawItemIter::marked_pose) method lets you query the final
+/// [`pose_by_mark_name`](DrawItemIter::pose_by_mark_name) method lets you query the final
 /// pose at any named mark.
 pub struct DrawItemIter<'a, const DOF: usize, const MARKS: usize> {
     steps: &'a [Step],
@@ -3559,16 +3559,36 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItemIter<'a, DOF, MARKS> {
         }
     }
 
-    /// Return the pose recorded at the named mark, or `None` if the mark was
-    /// never reached during iteration.  Call this after the iterator is
-    /// exhausted to inspect final joint positions.
-    #[must_use]
-    pub fn marked_pose(&self, name: &str) -> Option<Pose> {
-        self.mark_names
-            .iter()
-            .position(|&n| n == name)
+    /// Return the pose recorded at the named mark at the current point in iteration.
+    ///
+    /// Call this after the iterator is exhausted to inspect final joint positions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MarkError::NotFound`] if no mark has the given name, or
+    /// [`MarkError::Ambiguous`] if more than one mark shares the name.
+    pub fn pose_by_mark_name(&self, name: &str) -> Result<Pose, MarkError> {
+        let mut found = None;
+        for (index, &n) in self.mark_names.iter().enumerate() {
+            if n == name {
+                if found.is_some() {
+                    return Err(MarkError::Ambiguous);
+                }
+                found = Some(index);
+            }
+        }
+        found
             .map(|index| self.marked[index].pose)
+            .ok_or(MarkError::NotFound)
     }
+}
+
+/// Error returned by [`DrawItemIter::pose_by_mark_name`] when a mark name does
+/// not uniquely identify a mark.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MarkError {
+    NotFound,
+    Ambiguous,
 }
 
 impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemIter<'_, DOF, MARKS> {
