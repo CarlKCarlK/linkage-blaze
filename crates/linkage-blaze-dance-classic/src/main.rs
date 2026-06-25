@@ -33,7 +33,10 @@ use linkage_blaze_core::{
     DrawItemIter, LinkageFixed, NegXProjection, PixelTarget, Pose, Projection, Rgb888, WebColors,
     linkage, linkage_fixed, to_point,
 };
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBuffer};
+use linkage_blaze_cyd::{
+    Cyd, CydDisplayConfig, CydStatic, PixelBuffer,
+    tiling::{Region, TileGrid, max_usize},
+};
 use log::info;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
@@ -50,22 +53,26 @@ const TEXT_BAND_HEIGHT: usize = 34;
 const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
 const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
 
-const BODY_TOP: usize = TEXT_BAND_HEIGHT; // first row of the dance area (286 px tall)
+// The full-width status band runs across the top of the screen.
+const TEXT_BAND: Region = Region::new(
+    Point::new(0, 0),
+    Size::new(DISPLAY_WIDTH as u32, TEXT_BAND_HEIGHT as u32),
+);
 
-// 3×80 = 240 covers display width exactly; 3×96 = 288 covers body height (286) with 2 px clip on the last row.
-const TILE_COLUMNS: usize = 3;
-const TILE_ROWS: usize = 3;
-const TILE_WIDTH: usize = 80;
-const TILE_HEIGHT: usize = 96;
+// The dance body fills the rest of the screen below the text band, tiled in
+// 80×96 cells: 3×80 = 240 covers the width exactly; 3×96 = 288 covers the
+// 286 px body height with a 2 px clip on the last row.
+const BODY_TILES: TileGrid = TileGrid::new(
+    Point::new(0, TEXT_BAND_HEIGHT as i32),
+    Size::new(
+        DISPLAY_WIDTH as u32,
+        (DISPLAY_HEIGHT - TEXT_BAND_HEIGHT) as u32,
+    ),
+    Size::new(80, 96),
+);
 
 // The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
-const TILE_PIXELS: usize = TILE_WIDTH * TILE_HEIGHT;
-const TEXT_BAND_PIXELS: usize = DISPLAY_WIDTH * TEXT_BAND_HEIGHT;
-const WORKSPACE_PIXELS: usize = if TILE_PIXELS > TEXT_BAND_PIXELS {
-    TILE_PIXELS
-} else {
-    TEXT_BAND_PIXELS
-};
+const WORKSPACE_PIXELS: usize = max_usize(TEXT_BAND.pixel_count(), BODY_TILES.max_tile_pixels());
 
 // ── Digit glyph metrics (shared across draw_digit / draw_number_centered) ────
 
@@ -90,7 +97,7 @@ const LINKAGE_INNER: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start(
     .pen_color(FIGURE)
     .combine(linkage_fixed!(
         "../../linkage-blaze-mocap/samples/pirouette.lb.rs",
-        132,
+        132, // todo000 kill?
         6,
         600
     ));
@@ -104,31 +111,6 @@ const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE_INNER
     .strip_fixed_noops::<400>()
     .merge_adjacent_fixed::<400>()
     .strip_fixed_noops::<400>();
-
-// ── TileRect ─────────────────────────────────────────────────────────────────
-
-struct TileRect {
-    top_left: Point,
-    width: usize,
-    height: usize,
-}
-
-impl TileRect {
-    fn new(tile_column: usize, tile_row: usize) -> Option<Self> {
-        let left = tile_column * TILE_WIDTH;
-        let top = BODY_TOP + tile_row * TILE_HEIGHT;
-
-        if left >= DISPLAY_WIDTH || top >= DISPLAY_HEIGHT {
-            return None;
-        }
-
-        Some(Self {
-            top_left: Point::new(left as i32, top as i32),
-            width: TILE_WIDTH.min(DISPLAY_WIDTH - left),
-            height: TILE_HEIGHT.min(DISPLAY_HEIGHT - top),
-        })
-    }
-}
 
 // ── Time / param helpers ─────────────────────────────────────────────────────
 
@@ -511,8 +493,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = dance_params(hours, minutes, seconds);
         let time_text = format_clock_12h(hours, minutes, seconds);
 
-        let mut cyd_tile =
-            cyd.frame_mut(Size::new(DISPLAY_WIDTH as u32, TEXT_BAND_HEIGHT as u32));
+        let mut cyd_tile = cyd.frame_mut(TEXT_BAND.size);
         cyd_tile.clear(background565);
         Text::with_baseline(
             "WiFi OK",
@@ -534,40 +515,34 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
         let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
 
-        for tile_row in 0..TILE_ROWS {
-            for tile_column in 0..TILE_COLUMNS {
-                let Some(tile) = TileRect::new(tile_column, tile_row) else {
-                    continue;
-                };
-                let mut cyd_tile =
-                    cyd.frame_mut(Size::new(tile.width as u32, tile.height as u32));
-                cyd_tile.clear(background565);
+        for tile in BODY_TILES.tiles() {
+            let mut cyd_tile = cyd.frame_mut(tile.size);
+            cyd_tile.clear(background565);
 
-                // Dance-specific background overlay.
-                DanceOverlay::new(&mut cyd_tile, tile.top_left).draw_dial();
+            // Dance-specific background overlay.
+            DanceOverlay::new(&mut cyd_tile, tile.top_left).draw_dial();
 
-                // Shared linkage rendering path, identical to the ballet app.
-                let linkage_view = LINKAGE.view();
-                let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
-                for draw_item in &mut iter {
-                    draw_item
-                        .project(&PROJECTION)
-                        .draw_offset(&mut cyd_tile, tile.top_left);
-                }
-
-                // Dance-specific foreground overlay: placards hang from hand marks.
-                let right_hand_pose = iter
-                    .marked_pose("rMid2")
-                    .expect("rMid2 mark missing from LINKAGE");
-                let left_hand_pose = iter
-                    .marked_pose("lMid2")
-                    .expect("lMid2 mark missing from LINKAGE");
-                let mut overlay = DanceOverlay::new(&mut cyd_tile, tile.top_left);
-                overlay.draw_hanging_placard(pose_to_point(left_hand_pose), hour_display as u32);
-                overlay.draw_hanging_placard(pose_to_point(right_hand_pose), minutes as u32);
-
-                cyd_tile.flush_at(tile.top_left)?;
+            // Shared linkage rendering path, identical to the ballet app.
+            let linkage_view = LINKAGE.view();
+            let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
+            for draw_item in &mut iter {
+                draw_item
+                    .project(&PROJECTION)
+                    .draw_offset(&mut cyd_tile, tile.top_left);
             }
+
+            // Dance-specific foreground overlay: placards hang from hand marks.
+            let right_hand_pose = iter
+                .marked_pose("rMid2")
+                .expect("rMid2 mark missing from LINKAGE");
+            let left_hand_pose = iter
+                .marked_pose("lMid2")
+                .expect("lMid2 mark missing from LINKAGE");
+            let mut overlay = DanceOverlay::new(&mut cyd_tile, tile.top_left);
+            overlay.draw_hanging_placard(pose_to_point(left_hand_pose), hour_display as u32);
+            overlay.draw_hanging_placard(pose_to_point(right_hand_pose), minutes as u32);
+
+            cyd_tile.flush_at(tile.top_left)?;
         }
     }
 }
