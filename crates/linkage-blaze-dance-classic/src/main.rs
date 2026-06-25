@@ -26,8 +26,8 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use linkage_blaze_core::{
-    DrawItemIter, LinkageFixed, NegXProjection, PixelSurface, PixelTarget, Pose, Projection,
-    Rgb888, WebColors, linkage, linkage_fixed, render_draw_items, to_point,
+    DrawItem, DrawItemIter, DrawSurface, LinkageFixed, NegXProjection, PixelSurface, PixelTarget,
+    Pose, Projection, Rgb888, WebColors, linkage, linkage_fixed, to_point,
 };
 use linkage_blaze_cyd::{
     Cyd, CydDisplayConfig, CydStatic, PixelBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
@@ -181,279 +181,200 @@ fn wrap_param(value: f32) -> f32 {
     value
 }
 
-// ── Render ───────────────────────────────────────────────────────────────────
+// ── Surface drawing extension trait ──────────────────────────────────────────
 
-fn render_tile<T: PixelTarget>(
-    surface: &mut PixelSurface<'_, T>,
-    params: &[f32; 3],
-    hours: u8,
-    minutes: u8,
-) {
-    // Faint dial marks first, so the figure and placards draw over them.
-    draw_dial(surface);
+trait DanceSurface {
+    fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888);
 
-    let dance_view = LINKAGE.view();
-    let mut iter: DrawItemIter<3, 6> = dance_view.draw_items(params);
-    render_draw_items(&PROJECTION, surface, &mut iter);
-
-    // Hanging placards use the hand marks only as anchor points; they hang
-    // straight down in screen coordinates and do not inherit hand rotation.
-    let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
-    let right_hand_pose = iter
-        .marked_pose("rMid2")
-        .expect("rMid2 mark missing from LINKAGE");
-    let left_hand_pose = iter
-        .marked_pose("lMid2")
-        .expect("lMid2 mark missing from LINKAGE");
-    draw_hanging_placard(surface, pose_to_point(left_hand_pose), hour_display as u32);
-    draw_hanging_placard(surface, pose_to_point(right_hand_pose), minutes as u32);
-}
-
-fn draw_dial<T: PixelTarget>(surface: &mut PixelSurface<'_, T>) {
-    const DIAL_COLOR: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray (47, 79, 79)
-    const DIAL_SCALE: i32 = 2;
-    const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
-    const DIAL_RADIUS_X: i32 = 100;
-    const DIAL_RADIUS_Y: i32 = 118;
-
-    // Convert screen-space dial center to dance space (offset by TOP_LEFT).
-    let center_x = DIAL_CENTER_SCREEN.x - TOP_LEFT.x;
-    let center_y = DIAL_CENTER_SCREEN.y - TOP_LEFT.y;
-    let top = Point::new(center_x, center_y - DIAL_RADIUS_Y);
-    let bottom = Point::new(center_x, center_y + DIAL_RADIUS_Y);
-    let right = Point::new(center_x + DIAL_RADIUS_X, center_y);
-    let left = Point::new(center_x - DIAL_RADIUS_X, center_y);
-    draw_number_centered(surface, 12, top, DIAL_COLOR, DIAL_SCALE);
-    draw_number_centered(surface, 3, right, DIAL_COLOR, DIAL_SCALE);
-    draw_number_centered(surface, 6, bottom, DIAL_COLOR, DIAL_SCALE);
-    draw_number_centered(surface, 9, left, DIAL_COLOR, DIAL_SCALE);
-}
-
-/// Draw a hanging number sign anchored at `anchor` (a hand mark in screen
-/// coordinates).  The sign is a fixed size and always shows two digits.  It
-/// hangs straight down via a short vertical hook from the hand, then a triangle
-/// splays out to the sign's two top corners.  `number` is shown modulo 100.
-fn draw_hanging_placard<T: PixelTarget>(
-    surface: &mut PixelSurface<'_, T>,
-    anchor: Point,
-    number: u32,
-) {
-    const PLACARD_BORDER: Rgb888 = FIGURE;
-    const PLACARD_TEXT: Rgb888 = FIGURE;
-    const PLACARD_W: i32 = 34;
-    const PLACARD_H: i32 = 20;
-    const PLACARD_BORDER_PX: i32 = 2;
-    const HANGER_PX: i32 = 2;
-    const HANGER_HOOK: i32 = 7;
-    const HANGER_TRIANGLE: i32 = 22;
-
-    let card_left = anchor.x - PLACARD_W / 2;
-    let card_top = anchor.y + HANGER_HOOK + HANGER_TRIANGLE;
-    let card_right = card_left + PLACARD_W;
-
-    let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
-    draw_segment(surface, anchor, apex, PLACARD_BORDER, HANGER_PX);
-    draw_segment(
-        surface,
-        apex,
-        Point::new(card_left, card_top),
-        PLACARD_BORDER,
-        HANGER_PX,
-    );
-    draw_segment(
-        surface,
-        apex,
-        Point::new(card_right, card_top),
-        PLACARD_BORDER,
-        HANGER_PX,
-    );
-
-    fill_rect(
-        surface,
-        card_left,
-        card_top,
-        PLACARD_W,
-        PLACARD_H,
-        PLACARD_FILL,
-    );
-    draw_rect_border(
-        surface,
-        card_left,
-        card_top,
-        PLACARD_W,
-        PLACARD_H,
-        PLACARD_BORDER_PX,
-        PLACARD_BORDER,
-    );
-
-    let glyph_w = DIGIT_W * DIGIT_SCALE;
-    let glyph_h = DIGIT_H * DIGIT_SCALE;
-    let total_w = 2 * glyph_w + DIGIT_GAP;
-    let text_left = card_left + (PLACARD_W - total_w) / 2;
-    let text_top = card_top + (PLACARD_H - glyph_h) / 2;
-    let value = number % 100;
-    draw_digit(
-        surface,
-        value / 10,
-        Point::new(text_left, text_top),
-        PLACARD_TEXT,
-        DIGIT_SCALE,
-    );
-    draw_digit(
-        surface,
-        value % 10,
-        Point::new(text_left + glyph_w + DIGIT_GAP, text_top),
-        PLACARD_TEXT,
-        DIGIT_SCALE,
-    );
-}
-
-/// Draw a 1- or 2-digit number centered on `center`, at the given pixel scale.
-fn draw_number_centered<T: PixelTarget>(
-    surface: &mut PixelSurface<'_, T>,
-    number: u32,
-    center: Point,
-    color: Rgb888,
-    scale: i32,
-) {
-    let glyph_w = DIGIT_W * scale;
-    let glyph_h = DIGIT_H * scale;
-    let digit_count = if number >= 10 { 2 } else { 1 };
-    let total_w = digit_count * glyph_w + (digit_count - 1) * DIGIT_GAP;
-    let left = center.x - total_w / 2;
-    let top = center.y - glyph_h / 2;
-    if digit_count == 2 {
-        draw_digit(surface, number / 10, Point::new(left, top), color, scale);
-        draw_digit(
-            surface,
-            number % 10,
-            Point::new(left + glyph_w + DIGIT_GAP, top),
-            color,
-            scale,
-        );
-    } else {
-        draw_digit(surface, number, Point::new(left, top), color, scale);
-    }
-}
-
-fn draw_digit<T: PixelTarget>(
-    surface: &mut PixelSurface<'_, T>,
-    digit: u32,
-    origin: Point,
-    color: Rgb888,
-    scale: i32,
-) {
-    // Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
-    #[rustfmt::skip]
-    const DIGIT_BITMAPS: [u16; 10] = [
-        0b111_101_101_101_111, // 0
-        0b010_110_010_010_111, // 1
-        0b111_001_111_100_111, // 2
-        0b111_001_111_001_111, // 3
-        0b101_101_111_001_001, // 4
-        0b111_100_111_001_111, // 5
-        0b111_100_111_101_111, // 6
-        0b111_001_001_001_001, // 7
-        0b111_101_111_101_111, // 8
-        0b111_101_111_001_111, // 9
-    ];
-
-    let bits = DIGIT_BITMAPS[(digit % 10) as usize];
-    for row in 0..DIGIT_H {
-        for col in 0..DIGIT_W {
-            let bit = 14 - (row * DIGIT_W + col);
-            if (bits >> bit) & 1 == 1 {
-                for scale_y in 0..scale {
-                    for scale_x in 0..scale {
-                        surface.put_pixel(
-                            origin.x + col * scale + scale_x,
-                            origin.y + row * scale + scale_y,
-                            color,
-                        );
+    fn draw_digit(&mut self, digit: u32, origin: Point, color: Rgb888, scale: i32) {
+        // Each digit is 3×5 pixels, encoded as 15 bits (row-major, top-to-bottom, left-to-right).
+        #[rustfmt::skip]
+        const DIGIT_BITMAPS: [u16; 10] = [
+            0b111_101_101_101_111, // 0
+            0b010_110_010_010_111, // 1
+            0b111_001_111_100_111, // 2
+            0b111_001_111_001_111, // 3
+            0b101_101_111_001_001, // 4
+            0b111_100_111_001_111, // 5
+            0b111_100_111_101_111, // 6
+            0b111_001_001_001_001, // 7
+            0b111_101_111_101_111, // 8
+            0b111_101_111_001_111, // 9
+        ];
+        let bits = DIGIT_BITMAPS[(digit % 10) as usize];
+        for row in 0..DIGIT_H {
+            for col in 0..DIGIT_W {
+                let bit = 14 - (row * DIGIT_W + col);
+                if (bits >> bit) & 1 == 1 {
+                    for scale_y in 0..scale {
+                        for scale_x in 0..scale {
+                            self.put_pixel(
+                                origin.x + col * scale + scale_x,
+                                origin.y + row * scale + scale_y,
+                                color,
+                            );
+                        }
                     }
                 }
             }
         }
     }
-}
 
-fn fill_rect<T: PixelTarget>(
-    surface: &mut PixelSurface<'_, T>,
-    left: i32,
-    top: i32,
-    width: i32,
-    height: i32,
-    color: Rgb888,
-) {
-    for dy in 0..height {
-        for dx in 0..width {
-            surface.put_pixel(left + dx, top + dy, color);
-        }
-    }
-}
-
-fn draw_rect_border<T: PixelTarget>(
-    surface: &mut PixelSurface<'_, T>,
-    left: i32,
-    top: i32,
-    width: i32,
-    height: i32,
-    thickness: i32,
-    color: Rgb888,
-) {
-    for dy in 0..height {
-        for dx in 0..width {
-            let on_border = dx < thickness
-                || dx >= width - thickness
-                || dy < thickness
-                || dy >= height - thickness;
-            if on_border {
-                surface.put_pixel(left + dx, top + dy, color);
+    fn fill_rect(&mut self, left: i32, top: i32, width: i32, height: i32, color: Rgb888) {
+        for dy in 0..height {
+            for dx in 0..width {
+                self.put_pixel(left + dx, top + dy, color);
             }
         }
     }
+
+    fn draw_rect_border(
+        &mut self,
+        left: i32,
+        top: i32,
+        width: i32,
+        height: i32,
+        thickness: i32,
+        color: Rgb888,
+    ) {
+        for dy in 0..height {
+            for dx in 0..width {
+                let on_border = dx < thickness
+                    || dx >= width - thickness
+                    || dy < thickness
+                    || dy >= height - thickness;
+                if on_border {
+                    self.put_pixel(left + dx, top + dy, color);
+                }
+            }
+        }
+    }
+
+    fn draw_segment(&mut self, start: Point, end: Point, color: Rgb888, thickness: i32) {
+        // Brush spans `thickness` pixels, supporting both even and odd widths.
+        let brush_low = -(thickness / 2);
+        let brush_high = brush_low + thickness - 1;
+        let mut current_x = start.x;
+        let mut current_y = start.y;
+        let delta_x = (end.x - start.x).abs();
+        let delta_y = -(end.y - start.y).abs();
+        let step_x = if start.x < end.x { 1 } else { -1 };
+        let step_y = if start.y < end.y { 1 } else { -1 };
+        let mut error = delta_x + delta_y;
+
+        loop {
+            for dy in brush_low..=brush_high {
+                for dx in brush_low..=brush_high {
+                    self.put_pixel(current_x + dx, current_y + dy, color);
+                }
+            }
+            if current_x == end.x && current_y == end.y {
+                break;
+            }
+            let doubled_error = error * 2;
+            if doubled_error >= delta_y {
+                error += delta_y;
+                current_x += step_x;
+            }
+            if doubled_error <= delta_x {
+                error += delta_x;
+                current_y += step_y;
+            }
+        }
+    }
+
+    fn draw_number_centered(&mut self, number: u32, center: Point, color: Rgb888, scale: i32) {
+        let glyph_w = DIGIT_W * scale;
+        let glyph_h = DIGIT_H * scale;
+        let digit_count = if number >= 10 { 2 } else { 1 };
+        let total_w = digit_count * glyph_w + (digit_count - 1) * DIGIT_GAP;
+        let left = center.x - total_w / 2;
+        let top = center.y - glyph_h / 2;
+        if digit_count == 2 {
+            self.draw_digit(number / 10, Point::new(left, top), color, scale);
+            self.draw_digit(
+                number % 10,
+                Point::new(left + glyph_w + DIGIT_GAP, top),
+                color,
+                scale,
+            );
+        } else {
+            self.draw_digit(number, Point::new(left, top), color, scale);
+        }
+    }
+
+    fn draw_dial(&mut self) {
+        const DIAL_COLOR: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray (47, 79, 79)
+        const DIAL_SCALE: i32 = 2;
+        const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
+        const DIAL_RADIUS_X: i32 = 100;
+        const DIAL_RADIUS_Y: i32 = 118;
+
+        // Convert screen-space dial center to dance space (offset by TOP_LEFT).
+        let center_x = DIAL_CENTER_SCREEN.x - TOP_LEFT.x;
+        let center_y = DIAL_CENTER_SCREEN.y - TOP_LEFT.y;
+        let top = Point::new(center_x, center_y - DIAL_RADIUS_Y);
+        let bottom = Point::new(center_x, center_y + DIAL_RADIUS_Y);
+        let right = Point::new(center_x + DIAL_RADIUS_X, center_y);
+        let left = Point::new(center_x - DIAL_RADIUS_X, center_y);
+        self.draw_number_centered(12, top, DIAL_COLOR, DIAL_SCALE);
+        self.draw_number_centered(3, right, DIAL_COLOR, DIAL_SCALE);
+        self.draw_number_centered(6, bottom, DIAL_COLOR, DIAL_SCALE);
+        self.draw_number_centered(9, left, DIAL_COLOR, DIAL_SCALE);
+    }
+
+    /// Draw a hanging number sign anchored at `anchor` (a hand mark in screen
+    /// coordinates).  The sign is a fixed size and always shows two digits.  It
+    /// hangs straight down via a short vertical hook from the hand, then a triangle
+    /// splays out to the sign's two top corners.  `number` is shown modulo 100.
+    fn draw_hanging_placard(&mut self, anchor: Point, number: u32) {
+        const PLACARD_BORDER: Rgb888 = FIGURE;
+        const PLACARD_TEXT: Rgb888 = FIGURE;
+        const PLACARD_W: i32 = 34;
+        const PLACARD_H: i32 = 20;
+        const PLACARD_BORDER_PX: i32 = 2;
+        const HANGER_PX: i32 = 2;
+        const HANGER_HOOK: i32 = 7;
+        const HANGER_TRIANGLE: i32 = 22;
+
+        let card_left = anchor.x - PLACARD_W / 2;
+        let card_top = anchor.y + HANGER_HOOK + HANGER_TRIANGLE;
+        let card_right = card_left + PLACARD_W;
+
+        let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
+        self.draw_segment(anchor, apex, PLACARD_BORDER, HANGER_PX);
+        self.draw_segment(apex, Point::new(card_left, card_top), PLACARD_BORDER, HANGER_PX);
+        self.draw_segment(apex, Point::new(card_right, card_top), PLACARD_BORDER, HANGER_PX);
+
+        self.fill_rect(card_left, card_top, PLACARD_W, PLACARD_H, PLACARD_FILL);
+        self.draw_rect_border(
+            card_left,
+            card_top,
+            PLACARD_W,
+            PLACARD_H,
+            PLACARD_BORDER_PX,
+            PLACARD_BORDER,
+        );
+
+        let glyph_w = DIGIT_W * DIGIT_SCALE;
+        let glyph_h = DIGIT_H * DIGIT_SCALE;
+        let total_w = 2 * glyph_w + DIGIT_GAP;
+        let text_left = card_left + (PLACARD_W - total_w) / 2;
+        let text_top = card_top + (PLACARD_H - glyph_h) / 2;
+        let value = number % 100;
+        self.draw_digit(value / 10, Point::new(text_left, text_top), PLACARD_TEXT, DIGIT_SCALE);
+        self.draw_digit(
+            value % 10,
+            Point::new(text_left + glyph_w + DIGIT_GAP, text_top),
+            PLACARD_TEXT,
+            DIGIT_SCALE,
+        );
+    }
 }
 
-fn draw_segment<T: PixelTarget>(
-    surface: &mut PixelSurface<'_, T>,
-    start: Point,
-    end: Point,
-    color: Rgb888,
-    thickness: i32,
-) {
-    // Brush spans `thickness` pixels, supporting both even and odd widths.
-    let brush_low = -(thickness / 2);
-    let brush_high = brush_low + thickness - 1;
-    let mut current_x = start.x;
-    let mut current_y = start.y;
-    let delta_x = (end.x - start.x).abs();
-    let delta_y = -(end.y - start.y).abs();
-    let step_x = if start.x < end.x { 1 } else { -1 };
-    let step_y = if start.y < end.y { 1 } else { -1 };
-    let mut error = delta_x + delta_y;
-
-    loop {
-        let mut dy = brush_low;
-        while dy <= brush_high {
-            let mut dx = brush_low;
-            while dx <= brush_high {
-                surface.put_pixel(current_x + dx, current_y + dy, color);
-                dx += 1;
-            }
-            dy += 1;
-        }
-        if current_x == end.x && current_y == end.y {
-            break;
-        }
-        let doubled_error = error * 2;
-        if doubled_error >= delta_y {
-            error += delta_y;
-            current_x += step_x;
-        }
-        if doubled_error <= delta_x {
-            error += delta_x;
-            current_y += step_y;
-        }
+impl<T: PixelTarget> DanceSurface for PixelSurface<'_, T> {
+    fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888) {
+        PixelSurface::put_pixel(self, x, y, color)
     }
 }
 
@@ -472,13 +393,8 @@ esp_bootloader_esp_idf::esp_app_desc!();
 #[derive(Debug, derive_more::From)]
 enum MainError {
     DeviceEnvoy(Error),
+    Core(CoreError),
     Cyd(linkage_blaze_cyd::CydError),
-}
-
-impl From<CoreError> for MainError {
-    fn from(error: CoreError) -> Self {
-        MainError::DeviceEnvoy(error.into())
-    }
 }
 
 #[esp_rtos::main]
@@ -564,29 +480,25 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = dance_params(hours, minutes, seconds);
         let time_text = format_clock_12h(hours, minutes, seconds);
 
-        cyd.draw_frame(
-            Size::new(SCREEN_WIDTH as u32, TEXT_BAND_HEIGHT as u32),
-            Point::new(0, 0),
-            |frame| {
-                frame.clear(background565);
-                Text::with_baseline(
-                    "WiFi OK",
-                    WIFI_TEXT_TOP_LEFT,
-                    MonoTextStyle::new(&FONT_6X10, text565),
-                    Baseline::Top,
-                )
-                .draw(frame)
-                .expect("drawing to an Infallible frame cannot fail");
-                Text::with_baseline(
-                    time_text.as_str(),
-                    TIME_TEXT_TOP_LEFT,
-                    MonoTextStyle::new(&FONT_9X15_BOLD, text565),
-                    Baseline::Top,
-                )
-                .draw(frame)
-                .expect("drawing to an Infallible frame cannot fail");
-            },
-        )?;
+        let mut cyd_tile = cyd.frame_mut(Size::new(SCREEN_WIDTH as u32, TEXT_BAND_HEIGHT as u32));
+        cyd_tile.clear(background565);
+        Text::with_baseline(
+            "WiFi OK",
+            WIFI_TEXT_TOP_LEFT,
+            MonoTextStyle::new(&FONT_6X10, text565),
+            Baseline::Top,
+        )
+        .draw(&mut cyd_tile)
+        .expect("drawing to an Infallible frame cannot fail");
+        Text::with_baseline(
+            time_text.as_str(),
+            TIME_TEXT_TOP_LEFT,
+            MonoTextStyle::new(&FONT_9X15_BOLD, text565),
+            Baseline::Top,
+        )
+        .draw(&mut cyd_tile)
+        .expect("drawing to an Infallible frame cannot fail");
+        cyd_tile.flush()?;
 
         for tile_row in 0..TILE_ROWS {
             for tile_column in 0..TILE_COLUMNS {
@@ -597,22 +509,56 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 let Some(tile_flush) = TileFlush::new(tile_origin, TILE_WIDTH, TILE_HEIGHT) else {
                     continue;
                 };
-                cyd.draw_frame(
-                    Size::new(tile_flush.width as u32, tile_flush.height as u32),
-                    tile_flush.top_left,
-                    |frame| {
-                        frame.clear(background565);
-                        render_tile(
-                            &mut PixelSurface {
-                                target: frame,
-                                tile_origin: tile_flush.origin,
-                            },
-                            &params,
-                            hours,
-                            minutes,
-                        );
-                    },
-                )?;
+                let mut cyd_tile =
+                    cyd.frame_mut(Size::new(tile_flush.width as u32, tile_flush.height as u32));
+                cyd_tile.clear(background565);
+                {
+                    let mut surface =
+                        PixelSurface { target: &mut cyd_tile, tile_origin: tile_flush.origin };
+
+                    // Faint dial marks first, so the figure and placards draw over them.
+                    surface.draw_dial();
+
+                    let linkage_view = LINKAGE.view();
+                    let mut iter: DrawItemIter<3, 6> = linkage_view.draw_items(&params);
+                    for item in &mut iter {
+                        match item {
+                            DrawItem::Stroke(s) => surface.stroke(
+                                PROJECTION.project_pos(s.start()),
+                                PROJECTION.project_pos(s.end()),
+                                s.color(),
+                                PROJECTION.project_width(s.width()),
+                            ),
+                            DrawItem::Disk(d) => {
+                                let orient = d.pose().orientation();
+                                surface.filled_ellipse(
+                                    PROJECTION.project_pos(d.pose()),
+                                    PROJECTION.project_dir(d.pose(), orient.forward(), d.radius()),
+                                    PROJECTION.project_dir(d.pose(), orient.left(), d.radius()),
+                                    d.color(),
+                                );
+                            }
+                            DrawItem::Sphere(s) => surface.filled_circle(
+                                PROJECTION.project_pos(s.pose()),
+                                PROJECTION.project_radius(s.pose(), s.radius()),
+                                s.color(),
+                            ),
+                        }
+                    }
+
+                    // Hanging placards use the hand marks only as anchor points; they hang
+                    // straight down in screen coordinates and do not inherit hand rotation.
+                    let hour_display = if hours % 12 == 0 { 12 } else { hours % 12 };
+                    let right_hand_pose = iter
+                        .marked_pose("rMid2")
+                        .expect("rMid2 mark missing from LINKAGE");
+                    let left_hand_pose = iter
+                        .marked_pose("lMid2")
+                        .expect("lMid2 mark missing from LINKAGE");
+                    surface.draw_hanging_placard(pose_to_point(left_hand_pose), hour_display as u32);
+                    surface.draw_hanging_placard(pose_to_point(right_hand_pose), minutes as u32);
+                }
+                cyd_tile.flush_at(tile_flush.top_left)?;
             }
         }
     }

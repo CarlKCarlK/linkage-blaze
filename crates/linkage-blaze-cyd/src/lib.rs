@@ -199,7 +199,7 @@ impl Cyd {
     /// initializing the buffer from app-provided [`CydStatic`] storage.
     ///
     /// The app picks the buffer type via `B`; `Cyd` owns the init protocol. Use
-    /// [`Cyd::draw_frame`] to render into and flush the owned buffer.
+    /// [`Cyd::frame_mut`] or [`Cyd::full_frame_mut`] to render into and flush the owned buffer.
     pub fn new_display_only<B: DynPixelBuffer>(
         statics: &'static CydStatic<B>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
@@ -412,22 +412,6 @@ impl Cyd {
 
     pub fn flush(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(buffer, top_left)?)
-    }
-
-    /// Render into a view of the Cyd-owned frame buffer via `render`,
-    /// then flush that view to the display at `top_left`.
-    ///
-    /// This is the normal way to use the owned buffer: it borrows the buffer and
-    /// the display as disjoint fields, so the closure can render and the result
-    /// is flushed without the app juggling a separate buffer.
-    pub fn draw_frame<F>(&mut self, size: Size, top_left: Point, render: F) -> Result<(), CydError>
-    where
-        F: FnOnce(&mut CydFrame<'_>),
-    {
-        let mut cyd_frame = self.frame_mut(size);
-        render(&mut cyd_frame);
-        cyd_frame.flush_at(top_left)?;
-        Ok(())
     }
 
     pub fn full_frame_mut(&mut self) -> CydFrame<'_> {
