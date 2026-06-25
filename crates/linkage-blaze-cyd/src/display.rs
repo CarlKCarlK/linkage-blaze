@@ -19,7 +19,7 @@ use mipidsi::{
     Builder,
     interface::SpiInterface,
     models::ILI9341Rgb565,
-    options::{ColorOrder, Orientation, Rotation},
+    options::{ColorOrder, Orientation as MipiOrientation, Rotation},
 };
 use static_cell::StaticCell;
 
@@ -335,41 +335,40 @@ pub struct CydDisplay {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CydDisplayOrientation {
+pub enum Orientation {
     // todo000 later support a full algebra of rotations and flips like the
     // device-envoy 2D LED panel orientation model.
     Landscape,
     Portrait,
+    LandscapeInverted,
+    PortraitInverted,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CydDisplayConfig {
-    pub orientation: CydDisplayOrientation,
-}
-
-impl CydDisplayConfig {
-    pub const LANDSCAPE: Self = Self {
-        orientation: CydDisplayOrientation::Landscape,
-    };
-
-    pub const PORTRAIT: Self = Self {
-        orientation: CydDisplayOrientation::Portrait,
-    };
-
+impl Orientation {
     #[must_use]
-    pub const fn screen_size(self) -> Size {
-        match self.orientation {
-            CydDisplayOrientation::Landscape => {
-                Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
-            }
-            CydDisplayOrientation::Portrait => Size::new(240, 320),
+    pub const fn width(self) -> usize {
+        match self {
+            Self::Landscape | Self::LandscapeInverted => SCREEN_WIDTH,
+            Self::Portrait | Self::PortraitInverted => SCREEN_HEIGHT,
         }
     }
 
     #[must_use]
-    pub const fn screen_pixels(self) -> usize {
-        let screen_size = self.screen_size();
-        screen_size.width as usize * screen_size.height as usize
+    pub const fn height(self) -> usize {
+        match self {
+            Self::Landscape | Self::LandscapeInverted => SCREEN_HEIGHT,
+            Self::Portrait | Self::PortraitInverted => SCREEN_WIDTH,
+        }
+    }
+
+    #[must_use]
+    pub const fn size(self) -> Size {
+        Size::new(self.width() as u32, self.height() as u32)
+    }
+
+    #[must_use]
+    pub const fn pixels(self) -> usize {
+        self.width() * self.height()
     }
 }
 
@@ -389,7 +388,7 @@ impl CydDisplay {
         dc_pin: impl OutputPin + 'static,
         rst_pin: impl OutputPin + 'static,
         backlight_pin: impl OutputPin + 'static,
-        display_config: CydDisplayConfig,
+        orientation: Orientation,
     ) -> Result<CydDisplay, CydDisplayInitError> {
         let spi_config = spi::master::Config::default()
             .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
@@ -413,15 +412,21 @@ impl CydDisplay {
         let interface = SpiInterface::new(spi_device, dc, spi_buffer);
         let mut delay = Delay::new();
 
-        let screen_size = display_config.screen_size();
-        let display_orientation = match display_config.orientation {
-            CydDisplayOrientation::Landscape => Orientation::new()
+        let screen_size = orientation.size();
+        let display_orientation = match orientation {
+            Orientation::Landscape => MipiOrientation::new()
                 .rotate(Rotation::Deg90)
                 .flip_horizontal()
                 .rotate(Rotation::Deg180),
-            CydDisplayOrientation::Portrait => Orientation::new()
+            Orientation::Portrait => MipiOrientation::new()
                 .rotate(Rotation::Deg180)
                 .flip_horizontal(),
+            // todo000 verify on device; provisional 180° rotation of Landscape.
+            Orientation::LandscapeInverted => MipiOrientation::new()
+                .rotate(Rotation::Deg90)
+                .flip_horizontal(),
+            // todo000 verify on device; provisional 180° rotation of Portrait.
+            Orientation::PortraitInverted => MipiOrientation::new().flip_horizontal(),
         };
 
         let display = Builder::new(ILI9341Rgb565, interface)

@@ -260,7 +260,10 @@ pub const fn parse_bvh_motion_section<const DOF: usize, const SAMPLE_COUNT: usiz
 
     // Reject trailing non-whitespace: catches DOF too small.
     let end = skip_whitespace(bytes, i);
-    assert!(end == bytes.len(), "BVH: extra data after expected motion table");
+    assert!(
+        end == bytes.len(),
+        "BVH: extra data after expected motion table"
+    );
 
     out
 }
@@ -386,8 +389,11 @@ pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT
 ) -> BvhMotion<DOF, SAMPLE_COUNT> {
     let raw = parse_bvh_motion_section::<DOF, SAMPLE_COUNT>(bytes);
     let channel_is_position = parse_bvh_channel_is_position::<DOF>(bytes);
-    let normalized =
-        normalize_bvh_motion::<DOF, SAMPLE_COUNT>(raw, channel_is_position, BvhNormalizePolicy::LINKAGE_BLAZE);
+    let normalized = normalize_bvh_motion::<DOF, SAMPLE_COUNT>(
+        raw,
+        channel_is_position,
+        BvhNormalizePolicy::LINKAGE_BLAZE,
+    );
     BvhMotion::from_normalized(normalized)
 }
 
@@ -981,9 +987,7 @@ Frame Time:\t0.033333\n\
     #[test]
     #[should_panic(expected = "needle not found")]
     fn rejects_missing_frame_time() {
-        parse_bvh_motion_section::<2, 1>(
-            b"MOTION\nFrames: 1\n1.0 2.0\n",
-        );
+        parse_bvh_motion_section::<2, 1>(b"MOTION\nFrames: 1\n1.0 2.0\n");
     }
 
     #[test]
@@ -991,9 +995,7 @@ Frame Time:\t0.033333\n\
     fn rejects_bad_frame_time_value() {
         // Value is on the next line; skip_inline_whitespace does not cross it,
         // so parse_f32 sees '\n' and fails rather than consuming the data row.
-        parse_bvh_motion_section::<2, 1>(
-            b"MOTION\nFrames: 1\nFrame Time:\n1.0 2.0\n",
-        );
+        parse_bvh_motion_section::<2, 1>(b"MOTION\nFrames: 1\nFrame Time:\n1.0 2.0\n");
     }
 
     // ── parse_f32: digit-count limit ──────────────────────────────────────
@@ -1221,11 +1223,8 @@ Frame Time:\t0.033\n\
 
     #[test]
     fn samples_iter_yields_arrays() {
-        let motion = BvhMotion::<2, 3>::new([
-            [0, 65535],
-            [PARAM_CENTER_U16, PARAM_CENTER_U16],
-            [65535, 0],
-        ]);
+        let motion =
+            BvhMotion::<2, 3>::new([[0, 65535], [PARAM_CENTER_U16, PARAM_CENTER_U16], [65535, 0]]);
         let mut iter = motion.samples();
         assert_eq!(iter.next(), Some(motion.sample(0)));
         assert_eq!(iter.next(), Some(motion.sample(1)));

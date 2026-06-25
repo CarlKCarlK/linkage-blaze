@@ -36,7 +36,7 @@ use linkage_blaze_core::{
     linkage_fixed, to_point,
 };
 use linkage_blaze_cyd::{
-    Cyd, CydDisplayConfig, CydStatic, PixelBuffer, TranslatedDrawTarget,
+    Cyd, CydStatic, Orientation, PixelBuffer, TranslatedDrawTarget,
     tiling::{Region, TileGrid, max_usize},
 };
 use log::info;
@@ -49,8 +49,8 @@ const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196,
 const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
-const DISPLAY_WIDTH: usize = 240; // portrait CYD screen width
-const DISPLAY_HEIGHT: usize = 320; // portrait CYD screen height
+// This app always runs portrait; the screen size is derived from the config.
+const ORIENTATION: Orientation = Orientation::Portrait;
 const TEXT_BAND_HEIGHT: usize = 34;
 const WIFI_TEXT_TOP_LEFT: Point = Point::new(8, 12);
 const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
@@ -58,7 +58,7 @@ const TIME_TEXT_TOP_LEFT: Point = Point::new(166, 12);
 // The full-width status band runs across the top of the screen.
 const TEXT_BAND: Region = Region::new(
     Point::new(0, 0),
-    Size::new(DISPLAY_WIDTH as u32, TEXT_BAND_HEIGHT as u32),
+    Size::new(ORIENTATION.width() as u32, TEXT_BAND_HEIGHT as u32),
 );
 
 // The dance body fills the rest of the screen below the text band, tiled in
@@ -67,8 +67,8 @@ const TEXT_BAND: Region = Region::new(
 const BODY_TILES: TileGrid = TileGrid::new(
     Point::new(0, TEXT_BAND_HEIGHT as i32),
     Size::new(
-        DISPLAY_WIDTH as u32,
-        (DISPLAY_HEIGHT - TEXT_BAND_HEIGHT) as u32,
+        ORIENTATION.width() as u32,
+        ORIENTATION.height() as u32 - TEXT_BAND_HEIGHT as u32,
     ),
     Size::new(80, 96),
 );
@@ -84,29 +84,23 @@ const PROJECTION: NegXProjection = NegXProjection {
 
 // ── Linkage constants ─────────────────────────────────────────────────────────
 
-// todo0000 build it up in 3 steps
-const LINKAGE_INNER: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
+// Load the raw motion-capture linkage.
+const LINKAGE0: LinkageFixed<132, 6, 600> =
+    linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
+// Add a pen style to the linkage for drawing.
+const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
     .pen_width(3.5)
     .pen_color(FIGURE)
-    .combine(linkage_fixed!(
-        "../../linkage-blaze-mocap/samples/pirouette.lb.rs",
-        132,
-        6,
-        600
-    ));
-
-// todo000 I thought we killed _at_default
+    .combine(LINKAGE0);
+// Pick which params to keep.
 // todo000 can we kill or reduce the optimization steps?
-const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE_INNER
+const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE1
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
     .freeze_param_name_at_default::<130>("abdomen_xrotation")
     .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
     .strip_fixed_noops::<400>()
     .merge_adjacent_fixed::<400>()
     .strip_fixed_noops::<400>();
-
-// The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
-const WORKSPACE_PIXELS: usize = max_usize(TEXT_BAND.pixel_count(), BODY_TILES.max_tile_pixels());
 
 // ── Binary entry point ────────────────────────────────────────────────────────
 
@@ -133,6 +127,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD dance with WiFi");
 
+    // The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
+    const WORKSPACE_PIXELS: usize =
+        max_usize(TEXT_BAND.pixel_count(), BODY_TILES.max_tile_pixels());
+    // todo0000 why do we need to see PixelBuffer?
     static CYD_STATIC: CydStatic<PixelBuffer<WORKSPACE_PIXELS>> = CydStatic::new();
     let mut cyd = Cyd::new_display_only(
         &CYD_STATIC,
@@ -144,7 +142,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO2,
         p.GPIO4,
         p.GPIO21,
-        CydDisplayConfig::PORTRAIT,
+        ORIENTATION,
     )?;
     cyd.clear(Cyd::rgb565(BACKGROUND))?;
     info!("CYD display initialized");

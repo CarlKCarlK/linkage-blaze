@@ -25,8 +25,8 @@ use static_cell::StaticCell;
 pub use buffer::{DynPixelBuffer, PixelBuffer, RectBuffer, RectPixels, RectView};
 pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
 pub use display::{
-    CydDisplay, CydDisplayConfig, CydDisplayFlushError, CydDisplayInitError, CydDisplayOrientation,
-    DISPLAY_SPI_HZ, DrawPrimitive, Ellipse, LineSegment,
+    CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
+    LineSegment, Orientation,
 };
 pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH};
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
@@ -213,7 +213,7 @@ impl Cyd {
         display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_config: CydDisplayConfig,
+        orientation: Orientation,
     ) -> Result<Self, CydError> {
         let pixel_buffer = B::init_static(&statics.pixel_buffer);
         Self::new_with_buffer(
@@ -225,7 +225,7 @@ impl Cyd {
             display_dc_pin,
             display_rst_pin,
             display_backlight_pin,
-            display_config,
+            orientation,
             pixel_buffer,
         )
     }
@@ -242,7 +242,7 @@ impl Cyd {
         display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_config: CydDisplayConfig,
+        orientation: Orientation,
         pixel_buffer: &'static mut dyn DynPixelBuffer,
     ) -> Result<Self, CydError> {
         Self::new_inner(
@@ -254,7 +254,7 @@ impl Cyd {
             display_dc_pin,
             display_rst_pin,
             display_backlight_pin,
-            display_config,
+            orientation,
             None,
             None,
             None,
@@ -273,7 +273,7 @@ impl Cyd {
         display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_config: CydDisplayConfig,
+        orientation: Orientation,
         touch_spi: impl esp_hal::spi::master::Instance + 'static,
         touch_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
         touch_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -302,7 +302,7 @@ impl Cyd {
             display_dc_pin,
             display_rst_pin,
             display_backlight_pin,
-            display_config,
+            orientation,
             Some(touch),
             Some(calibration_flash_block),
             Some(calibration_button),
@@ -319,7 +319,7 @@ impl Cyd {
         display_dc_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_rst_pin: impl esp_hal::gpio::OutputPin + 'static,
         display_backlight_pin: impl esp_hal::gpio::OutputPin + 'static,
-        display_config: CydDisplayConfig,
+        orientation: Orientation,
         touch: Option<CydTouch>,
         calibration_flash_block: Option<FlashBlockEsp>,
         calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
@@ -345,7 +345,7 @@ impl Cyd {
                 display_dc_pin,
                 display_rst_pin,
                 display_backlight_pin,
-                display_config,
+                orientation,
             )?,
             touch,
             calibration_config,

@@ -19,7 +19,7 @@ use linkage_blaze_core::{
     LinkageFixed, NegXProjection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
     linkage_fixed,
 };
-use linkage_blaze_cyd::{Cyd, CydDisplayConfig, CydStatic, PixelBufferFull};
+use linkage_blaze_cyd::{Cyd, CydStatic, Orientation, PixelBufferFull};
 use log::info;
 
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
@@ -83,7 +83,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO4,
         p.GPIO21,
         // todo000 are there 4 orientations?
-        CydDisplayConfig::PORTRAIT,
+        Orientation::Portrait,
     )?;
     let background565 = Cyd::rgb565(BACKGROUND);
     let text565 = Cyd::rgb565(TEXT);
