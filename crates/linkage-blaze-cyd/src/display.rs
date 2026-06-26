@@ -346,29 +346,29 @@ pub enum Orientation {
 
 impl Orientation {
     #[must_use]
-    pub const fn width(self) -> usize {
+    pub const fn width(self) -> u32 {
         match self {
-            Self::Landscape | Self::LandscapeInverted => SCREEN_WIDTH,
-            Self::Portrait | Self::PortraitInverted => SCREEN_HEIGHT,
+            Self::Landscape | Self::LandscapeInverted => SCREEN_WIDTH as u32,
+            Self::Portrait | Self::PortraitInverted => SCREEN_HEIGHT as u32,
         }
     }
 
     #[must_use]
-    pub const fn height(self) -> usize {
+    pub const fn height(self) -> u32 {
         match self {
-            Self::Landscape | Self::LandscapeInverted => SCREEN_HEIGHT,
-            Self::Portrait | Self::PortraitInverted => SCREEN_WIDTH,
+            Self::Landscape | Self::LandscapeInverted => SCREEN_HEIGHT as u32,
+            Self::Portrait | Self::PortraitInverted => SCREEN_WIDTH as u32,
         }
     }
 
     #[must_use]
     pub const fn size(self) -> Size {
-        Size::new(self.width() as u32, self.height() as u32)
+        Size::new(self.width(), self.height())
     }
 
     #[must_use]
     pub const fn pixels(self) -> usize {
-        self.width() * self.height()
+        self.width() as usize * self.height() as usize
     }
 }
 

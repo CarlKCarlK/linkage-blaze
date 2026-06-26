@@ -34,7 +34,7 @@ use linkage_blaze_core::{
 };
 use linkage_blaze_cyd::{
     Cyd, CydError, CydStatic, Orientation, TranslatedDrawTarget,
-    tiling::{TileGrid, max_usize},
+    tiling::{TileGrid, max_u32, max_usize},
 };
 use log::info;
 use time::OffsetDateTime;
@@ -49,28 +49,22 @@ const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 const ORIENTATION: Orientation = Orientation::Portrait;
 
-// Full-width status band across the top: Wi-Fi status on the left, time on the right.
-//todo000 kill this.
-const TEXT_BAND_HEIGHT: u32 = 34;
-const WIFI_STATUS_SIZE: Size = Size::new(ORIENTATION.width() as u32, TEXT_BAND_HEIGHT);
-const WIFI_STATUS_POINT: Point = Point::new(8, 12);
-// Screen-space top-left of the clock text. The clock loop redraws only this
-// right-hand slice of the band each tick, so the once-drawn Wi-Fi label on the
-// left is left untouched.
-const TIME_POINT: Point = Point::new(166, 12);
+const WIFI_STATUS_SIZE: Size = Size::new(166, 22);
+const WIFI_STATUS_POINT: Point = Point::new(0, 0);
+
+const TIME_POINT: Point = Point::new(WIFI_STATUS_SIZE.width as i32, WIFI_STATUS_POINT.y as i32);
 const TIME_SIZE: Size = Size::new(
-    ORIENTATION.width() as u32 - TIME_POINT.x as u32,
-    TEXT_BAND_HEIGHT - TIME_POINT.y as u32,
+    ORIENTATION.width() - TIME_POINT.x as u32,
+    WIFI_STATUS_SIZE.height,
 );
 
-// Tile grid covering the dance figure below the band. `TileGrid` computes tile
-// sizes and clips the final row/column.
+const BELOW_WIFI_TIME: u32 = max_u32(
+    WIFI_STATUS_POINT.y as u32 + WIFI_STATUS_SIZE.height,
+    TIME_POINT.y as u32 + TIME_SIZE.height,
+);
 const FIGURE_TILES: TileGrid = TileGrid::new(
-    Point::new(0, TEXT_BAND_HEIGHT as i32),
-    Size::new(
-        ORIENTATION.width() as u32,
-        ORIENTATION.height() as u32 - TEXT_BAND_HEIGHT,
-    ),
+    Point::new(0, BELOW_WIFI_TIME as i32),
+    Size::new(ORIENTATION.width(), ORIENTATION.height() - BELOW_WIFI_TIME),
     3,
     3,
 );
@@ -182,7 +176,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 // Draw the Wi-Fi status into the top band, leaving the time slot
                 // blank, until the clock loop below takes over the band.
                 //todo0000 fix this
-                wifi_status_frame.clear(Cyd::rgb565(BACKGROUND));
+                wifi_status_frame.clear(cyd.background_565());
                 wifi_status_frame.write_text(message, WIFI_STATUS_POINT);
                 wifi_status_frame.flush()?;
                 Ok(())
@@ -190,7 +184,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         )
         .await?;
 
-    wifi_status_frame.clear(Cyd::rgb565(BACKGROUND));
+    wifi_status_frame.clear(cyd.background_565());
     wifi_status_frame.write_text("WiFi OK", WIFI_STATUS_POINT);
     wifi_status_frame.flush()?;
     drop(wifi_status_frame);

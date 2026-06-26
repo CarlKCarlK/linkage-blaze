@@ -375,6 +375,24 @@ impl Cyd {
         self.foreground
     }
 
+    /// The device background color in the native `Rgb565` format (pre-computed).
+    #[must_use]
+    pub fn background_565(&self) -> Rgb565 {
+        self.background565
+    }
+
+    /// The device foreground color in the native `Rgb565` format (pre-computed).
+    #[must_use]
+    pub fn foreground_565(&self) -> Rgb565 {
+        self.foreground565
+    }
+
+    /// Convert an `Rgb888` color to the device's native `Rgb565` format.
+    #[must_use]
+    pub fn to_rgb565(&self, color: Rgb888) -> Rgb565 {
+        Rgb565::from(color)
+    }
+
     #[must_use]
     pub fn calibration_config(&self) -> Option<CalibrationConfig> {
         self.calibration_config

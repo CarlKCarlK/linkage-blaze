@@ -23,6 +23,15 @@ pub const fn max_usize(first: usize, second: usize) -> usize {
     if first > second { first } else { second }
 }
 
+/// `const fn` max of two `u32` values.
+///
+/// Useful for sizing layout coordinates, which are `u32` (e.g. `Size` fields),
+/// without round-tripping through `usize`.
+#[must_use]
+pub const fn max_u32(first: u32, second: u32) -> u32 {
+    if first > second { first } else { second }
+}
+
 /// `const fn` ceiling division of two `usize` values.
 ///
 /// Used to derive a per-tile size that covers a region given a tile count:
