@@ -16,7 +16,7 @@ use esp_backtrace as _;
 use esp_hal::time::{Duration, Instant};
 
 use linkage_blaze_core::{
-    LinkageFixed, NegXProjection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
+    CameraProjection, LinkageFixed, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
     linkage_fixed,
 };
 use linkage_blaze_cyd::{Cyd, CydStatic, Orientation};
@@ -43,11 +43,8 @@ const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>:
     .combine(LINKAGE_INNER);
 
 // todo000 still to understand projections.
-const PROJECTION: NegXProjection = NegXProjection {
-    center_x: CENTER_X as f32,
-    baseline_y: BASELINE_Y as f32,
-    scale: SCALE,
-};
+const PROJECTION: CameraProjection =
+    CameraProjection::neg_x_ortho(CENTER_X as f32, BASELINE_Y as f32, SCALE);
 
 esp_bootloader_esp_idf::esp_app_desc!();
 

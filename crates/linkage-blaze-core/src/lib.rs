@@ -3997,41 +3997,116 @@ pub fn to_point(xy: (f32, f32)) -> embedded_graphics::prelude::Point {
     embedded_graphics::prelude::Point::new(xy.0 as i32, xy.1 as i32)
 }
 
-/// Orthographic projection looking along the negative X axis.
+/// Maps world-space geometry to pixel space via an axis rotation plus an
+/// optional perspective divide.
 ///
-/// World Y maps to screen X (negated) and world Z maps to screen Y (negated),
-/// with a configurable origin and uniform scale factor.
+/// The `rotation` matrix maps world axes onto camera axes: row 0 is the depth
+/// axis, row 1 is the source of screen X, and row 2 is the source of screen Y.
+/// `focal` of `None` is orthographic; `Some(f)` applies a focal-length
+/// perspective divide on the depth axis (larger `f` → less foreshortening).
+///
+/// Use the named constructors rather than building the matrix by hand:
 ///
 /// ```rust,no_run
-/// # use linkage_blaze_core::NegXProjection;
-/// let projection = NegXProjection { center_x: 84.0, baseline_y: 300.0, scale: 1.575 };
+/// # use linkage_blaze_core::CameraProjection;
+/// let ortho = CameraProjection::neg_x_ortho(84.0, 300.0, 1.575);
+/// let persp = CameraProjection::neg_x_perspective(120.0, 160.0, 15.0, 30.0);
 /// ```
-pub struct NegXProjection {
-    pub center_x: f32,
-    pub baseline_y: f32,
-    pub scale: f32,
+pub struct CameraProjection {
+    rotation: Mat3,
+    center_x: f32,
+    center_y: f32,
+    scale: f32,
+    /// `None` is orthographic; `Some(focal)` is perspective.
+    focal: Option<f32>,
 }
 
-impl Projection for NegXProjection {
+/// World Y → screen X, world Z → screen Y, world X → depth.
+const NEG_X_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
+/// Robot ortho: +Z up, +Y left, drops X. Screen X is sourced from world Y
+/// negated relative to [`NEG_X_BASIS`] so +Y renders to the left.
+const ROBOT_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]]);
+
+impl CameraProjection {
+    /// Orthographic, looking along negative X: world Y → screen X (negated),
+    /// world Z → screen Y (negated). Replaces the old `NegXProjection`.
+    pub const fn neg_x_ortho(center_x: f32, baseline_y: f32, scale: f32) -> Self {
+        Self {
+            rotation: NEG_X_BASIS,
+            center_x,
+            center_y: baseline_y,
+            scale,
+            focal: None,
+        }
+    }
+
+    /// Perspective, looking along negative X (same axes as [`Self::neg_x_ortho`]).
+    /// Replaces the old `PerspectiveNegXProjection`.
+    pub const fn neg_x_perspective(center_x: f32, center_y: f32, scale: f32, focal: f32) -> Self {
+        Self {
+            rotation: NEG_X_BASIS,
+            center_x,
+            center_y,
+            scale,
+            focal: Some(focal),
+        }
+    }
+
+    /// Robot orthographic view: +Z up, +Y left, drops X.
+    pub const fn robot_ortho(center_x: f32, center_y: f32, scale: f32) -> Self {
+        Self {
+            rotation: ROBOT_BASIS,
+            center_x,
+            center_y,
+            scale,
+            focal: None,
+        }
+    }
+
+    //todo0000 add a runtime constructor (e.g. from_yaw_pitch) that builds
+    // `rotation` from camera angles via Mat3::yaw/pitch/roll, for camera_control.
+
+    /// Map a world vector into camera axes `[depth, screen-x source, screen-y source]`.
+    #[inline]
+    fn cam(&self, v: Vec3) -> [f32; 3] {
+        let r = &self.rotation;
+        [
+            r[0][0] * v[0] + r[0][1] * v[1] + r[0][2] * v[2],
+            r[1][0] * v[0] + r[1][1] * v[1] + r[1][2] * v[2],
+            r[2][0] * v[0] + r[2][1] * v[1] + r[2][2] * v[2],
+        ]
+    }
+
+    #[inline]
+    fn depth_factor(&self, depth: f32) -> f32 {
+        match self.focal {
+            None => 1.0,
+            Some(focal) => focal / (focal + depth).max(focal * 0.05),
+        }
+    }
+}
+
+impl Projection for CameraProjection {
     fn project_pos(&self, pose: Pose) -> (f32, f32) {
-        let p = pose.position();
-        (
-            self.center_x - p[1] * self.scale,
-            self.baseline_y - p[2] * self.scale,
-        )
+        let c = self.cam(pose.position());
+        let k = self.scale * self.depth_factor(c[0]);
+        (self.center_x - c[1] * k, self.center_y - c[2] * k)
     }
 
-    fn project_dir(&self, _pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
-        let r = radius * self.scale;
-        (-world_dir[1] * r, -world_dir[2] * r)
+    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
+        let factor = self.depth_factor(self.cam(pose.position())[0]);
+        let d = self.cam(world_dir);
+        let r = radius * self.scale * factor;
+        (-d[1] * r, -d[2] * r)
     }
 
-    fn project_radius(&self, _pose: Pose, radius: f32) -> f32 {
-        radius * self.scale
+    fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
+        let factor = self.depth_factor(self.cam(pose.position())[0]);
+        radius * self.scale * factor
     }
 
     fn project_width(&self, width: f32) -> f32 {
-        width * self.scale
+        (width * self.scale).max(1.0)
     }
 }
 
@@ -4153,60 +4228,6 @@ impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
                 tile_origin: self.tile_origin,
             })
             .unwrap();
-    }
-}
-
-/// Perspective projection looking along the negative X axis.
-///
-/// Applies a focal-length perspective divide on the world X coordinate (depth),
-/// then maps world Y to screen X and world Z to screen Y.
-///
-/// ```rust,no_run
-/// # use linkage_blaze_core::PerspectiveNegXProjection;
-/// let projection = PerspectiveNegXProjection {
-///     center_x: 120.0,
-///     center_y: 160.0,
-///     scale: 15.0,
-///     focal: 30.0,
-/// };
-/// ```
-pub struct PerspectiveNegXProjection {
-    pub center_x: f32,
-    pub center_y: f32,
-    pub scale: f32,
-    /// Focal length in world units. Larger values produce less foreshortening.
-    pub focal: f32,
-}
-
-impl PerspectiveNegXProjection {
-    fn depth_factor(&self, depth: f32) -> f32 {
-        self.focal / (self.focal + depth).max(self.focal * 0.05)
-    }
-}
-
-impl Projection for PerspectiveNegXProjection {
-    fn project_pos(&self, pose: Pose) -> (f32, f32) {
-        let p = pose.position();
-        let factor = self.depth_factor(p[0]);
-        (
-            self.center_x - p[1] * self.scale * factor,
-            self.center_y - p[2] * self.scale * factor,
-        )
-    }
-
-    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
-        let factor = self.depth_factor(pose.position()[0]);
-        let r = radius * self.scale * factor;
-        (-world_dir[1] * r, -world_dir[2] * r)
-    }
-
-    fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
-        let factor = self.depth_factor(pose.position()[0]);
-        radius * self.scale * factor
-    }
-
-    fn project_width(&self, width: f32) -> f32 {
-        (width * self.scale).max(1.0)
     }
 }
 
