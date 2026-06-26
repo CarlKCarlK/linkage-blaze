@@ -20,16 +20,12 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, Orientation, tiling::max_usize};
+use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, tiling::max_usize};
 use linkage_blaze_example_core::skeleton_clock::{
-    FIGURE_TILES, SKELETON_CLOCK_BACKGROUND, SKELETON_CLOCK_FOREGROUND, SkeletonClockError,
-    WIFI_STATUS_POINT, WIFI_STATUS_SIZE, skeleton_clock,
+    BACKGROUND, FIGURE_TILES, FOREGROUND, ORIENTATION, SkeletonClockError, WIFI_STATUS_POINT,
+    WIFI_STATUS_SIZE, skeleton_clock,
 };
 use log::info;
-
-// ── Screen orientation ────────────────────────────────────────────────────────
-// Must stay Portrait to match `linkage-blaze-example-core`'s layout constants.
-const ORIENTATION: Orientation = Orientation::Portrait;
 
 // ── Binary entry point ────────────────────────────────────────────────────────
 
@@ -75,8 +71,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO4,
         p.GPIO21,
         ORIENTATION,
-        SKELETON_CLOCK_BACKGROUND,
-        SKELETON_CLOCK_FOREGROUND,
+        BACKGROUND,
+        FOREGROUND,
         &FONT_6X10,
     )?;
     info!("CYD display initialized");

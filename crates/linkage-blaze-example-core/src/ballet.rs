@@ -25,16 +25,13 @@ use linkage_blaze_cyd_core::{Cyd, CydFrame};
 
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)
-const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36); // very dark blue-green
-const FIGURE: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
-const TEXT: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
-
 /// Device default background color the platform shim should construct its `Cyd`
 /// with (also used to clear every frame).
-pub const BALLET_BACKGROUND: Rgb888 = BACKGROUND;
+pub const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36); // very dark blue-green
+const FIGURE: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
 /// Device default foreground/text color the platform shim should construct its
 /// `Cyd` with.
-pub const BALLET_FOREGROUND: Rgb888 = TEXT;
+pub const FOREGROUND: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
 
 // todo000 these could be OK, but there are a lot of them. Can't some be done via math?
 const CENTER_X: i32 = 84;
@@ -62,7 +59,7 @@ where
     S: Cyd,
 {
     let linkage = LINKAGE.view();
-    let text565 = Rgb565::from(TEXT);
+    let text565 = Rgb565::from(FOREGROUND);
     let mut last_sample_duration = None;
     loop {
         for (sample_index, params) in MOTION.samples().enumerate() {
