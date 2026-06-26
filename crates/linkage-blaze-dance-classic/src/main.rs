@@ -122,7 +122,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD dance with WiFi");
 
-    // The shared pixel buffer must hold the largest frame: a dance tile or the full-width text band.
+    // The shared pixel buffer must hold the largest frame: a dance tile or a wi-fi or time message.
     const BUFFER_PIXEL_COUNT: usize = max_usize(
         (WIFI_STATUS_SIZE.width * WIFI_STATUS_SIZE.height) as usize,
         FIGURE_TILES.max_tile_pixel_count(),
@@ -181,7 +181,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     wifi_status_frame
         .clear()
-        .write_text("WiFi: Ok")
+        .write_text("WiFi: OK")
         .flush_at(WIFI_STATUS_POINT)?;
     drop(wifi_status_frame);
     info!("WiFi connected");
