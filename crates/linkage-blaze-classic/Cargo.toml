@@ -37,6 +37,7 @@ linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
+linkage-blaze-example-core = { path = "../linkage-blaze-example-core" }
 derive_more = { version = "2.1.1", default-features = false, features = [
     "from",
 ] }
