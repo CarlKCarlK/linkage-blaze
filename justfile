@@ -24,6 +24,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
+    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-skeleton-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-printer-wasm --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
@@ -191,6 +192,26 @@ run-ballet-wasm port=_ballet_wasm_port:
     just check-ballet-wasm
     just build-ballet-wasm
     just serve-ballet-wasm {{port}}
+
+# ── linkage-blaze-skeleton-clock-wasm (browser-simulated CYD `skeleton_clock`) ─
+_skeleton_clock_wasm_crate := "crates/linkage-blaze-skeleton-clock-wasm"
+_skeleton_clock_wasm_www   := "crates/linkage-blaze-skeleton-clock-wasm/www"
+_skeleton_clock_wasm_port  := "8086"
+
+check-skeleton-clock-wasm:
+    cargo check -p linkage-blaze-skeleton-clock-wasm --target wasm32-unknown-unknown
+
+build-skeleton-clock-wasm:
+    wasm-pack build {{_skeleton_clock_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
+
+serve-skeleton-clock-wasm port=_skeleton_clock_wasm_port:
+    -lsof -ti:{{port}} | xargs -r kill
+    cd {{_skeleton_clock_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-skeleton-clock-wasm port=_skeleton_clock_wasm_port:
+    just check-skeleton-clock-wasm
+    just build-skeleton-clock-wasm
+    just serve-skeleton-clock-wasm {{port}}
 
 generate-ballet:
     cargo run -p linkage-blaze-mocap --example generate_ballet
