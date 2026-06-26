@@ -25,6 +25,12 @@ license = "MIT OR Apache-2.0"
 linkage-blaze-core = { path = "crates/linkage-blaze-core" }
 linkage-blaze-mocap = { path = "crates/linkage-blaze-mocap" }
 
+# Consume the local, unreleased device-envoy (async-closure wifi_auto API) until it
+# is published. Remove once a device-envoy with the AsyncFnMut connect bound ships.
+[patch.crates-io]
+device-envoy-core = { path = "/home/carlk/programs/mcu/device-envoy/crates/device-envoy-core" }
+device-envoy-esp = { path = "/home/carlk/programs/mcu/device-envoy/crates/device-envoy-esp" }
+
 [profile.dev]
 panic = "abort"
 
