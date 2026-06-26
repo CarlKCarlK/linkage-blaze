@@ -102,13 +102,15 @@ impl<'a> CydFrame<'a> {
     }
 
     /// Fill the frame with the device default background color.
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> &mut Self {
         self.view.clear(self.background565);
+        self
     }
 
     /// Fill the frame with an explicit color.
-    pub fn fill(&mut self, color: Rgb565) {
+    pub fn fill(&mut self, color: Rgb565) -> &mut Self {
         self.view.clear(color);
+        self
     }
 
     #[must_use]

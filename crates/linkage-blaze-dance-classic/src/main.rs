@@ -169,18 +169,20 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                     WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
                     WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
                 };
-                wifi_status_frame.clear();
-                wifi_status_frame.write_text(message);
-                wifi_status_frame.flush_at(WIFI_STATUS_POINT)?;
+                wifi_status_frame
+                    .clear()
+                    .write_text(message)
+                    .flush_at(WIFI_STATUS_POINT)?;
                 info!("WiFi: {message}");
                 Ok(())
             },
         )
         .await?;
 
-    wifi_status_frame.clear();
-    wifi_status_frame.write_text("WiFi: OK");
-    wifi_status_frame.flush_at(WIFI_STATUS_POINT)?;
+    wifi_status_frame
+        .clear()
+        .write_text("WiFi: Ok")
+        .flush_at(WIFI_STATUS_POINT)?;
     drop(wifi_status_frame);
     info!("WiFi connected");
 
@@ -211,9 +213,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = clock.linkage_params();
         let time_text = clock.text_12h();
 
-        let mut time_frame = cyd.frame_mut(TIME_SIZE);
-        time_frame.write_text(time_text.as_str());
-        time_frame.flush_at(TIME_POINT)?;
+        cyd.frame_mut(TIME_SIZE)
+            .write_text(&time_text)
+            .flush_at(TIME_POINT)?;
 
         // Shared linkage rendering path, tiled for CYD.
 
@@ -376,6 +378,7 @@ where
     .expect("drawing to an Infallible target cannot fail");
 }
 
+// todo000 this is hard to see. Make it more visible or remove it
 /// Draw the clock dial's 12 / 3 / 6 / 9 hour markers around the figure.
 fn draw_dial<D>(target: &mut D)
 where

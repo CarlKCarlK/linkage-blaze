@@ -29,7 +29,7 @@ impl CydFrame<'_> {
     ///
     /// For any other font, color, alignment, or baseline, draw with
     /// embedded-graphics directly against this frame.
-    pub fn write_text(&mut self, text: &str) {
+    pub fn write_text(&mut self, text: &str) -> &mut Self {
         Text::with_baseline(
             text,
             Point::new(0, 0),
@@ -38,5 +38,6 @@ impl CydFrame<'_> {
         )
         .draw(self)
         .expect("drawing text to an Infallible CYD frame cannot fail");
+        self
     }
 }
