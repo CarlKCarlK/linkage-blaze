@@ -21,8 +21,8 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
     env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-dance-classic {{_classic_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-ballet {{_ballet_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example dance {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-printer-wasm --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
@@ -150,64 +150,58 @@ run-clock-classic:
     just build-clock-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-clock-classic {{_classic_args}}
 
-# ── linkage-blaze-dance-classic ─────────────────────────────────────────
+# ── linkage-blaze-classic examples (dance, ballet) ──────────────────────
+#
+# dance and ballet now live as `--example`s in the shared `linkage-blaze-classic`
+# crate. Example binaries land in target/<triple>/release/examples/<name>.
+
+_ballet_args := _classic_args
 
 generate-dance:
     cargo run -p linkage-blaze-mocap --example specialize_dance
 
 check-dance-classic:
-    cargo +esp check -p linkage-blaze-dance-classic {{_classic_args}}
+    cargo +esp check -p linkage-blaze-classic --example dance {{_classic_args}}
 
 build-dance-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-dance-classic {{_classic_args}}
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example dance {{_classic_args}}
 
 run-dance-classic:
     just check-dance-classic
     just build-dance-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-dance-classic {{_classic_args}}
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example dance {{_classic_args}}
 
-_dance_classic_crate := "crates/linkage-blaze-dance-classic"
-_dance_classic_www   := "crates/linkage-blaze-dance-classic/web"
+_dance_classic_www   := "crates/linkage-blaze-classic/web"
 _dance_wasm_port     := "8085"
 
+# NOTE: the WASM-simulated CYD for dance is not wired up yet; these recipes are
+# placeholders pointing at the merged crate's (currently test-only) lib target.
 check-dance-wasm:
-    cargo check -p linkage-blaze-dance-classic --target wasm32-unknown-unknown --no-default-features --lib
-
-build-dance-wasm:
-    wasm-pack build {{_dance_classic_crate}} --target web --out-dir web/pkg --out-name linkage_blaze_dance_classic --no-default-features
+    cargo check -p linkage-blaze-classic --target wasm32-unknown-unknown --no-default-features --lib
 
 serve-dance-wasm port=_dance_wasm_port:
     -lsof -ti:{{port}} | xargs -r kill
     cd {{_dance_classic_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
 
-run-dance-wasm port=_dance_wasm_port:
-    just check-dance-wasm
-    just build-dance-wasm
-    just serve-dance-wasm {{port}}
-
-# ── linkage-blaze-ballet ───────────────────────────────────────────────
-
-_ballet_args := _classic_args
-
 generate-ballet:
     cargo run -p linkage-blaze-mocap --example generate_ballet
 
 check-ballet-classic:
-    cargo +esp check -p linkage-blaze-ballet {{_ballet_args}}
+    cargo +esp check -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
 build-ballet-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-ballet {{_ballet_args}}
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
 size-ballet-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-ballet {{_ballet_args}}
-    source ~/export-esp.sh && xtensa-esp32-elf-size target/xtensa-esp32-none-elf/release/linkage-blaze-ballet
-    source ~/export-esp.sh && xtensa-esp32-elf-size -A target/xtensa-esp32-none-elf/release/linkage-blaze-ballet
-    source ~/export-esp.sh && xtensa-esp32-elf-nm -S --size-sort target/xtensa-esp32-none-elf/release/linkage-blaze-ballet | tail -n 30
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    source ~/export-esp.sh && xtensa-esp32-elf-size target/xtensa-esp32-none-elf/release/examples/ballet
+    source ~/export-esp.sh && xtensa-esp32-elf-size -A target/xtensa-esp32-none-elf/release/examples/ballet
+    source ~/export-esp.sh && xtensa-esp32-elf-nm -S --size-sort target/xtensa-esp32-none-elf/release/examples/ballet | tail -n 30
 
 run-ballet-classic:
     just check-ballet-classic
     just build-ballet-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-ballet {{_ballet_args}}
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
 # ── linkage-blaze-armatron-wasm (web simulator + 3D viewer) ─────────────────
 
