@@ -26,30 +26,26 @@ use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, TranslatedDrawTarget,
+    Cyd, CydFrame, Orientation, TranslatedDrawTarget,
     tiling::{TileGrid, max_u32},
 };
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-const BACKGROUND: Rgb888 = Rgb888::CSS_MIDNIGHT_BLUE; // deep night blue (25, 25, 112)
-const FIGURE: Rgb888 = Rgb888::CSS_WHEAT; // warm pale bone-like tan (245, 222, 179)
-const FOREGROUND: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
-const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
-
 /// Device default background color the platform shim should construct its `Cyd`
 /// with (also used to clear every frame).
-pub const SKELETON_CLOCK_BACKGROUND: Rgb888 = BACKGROUND;
+pub const BACKGROUND: Rgb888 = Rgb888::CSS_MIDNIGHT_BLUE; // deep night blue (25, 25, 112)
+const FIGURE: Rgb888 = Rgb888::CSS_WHEAT; // warm pale bone-like tan (245, 222, 179)
 /// Device default foreground/text color the platform shim should construct its
 /// `Cyd` with.
-pub const SKELETON_CLOCK_FOREGROUND: Rgb888 = FOREGROUND;
+pub const FOREGROUND: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
+const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
-//
-// CYD panel dimensions in the Portrait orientation this example assumes. The
-// platform shim MUST construct its `Cyd` in Portrait so these match.
-const SCREEN_WIDTH: u32 = 240;
-const SCREEN_HEIGHT: u32 = 320;
+
+/// Screen orientation this example's layout assumes; the platform shim MUST
+/// construct its `Cyd` with this orientation so the layout constants match.
+pub const ORIENTATION: Orientation = Orientation::Portrait;
 
 /// Region (size) of the WiFi-status band; the shim draws WiFi messages here.
 pub const WIFI_STATUS_SIZE: Size = Size::new(166, 22);
@@ -57,7 +53,7 @@ pub const WIFI_STATUS_SIZE: Size = Size::new(166, 22);
 pub const WIFI_STATUS_POINT: Point = Point::new(0, 0);
 
 const TIME_POINT: Point = Point::new(WIFI_STATUS_SIZE.width as i32, WIFI_STATUS_POINT.y);
-const TIME_SIZE: Size = Size::new(SCREEN_WIDTH - TIME_POINT.x as u32, WIFI_STATUS_SIZE.height);
+const TIME_SIZE: Size = Size::new(ORIENTATION.width() - TIME_POINT.x as u32, WIFI_STATUS_SIZE.height);
 
 const BELOW_WIFI_TIME: u32 = max_u32(
     WIFI_STATUS_POINT.y as u32 + WIFI_STATUS_SIZE.height,
@@ -68,7 +64,7 @@ const BELOW_WIFI_TIME: u32 = max_u32(
 /// The shim uses this to size its shared pixel buffer.
 pub const FIGURE_TILES: TileGrid = TileGrid::new(
     Point::new(0, BELOW_WIFI_TIME as i32),
-    Size::new(SCREEN_WIDTH, SCREEN_HEIGHT - BELOW_WIFI_TIME),
+    Size::new(ORIENTATION.width(), ORIENTATION.height() - BELOW_WIFI_TIME),
     3,
     3,
 );

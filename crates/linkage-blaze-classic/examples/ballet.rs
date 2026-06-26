@@ -11,7 +11,7 @@ use embassy_executor::Spawner;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, Orientation};
-use linkage_blaze_example_core::ballet::{BALLET_BACKGROUND, BALLET_FOREGROUND, ballet};
+use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ballet};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -49,8 +49,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO21,
         // todo000 are there 4 orientations?
         Orientation::Portrait,
-        BALLET_BACKGROUND,
-        BALLET_FOREGROUND,
+        BACKGROUND,
+        FOREGROUND,
         &FONT_6X10,
     )?;
     info!("CYD display initialized");
