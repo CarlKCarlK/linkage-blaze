@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-// todo000 wifi status is missing. (may no longer apply)
 // todo000 we need to use color and/or size to tell hours from minutes
 // todo000 we need some wasm preview
 
@@ -10,7 +9,9 @@ use core::convert::Infallible;
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
-    clock_sync::{ClockSync as _, ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
+    clock_sync::{
+        ClockSync as _, ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND, h12_m_s,
+    },
     flash_block::FlashBlockEsp,
     init_and_start,
     wifi_auto::{
@@ -206,12 +207,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     loop {
         let tick = clock_sync.wait_for_tick().await;
-        // todo could add ClockTime functionality to ClockSyncTick
-        let clock = ClockTime::new(&tick.local_time);
-        info!("tick {}", clock.text_24h());
+        let local_time = &tick.local_time;
+        info!("tick {}", text_24h(local_time));
 
-        let params = clock.linkage_params();
-        let time_text = clock.text_12h();
+        let params = linkage_params(local_time);
+        let time_text = text_12h(local_time);
 
         cyd.frame_mut(TIME_SIZE)
             .write_text(&time_text)
@@ -241,17 +241,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             // Dance-specific foreground overlay: placards hang from hand marks.
             let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
+            let (hour_12, minute, _) = h12_m_s(local_time);
             let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-            draw_hanging_placard(
-                &mut target,
-                pose_to_point(left_hand_pose),
-                clock.hour_12() as u32,
-            );
-            draw_hanging_placard(
-                &mut target,
-                pose_to_point(right_hand_pose),
-                clock.minute() as u32,
-            );
+            draw_hanging_placard(&mut target, pose_to_point(left_hand_pose), hour_12 as u32);
+            draw_hanging_placard(&mut target, pose_to_point(right_hand_pose), minute as u32);
 
             tile_frame.flush_at(tile.top_left)?;
         }
@@ -260,84 +253,57 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
 // ── Clock time ────────────────────────────────────────────────────────────────
 
-/// App-local wall-clock time. Collects the time-derived behavior the dance
-/// needs: 12-hour display, formatted strings, and the normalized linkage
-/// parameters. No alloc.
-struct ClockTime {
-    hours: u8,
-    minutes: u8,
-    seconds: u8,
+/// Format a 12-hour clock string with AM/PM, right-justified to 11
+/// characters (e.g. " 5:04:32 PM" or "12:04:32 PM").
+fn text_12h(local_time: &OffsetDateTime) -> heapless::String<16> {
+    let (hour_12, minute, second) = h12_m_s(local_time);
+    let suffix = if local_time.hour() % 24 < 12 {
+        "AM"
+    } else {
+        "PM"
+    };
+    let mut text = heapless::String::new();
+    core::fmt::write(
+        &mut text,
+        format_args!("{hour_12:>2}:{minute:02}:{second:02} {suffix}"),
+    )
+    .expect("clock string fits in 16 bytes");
+    text
 }
 
-impl ClockTime {
-    fn new(local_time: &OffsetDateTime) -> Self {
-        Self {
-            hours: local_time.hour(),
-            minutes: local_time.minute(),
-            seconds: local_time.second(),
-        }
-    }
-
-    /// 12 for midnight/noon, 1–11 otherwise.
-    fn hour_12(&self) -> u8 {
-        match self.hours % 12 {
-            0 => 12,
-            other => other,
-        }
-    }
-
-    fn minute(&self) -> u8 {
-        self.minutes
-    }
-
-    /// Format a 12-hour clock string with AM/PM, right-justified to 11
-    /// characters (e.g. " 5:04:32 PM" or "12:04:32 PM").
-    fn text_12h(&self) -> heapless::String<16> {
-        let suffix = if self.hours % 24 < 12 { "AM" } else { "PM" };
-        let mut text = heapless::String::new();
-        core::fmt::write(
-            &mut text,
-            format_args!(
-                "{:>2}:{:02}:{:02} {suffix}",
-                self.hour_12(),
-                self.minutes,
-                self.seconds
-            ),
-        )
-        .expect("clock string fits in 16 bytes");
-        text
-    }
-
-    /// Format a 24-hour `HH:MM:SS` clock string.
-    fn text_24h(&self) -> heapless::String<9> {
-        let mut text = heapless::String::new();
-        core::fmt::write(
-            &mut text,
-            format_args!("{:02}:{:02}:{:02}", self.hours, self.minutes, self.seconds),
-        )
-        .expect("clock string fits in 9 bytes");
-        text
-    }
-
-    // todo000 seems overly complex.
-    fn linkage_params(&self) -> [f32; 3] {
-        const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
-        const EYES_FORWARD_PARAM: f32 = 0.5;
-        const RIGHT_ARM_12_PARAM: f32 = 0.4375;
-        const LEFT_ARM_12_PARAM: f32 = 0.5625;
-        let second_phase = self.seconds as f32 / 60.0;
-        let minute_phase = (self.minutes as f32 + second_phase) / 60.0;
-        let hour_phase = ((self.hours % 12) as f32 + minute_phase) / 12.0;
-        let signed_hour_phase = signed_clock_phase(hour_phase);
-        [
-            wrap_unit(EYES_FORWARD_PARAM + second_phase * CLOCK_HAND_PARAM_TURN),
-            wrap_unit(RIGHT_ARM_12_PARAM + minute_phase * CLOCK_HAND_PARAM_TURN),
-            wrap_unit(LEFT_ARM_12_PARAM + signed_hour_phase * CLOCK_HAND_PARAM_TURN),
-        ]
-    }
+/// Format a 24-hour `HH:MM:SS` clock string.
+fn text_24h(local_time: &OffsetDateTime) -> heapless::String<9> {
+    let mut text = heapless::String::new();
+    core::fmt::write(
+        &mut text,
+        format_args!(
+            "{:02}:{:02}:{:02}",
+            local_time.hour(),
+            local_time.minute(),
+            local_time.second()
+        ),
+    )
+    .expect("clock string fits in 9 bytes");
+    text
 }
 
-// todo000 move these into impl ClockTime as static methods?
+// todo000 seems overly complex.
+fn linkage_params(local_time: &OffsetDateTime) -> [f32; 3] {
+    const CLOCK_HAND_PARAM_TURN: f32 = 0.25;
+    const EYES_FORWARD_PARAM: f32 = 0.5;
+    const RIGHT_ARM_12_PARAM: f32 = 0.4375;
+    const LEFT_ARM_12_PARAM: f32 = 0.5625;
+    let second_phase = local_time.second() as f32 / 60.0;
+    let minute_phase = (local_time.minute() as f32 + second_phase) / 60.0;
+    let hour_phase = ((local_time.hour() % 12) as f32 + minute_phase) / 12.0;
+    let signed_hour_phase = signed_clock_phase(hour_phase);
+    [
+        wrap_unit(EYES_FORWARD_PARAM + second_phase * CLOCK_HAND_PARAM_TURN),
+        wrap_unit(RIGHT_ARM_12_PARAM + minute_phase * CLOCK_HAND_PARAM_TURN),
+        wrap_unit(LEFT_ARM_12_PARAM + signed_hour_phase * CLOCK_HAND_PARAM_TURN),
+    ]
+}
+
 fn signed_clock_phase(phase: f32) -> f32 {
     if phase > 0.5 { phase - 1.0 } else { phase }
 }
