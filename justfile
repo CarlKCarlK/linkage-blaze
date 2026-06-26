@@ -23,6 +23,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-printer-wasm --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
@@ -171,17 +172,25 @@ run-skeleton-clock-classic:
     just build-skeleton-clock-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
 
-_skeleton_clock_www  := "crates/linkage-blaze-classic/web"
-_skeleton_clock_wasm_port := "8085"
+# ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
+_ballet_wasm_crate := "crates/linkage-blaze-classic-wasm"
+_ballet_wasm_www   := "crates/linkage-blaze-classic-wasm/www"
+_ballet_wasm_port  := "8085"
 
-# NOTE: the WASM-simulated CYD for skeleton-clock is not wired up yet; these
-# recipes are placeholders pointing at the merged crate's (test-only) lib target.
-check-skeleton-clock-wasm:
-    cargo check -p linkage-blaze-classic --target wasm32-unknown-unknown --no-default-features --lib
+check-ballet-wasm:
+    cargo check -p linkage-blaze-classic-wasm --target wasm32-unknown-unknown
 
-serve-skeleton-clock-wasm port=_skeleton_clock_wasm_port:
+build-ballet-wasm:
+    wasm-pack build {{_ballet_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
+
+serve-ballet-wasm port=_ballet_wasm_port:
     -lsof -ti:{{port}} | xargs -r kill
-    cd {{_skeleton_clock_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+    cd {{_ballet_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-ballet-wasm port=_ballet_wasm_port:
+    just check-ballet-wasm
+    just build-ballet-wasm
+    just serve-ballet-wasm {{port}}
 
 generate-ballet:
     cargo run -p linkage-blaze-mocap --example generate_ballet

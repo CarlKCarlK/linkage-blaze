@@ -56,5 +56,5 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     // Hand off to the device-agnostic render loop.
-    Ok(ballet(&mut cyd)?)
+    Ok(ballet(&mut cyd).await?)
 }

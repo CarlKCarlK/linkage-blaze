@@ -1,0 +1,23 @@
+[package]
+name = "linkage-blaze-cyd-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# A browser-simulated CYD device: implements the device-agnostic `Cyd` /
+# `CydFrame` traits against an HTML canvas. `flush_at` awaits the next
+# `requestAnimationFrame`, blits to the canvas, then resolves, so the same
+# `loop { draw; flush_at(..).await?; }` example code paces itself to the
+# browser's repaint boundary. Parallel to `linkage-blaze-cyd` for esp32.
+
+[dependencies]
+embedded-graphics = { version = "0.8", default-features = false }
+linkage-blaze-core.workspace = true
+linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
+wasm-bindgen = "=0.2.118"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "CanvasRenderingContext2d",
+    "ImageData",
+] }

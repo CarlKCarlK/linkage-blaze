@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CYD Ballet Simulator</title>
+  <meta name="theme-color" content="#0a1c24" />
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0a1c24; /* very dark blue-green, matches device background */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      image-rendering: pixelated;
+      /* Display size is set in app.js (scaled up from the panel resolution). */
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
+    }
+    #status {
+      position: fixed;
+      bottom: 8px;
+      left: 8px;
+      color: #b6c6dc; /* light steel blue */
+      font: 12px monospace;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="screen" aria-label="CYD ballet display simulator"></canvas>
+  <div id="status"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+
+</html>

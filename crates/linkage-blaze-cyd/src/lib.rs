@@ -640,7 +640,10 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
         CydFrameEsp::write_text(self, text)
     }
 
-    fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
+    // Flushing the panel over SPI is synchronous, so this future resolves on its
+    // first poll. The `async fn` is the device-agnostic frame boundary the
+    // render loop awaits; on the MCU it adds no suspension.
+    async fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
         CydFrameEsp::flush_at(self, top_left)
     }
 }

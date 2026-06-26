@@ -1,0 +1,37 @@
+[package]
+name = "linkage-blaze-classic-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Browser build of the "classic" CYD examples. Resolves the page's canvas,
+# builds a `CydWasm`, and spawns the device-agnostic `ballet` render loop, which
+# paces itself to `requestAnimationFrame` via `CydFrameWasm::flush_at`.
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Pull in embassy-time's built-in WASM time driver (setTimeout-backed, with full
+# timer-queue support) here in the final WASM crate only. Embassy time drivers
+# are global and there must be exactly one: the esp32 build gets its driver from
+# the HAL and never compiles this crate, so the two never collide.
+# `wasm`: the built-in setTimeout-backed driver. `generic-queue-64`: use the
+# self-contained timer queue instead of the executor-integrated one, since this
+# build has no embassy-executor to provide the integrated queue's symbols.
+embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
+embedded-graphics = { version = "0.8", default-features = false }
+linkage-blaze-cyd-wasm = { path = "../linkage-blaze-cyd-wasm" }
+linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
+# `ballet` only — no `skeleton-clock`, so device-envoy-core/embassy-executor
+# stay out of the WASM graph.
+linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
+wasm-bindgen = "=0.2.118"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "Window",
+] }
