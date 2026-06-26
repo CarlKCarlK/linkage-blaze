@@ -118,11 +118,11 @@ impl<'a> CydFrame<'a> {
         self.view.raw_pixels_mut()
     }
 
-    pub fn flush(self) -> Result<(), CydError> {
+    pub fn flush(&mut self) -> Result<(), CydError> {
         self.flush_at(Point::new(0, 0))
     }
 
-    pub fn flush_at(self, top_left: Point) -> Result<(), CydError> {
+    pub fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(&self.view, top_left)?)
     }
 }
