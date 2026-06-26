@@ -30,7 +30,7 @@ use embedded_graphics::{
 };
 use esp_backtrace as _;
 use linkage_blaze_core::{
-    LinkageFixed, MarkError, NegXProjection, Pose, Projection, Rgb888, WebColors, linkage,
+    CameraProjection, LinkageFixed, MarkError, Pose, Projection, Rgb888, WebColors, linkage,
     linkage_fixed, to_point,
 };
 use linkage_blaze_cyd::{
@@ -73,11 +73,7 @@ const FIGURE_TILES: TileGrid = TileGrid::new(
 // ── Projection ───────────────────────────────────────────────────────────────
 
 //todo000 review projections.
-const PROJECTION: NegXProjection = NegXProjection {
-    center_x: 120.0,
-    baseline_y: 300.0,
-    scale: 1.25,
-};
+const PROJECTION: CameraProjection = CameraProjection::neg_x_ortho(120.0, 300.0, 1.25);
 
 // ── Linkage constants ─────────────────────────────────────────────────────────
 
