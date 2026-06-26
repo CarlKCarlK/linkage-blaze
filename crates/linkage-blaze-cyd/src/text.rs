@@ -24,15 +24,15 @@ use crate::CydFrame;
 pub const DEFAULT_FONT: MonoFont<'static> = FONT_9X15_BOLD;
 
 impl CydFrame<'_> {
-    /// Draw `text` with its top-left at `top_left` using the device default font
+    /// Draw `text` at the frame's top-left (0, 0) using the device default font
     /// and foreground color.
     ///
     /// For any other font, color, alignment, or baseline, draw with
     /// embedded-graphics directly against this frame.
-    pub fn write_text(&mut self, text: &str, top_left: Point) {
+    pub fn write_text(&mut self, text: &str) {
         Text::with_baseline(
             text,
-            top_left,
+            Point::new(0, 0),
             MonoTextStyle::new(self.font, self.foreground565),
             Baseline::Top,
         )

@@ -25,7 +25,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{Cyd, CydStatic, DEFAULT_FONT, Orientation};
+use linkage_blaze_cyd::{Cyd, CydError, CydStatic, DEFAULT_FONT, Orientation};
 use log::info;
 use static_cell::StaticCell;
 
@@ -106,7 +106,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
 
     let stack = wifi_auto
-        .connect(&mut force_portal_button, |wifi_auto_event| async move {
+        .connect(&mut force_portal_button, async |wifi_auto_event| -> Result<(), CydError> {
             let wifi_mode = match wifi_auto_event {
                 WifiAutoEvent::CaptivePortalReady => "setup CydClock",
                 WifiAutoEvent::Connecting { .. } => "connecting",
