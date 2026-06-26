@@ -9,8 +9,8 @@ license.workspace = true
 # the motion data they embed. The library target exists only to host the
 # precomputed-frames regression test (see `src/lib.rs`).
 [[example]]
-name = "dance"
-path = "examples/dance.rs"
+name = "skeleton-clock"
+path = "examples/skeleton-clock.rs"
 required-features = ["esp32"]
 
 [[example]]

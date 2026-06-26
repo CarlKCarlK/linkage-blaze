@@ -21,7 +21,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
     env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example dance {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
@@ -157,31 +157,31 @@ run-clock-classic:
 
 _ballet_args := _classic_args
 
-generate-dance:
+generate-skeleton-clock:
     cargo run -p linkage-blaze-mocap --example specialize_dance
 
-check-dance-classic:
-    cargo +esp check -p linkage-blaze-classic --example dance {{_classic_args}}
+check-skeleton-clock-classic:
+    cargo +esp check -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
 
-build-dance-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example dance {{_classic_args}}
+build-skeleton-clock-classic:
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
 
-run-dance-classic:
-    just check-dance-classic
-    just build-dance-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example dance {{_classic_args}}
+run-skeleton-clock-classic:
+    just check-skeleton-clock-classic
+    just build-skeleton-clock-classic
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
 
-_dance_classic_www   := "crates/linkage-blaze-classic/web"
-_dance_wasm_port     := "8085"
+_skeleton_clock_www  := "crates/linkage-blaze-classic/web"
+_skeleton_clock_wasm_port := "8085"
 
-# NOTE: the WASM-simulated CYD for dance is not wired up yet; these recipes are
-# placeholders pointing at the merged crate's (currently test-only) lib target.
-check-dance-wasm:
+# NOTE: the WASM-simulated CYD for skeleton-clock is not wired up yet; these
+# recipes are placeholders pointing at the merged crate's (test-only) lib target.
+check-skeleton-clock-wasm:
     cargo check -p linkage-blaze-classic --target wasm32-unknown-unknown --no-default-features --lib
 
-serve-dance-wasm port=_dance_wasm_port:
+serve-skeleton-clock-wasm port=_skeleton_clock_wasm_port:
     -lsof -ti:{{port}} | xargs -r kill
-    cd {{_dance_classic_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+    cd {{_skeleton_clock_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
 
 generate-ballet:
     cargo run -p linkage-blaze-mocap --example generate_ballet
