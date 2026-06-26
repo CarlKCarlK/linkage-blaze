@@ -1,0 +1,44 @@
+[package]
+name = "linkage-blaze-skeleton-clock-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Browser build of the "classic" CYD `skeleton_clock` example. Reuses the
+# `CydWasm` device and the device-agnostic `skeleton_clock` render loop, driving
+# it with a browser-clock `ClockSync` (js_sys::Date + an embassy-time tick).
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# `skeleton-clock` feature is on by default, pulling device-envoy-core's ClockSync.
+linkage-blaze-example-core = { path = "../linkage-blaze-example-core" }
+linkage-blaze-cyd-wasm = { path = "../linkage-blaze-cyd-wasm" }
+linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
+device-envoy-core = { version = "0.1.0", default-features = false, features = [
+    "wifi",
+] }
+embedded-graphics = { version = "0.8", default-features = false }
+time = { version = "0.3.47", default-features = false }
+# device-envoy-core pulls embassy-executor (for its esp constructors we never run
+# on WASM). Select its WASM platform here so it provides the `__pender` symbol;
+# we drive futures with wasm-bindgen-futures, not this executor.
+embassy-executor = { version = "0.10.0", features = [
+    "platform-wasm",
+    "executor-thread",
+] }
+# Built-in WASM time driver (setTimeout-backed) with a self-contained timer
+# queue. Enabled only here, in a final WASM crate (one global driver).
+embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
+wasm-bindgen = "=0.2.118"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "Window",
+    "console",
+] }
