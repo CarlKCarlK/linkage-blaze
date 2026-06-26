@@ -24,30 +24,32 @@ use static_cell::StaticCell;
 
 use buffer::DynPixelBuffer;
 pub use buffer::{PixelBuffer, RectBuffer, RectPixels, RectView};
-pub use calibration::{CalibrationConfig, RawPoint, TouchInputEvent, map_raw_to_screen};
+pub use calibration::{CalibrationConfig, RawPoint, map_raw_to_screen};
 pub use display::{
-    CydDisplay, CydDisplayFlushError, CydDisplayInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
-    LineSegment, Orientation,
+    CydPanel, CydPanelFlushError, CydPanelInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
+    LineSegment,
 };
-pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH};
-// Tiled-layout machinery and the translating draw target now live in the
-// platform-neutral example core; re-export them so existing call sites
-// (`linkage_blaze_cyd::tiling`, `TranslatedDrawTarget`) keep working.
-pub use linkage_blaze_example_core::{TranslatedDrawTarget, tiling};
+// The device abstraction and its neutral support types live in
+// `linkage-blaze-cyd-core`; re-export them so existing call sites
+// (`linkage_blaze_cyd::{Orientation, tiling, TranslatedDrawTarget, ...}`) keep working.
+pub use linkage_blaze_cyd_core::{
+    Cyd as CydDevice, CydFrame as CydFrameTrait, Orientation, SCREEN_HEIGHT, SCREEN_PIXELS,
+    SCREEN_WIDTH, TouchInputEvent, TranslatedDrawTarget, tiling,
+};
 pub use text::DEFAULT_FONT;
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
 
-pub struct Cyd {
-    display: CydDisplay,
+pub struct CydEsp {
+    display: CydPanel,
     touch: Option<CydTouch>,
     calibration_config: Option<CalibrationConfig>,
     calibration_flash_block: Option<FlashBlockEsp>,
     calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
-    // Every Cyd owns exactly one draw buffer. Apps that don't draw through it
-    // pass a zero-sized buffer (e.g. `CydStatic<0>`).
+    // Every CydEsp owns exactly one draw buffer. Apps that don't draw through it
+    // pass a zero-sized buffer (e.g. `CydStaticEsp<0>`).
     pixel_buffer: &'static mut dyn DynPixelBuffer,
     // Default drawing style. Background clears the device at construction and
-    // fills every new frame; foreground and font drive `CydFrame::write_text`.
+    // fills every new frame; foreground and font drive `CydFrameEsp::write_text`.
     // The `Rgb565` versions are precomputed so the hot drawing paths skip the
     // per-call conversion.
     background: Rgb888,
@@ -57,24 +59,24 @@ pub struct Cyd {
     font: &'static MonoFont<'static>,
 }
 
-/// Static storage for a [`Cyd`]-owned pixel buffer.
+/// Static storage for a [`CydEsp`]-owned pixel buffer.
 ///
 /// The app declares one at file scope and names the workspace pixel count it
 /// wants:
 ///
 /// ```ignore
-/// static CYD_STATIC: CydStatic<{ Cyd::SCREEN_PIXELS }> = Cyd::new_static();
+/// static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
 /// ```
 ///
-/// The app chooses the pixel count (policy); [`Cyd::new_display_only`] owns the
+/// The app chooses the pixel count (policy); [`CydEsp::new_display_only`] owns the
 /// initialization protocol and the storage details.
-pub struct CydStatic<const PIXEL_COUNT: usize> {
+pub struct CydStaticEsp<const PIXEL_COUNT: usize> {
     pixel_buffer: StaticCell<PixelBuffer<PIXEL_COUNT>>,
 }
 
-impl<const PIXEL_COUNT: usize> CydStatic<PIXEL_COUNT> {
-    /// Internal constructor. Apps create storage via [`Cyd::new_static`] so all
-    /// construction goes through the `Cyd` device abstraction.
+impl<const PIXEL_COUNT: usize> CydStaticEsp<PIXEL_COUNT> {
+    /// Internal constructor. Apps create storage via [`CydEsp::new_static`] so all
+    /// construction goes through the `CydEsp` device abstraction.
     pub(crate) const fn new() -> Self {
         Self {
             pixel_buffer: StaticCell::new(),
@@ -82,22 +84,22 @@ impl<const PIXEL_COUNT: usize> CydStatic<PIXEL_COUNT> {
     }
 }
 
-pub struct CalibratedCyd<'a> {
-    cyd: &'a mut Cyd,
+pub struct CalibratedCydEsp<'a> {
+    cyd: &'a mut CydEsp,
     calibration_config: CalibrationConfig,
 }
 
-pub struct CydFrame<'a> {
-    display: &'a mut CydDisplay,
+pub struct CydFrameEsp<'a> {
+    display: &'a mut CydPanel,
     view: RectView<'a>,
     // Default background and foreground colors and font, copied from the owning
-    // `Cyd`, so `clear` and `write_text` can render with the device default style.
+    // `CydEsp`, so `clear` and `write_text` can render with the device default style.
     pub(crate) background565: Rgb565,
     pub(crate) foreground565: Rgb565,
     pub(crate) font: &'static MonoFont<'static>,
 }
 
-impl<'a> CydFrame<'a> {
+impl<'a> CydFrameEsp<'a> {
     pub fn view_mut(&mut self) -> &mut RectView<'a> {
         &mut self.view
     }
@@ -133,7 +135,7 @@ impl<'a> CydFrame<'a> {
     }
 }
 
-impl DrawTarget for CydFrame<'_> {
+impl DrawTarget for CydFrameEsp<'_> {
     type Color = Rgb565;
     type Error = Infallible;
 
@@ -150,13 +152,13 @@ impl DrawTarget for CydFrame<'_> {
     }
 }
 
-impl OriginDimensions for CydFrame<'_> {
+impl OriginDimensions for CydFrameEsp<'_> {
     fn size(&self) -> Size {
         self.view.size()
     }
 }
 
-impl PixelTarget for CydFrame<'_> {
+impl PixelTarget for CydFrameEsp<'_> {
     fn width(&self) -> usize {
         self.width()
     }
@@ -170,35 +172,35 @@ impl PixelTarget for CydFrame<'_> {
             return;
         }
         let stride = self.width();
-        self.raw_pixels_mut()[y * stride + x] = Cyd::rgb565(color).into_storage();
+        self.raw_pixels_mut()[y * stride + x] = CydEsp::rgb565(color).into_storage();
     }
 }
 
 #[derive(Debug, derive_more::From)]
 pub enum CydError {
     Flash(device_envoy_esp::Error),
-    DisplayInit(CydDisplayInitError),
+    DisplayInit(CydPanelInitError),
     TouchInit(CydTouchInitError),
-    DisplayFlush(CydDisplayFlushError),
+    DisplayFlush(CydPanelFlushError),
     TouchUnavailable,
     CalibrationUnavailable,
 }
 
-impl Cyd {
+impl CydEsp {
     /// Total pixel count of the CYD panel — fixed hardware, independent of orientation.
     pub const SCREEN_PIXELS: usize = SCREEN_PIXELS;
 
-    /// Create [`CydStatic`] storage for a `PIXEL_COUNT`-sized draw buffer.
+    /// Create [`CydStaticEsp`] storage for a `PIXEL_COUNT`-sized draw buffer.
     ///
-    /// Equivalent to `CydStatic::<PIXEL_COUNT>::new()` but namespaced under `Cyd` so
+    /// Equivalent to `CydStaticEsp::<PIXEL_COUNT>::new()` but namespaced under `CydEsp` so
     /// all construction calls share a common prefix.
     ///
     /// ```ignore
-    /// static CYD_STATIC: CydStatic<{ Cyd::SCREEN_PIXELS }> = Cyd::new_static();
+    /// static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     /// ```
     #[must_use]
-    pub const fn new_static<const PIXEL_COUNT: usize>() -> CydStatic<PIXEL_COUNT> {
-        CydStatic::new()
+    pub const fn new_static<const PIXEL_COUNT: usize>() -> CydStaticEsp<PIXEL_COUNT> {
+        CydStaticEsp::new()
     }
 
     // todo000 couldn't this be const and/or inlined and defined elsewhere?
@@ -214,13 +216,13 @@ impl Cyd {
         self.display.size()
     }
 
-    /// Construct a display-only `Cyd` (no touch) that owns its draw buffer,
-    /// initializing the buffer from app-provided [`CydStatic`] storage.
+    /// Construct a display-only `CydEsp` (no touch) that owns its draw buffer,
+    /// initializing the buffer from app-provided [`CydStaticEsp`] storage.
     ///
-    /// The app picks the size via `PIXEL_COUNT`; `Cyd` owns the init protocol. Use
-    /// [`Cyd::frame_mut`] or [`Cyd::full_frame_mut`] to render into and flush the owned buffer.
+    /// The app picks the size via `PIXEL_COUNT`; `CydEsp` owns the init protocol. Use
+    /// [`CydEsp::frame_mut`] or [`CydEsp::full_frame_mut`] to render into and flush the owned buffer.
     pub fn new_display_only<const PIXEL_COUNT: usize>(
-        statics: &'static CydStatic<PIXEL_COUNT>,
+        statics: &'static CydStaticEsp<PIXEL_COUNT>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
         display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
         display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -255,9 +257,9 @@ impl Cyd {
         )
     }
 
-    /// Construct a full `Cyd` with touch + calibration that owns its draw buffer.
+    /// Construct a full `CydEsp` with touch + calibration that owns its draw buffer.
     pub fn new<const PIXEL_COUNT: usize>(
-        statics: &'static CydStatic<PIXEL_COUNT>,
+        statics: &'static CydStaticEsp<PIXEL_COUNT>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
         display_sck_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
         display_mosi_pin: impl esp_hal::gpio::interconnect::PeripheralOutput<'static>,
@@ -337,7 +339,7 @@ impl Cyd {
             _ => None,
         };
 
-        let mut display = CydDisplay::new(
+        let mut display = CydPanel::new(
             display_spi,
             display_sck_pin,
             display_mosi_pin,
@@ -369,13 +371,13 @@ impl Cyd {
     }
 
     /// The device default background color (cleared at construction and used to
-    /// clear every new frame from [`Cyd::frame_mut`]).
+    /// clear every new frame from [`CydEsp::frame_mut`]).
     #[must_use]
     pub fn background(&self) -> Rgb888 {
         self.background
     }
 
-    /// The device default foreground/text color (used by [`CydFrame::write_text`]).
+    /// The device default foreground/text color (used by [`CydFrameEsp::write_text`]).
     #[must_use]
     pub fn foreground(&self) -> Rgb888 {
         self.foreground
@@ -438,7 +440,7 @@ impl Cyd {
         Ok(())
     }
 
-    pub fn ensure_calibration(&mut self) -> Result<CalibratedCyd<'_>, CydError> {
+    pub fn ensure_calibration(&mut self) -> Result<CalibratedCydEsp<'_>, CydError> {
         if self.recalibration_requested() {
             self.calibration_config = None;
         }
@@ -447,7 +449,7 @@ impl Cyd {
             .calibration_config
             .ok_or(CydError::CalibrationUnavailable)?;
 
-        Ok(CalibratedCyd {
+        Ok(CalibratedCydEsp {
             cyd: self,
             calibration_config,
         })
@@ -461,18 +463,18 @@ impl Cyd {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
-    pub fn full_frame_mut(&mut self) -> CydFrame<'_> {
+    pub fn full_frame_mut(&mut self) -> CydFrameEsp<'_> {
         self.frame_mut(self.screen_size())
     }
 
-    pub fn frame_mut(&mut self, size: Size) -> CydFrame<'_> {
+    pub fn frame_mut(&mut self, size: Size) -> CydFrameEsp<'_> {
         let mut view = self
             .pixel_buffer
             .view_mut(size.width as usize, size.height as usize);
         // Every new frame starts cleared to the device background so callers
         // never have to clear it themselves.
         view.clear(self.background565);
-        CydFrame {
+        CydFrameEsp {
             display: &mut self.display,
             view,
             background565: self.background565,
@@ -485,7 +487,7 @@ impl Cyd {
     ///
     /// Mirrors embedded-graphics' [`DrawTarget::clear`]. The device is already
     /// cleared to its default background at construction and every frame from
-    /// [`Cyd::frame_mut`] starts cleared, so this is only needed for an explicit
+    /// [`CydEsp::frame_mut`] starts cleared, so this is only needed for an explicit
     /// non-default full-screen fill.
     pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
         Ok(self.display.clear(color)?)
@@ -525,7 +527,7 @@ impl Cyd {
     }
 }
 
-impl CalibratedCyd<'_> {
+impl CalibratedCydEsp<'_> {
     pub fn remove_calibration(&mut self) {
         self.cyd.remove_calibration();
     }
@@ -584,38 +586,61 @@ impl CalibratedCyd<'_> {
     }
 }
 
-impl fmt::Debug for Cyd {
+impl fmt::Debug for CydEsp {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_struct("Cyd").finish_non_exhaustive()
+        formatter.debug_struct("CydEsp").finish_non_exhaustive()
     }
 }
 
-// ── Device-agnostic surface trait impls ───────────────────────────────────────
+// ── Device-agnostic `Cyd` trait impls ─────────────────────────────────────────
 //
-// These let platform-neutral example code (`linkage-blaze-example-core`) drive
-// the concrete esp `Cyd` without naming any esp type.
+// These let platform-neutral code (`linkage-blaze-cyd-core` consumers) drive the
+// concrete esp `CydEsp` through the `Cyd`/`CydFrame` traits without naming any
+// esp type.
 
-impl linkage_blaze_example_core::CydSurface for Cyd {
-    type FlushError = CydError;
-    type Frame<'a> = CydFrame<'a>;
+impl linkage_blaze_cyd_core::Cyd for CydEsp {
+    type Error = CydError;
+    type Frame<'a> = CydFrameEsp<'a>;
 
     fn screen_size(&self) -> Size {
-        Cyd::screen_size(self)
+        CydEsp::screen_size(self)
     }
 
-    fn frame_mut(&mut self, size: Size) -> CydFrame<'_> {
-        Cyd::frame_mut(self, size)
+    fn frame_mut(&mut self, size: Size) -> CydFrameEsp<'_> {
+        CydEsp::frame_mut(self, size)
+    }
+
+    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
+        let Some(calibration_config) = self.calibration_config else {
+            return Ok(None);
+        };
+        let Some(touch) = self.touch.as_mut() else {
+            return Ok(None);
+        };
+        Ok(touch.read_raw_touch_event().map(|raw_touch_event| {
+            match raw_touch_event {
+                RawTouchEvent::Down { raw_x, raw_y } => {
+                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
+                    TouchInputEvent::Down { x, y }
+                }
+                RawTouchEvent::Move { raw_x, raw_y } => {
+                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
+                    TouchInputEvent::Move { x, y }
+                }
+                RawTouchEvent::Up => TouchInputEvent::Up,
+            }
+        }))
     }
 }
 
-impl linkage_blaze_example_core::CydFrameOps for CydFrame<'_> {
-    type FlushError = CydError;
+impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
+    type Error = CydError;
 
     fn write_text(&mut self, text: &str) -> &mut Self {
-        CydFrame::write_text(self, text)
+        CydFrameEsp::write_text(self, text)
     }
 
     fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
-        CydFrame::flush_at(self, top_left)
+        CydFrameEsp::flush_at(self, top_left)
     }
 }

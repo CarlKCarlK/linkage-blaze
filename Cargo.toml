@@ -2,6 +2,7 @@
 members = [
     "crates/linkage-blaze-core",
     "crates/linkage-blaze-cyd",
+    "crates/linkage-blaze-cyd-core",
     "crates/linkage-blaze-example-core",
     "crates/linkage-blaze-editor",
     "crates/linkage-blaze-armatron-core",

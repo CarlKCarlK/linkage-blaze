@@ -23,7 +23,7 @@ use mipidsi::{
 };
 use static_cell::StaticCell;
 
-use crate::{RectPixels, SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::{Orientation, RectPixels};
 
 // 80 MHz measured 10.9 draw+flush fps but produced visible display corruption.
 pub const DISPLAY_SPI_HZ: u32 = 60_000_000;
@@ -35,14 +35,14 @@ type CydDisplayInterface = SpiInterface<'static, CydDisplaySpiDevice, Output<'st
 type CydDisplayDevice = mipidsi::Display<CydDisplayInterface, ILI9341Rgb565, Output<'static>>;
 
 #[derive(Clone, Copy, Debug)]
-pub enum CydDisplayInitError {
+pub enum CydPanelInitError {
     ConfigureDisplaySpi,
     CreateDisplaySpiDevice,
     InitDisplay,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum CydDisplayFlushError {
+pub enum CydPanelFlushError {
     FlushFrameBuffer,
 }
 
@@ -329,50 +329,12 @@ impl PreparedPrimitive {
     }
 }
 
-pub struct CydDisplay {
+pub struct CydPanel {
     display: CydDisplayDevice,
     screen_size: Size,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Orientation {
-    // todo000 later support a full algebra of rotations and flips like the
-    // device-envoy 2D LED panel orientation model.
-    Landscape,
-    Portrait,
-    LandscapeInverted,
-    PortraitInverted,
-}
-
-impl Orientation {
-    #[must_use]
-    pub const fn width(self) -> u32 {
-        match self {
-            Self::Landscape | Self::LandscapeInverted => SCREEN_WIDTH as u32,
-            Self::Portrait | Self::PortraitInverted => SCREEN_HEIGHT as u32,
-        }
-    }
-
-    #[must_use]
-    pub const fn height(self) -> u32 {
-        match self {
-            Self::Landscape | Self::LandscapeInverted => SCREEN_HEIGHT as u32,
-            Self::Portrait | Self::PortraitInverted => SCREEN_WIDTH as u32,
-        }
-    }
-
-    #[must_use]
-    pub const fn size(self) -> Size {
-        Size::new(self.width(), self.height())
-    }
-
-    #[must_use]
-    pub const fn pixels(self) -> usize {
-        self.width() as usize * self.height() as usize
-    }
-}
-
-impl CydDisplay {
+impl CydPanel {
     /// Oriented screen size stored at init time.
     #[must_use]
     pub const fn size(&self) -> Size {
@@ -389,12 +351,12 @@ impl CydDisplay {
         rst_pin: impl OutputPin + 'static,
         backlight_pin: impl OutputPin + 'static,
         orientation: Orientation,
-    ) -> Result<CydDisplay, CydDisplayInitError> {
+    ) -> Result<CydPanel, CydPanelInitError> {
         let spi_config = spi::master::Config::default()
             .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
             .with_mode(spi::Mode::_0);
         let spi = spi::master::Spi::new(spi, spi_config)
-            .map_err(|_| CydDisplayInitError::ConfigureDisplaySpi)?
+            .map_err(|_| CydPanelInitError::ConfigureDisplaySpi)?
             .with_sck(sck_pin)
             .with_mosi(mosi_pin)
             .with_miso(miso_pin);
@@ -405,7 +367,7 @@ impl CydDisplay {
         let mut backlight = Output::new(backlight_pin, Level::High, OutputConfig::default());
 
         let spi_device = ExclusiveDevice::<_, _, NoDelay>::new_no_delay(spi, cs)
-            .map_err(|_| CydDisplayInitError::CreateDisplaySpiDevice)?;
+            .map_err(|_| CydPanelInitError::CreateDisplaySpiDevice)?;
 
         static SPI_BUFFER: StaticCell<[u8; DISPLAY_SPI_BUFFER_LEN]> = StaticCell::new();
         let spi_buffer = SPI_BUFFER.init([0u8; DISPLAY_SPI_BUFFER_LEN]);
@@ -435,11 +397,11 @@ impl CydDisplay {
             .color_order(ColorOrder::Bgr)
             .orientation(display_orientation)
             .init(&mut delay)
-            .map_err(|_| CydDisplayInitError::InitDisplay)?;
+            .map_err(|_| CydPanelInitError::InitDisplay)?;
 
         backlight.set_high();
 
-        Ok(CydDisplay {
+        Ok(CydPanel {
             display,
             screen_size,
         })
@@ -449,7 +411,7 @@ impl CydDisplay {
         &mut self,
         buffer: &impl RectPixels,
         top_left: Point,
-    ) -> Result<(), CydDisplayFlushError> {
+    ) -> Result<(), CydPanelFlushError> {
         let rectangle = Rectangle::new(
             top_left,
             Size::new(buffer.width() as u32, buffer.height() as u32),
@@ -463,10 +425,10 @@ impl CydDisplay {
                     .copied()
                     .map(|pixel| Rgb565::from(RawU16::new(pixel))),
             )
-            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
     }
 
-    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydDisplayFlushError> {
+    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydPanelFlushError> {
         self.fill_rect(Rectangle::new(Point::new(0, 0), self.screen_size), color)
     }
 
@@ -474,7 +436,7 @@ impl CydDisplay {
         &mut self,
         rectangle: Rectangle,
         color: Rgb565,
-    ) -> Result<(), CydDisplayFlushError> {
+    ) -> Result<(), CydPanelFlushError> {
         let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let rectangle = rectangle.intersection(&screen_rectangle);
         if rectangle.size.width == 0 || rectangle.size.height == 0 {
@@ -482,20 +444,20 @@ impl CydDisplay {
         }
         self.display
             .fill_solid(&rectangle, color)
-            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
     }
 
     pub fn fill_contiguous<I>(
         &mut self,
         rectangle: Rectangle,
         pixels: I,
-    ) -> Result<(), CydDisplayFlushError>
+    ) -> Result<(), CydPanelFlushError>
     where
         I: IntoIterator<Item = Rgb565>,
     {
         self.display
             .fill_contiguous(&rectangle, pixels)
-            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
     }
 
     pub fn draw_line_segments(
@@ -503,7 +465,7 @@ impl CydDisplay {
         bounds: Rectangle,
         background: Rgb565,
         segments: &[LineSegment],
-    ) -> Result<(), CydDisplayFlushError> {
+    ) -> Result<(), CydPanelFlushError> {
         let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let bounds = bounds.intersection(&screen_rectangle);
         if bounds.size.width == 0 || bounds.size.height == 0 {
@@ -523,7 +485,7 @@ impl CydDisplay {
 
         self.display
             .fill_contiguous(&bounds, pixels)
-            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
     }
 
     pub fn draw_primitives(
@@ -531,7 +493,7 @@ impl CydDisplay {
         bounds: Rectangle,
         background: Rgb565,
         draw_primitives: &[DrawPrimitive],
-    ) -> Result<(), CydDisplayFlushError> {
+    ) -> Result<(), CydPanelFlushError> {
         let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let bounds = bounds.intersection(&screen_rectangle);
         if bounds.size.width == 0 || bounds.size.height == 0 {
@@ -559,7 +521,7 @@ impl CydDisplay {
 
         self.display
             .fill_contiguous(&bounds, pixels)
-            .map_err(|_| CydDisplayFlushError::FlushFrameBuffer)
+            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
     }
 }
 

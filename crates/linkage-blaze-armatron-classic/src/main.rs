@@ -23,7 +23,7 @@ use static_cell::StaticCell;
 
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCyd, CalibrationConfig, Cyd, CydError, CydStatic, DEFAULT_FONT, Orientation,
+    CalibratedCydEsp, CalibrationConfig, CydEsp, CydError, CydStaticEsp, DEFAULT_FONT, Orientation,
     RawPoint, RawTouchEvent, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
     TouchInputEvent as CydTouchInputEvent,
 };
@@ -74,13 +74,13 @@ impl From<CydError> for MainError {
         match error {
             CydError::Flash(_) => MainError::Flash,
             CydError::DisplayInit(error) => match error {
-                linkage_blaze_cyd::CydDisplayInitError::ConfigureDisplaySpi => {
+                linkage_blaze_cyd::CydPanelInitError::ConfigureDisplaySpi => {
                     MainError::ConfigureDisplaySpi
                 }
-                linkage_blaze_cyd::CydDisplayInitError::CreateDisplaySpiDevice => {
+                linkage_blaze_cyd::CydPanelInitError::CreateDisplaySpiDevice => {
                     MainError::CreateDisplaySpiDevice
                 }
-                linkage_blaze_cyd::CydDisplayInitError::InitDisplay => MainError::InitDisplay,
+                linkage_blaze_cyd::CydPanelInitError::InitDisplay => MainError::InitDisplay,
             },
             CydError::TouchInit(error) => match error {
                 linkage_blaze_cyd::CydTouchInitError::ConfigureTouchSpi => {
@@ -115,10 +115,10 @@ fn inner_main() -> Result<Infallible, MainError> {
     let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);
 
     // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
-    // Cyd-owned buffer is zero-sized. Look at rendering into the single Cyd-owned
+    // CydEsp-owned buffer is zero-sized. Look at rendering into the single CydEsp-owned
     // buffer via cyd.frame_mut instead.
-    static CYD_STATIC: CydStatic<0> = Cyd::new_static();
-    let mut cyd = Cyd::new(
+    static CYD_STATIC: CydStaticEsp<0> = CydEsp::new_static();
+    let mut cyd = CydEsp::new(
         &CYD_STATIC,
         p.SPI2,   // display SPI
         p.GPIO14, // display SCK
@@ -161,9 +161,9 @@ fn inner_main() -> Result<Infallible, MainError> {
 }
 
 fn ensure_calibration<'a>(
-    cyd: &'a mut Cyd,
+    cyd: &'a mut CydEsp,
     screen_buffer: &mut ScreenBuffer,
-) -> Result<CalibratedCyd<'a>, MainError> {
+) -> Result<CalibratedCydEsp<'a>, MainError> {
     if cyd.recalibration_requested() {
         cyd.remove_calibration();
     }
@@ -175,7 +175,7 @@ fn ensure_calibration<'a>(
     Ok(cyd.ensure_calibration()?)
 }
 
-fn calibrate(cyd: &mut Cyd, screen_buffer: &mut ScreenBuffer) -> Result<(), MainError> {
+fn calibrate(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), MainError> {
     let mut calibration_index = 0;
     let mut calibration_points = [RawPoint { x: 0, y: 0 }; 4];
 
@@ -222,11 +222,11 @@ fn calibrate(cyd: &mut Cyd, screen_buffer: &mut ScreenBuffer) -> Result<(), Main
 }
 
 fn draw_calibration_screen(
-    cyd: &mut Cyd,
+    cyd: &mut CydEsp,
     screen_buffer: &mut ScreenBuffer,
     calibration_index: usize,
 ) -> Result<(), MainError> {
-    screen_buffer.clear(Cyd::rgb565(BLACK));
+    screen_buffer.clear(CydEsp::rgb565(BLACK));
     if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
         draw_calibration_cross(
             screen_buffer,
@@ -238,7 +238,7 @@ fn draw_calibration_screen(
     Ok(cyd.flush_at(screen_buffer, Point::new(0, 0))?)
 }
 
-fn read_touch_input(cyd: &mut CalibratedCyd<'_>) -> Result<Option<TouchInputEvent>, MainError> {
+fn read_touch_input(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchInputEvent>, MainError> {
     Ok(cyd
         .read_touch_input()?
         .map(|touch_input_event| match touch_input_event {
@@ -307,11 +307,11 @@ fn draw_calibration_cross(
     let bottom = Point::new(center.x, center.y + CALIBRATION_CROSS_HALF_SIZE);
 
     Line::new(left, right)
-        .into_styled(PrimitiveStyle::with_stroke(Cyd::rgb565(YELLOW), 4))
+        .into_styled(PrimitiveStyle::with_stroke(CydEsp::rgb565(YELLOW), 4))
         .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
     Line::new(top, bottom)
-        .into_styled(PrimitiveStyle::with_stroke(Cyd::rgb565(YELLOW), 4))
+        .into_styled(PrimitiveStyle::with_stroke(CydEsp::rgb565(YELLOW), 4))
         .draw(target)
         .map_err(|_| MainError::DrawCalibrationCross)?;
 
@@ -322,7 +322,7 @@ fn draw_calibration_cross(
         ),
         (CALIBRATION_CENTER_DOT_RADIUS * 2 + 1) as u32,
     )
-    .into_styled(PrimitiveStyle::with_fill(Cyd::rgb565(WHITE)))
+    .into_styled(PrimitiveStyle::with_fill(CydEsp::rgb565(WHITE)))
     .draw(target)
     .map_err(|_| MainError::DrawCalibrationCenterDot)?;
 

@@ -25,8 +25,8 @@ use linkage_blaze_core::{
 use log::info;
 use time::OffsetDateTime;
 
-use crate::{
-    CydFrameOps, CydSurface, TranslatedDrawTarget,
+use linkage_blaze_cyd_core::{
+    Cyd, CydFrame, TranslatedDrawTarget,
     tiling::{TileGrid, max_u32},
 };
 
@@ -121,9 +121,9 @@ impl<F> From<MarkError> for SkeletonClockError<F> {
 pub async fn skeleton_clock<S, C>(
     cyd: &mut S,
     clock_sync: &C,
-) -> Result<Infallible, SkeletonClockError<S::FlushError>>
+) -> Result<Infallible, SkeletonClockError<S::Error>>
 where
-    S: CydSurface,
+    S: Cyd,
     C: ClockSync,
 {
     let linkage_view = LINKAGE.view();

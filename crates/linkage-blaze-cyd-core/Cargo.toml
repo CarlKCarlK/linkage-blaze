@@ -1,0 +1,17 @@
+[package]
+name = "linkage-blaze-cyd-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Platform-neutral core of the CYD device abstraction, modeled on
+# `device-envoy-core`: the opinionated `Cyd` device trait (drawing + tiled
+# frames + calibrated touch) and its `CydFrame`, plus the support types that
+# belong with them (`Orientation`, tiled-layout machinery, the coordinate-
+# translating draw target, and the fixed 320x240 panel constants). Concrete
+# platforms — esp `linkage-blaze-cyd` (`CydEsp`) and a future WASM sim
+# (`CydWasm`) — implement these traits; this crate never depends on a platform.
+
+[dependencies]
+embedded-graphics = { version = "0.8", default-features = false }
+linkage-blaze-core.workspace = true

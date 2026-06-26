@@ -16,7 +16,7 @@ use linkage_blaze_core::{
     DiskItem, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, SphereItem, Vec3,
 };
 use linkage_blaze_cyd::{
-    Cyd, CydError, DrawPrimitive, Ellipse, LineSegment, PixelBuffer, SCREEN_WIDTH,
+    CydEsp, CydError, DrawPrimitive, Ellipse, LineSegment, PixelBuffer, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 
@@ -56,11 +56,11 @@ type GlyphWorkspace = PixelBuffer<GLYPH_WORKSPACE_PIXELS>;
 #[allow(dead_code)]
 #[derive(Debug, derive_more::From)]
 pub enum CydClockDisplayError {
-    Cyd(CydError),
+    CydEsp(CydError),
 }
 
 pub struct CydClockDisplay {
-    cyd: Cyd,
+    cyd: CydEsp,
     glyph_workspace: &'static mut GlyphWorkspace,
     background_cleared: bool,
     title_drawn: bool,
@@ -69,7 +69,7 @@ pub struct CydClockDisplay {
 }
 
 impl CydClockDisplay {
-    pub fn new(cyd: Cyd) -> Self {
+    pub fn new(cyd: CydEsp) -> Self {
         static GLYPH_WORKSPACE: StaticCell<GlyphWorkspace> = StaticCell::new();
 
         Self {
@@ -88,7 +88,7 @@ impl CydClockDisplay {
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         if !self.background_cleared {
-            self.cyd.clear(Cyd::rgb565(BACKGROUND))?;
+            self.cyd.clear(CydEsp::rgb565(BACKGROUND))?;
             self.background_cleared = true;
         }
 
@@ -145,11 +145,11 @@ impl CydClockDisplay {
             fmt::Write::write_char(&mut character_text, character)
                 .expect("single character fits in 4 bytes");
             let mut glyph_buffer = self.glyph_workspace.view_mut(flush_width, flush_height);
-            glyph_buffer.clear(Cyd::rgb565(BACKGROUND));
+            glyph_buffer.clear(CydEsp::rgb565(BACKGROUND));
             Text::with_baseline(
                 character_text.as_str(),
                 Point::new(0, 0),
-                MonoTextStyle::new(font, Cyd::rgb565(color)),
+                MonoTextStyle::new(font, CydEsp::rgb565(color)),
                 Baseline::Top,
             )
             .draw(&mut glyph_buffer)
@@ -217,7 +217,7 @@ impl CydClockDisplay {
                 top_left,
                 embedded_graphics::prelude::Size::new(width as u32, height as u32),
             ),
-            Cyd::rgb565(BACKGROUND),
+            CydEsp::rgb565(BACKGROUND),
         )?;
         Ok(())
     }
@@ -240,7 +240,7 @@ impl CydClockDisplay {
                             start,
                             end,
                             width: clock_width_pixels(stroke.width()),
-                            color: Cyd::rgb565(stroke.color()),
+                            color: CydEsp::rgb565(stroke.color()),
                         })
                     } else {
                         continue;
@@ -254,7 +254,7 @@ impl CydClockDisplay {
 
         let t0 = Instant::now();
         self.cyd
-            .draw_primitives(CLOCK_BOUNDS, Cyd::rgb565(BACKGROUND), &primitives)?;
+            .draw_primitives(CLOCK_BOUNDS, CydEsp::rgb565(BACKGROUND), &primitives)?;
         let elapsed_ms = (Instant::now() - t0).as_millis();
         esp_println::println!("draw_primitives ms = {}", elapsed_ms);
         Ok(())

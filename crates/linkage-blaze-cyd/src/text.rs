@@ -1,10 +1,10 @@
-//! Convenience text rendering for [`CydFrame`].
+//! Convenience text rendering for [`CydFrameEsp`].
 //!
 //! This mirrors the device-envoy `led2d` text helpers: the device owns a single
-//! default style (background, foreground, font) and [`CydFrame::write_text`]
+//! default style (background, foreground, font) and [`CydFrameEsp::write_text`]
 //! drops a line of text into a frame using that default, without repeating the
 //! [`Text`] / [`MonoTextStyle`] / [`Baseline`] boilerplate each time. Combined
-//! with per-region frames (see [`Cyd::frame_mut`]), this lets each status or time
+//! with per-region frames (see [`CydEsp::frame_mut`]), this lets each status or time
 //! message own its own area and be drawn in one call.
 //!
 //! There is intentionally exactly one convenience method. For a different font,
@@ -18,12 +18,12 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 
-use crate::CydFrame;
+use crate::CydFrameEsp;
 
-/// Font apps typically pass to [`Cyd::new_display_only`] as the device default.
+/// Font apps typically pass to [`CydEsp::new_display_only`] as the device default.
 pub const DEFAULT_FONT: MonoFont<'static> = FONT_9X15_BOLD;
 
-impl CydFrame<'_> {
+impl CydFrameEsp<'_> {
     /// Draw `text` at the frame's top-left (0, 0) using the device default font
     /// and foreground color.
     ///

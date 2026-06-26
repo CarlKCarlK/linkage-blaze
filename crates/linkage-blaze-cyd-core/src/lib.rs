@@ -1,0 +1,23 @@
+#![no_std]
+
+//! Platform-neutral core of the CYD device abstraction.
+//!
+//! See [`cyd`] for the [`Cyd`] device trait and its [`CydFrame`].
+
+mod cyd;
+mod orientation;
+pub mod tiling;
+mod touch_event;
+mod translated;
+
+pub use cyd::{Cyd, CydFrame};
+pub use orientation::Orientation;
+pub use touch_event::TouchInputEvent;
+pub use translated::TranslatedDrawTarget;
+
+/// Native panel width in pixels (landscape). The CYD panel is fixed hardware.
+pub const SCREEN_WIDTH: usize = 320;
+/// Native panel height in pixels (landscape). The CYD panel is fixed hardware.
+pub const SCREEN_HEIGHT: usize = 240;
+/// Total panel pixel count (`SCREEN_WIDTH * SCREEN_HEIGHT`).
+pub const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
