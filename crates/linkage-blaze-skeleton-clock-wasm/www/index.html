@@ -21,6 +21,7 @@
        Note: one CYD pixel is two browser pixels here. */
     .stage {
       position: relative;
+      z-index: 0; /* stacking context so the cord (z-index:-1) sits behind the case */
       width: 480px;
       height: 640px;
     }
@@ -40,10 +41,22 @@
       position: absolute;
       z-index: 0;
       width: 1087px;
-      height: 1395px;
-      left: -308px;
-      top: -340px;
+      height: 1396px;
+      left: -301px;
+      top: -418px;
       filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
+    }
+    /* Extends the USB cord off the top of the page. Behind the case, ending at
+       the case image's top edge (top: -418px) where the real cord begins. */
+    .stage .cord {
+      position: absolute;
+      z-index: -1;
+      left: 220px;
+      width: 35px;
+      top: -2400px;
+      height: 1982px; /* down to the case image's top edge (-418px) */
+      /* dark grey cord with a lighter sheen stripe from 50%-90% of its width */
+      background: linear-gradient(to right, #333 0 50%, #4d4d4d 50% 90%, #333 90% 100%);
     }
     #status {
       position: fixed;
@@ -58,6 +71,7 @@
 
 <body>
   <div class="stage">
+    <div class="cord"></div>
     <img class="case" src="./case.png" alt="CYD device case" />
     <canvas id="screen" aria-label="CYD skeleton-clock display simulator"></canvas>
   </div>
