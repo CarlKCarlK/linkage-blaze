@@ -20,7 +20,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{Cyd, CydError, CydStatic, Orientation, tiling::max_usize};
+use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, Orientation, tiling::max_usize};
 use linkage_blaze_example_core::skeleton_clock::{
     FIGURE_TILES, SKELETON_CLOCK_BACKGROUND, SKELETON_CLOCK_FOREGROUND, SkeletonClockError,
     WIFI_STATUS_POINT, WIFI_STATUS_SIZE, skeleton_clock,
@@ -42,7 +42,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 enum MainError {
     DeviceEnvoy(Error),
     Core(CoreError),
-    Cyd(CydError),
+    CydEsp(CydError),
     SkeletonClock(SkeletonClockError<CydError>),
 }
 
@@ -63,8 +63,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         (WIFI_STATUS_SIZE.width * WIFI_STATUS_SIZE.height) as usize,
         FIGURE_TILES.max_tile_pixel_count(),
     );
-    static CYD_STATIC: CydStatic<BUFFER_PIXEL_COUNT> = Cyd::new_static();
-    let mut cyd = Cyd::new_display_only(
+    static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
+    let mut cyd = CydEsp::new_display_only(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,

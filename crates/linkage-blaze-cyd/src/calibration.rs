@@ -19,13 +19,6 @@ pub struct CalibrationConfig {
     cy: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum TouchInputEvent {
-    Down { x: f32, y: f32 },
-    Move { x: f32, y: f32 },
-    Up,
-}
-
 #[derive(Clone, Copy)]
 enum CalibrationCorner {
     UpperLeft,

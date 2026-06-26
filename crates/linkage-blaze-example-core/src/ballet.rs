@@ -21,7 +21,7 @@ use linkage_blaze_core::{
     linkage_fixed,
 };
 
-use crate::{CydFrameOps, CydSurface};
+use linkage_blaze_cyd_core::{Cyd, CydFrame};
 
 // todo00 audit the existing numeric color backlog and add approximate color-name comments.
 // todo000 every numeric color should have a comment telling what it is. (and named colors are better)
@@ -57,9 +57,9 @@ const PROJECTION: CameraProjection =
 // ── Generic entry point ────────────────────────────────────────────────────────
 
 /// Run the ballet render loop forever, drawn onto `cyd`.
-pub fn ballet<S>(cyd: &mut S) -> Result<Infallible, S::FlushError>
+pub fn ballet<S>(cyd: &mut S) -> Result<Infallible, S::Error>
 where
-    S: CydSurface,
+    S: Cyd,
 {
     let linkage = LINKAGE.view();
     let text565 = Rgb565::from(TEXT);

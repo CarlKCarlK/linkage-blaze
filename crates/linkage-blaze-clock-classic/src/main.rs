@@ -25,7 +25,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{Cyd, CydError, CydStatic, DEFAULT_FONT, Orientation};
+use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, DEFAULT_FONT, Orientation};
 use log::info;
 use static_cell::StaticCell;
 
@@ -46,7 +46,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 #[derive(Debug, derive_more::From)]
 enum MainError {
     DeviceEnvoy(Error),
-    Cyd(linkage_blaze_cyd::CydError),
+    CydEsp(linkage_blaze_cyd::CydError),
     Display(CydClockDisplayError),
 }
 
@@ -69,10 +69,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("Starting CYD clock with WiFi");
 
     // todo00 unify: CydClockDisplay still owns its own glyph workspace, so the
-    // Cyd-owned buffer is zero-sized. Look at moving the glyph rendering onto the
-    // single Cyd-owned buffer via cyd.frame_mut.
-    static CYD_STATIC: CydStatic<0> = Cyd::new_static();
-    let cyd = Cyd::new_display_only(
+    // CydEsp-owned buffer is zero-sized. Look at moving the glyph rendering onto the
+    // single CydEsp-owned buffer via cyd.frame_mut.
+    static CYD_STATIC: CydStaticEsp<0> = CydEsp::new_static();
+    let cyd = CydEsp::new_display_only(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,

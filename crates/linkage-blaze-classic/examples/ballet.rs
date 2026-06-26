@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 // The embedded `MOTION` capture is a heavy const; its evaluation happens here,
-// where the generic `ballet::<Cyd>` is instantiated, so the allow lives here.
+// where the generic `ballet::<CydEsp>` is instantiated, so the allow lives here.
 #![allow(long_running_const_eval)]
 
 use core::convert::Infallible;
@@ -10,7 +10,7 @@ use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{Cyd, CydError, CydStatic, Orientation};
+use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, Orientation};
 use linkage_blaze_example_core::ballet::{BALLET_BACKGROUND, BALLET_FOREGROUND, ballet};
 use log::info;
 
@@ -21,7 +21,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 #[allow(dead_code)]
 #[derive(Debug, derive_more::From)]
 enum MainError {
-    Cyd(CydError),
+    CydEsp(CydError),
 }
 
 #[esp_rtos::main]
@@ -36,8 +36,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     info!("Starting CYD ballet loop");
 
-    static CYD_STATIC: CydStatic<{ Cyd::SCREEN_PIXELS }> = Cyd::new_static();
-    let mut cyd = Cyd::new_display_only(
+    static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
+    let mut cyd = CydEsp::new_display_only(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,

@@ -21,7 +21,7 @@ use esp_hal::{
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use linkage_blaze_cyd::{
-    Cyd, CydError, CydStatic, DEFAULT_FONT, Orientation, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    CydEsp, CydError, CydStaticEsp, DEFAULT_FONT, Orientation, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 
@@ -97,13 +97,13 @@ impl From<CydError> for MainError {
     fn from(error: CydError) -> Self {
         match error {
             CydError::DisplayInit(error) => match error {
-                linkage_blaze_cyd::CydDisplayInitError::ConfigureDisplaySpi => {
+                linkage_blaze_cyd::CydPanelInitError::ConfigureDisplaySpi => {
                     MainError::ConfigureDisplaySpi
                 }
-                linkage_blaze_cyd::CydDisplayInitError::CreateDisplaySpiDevice => {
+                linkage_blaze_cyd::CydPanelInitError::CreateDisplaySpiDevice => {
                     MainError::CreateDisplaySpiDevice
                 }
-                linkage_blaze_cyd::CydDisplayInitError::InitDisplay => MainError::InitDisplay,
+                linkage_blaze_cyd::CydPanelInitError::InitDisplay => MainError::InitDisplay,
             },
             CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
             _ => MainError::FlushFrameBuffer,
@@ -130,10 +130,10 @@ fn inner_main() -> Result<Infallible, MainError> {
 
     esp_println::println!("c6: initializing display");
     // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
-    // Cyd-owned buffer is zero-sized. Look at rendering into the single Cyd-owned
+    // CydEsp-owned buffer is zero-sized. Look at rendering into the single CydEsp-owned
     // buffer via cyd.frame_mut instead.
-    static CYD_STATIC: CydStatic<0> = Cyd::new_static();
-    let mut cyd = Cyd::new_display_only(
+    static CYD_STATIC: CydStaticEsp<0> = CydEsp::new_static();
+    let mut cyd = CydEsp::new_display_only(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO19,

@@ -1549,11 +1549,19 @@ dependencies = [
  "heapless 0.8.0",
  "linkage-blaze-armatron-core",
  "linkage-blaze-core",
- "linkage-blaze-example-core",
+ "linkage-blaze-cyd-core",
  "micromath",
  "mipidsi",
  "serde",
  "static_cell",
+]
+
+[[package]]
+name = "linkage-blaze-cyd-core"
+version = "0.1.4"
+dependencies = [
+ "embedded-graphics",
+ "linkage-blaze-core",
 ]
 
 [[package]]
@@ -1573,6 +1581,7 @@ dependencies = [
  "embedded-graphics",
  "heapless 0.9.3",
  "linkage-blaze-core",
+ "linkage-blaze-cyd-core",
  "log",
  "time",
 ]

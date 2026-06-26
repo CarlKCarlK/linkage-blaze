@@ -1,15 +1,10 @@
 #![no_std]
 
-//! Platform-neutral core for the linkage-blaze CYD examples.
+//! Platform-neutral example logic for the linkage-blaze CYD examples.
 //!
-//! See [`cyd_surface`] for the device abstraction and [`skeleton_clock`] for the
-//! first generic example built on it.
+//! The device abstraction itself lives in [`linkage_blaze_cyd_core`]; this crate
+//! holds the generic examples ([`skeleton_clock`], [`ballet`]) written against
+//! the [`Cyd`](linkage_blaze_cyd_core::Cyd) trait.
 
 pub mod ballet;
-mod cyd_surface;
 pub mod skeleton_clock;
-pub mod tiling;
-mod translated;
-
-pub use cyd_surface::{CydFrameOps, CydSurface};
-pub use translated::TranslatedDrawTarget;

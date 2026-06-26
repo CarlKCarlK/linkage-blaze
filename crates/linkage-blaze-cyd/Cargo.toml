@@ -30,7 +30,7 @@ heapless = "0.8"
 micromath = "2.1"
 mipidsi = "0.10.0"
 linkage-blaze-armatron-core = { path = "../linkage-blaze-armatron-core" }
-linkage-blaze-example-core = { path = "../linkage-blaze-example-core" }
+linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
 linkage-blaze-core.workspace = true
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 static_cell = "2.1.1"
