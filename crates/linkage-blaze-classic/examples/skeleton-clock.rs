@@ -117,9 +117,9 @@ async fn main(spawner: Spawner) -> ! {
 async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
-    info!("Starting CYD dance with WiFi");
+    info!("Starting CYD skeleton-clock with WiFi");
 
-    // The shared pixel buffer must hold the largest frame: a dance tile or a wi-fi or time message.
+    // The shared pixel buffer must hold the largest frame: a skeleton-clock tile or a wi-fi or time message.
     const BUFFER_PIXEL_COUNT: usize = max_usize(
         (WIFI_STATUS_SIZE.width * WIFI_STATUS_SIZE.height) as usize,
         FIGURE_TILES.max_tile_pixel_count(),
@@ -151,7 +151,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     let wifi_auto = WifiAutoEsp::new(
         p.WIFI,
         wifi_auto_flash_block,
-        "CydDance",
+        "SkelClock",
         [timezone_field],
         spawner,
     )?;
@@ -162,7 +162,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             &mut force_portal_button,
             async |wifi_auto_event| -> Result<(), CydError> {
                 let message = match wifi_auto_event {
-                    WifiAutoEvent::CaptivePortalReady => "WiFi: setup CydDance",
+                    WifiAutoEvent::CaptivePortalReady => "WiFi: setup SkelClock",
                     WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
                     WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
                 };
@@ -195,7 +195,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         Some(ONE_SECOND),
         spawner,
     )?;
-    info!("clock sync ready; entering dance loop");
+    info!("clock sync ready; entering skeleton-clock loop");
 
     // todo000 should shared/generic code with wasm start here?
 
@@ -218,7 +218,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         for tile in FIGURE_TILES.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
 
-            // Dance-specific background overlay.
+            // Skeleton-clock-specific background overlay.
             {
                 // todo000 understand TranslatedDrawTarget
                 let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
@@ -234,7 +234,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             }
 
             // todo000 explain that after we go through all the items we inspect the poses of the marks.
-            // Dance-specific foreground overlay: placards hang from hand marks.
+            // Skeleton-clock-specific foreground overlay: placards hang from hand marks.
             let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
             let (hour_12, minute, _) = h12_m_s(local_time);
@@ -315,7 +315,7 @@ fn wrap_unit(value: f32) -> f32 {
     value
 }
 
-// ── Dance-specific overlay drawing ───────────────────────────────────────────
+// ── Skeleton-clock-specific overlay drawing ───────────────────────────────────────────
 
 // All overlay drawing happens against a `DrawTarget` whose coordinates are in
 // physical-screen space; a `TranslatedDrawTarget` subtracts the tile origin so
@@ -380,7 +380,7 @@ where
     );
 }
 
-/// Draw a hanging number sign anchored at `anchor` (a hand mark in dance
+/// Draw a hanging number sign anchored at `anchor` (a hand mark in skeleton-clock
 /// coordinates).  The sign is a fixed size and always shows two digits.  It
 /// hangs straight down via a short vertical hook from the hand, then a triangle
 /// splays out to the sign's two top corners.  `number` is shown modulo 100.
