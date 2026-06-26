@@ -12,6 +12,14 @@ license.workspace = true
 # Concrete platforms (esp `linkage-blaze-cyd`, a future WASM sim) implement the
 # traits; this crate never depends on a platform.
 
+[features]
+default = ["skeleton-clock"]
+# The `skeleton_clock` example needs device-envoy's `ClockSync` (→ embassy-executor).
+# `ballet` does not, so platforms that only want `ballet` (e.g. the WASM build,
+# which must avoid embassy-executor's unprovided `__pender` arch symbol) can
+# disable this and keep the dependency graph lean.
+skeleton-clock = ["dep:device-envoy-core"]
+
 [dependencies]
 embedded-graphics = { version = "0.8", default-features = false }
 embassy-time = "0.5.1"
@@ -22,4 +30,4 @@ linkage-blaze-core.workspace = true
 linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
 device-envoy-core = { version = "0.1.0", default-features = false, features = [
     "wifi",
-] }
+], optional = true }

@@ -11,7 +11,7 @@
 //! it, and is flushed to a screen position. Touch reads return calibrated,
 //! screen-space [`TouchInputEvent`]s (or `None` when there is no touch).
 
-use core::convert::Infallible;
+use core::{convert::Infallible, future::Future};
 
 use embedded_graphics::{
     pixelcolor::Rgb565,
@@ -27,6 +27,10 @@ pub trait Cyd {
     type Error;
 
     /// The per-region frame type this device produces.
+    ///
+    /// Its [`CydFrame::Error`] is pinned to this device's [`Cyd::Error`], so
+    /// `frame.flush_at(..).await?` in generic code propagates a single
+    /// `S::Error` (see [`ballet`](../../linkage_blaze_example_core/ballet/index.html)).
     type Frame<'a>: CydFrame<Error = Self::Error>
     where
         Self: 'a;
@@ -60,6 +64,16 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     /// foreground color. Returns `&mut Self` for chaining.
     fn write_text(&mut self, text: &str) -> &mut Self;
 
-    /// Flush the frame's pixels to the panel at `top_left` (screen coordinates).
-    fn flush_at(&mut self, top_left: Point) -> Result<(), <Self as CydFrame>::Error>;
+    /// Present the frame's pixels at `top_left` (screen coordinates).
+    ///
+    /// The returned future is the render loop's frame boundary. On the MCU it
+    /// flushes over SPI and resolves immediately; on WASM it awaits the next
+    /// browser animation frame, blits to the canvas, then resolves — so a
+    /// platform-neutral `loop { draw; flush_at(..).await?; }` paces itself to
+    /// each device's natural present point without inverting into a state
+    /// machine.
+    fn flush_at(
+        &mut self,
+        top_left: Point,
+    ) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>>;
 }

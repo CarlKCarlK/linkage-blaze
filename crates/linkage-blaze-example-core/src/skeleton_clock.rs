@@ -135,6 +135,7 @@ where
         cyd.frame_mut(TIME_SIZE)
             .write_text(&time_text)
             .flush_at(TIME_POINT)
+            .await
             .map_err(SkeletonClockError::Flush)?;
 
         // Shared linkage rendering path, tiled for CYD.
@@ -168,6 +169,7 @@ where
 
             tile_frame
                 .flush_at(tile.top_left)
+                .await
                 .map_err(SkeletonClockError::Flush)?;
         }
     }
