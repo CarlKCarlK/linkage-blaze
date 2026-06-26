@@ -1,0 +1,24 @@
+[package]
+name = "linkage-blaze-example-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Platform-neutral "core" for the CYD examples, modeled on device-envoy's
+# `device-envoy-example-common`: it holds the device-agnostic abstractions
+# (the `CydSurface`/`CydFrameOps` traits, tiled-layout machinery, the
+# coordinate-translating draw target) plus the generic example logic
+# (`skeleton_clock`) written against those traits and the `ClockSync` trait.
+# Concrete platforms (esp `linkage-blaze-cyd`, a future WASM sim) implement the
+# traits; this crate never depends on a platform.
+
+[dependencies]
+embedded-graphics = { version = "0.8", default-features = false }
+embassy-time = "0.5.1"
+heapless = "0.9.1"
+log = { version = "0.4", default-features = false }
+time = { version = "0.3.47", default-features = false }
+linkage-blaze-core.workspace = true
+device-envoy-core = { version = "0.1.0", default-features = false, features = [
+    "wifi",
+] }

@@ -4,9 +4,7 @@ mod buffer;
 mod calibration;
 mod display;
 mod text;
-pub mod tiling;
 mod touch;
-mod translated;
 
 use core::{convert::Infallible, fmt};
 
@@ -32,9 +30,12 @@ pub use display::{
     LineSegment, Orientation,
 };
 pub use linkage_blaze_armatron_core::{SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH};
+// Tiled-layout machinery and the translating draw target now live in the
+// platform-neutral example core; re-export them so existing call sites
+// (`linkage_blaze_cyd::tiling`, `TranslatedDrawTarget`) keep working.
+pub use linkage_blaze_example_core::{TranslatedDrawTarget, tiling};
 pub use text::DEFAULT_FONT;
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
-pub use translated::TranslatedDrawTarget;
 
 pub struct Cyd {
     display: CydDisplay,
@@ -586,5 +587,35 @@ impl CalibratedCyd<'_> {
 impl fmt::Debug for Cyd {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_struct("Cyd").finish_non_exhaustive()
+    }
+}
+
+// ── Device-agnostic surface trait impls ───────────────────────────────────────
+//
+// These let platform-neutral example code (`linkage-blaze-example-core`) drive
+// the concrete esp `Cyd` without naming any esp type.
+
+impl linkage_blaze_example_core::CydSurface for Cyd {
+    type FlushError = CydError;
+    type Frame<'a> = CydFrame<'a>;
+
+    fn screen_size(&self) -> Size {
+        Cyd::screen_size(self)
+    }
+
+    fn frame_mut(&mut self, size: Size) -> CydFrame<'_> {
+        Cyd::frame_mut(self, size)
+    }
+}
+
+impl linkage_blaze_example_core::CydFrameOps for CydFrame<'_> {
+    type FlushError = CydError;
+
+    fn write_text(&mut self, text: &str) -> &mut Self {
+        CydFrame::write_text(self, text)
+    }
+
+    fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
+        CydFrame::flush_at(self, top_left)
     }
 }
