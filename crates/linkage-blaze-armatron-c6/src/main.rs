@@ -300,13 +300,13 @@ fn inner_main() -> Result<Infallible, MainError> {
         match cyd_sim.tick(now, None) {
             TickOut::Draw => {
                 draw(screen_buffer, &cyd_sim);
-                cyd.flush(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
+                cyd.flush_at(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
             }
             TickOut::Calibrate => {}
             TickOut::Nada => {
                 if control_mode_changed || joystick_changed {
                     draw(screen_buffer, &cyd_sim);
-                    cyd.flush(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
+                    cyd.flush_at(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
                 }
             }
         }

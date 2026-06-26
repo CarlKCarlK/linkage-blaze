@@ -105,7 +105,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
             // todo000 review this
             draw_status(&mut cyd_frame, text565, sample_index, last_sample_duration);
-            cyd_frame.flush()?;
+            cyd_frame.flush_at(Point::new(0, 0))?;
             last_sample_duration = Some(Instant::now() - started);
         }
     }

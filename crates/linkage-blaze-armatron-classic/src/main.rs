@@ -153,7 +153,7 @@ fn inner_main() -> Result<Infallible, MainError> {
             TickOut::Draw => {
                 // todo0000 make nicer
                 draw(screen_buffer, &cyd_sim); // 32.3 fps if only command
-                cyd.flush(screen_buffer, Point::new(0, 0))?; // 13.2 fps if only command
+                cyd.flush_at(screen_buffer, Point::new(0, 0))?; // 13.2 fps if only command
             }
             TickOut::Nada => {}
         }
@@ -235,7 +235,7 @@ fn draw_calibration_screen(
             CydSim::HEIGHT_U16,
         )?;
     }
-    Ok(cyd.flush(screen_buffer, Point::new(0, 0))?)
+    Ok(cyd.flush_at(screen_buffer, Point::new(0, 0))?)
 }
 
 fn read_touch_input(cyd: &mut CalibratedCyd<'_>) -> Result<Option<TouchInputEvent>, MainError> {

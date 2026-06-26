@@ -89,8 +89,9 @@ pub struct CalibratedCyd<'a> {
 pub struct CydFrame<'a> {
     display: &'a mut CydDisplay,
     view: RectView<'a>,
-    // Default foreground color and font, copied from the owning `Cyd`, so
-    // `write_text` can render with the device default style.
+    // Default background and foreground colors and font, copied from the owning
+    // `Cyd`, so `clear` and `write_text` can render with the device default style.
+    pub(crate) background565: Rgb565,
     pub(crate) foreground565: Rgb565,
     pub(crate) font: &'static MonoFont<'static>,
 }
@@ -100,7 +101,13 @@ impl<'a> CydFrame<'a> {
         &mut self.view
     }
 
-    pub fn clear(&mut self, color: Rgb565) {
+    /// Fill the frame with the device default background color.
+    pub fn clear(&mut self) {
+        self.view.clear(self.background565);
+    }
+
+    /// Fill the frame with an explicit color.
+    pub fn fill(&mut self, color: Rgb565) {
         self.view.clear(color);
     }
 
@@ -118,10 +125,6 @@ impl<'a> CydFrame<'a> {
         self.view.raw_pixels_mut()
     }
 
-    pub fn flush(&mut self) -> Result<(), CydError> {
-        self.flush_at(Point::new(0, 0))
-    }
-
     pub fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(&self.view, top_left)?)
     }
@@ -132,7 +135,7 @@ impl DrawTarget for CydFrame<'_> {
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.clear(color);
+        self.fill(color);
         Ok(())
     }
 
@@ -451,7 +454,7 @@ impl Cyd {
         self.touch.as_mut()?.read_raw_touch_event()
     }
 
-    pub fn flush(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
+    pub fn flush_at(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
@@ -469,6 +472,7 @@ impl Cyd {
         CydFrame {
             display: &mut self.display,
             view,
+            background565: self.background565,
             foreground565: self.foreground565,
             font: self.font,
         }
@@ -546,8 +550,8 @@ impl CalibratedCyd<'_> {
         )
     }
 
-    pub fn flush(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
-        self.cyd.flush(buffer, top_left)
+    pub fn flush_at(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
+        self.cyd.flush_at(buffer, top_left)
     }
 
     pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {

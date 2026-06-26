@@ -159,36 +159,29 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,
     )?;
 
-    // One frame owns the Wi-Fi status band: it is reused across every connect
-    // event and for the final "WiFi OK". The async closure borrows it directly
-    // (no `RefCell`), and dropping it afterward hands `cyd` back to the clock loop.
     let mut wifi_status_frame = cyd.frame_mut(WIFI_STATUS_SIZE);
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,
             async |wifi_auto_event| -> Result<(), CydError> {
                 let message = match wifi_auto_event {
-                    WifiAutoEvent::CaptivePortalReady => "setup CydDance",
-                    WifiAutoEvent::Connecting { .. } => "connecting",
-                    WifiAutoEvent::ConnectionFailed => "connect failed",
+                    WifiAutoEvent::CaptivePortalReady => "WiFi: setup CydDance",
+                    WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
+                    WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
                 };
+                wifi_status_frame.clear();
+                wifi_status_frame.write_text(message);
+                wifi_status_frame.flush_at(WIFI_STATUS_POINT)?;
                 info!("WiFi: {message}");
-                // Draw the Wi-Fi status into the top band, leaving the time slot
-                // blank, until the clock loop below takes over the band.
-                //todo0000 fix this
-                wifi_status_frame.clear(cyd.background_565());
-                wifi_status_frame.write_text(message, WIFI_STATUS_POINT);
-                wifi_status_frame.flush()?;
                 Ok(())
             },
         )
         .await?;
 
-    wifi_status_frame.clear(cyd.background_565());
-    wifi_status_frame.write_text("WiFi OK", WIFI_STATUS_POINT);
-    wifi_status_frame.flush()?;
+    wifi_status_frame.clear();
+    wifi_status_frame.write_text("WiFi: OK");
+    wifi_status_frame.flush_at(WIFI_STATUS_POINT)?;
     drop(wifi_status_frame);
-
     info!("WiFi connected");
 
     let timezone_offset_minutes = timezone_field
@@ -218,11 +211,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         let params = clock.linkage_params();
         let time_text = clock.text_12h();
 
-        //todo0000 there is not point in the write_text method. It also starts at the upper left and respects "\n" like device-envoy.
         let mut time_frame = cyd.frame_mut(TIME_SIZE);
-        time_frame.write_text(time_text.as_str(), Point::new(0, 0));
-        //todo0000 this is where point goes. I was confused before.
-        //todo000 let's call this flush and not have a flush w/o a point.
+        time_frame.write_text(time_text.as_str());
         time_frame.flush_at(TIME_POINT)?;
 
         // Shared linkage rendering path, tiled for CYD.

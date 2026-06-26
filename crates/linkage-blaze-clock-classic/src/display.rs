@@ -158,7 +158,7 @@ impl CydClockDisplay {
                 scale_glyph_in_place(&mut glyph_buffer, glyph_width, glyph_height, scale);
             }
             self.cyd
-                .flush(&glyph_buffer, Point::new(glyph_left, top_left.y))?;
+                .flush_at(&glyph_buffer, Point::new(glyph_left, top_left.y))?;
             glyph_left += flush_width as i32;
         }
 
