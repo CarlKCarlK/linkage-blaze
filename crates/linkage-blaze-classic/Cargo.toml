@@ -18,6 +18,11 @@ name = "ballet"
 path = "examples/ballet.rs"
 required-features = ["esp32"]
 
+[[example]]
+name = "gamma-ramp"
+path = "examples/gamma-ramp.rs"
+required-features = ["esp32"]
+
 [features]
 default = ["esp32"]
 esp32 = [

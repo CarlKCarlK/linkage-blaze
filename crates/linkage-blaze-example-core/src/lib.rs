@@ -7,5 +7,6 @@
 //! the [`Cyd`](linkage_blaze_cyd_core::Cyd) trait.
 
 pub mod ballet;
+pub mod gamma_ramp;
 #[cfg(feature = "skeleton-clock")]
 pub mod skeleton_clock;
