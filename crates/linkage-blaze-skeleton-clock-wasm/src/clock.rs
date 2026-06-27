@@ -10,10 +10,23 @@ use core::cell::Cell;
 
 use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
 use embassy_time::{Duration, Timer};
-use time::{OffsetDateTime, UtcOffset};
+use time::{OffsetDateTime, Time, UtcOffset};
 
 /// One-second tick interval for the clock.
 const TICK_INTERVAL: Duration = Duration::from_secs(1);
+
+thread_local! {
+    /// When `Some(seconds_of_day)` (0..86400), the clock reports today's date
+    /// with this manually-chosen time of day instead of the real wall clock.
+    /// Driven by the page's time-of-day slider; `None` follows the OS clock.
+    static TIME_OVERRIDE: Cell<Option<u32>> = const { Cell::new(None) };
+}
+
+/// Override the reported time of day to `seconds_of_day` (0..86400), or pass
+/// `None` to resume following the browser's real clock. The date stays today's.
+pub fn set_time_override(seconds_of_day: Option<u32>) {
+    TIME_OVERRIDE.with(|cell| cell.set(seconds_of_day));
+}
 
 /// A [`ClockSync`] backed by the browser's local clock.
 pub struct WasmClockSync {
@@ -57,7 +70,20 @@ impl ClockSync for WasmClockSync {
             .expect("a current JavaScript timestamp is in range");
         let offset = UtcOffset::from_whole_seconds(self.offset_minutes.get() * 60)
             .expect("a timezone offset in minutes is in range");
-        utc.to_offset(offset)
+        let local = utc.to_offset(offset);
+        // The slider, when engaged, replaces only the time of day; the date and
+        // zone stay as the real clock's.
+        match TIME_OVERRIDE.with(Cell::get) {
+            Some(seconds_of_day) => {
+                let hour = (seconds_of_day / 3600) as u8;
+                let minute = ((seconds_of_day % 3600) / 60) as u8;
+                let second = (seconds_of_day % 60) as u8;
+                let time = Time::from_hms(hour, minute, second)
+                    .expect("seconds_of_day in 0..86400 yields a valid time");
+                local.replace_time(time)
+            }
+            None => local,
+        }
     }
 
     fn set_offset_minutes(&self, minutes: i32) {

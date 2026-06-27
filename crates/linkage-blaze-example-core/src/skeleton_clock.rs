@@ -12,10 +12,10 @@ use core::convert::Infallible;
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embedded_graphics::{
     Drawable,
-    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_10X20},
+    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_7X13, ascii::FONT_10X20},
     pixelcolor::Rgb565,
     prelude::{DrawTarget, Point, Primitive, Size},
-    primitives::{Circle, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
+    primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
@@ -26,7 +26,7 @@ use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, Orientation, TranslatedDrawTarget,
+    Cyd, CydFrame, Image565, Orientation, TranslatedDrawTarget, tga565,
     tiling::{TileGrid, max_u32},
 };
 
@@ -34,15 +34,25 @@ use linkage_blaze_cyd_core::{
 
 /// Device default background color the platform shim should construct its `Cyd`
 /// with (also used to clear every frame).
-pub const BACKGROUND: Rgb888 = Rgb888::CSS_MIDNIGHT_BLUE; // deep night blue (25, 25, 112)
-const FIGURE: Rgb888 = Rgb888::CSS_WHEAT; // warm pale bone-like tan (245, 222, 179)
+pub const BACKGROUND: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal (13, 13, 11)
+// CSS_WHEAT (245, 222, 179) is so light it reads as plain white on the panel
+// (all channels near max). Use a more saturated warm tan so the figure clearly
+// shows a hue on the real device, the way the colored background numerals do.
+const FIGURE: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
 /// Device default foreground/text color the platform shim should construct its
 /// `Cyd` with.
-pub const FOREGROUND: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
+pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
 const PLACARD_FILL: Rgb888 = Rgb888::CSS_WHEAT; // light sign face
 const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
-const DIAL_FILL: Rgb888 = Rgb888::new(13, 49, 67); // dark blue-green dial disk
-const DIAL_STROKE: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray dial edge
+
+// ── Background bitmap ──────────────────────────────────────────────────────────
+
+/// Clock-face background, decoded from a 239×319 32-bit TGA at compile time and
+/// drawn behind the figure in place of the old vector dial. Screen-space
+/// top-left where it is blitted (panel is 240×320 portrait).
+const CLOCK_BACK: Image565<239, 319, { 239 * 319 }> =
+    tga565!("../assets/clock_back.small.tga", 239, 319);
+const CLOCK_BACK_POINT: Point = Point::new(0, 0);
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 
@@ -52,17 +62,21 @@ pub const ORIENTATION: Orientation = Orientation::Portrait;
 
 /// Font for the top WiFi/time texts; every platform shim MUST construct its
 /// `Cyd` with this font so the simulator and the real device match (and so the
-/// time band's character-width math below stays correct). Double-height (10×20).
-pub const TOP_FONT: MonoFont<'static> = FONT_10X20;
+/// time band's character-width math below stays correct). 7×13.
+pub const TOP_FONT: MonoFont<'static> = FONT_7X13;
+
+/// Top-left of the WiFi-status band; nudged 3 px right of the screen edge.
+pub const WIFI_STATUS_POINT: Point = Point::new(3, 0);
+
+/// Top-left of the digital time band. The time begins about two-thirds of the
+/// way across the screen and sits 3 px below the top edge.
+const TIME_POINT: Point = Point::new((ORIENTATION.width() * 2 / 3) as i32, 3);
 
 /// Region (size) of the WiFi-status band; the shim draws WiFi messages here.
-/// Sized for the double-height top font (10×20): "WiFi: OK" is 8×10 = 80 px wide
-/// and the band is 44 px tall, leaving the rest of the row for the time text.
-pub const WIFI_STATUS_SIZE: Size = Size::new(96, 44);
-/// Top-left of the WiFi-status band.
-pub const WIFI_STATUS_POINT: Point = Point::new(0, 0);
-
-const TIME_POINT: Point = Point::new(WIFI_STATUS_SIZE.width as i32, WIFI_STATUS_POINT.y);
+/// Spans the whole top of the screen from `WIFI_STATUS_POINT` across to where
+/// the digital time begins (~2/3 of the width), and is 22 px tall.
+pub const WIFI_STATUS_SIZE: Size =
+    Size::new(TIME_POINT.x as u32 - WIFI_STATUS_POINT.x as u32, 22);
 const TIME_SIZE: Size = Size::new(
     ORIENTATION.width() - TIME_POINT.x as u32,
     WIFI_STATUS_SIZE.height,
@@ -85,7 +99,7 @@ pub const FIGURE_TILES: TileGrid = TileGrid::new(
 // ── Projection ───────────────────────────────────────────────────────────────
 
 //todo000 review projections.
-const PROJECTION: CameraProjection = CameraProjection::neg_x_ortho(120.0, 300.0, 1.25);
+const PROJECTION: CameraProjection = CameraProjection::neg_x_ortho(141.0, 306.0, 1.35);
 
 // ── Linkage constants ─────────────────────────────────────────────────────────
 
@@ -156,19 +170,29 @@ where
         for tile in FIGURE_TILES.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
 
-            // Skeleton-clock-specific background overlay.
-            {
-                // todo000 understand TranslatedDrawTarget
-                let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-                draw_dial(&mut target);
-            }
+            // Skeleton-clock-specific background overlay: blit the clock-face
+            // bitmap. `tile_frame` is a `PixelTarget` in tile-local coordinates,
+            // so a screen point maps to local by subtracting the tile origin;
+            // pixels outside the tile are clipped.
+            CLOCK_BACK.draw_at(
+                &mut tile_frame,
+                (
+                    CLOCK_BACK_POINT.x - tile.top_left.x,
+                    CLOCK_BACK_POINT.y - tile.top_left.y,
+                ),
+            );
 
             let mut draw_items = linkage_view.draw_items(&params);
             for draw_item in &mut draw_items {
                 draw_item
                     .project(&PROJECTION)
                     // todo00 really understand draw_offset
-                    .draw_offset(&mut tile_frame, tile.top_left);
+                    // Shift the figure 2 px toward screen-left by drawing it
+                    // relative to an origin nudged 2 px right (local = screen − origin).
+                    .draw_offset(
+                        &mut tile_frame,
+                        Point::new(tile.top_left.x + 2, tile.top_left.y),
+                    );
             }
 
             // todo000 explain that after we go through all the items we inspect the poses of the marks.
@@ -202,9 +226,9 @@ where
 
 /// Format a 12-hour clock string with AM/PM. The hour is space-padded to two
 /// characters (e.g. " 5:04:32 PM" or "12:04:32 PM") and the whole string is
-/// right-justified within the time band (144 px ÷ 10 px/char = 14 chars) so it
+/// right-justified within the time band (144 px ÷ 7 px/char = 20 chars) so it
 /// sits against the band's right edge.
-fn text_12h(local_time: &OffsetDateTime) -> heapless::String<16> {
+fn text_12h(local_time: &OffsetDateTime) -> heapless::String<24> {
     let (hour_12, minute, second) = h12_m_s(local_time);
     let suffix = if local_time.hour() % 24 < 12 {
         "AM"
@@ -220,8 +244,8 @@ fn text_12h(local_time: &OffsetDateTime) -> heapless::String<16> {
     )
     .expect("clock string fits in 16 bytes");
     let mut text = heapless::String::new();
-    core::fmt::write(&mut text, format_args!("{inner:>14}"))
-        .expect("clock string fits in 16 bytes");
+    core::fmt::write(&mut text, format_args!("{inner:>20}"))
+        .expect("clock string fits in 24 bytes");
     text
 }
 
@@ -296,136 +320,6 @@ fn draw_centered_text<D>(
     Text::with_text_style(text, center, MonoTextStyle::new(font, color), text_style)
         .draw(target)
         .expect("drawing to an Infallible target cannot fail");
-}
-
-// todo000 this is hard to see. Make it more visible or remove it
-/// Draw a soft clock face behind the figure plus the 12 / 3 / 6 / 9 markers.
-fn draw_dial<D>(target: &mut D)
-where
-    D: DrawTarget<Color = Rgb565, Error = Infallible>,
-{
-    const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
-    const DIAL_RADIUS: i32 = 112;
-    const DIAL_NUMBER_RADIUS_X: i32 = 96;
-    const DIAL_NUMBER_RADIUS_Y: i32 = 102;
-
-    let dial_fill = Rgb565::from(DIAL_FILL);
-    let dial_stroke = Rgb565::from(DIAL_STROKE);
-    let dial_text = Rgb565::from(FIGURE);
-
-    Circle::new(
-        Point::new(
-            DIAL_CENTER_SCREEN.x - DIAL_RADIUS,
-            DIAL_CENTER_SCREEN.y - DIAL_RADIUS,
-        ),
-        (DIAL_RADIUS * 2) as u32,
-    )
-    .into_styled(
-        PrimitiveStyleBuilder::new()
-            .fill_color(dial_fill)
-            .stroke_color(dial_stroke)
-            .stroke_width(2)
-            .build(),
-    )
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
-
-    // Cardinal ticks help the pale numerals read as a clock face, even on the
-    // small CYD screen.
-    let tick_style = PrimitiveStyle::with_stroke(dial_stroke, 3);
-    Line::new(
-        Point::new(
-            DIAL_CENTER_SCREEN.x,
-            DIAL_CENTER_SCREEN.y - DIAL_RADIUS + 10,
-        ),
-        Point::new(
-            DIAL_CENTER_SCREEN.x,
-            DIAL_CENTER_SCREEN.y - DIAL_RADIUS + 28,
-        ),
-    )
-    .into_styled(tick_style)
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
-    Line::new(
-        Point::new(
-            DIAL_CENTER_SCREEN.x + DIAL_RADIUS - 28,
-            DIAL_CENTER_SCREEN.y,
-        ),
-        Point::new(
-            DIAL_CENTER_SCREEN.x + DIAL_RADIUS - 10,
-            DIAL_CENTER_SCREEN.y,
-        ),
-    )
-    .into_styled(tick_style)
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
-    Line::new(
-        Point::new(
-            DIAL_CENTER_SCREEN.x,
-            DIAL_CENTER_SCREEN.y + DIAL_RADIUS - 28,
-        ),
-        Point::new(
-            DIAL_CENTER_SCREEN.x,
-            DIAL_CENTER_SCREEN.y + DIAL_RADIUS - 10,
-        ),
-    )
-    .into_styled(tick_style)
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
-    Line::new(
-        Point::new(
-            DIAL_CENTER_SCREEN.x - DIAL_RADIUS + 10,
-            DIAL_CENTER_SCREEN.y,
-        ),
-        Point::new(
-            DIAL_CENTER_SCREEN.x - DIAL_RADIUS + 28,
-            DIAL_CENTER_SCREEN.y,
-        ),
-    )
-    .into_styled(tick_style)
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
-
-    draw_centered_text(
-        target,
-        "12",
-        Point::new(
-            DIAL_CENTER_SCREEN.x,
-            DIAL_CENTER_SCREEN.y - DIAL_NUMBER_RADIUS_Y,
-        ),
-        &FONT_10X20,
-        dial_text,
-    );
-    draw_centered_text(
-        target,
-        "3",
-        Point::new(
-            DIAL_CENTER_SCREEN.x + DIAL_NUMBER_RADIUS_X,
-            DIAL_CENTER_SCREEN.y,
-        ),
-        &FONT_10X20,
-        dial_text,
-    );
-    draw_centered_text(
-        target,
-        "6",
-        Point::new(
-            DIAL_CENTER_SCREEN.x,
-            DIAL_CENTER_SCREEN.y + DIAL_NUMBER_RADIUS_Y,
-        ),
-        &FONT_10X20,
-        dial_text,
-    );
-    draw_centered_text(
-        target,
-        "9",
-        Point::new(
-            DIAL_CENTER_SCREEN.x - DIAL_NUMBER_RADIUS_X,
-            DIAL_CENTER_SCREEN.y,
-        ),
-        &FONT_10X20,
-        dial_text,
-    );
 }
 
 /// Draw a hanging number sign anchored at `anchor` (a hand mark in skeleton-clock
