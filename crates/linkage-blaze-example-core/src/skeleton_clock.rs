@@ -15,7 +15,7 @@ use embedded_graphics::{
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_10X20},
     pixelcolor::Rgb565,
     prelude::{DrawTarget, Point, Primitive, Size},
-    primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
+    primitives::{Circle, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
@@ -39,7 +39,10 @@ const FIGURE: Rgb888 = Rgb888::CSS_WHEAT; // warm pale bone-like tan (245, 222, 
 /// Device default foreground/text color the platform shim should construct its
 /// `Cyd` with.
 pub const FOREGROUND: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE; // muted cool text (176, 196, 222)
-const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
+const PLACARD_FILL: Rgb888 = Rgb888::CSS_WHEAT; // light sign face
+const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
+const DIAL_FILL: Rgb888 = Rgb888::new(13, 49, 67); // dark blue-green dial disk
+const DIAL_STROKE: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray dial edge
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 
@@ -60,7 +63,10 @@ pub const WIFI_STATUS_SIZE: Size = Size::new(96, 44);
 pub const WIFI_STATUS_POINT: Point = Point::new(0, 0);
 
 const TIME_POINT: Point = Point::new(WIFI_STATUS_SIZE.width as i32, WIFI_STATUS_POINT.y);
-const TIME_SIZE: Size = Size::new(ORIENTATION.width() - TIME_POINT.x as u32, WIFI_STATUS_SIZE.height);
+const TIME_SIZE: Size = Size::new(
+    ORIENTATION.width() - TIME_POINT.x as u32,
+    WIFI_STATUS_SIZE.height,
+);
 
 const BELOW_WIFI_TIME: u32 = max_u32(
     WIFI_STATUS_POINT.y as u32 + WIFI_STATUS_SIZE.height,
@@ -171,8 +177,18 @@ where
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
             let (hour_12, minute, _) = h12_m_s(local_time);
             let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-            draw_hanging_placard(&mut target, pose_to_point(left_hand_pose), hour_12 as u32);
-            draw_hanging_placard(&mut target, pose_to_point(right_hand_pose), minute as u32);
+            draw_hanging_placard(
+                &mut target,
+                pose_to_point(left_hand_pose),
+                hour_12 as u32,
+                "H",
+            );
+            draw_hanging_placard(
+                &mut target,
+                pose_to_point(right_hand_pose),
+                minute as u32,
+                "M",
+            );
 
             tile_frame
                 .flush_at(tile.top_left)
@@ -204,7 +220,8 @@ fn text_12h(local_time: &OffsetDateTime) -> heapless::String<16> {
     )
     .expect("clock string fits in 16 bytes");
     let mut text = heapless::String::new();
-    core::fmt::write(&mut text, format_args!("{inner:>14}")).expect("clock string fits in 16 bytes");
+    core::fmt::write(&mut text, format_args!("{inner:>14}"))
+        .expect("clock string fits in 16 bytes");
     text
 }
 
@@ -262,82 +279,171 @@ fn wrap_unit(value: f32) -> f32 {
 // physical-screen space; a `TranslatedDrawTarget` subtracts the tile origin so
 // these functions never need to know they are rendering into a tile.
 
-/// Draw a short number string centered (both axes) on `center`.
-fn draw_centered_number<D>(target: &mut D, text: &str, center: Point, color: Rgb565)
-where
+/// Draw a short string centered (both axes) on `center`.
+fn draw_centered_text<D>(
+    target: &mut D,
+    text: &str,
+    center: Point,
+    font: &'static MonoFont<'static>,
+    color: Rgb565,
+) where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let text_style = TextStyleBuilder::new()
         .alignment(Alignment::Center)
         .baseline(Baseline::Middle)
         .build();
-    Text::with_text_style(
-        text,
-        center,
-        MonoTextStyle::new(&FONT_6X10, color),
-        text_style,
-    )
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
+    Text::with_text_style(text, center, MonoTextStyle::new(font, color), text_style)
+        .draw(target)
+        .expect("drawing to an Infallible target cannot fail");
 }
 
 // todo000 this is hard to see. Make it more visible or remove it
-/// Draw the clock dial's 12 / 3 / 6 / 9 hour markers around the figure.
+/// Draw a soft clock face behind the figure plus the 12 / 3 / 6 / 9 markers.
 fn draw_dial<D>(target: &mut D)
 where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
-    const DIAL_COLOR: Rgb888 = Rgb888::CSS_DARK_SLATE_GRAY; // muted teal-gray (47, 79, 79)
     const DIAL_CENTER_SCREEN: Point = Point::new(120, 178);
-    const DIAL_RADIUS_X: i32 = 100;
-    const DIAL_RADIUS_Y: i32 = 118;
+    const DIAL_RADIUS: i32 = 112;
+    const DIAL_NUMBER_RADIUS_X: i32 = 96;
+    const DIAL_NUMBER_RADIUS_Y: i32 = 102;
 
-    let dial565 = Rgb565::from(DIAL_COLOR);
-    let center_x = DIAL_CENTER_SCREEN.x;
-    let center_y = DIAL_CENTER_SCREEN.y;
-    draw_centered_number(
+    let dial_fill = Rgb565::from(DIAL_FILL);
+    let dial_stroke = Rgb565::from(DIAL_STROKE);
+    let dial_text = Rgb565::from(FIGURE);
+
+    Circle::new(
+        Point::new(
+            DIAL_CENTER_SCREEN.x - DIAL_RADIUS,
+            DIAL_CENTER_SCREEN.y - DIAL_RADIUS,
+        ),
+        (DIAL_RADIUS * 2) as u32,
+    )
+    .into_styled(
+        PrimitiveStyleBuilder::new()
+            .fill_color(dial_fill)
+            .stroke_color(dial_stroke)
+            .stroke_width(2)
+            .build(),
+    )
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
+
+    // Cardinal ticks help the pale numerals read as a clock face, even on the
+    // small CYD screen.
+    let tick_style = PrimitiveStyle::with_stroke(dial_stroke, 3);
+    Line::new(
+        Point::new(
+            DIAL_CENTER_SCREEN.x,
+            DIAL_CENTER_SCREEN.y - DIAL_RADIUS + 10,
+        ),
+        Point::new(
+            DIAL_CENTER_SCREEN.x,
+            DIAL_CENTER_SCREEN.y - DIAL_RADIUS + 28,
+        ),
+    )
+    .into_styled(tick_style)
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
+    Line::new(
+        Point::new(
+            DIAL_CENTER_SCREEN.x + DIAL_RADIUS - 28,
+            DIAL_CENTER_SCREEN.y,
+        ),
+        Point::new(
+            DIAL_CENTER_SCREEN.x + DIAL_RADIUS - 10,
+            DIAL_CENTER_SCREEN.y,
+        ),
+    )
+    .into_styled(tick_style)
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
+    Line::new(
+        Point::new(
+            DIAL_CENTER_SCREEN.x,
+            DIAL_CENTER_SCREEN.y + DIAL_RADIUS - 28,
+        ),
+        Point::new(
+            DIAL_CENTER_SCREEN.x,
+            DIAL_CENTER_SCREEN.y + DIAL_RADIUS - 10,
+        ),
+    )
+    .into_styled(tick_style)
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
+    Line::new(
+        Point::new(
+            DIAL_CENTER_SCREEN.x - DIAL_RADIUS + 10,
+            DIAL_CENTER_SCREEN.y,
+        ),
+        Point::new(
+            DIAL_CENTER_SCREEN.x - DIAL_RADIUS + 28,
+            DIAL_CENTER_SCREEN.y,
+        ),
+    )
+    .into_styled(tick_style)
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
+
+    draw_centered_text(
         target,
         "12",
-        Point::new(center_x, center_y - DIAL_RADIUS_Y),
-        dial565,
+        Point::new(
+            DIAL_CENTER_SCREEN.x,
+            DIAL_CENTER_SCREEN.y - DIAL_NUMBER_RADIUS_Y,
+        ),
+        &FONT_10X20,
+        dial_text,
     );
-    draw_centered_number(
+    draw_centered_text(
         target,
         "3",
-        Point::new(center_x + DIAL_RADIUS_X, center_y),
-        dial565,
+        Point::new(
+            DIAL_CENTER_SCREEN.x + DIAL_NUMBER_RADIUS_X,
+            DIAL_CENTER_SCREEN.y,
+        ),
+        &FONT_10X20,
+        dial_text,
     );
-    draw_centered_number(
+    draw_centered_text(
         target,
         "6",
-        Point::new(center_x, center_y + DIAL_RADIUS_Y),
-        dial565,
+        Point::new(
+            DIAL_CENTER_SCREEN.x,
+            DIAL_CENTER_SCREEN.y + DIAL_NUMBER_RADIUS_Y,
+        ),
+        &FONT_10X20,
+        dial_text,
     );
-    draw_centered_number(
+    draw_centered_text(
         target,
         "9",
-        Point::new(center_x - DIAL_RADIUS_X, center_y),
-        dial565,
+        Point::new(
+            DIAL_CENTER_SCREEN.x - DIAL_NUMBER_RADIUS_X,
+            DIAL_CENTER_SCREEN.y,
+        ),
+        &FONT_10X20,
+        dial_text,
     );
 }
 
 /// Draw a hanging number sign anchored at `anchor` (a hand mark in skeleton-clock
-/// coordinates).  The sign is a fixed size and always shows two digits.  It
-/// hangs straight down via a short vertical hook from the hand, then a triangle
-/// splays out to the sign's two top corners.  `number` is shown modulo 100.
-fn draw_hanging_placard<D>(target: &mut D, anchor: Point, number: u32)
+/// coordinates). The sign is fixed size and shows a two-digit value plus a
+/// small label (`"H"` or `"M"`) so the hanging hour and minute are distinguishable.
+fn draw_hanging_placard<D>(target: &mut D, anchor: Point, number: u32, label: &str)
 where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
-    const PLACARD_W: i32 = 34;
-    const PLACARD_H: i32 = 20;
+    const PLACARD_W: i32 = 38;
+    const PLACARD_H: i32 = 28;
     const PLACARD_BORDER_PX: i32 = 2;
     const HANGER_PX: i32 = 2;
     const HANGER_HOOK: i32 = 7;
-    const HANGER_TRIANGLE: i32 = 22;
+    const HANGER_TRIANGLE: i32 = 18;
 
     let placard_border = Rgb565::from(FIGURE);
-    let placard_text = Rgb565::from(FIGURE);
+    let placard_text = Rgb565::from(PLACARD_TEXT);
     let placard_fill = Rgb565::from(PLACARD_FILL);
 
     let card_left = anchor.x - PLACARD_W / 2;
@@ -359,7 +465,6 @@ where
         .draw(target)
         .expect("drawing to an Infallible target cannot fail");
 
-    // Fill plus an inside-aligned stroke reproduces the original 2 px inner border.
     let card_style = PrimitiveStyleBuilder::new()
         .fill_color(placard_fill)
         .stroke_color(placard_border)
@@ -374,11 +479,34 @@ where
     .draw(target)
     .expect("drawing to an Infallible target cannot fail");
 
+    // A center divider makes the small H/M label read as part of the sign
+    // rather than as a third digit.
+    Line::new(
+        Point::new(card_left + 4, card_top + 18),
+        Point::new(card_right - 4, card_top + 18),
+    )
+    .into_styled(PrimitiveStyle::with_stroke(placard_text, 1))
+    .draw(target)
+    .expect("drawing to an Infallible target cannot fail");
+
     let mut value_text = heapless::String::<4>::new();
     core::fmt::write(&mut value_text, format_args!("{:02}", number % 100))
         .expect("two-digit placard value fits in 4 bytes");
-    let card_center = Point::new(card_left + PLACARD_W / 2, card_top + PLACARD_H / 2);
-    draw_centered_number(target, &value_text, card_center, placard_text);
+
+    draw_centered_text(
+        target,
+        &value_text,
+        Point::new(card_left + PLACARD_W / 2, card_top + 10),
+        &FONT_10X20,
+        placard_text,
+    );
+    draw_centered_text(
+        target,
+        label,
+        Point::new(card_left + PLACARD_W / 2, card_top + 23),
+        &FONT_6X10,
+        placard_text,
+    );
 }
 
 // todo0000 shouldn't be needed.
