@@ -18,12 +18,11 @@ use device_envoy_esp::{
     },
 };
 use embassy_executor::Spawner;
-use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, tiling::max_usize};
 use linkage_blaze_example_core::skeleton_clock::{
-    BACKGROUND, FIGURE_TILES, FOREGROUND, ORIENTATION, SkeletonClockError, WIFI_STATUS_POINT,
-    WIFI_STATUS_SIZE, skeleton_clock,
+    BACKGROUND, FIGURE_TILES, FOREGROUND, ORIENTATION, SkeletonClockError, TOP_FONT,
+    WIFI_STATUS_POINT, WIFI_STATUS_SIZE, skeleton_clock,
 };
 use log::info;
 
@@ -73,7 +72,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         ORIENTATION,
         BACKGROUND,
         FOREGROUND,
-        &FONT_6X10,
+        &TOP_FONT,
     )?;
     info!("CYD display initialized");
 

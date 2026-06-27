@@ -12,7 +12,7 @@ use core::convert::Infallible;
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embedded_graphics::{
     Drawable,
-    mono_font::{MonoTextStyle, ascii::FONT_6X10},
+    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_10X20},
     pixelcolor::Rgb565,
     prelude::{DrawTarget, Point, Primitive, Size},
     primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
@@ -47,8 +47,15 @@ const PLACARD_FILL: Rgb888 = Rgb888::new(25, 60, 70); // dark teal sign face
 /// construct its `Cyd` with this orientation so the layout constants match.
 pub const ORIENTATION: Orientation = Orientation::Portrait;
 
+/// Font for the top WiFi/time texts; every platform shim MUST construct its
+/// `Cyd` with this font so the simulator and the real device match (and so the
+/// time band's character-width math below stays correct). Double-height (10×20).
+pub const TOP_FONT: MonoFont<'static> = FONT_10X20;
+
 /// Region (size) of the WiFi-status band; the shim draws WiFi messages here.
-pub const WIFI_STATUS_SIZE: Size = Size::new(166, 22);
+/// Sized for the double-height top font (10×20): "WiFi: OK" is 8×10 = 80 px wide
+/// and the band is 44 px tall, leaving the rest of the row for the time text.
+pub const WIFI_STATUS_SIZE: Size = Size::new(96, 44);
 /// Top-left of the WiFi-status band.
 pub const WIFI_STATUS_POINT: Point = Point::new(0, 0);
 
@@ -177,8 +184,10 @@ where
 
 // ── Clock time ────────────────────────────────────────────────────────────────
 
-/// Format a 12-hour clock string with AM/PM, right-justified to 11
-/// characters (e.g. " 5:04:32 PM" or "12:04:32 PM").
+/// Format a 12-hour clock string with AM/PM. The hour is space-padded to two
+/// characters (e.g. " 5:04:32 PM" or "12:04:32 PM") and the whole string is
+/// right-justified within the time band (144 px ÷ 10 px/char = 14 chars) so it
+/// sits against the band's right edge.
 fn text_12h(local_time: &OffsetDateTime) -> heapless::String<16> {
     let (hour_12, minute, second) = h12_m_s(local_time);
     let suffix = if local_time.hour() % 24 < 12 {
@@ -186,12 +195,16 @@ fn text_12h(local_time: &OffsetDateTime) -> heapless::String<16> {
     } else {
         "PM"
     };
-    let mut text = heapless::String::new();
+    // Build the time, then right-justify the whole thing to the band width so it
+    // hugs the right edge (leading spaces push it over; the hour stays padded).
+    let mut inner = heapless::String::<16>::new();
     core::fmt::write(
-        &mut text,
+        &mut inner,
         format_args!("{hour_12:>2}:{minute:02}:{second:02} {suffix}"),
     )
     .expect("clock string fits in 16 bytes");
+    let mut text = heapless::String::new();
+    core::fmt::write(&mut text, format_args!("{inner:>14}")).expect("clock string fits in 16 bytes");
     text
 }
 
