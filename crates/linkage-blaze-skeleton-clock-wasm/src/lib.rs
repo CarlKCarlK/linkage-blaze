@@ -17,13 +17,11 @@ use clock::WasmClockSync;
 use linkage_blaze_cyd_core::{Cyd, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::skeleton_clock::{
-    BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_POINT, WIFI_STATUS_SIZE, skeleton_clock,
+    BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_POINT, WIFI_STATUS_SIZE,
+    skeleton_clock,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
-
-// The default monospace font the device-agnostic example draws its text with.
-use embedded_graphics::mono_font::ascii::FONT_6X10;
 
 /// Start the skeleton-clock animation on the canvas with `canvas_id`.
 #[wasm_bindgen]
@@ -48,7 +46,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .dyn_into()
         .expect("the context is a CanvasRenderingContext2d");
 
-    let cyd = CydWasm::new(context, ORIENTATION, BACKGROUND, FOREGROUND, &FONT_6X10);
+    let cyd = CydWasm::new(context, ORIENTATION, BACKGROUND, FOREGROUND, &TOP_FONT);
 
     // `async move` owns `cyd` and the clock, making the spawned future `'static`
     // while `skeleton_clock` borrows them for the whole run.

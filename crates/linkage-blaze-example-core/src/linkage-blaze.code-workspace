@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../../mcu/device-envoy"
+		}
+	],
+	"settings": {
+		"rust-analyzer.cargo.allTargets": false,
+		"rust-analyzer.cargo.target": "xtensa-esp32-none-elf",
+		"rust-analyzer.diagnostics.enable": false
+	}
+}
