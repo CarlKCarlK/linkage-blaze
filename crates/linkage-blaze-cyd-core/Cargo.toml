@@ -15,3 +15,6 @@ license.workspace = true
 [dependencies]
 embedded-graphics = { version = "0.8", default-features = false }
 linkage-blaze-core.workspace = true
+
+[dev-dependencies]
+heapless = "0.8"
