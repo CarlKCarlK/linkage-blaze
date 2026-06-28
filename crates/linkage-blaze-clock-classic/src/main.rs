@@ -25,7 +25,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, DEFAULT_FONT, Orientation};
+use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation};
 use log::info;
 use static_cell::StaticCell;
 
@@ -106,18 +106,21 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
 
     let stack = wifi_auto
-        .connect(&mut force_portal_button, async |wifi_auto_event| -> Result<(), CydError> {
-            let wifi_mode = match wifi_auto_event {
-                WifiAutoEvent::CaptivePortalReady => "setup CydClock",
-                WifiAutoEvent::Connecting { .. } => "connecting",
-                WifiAutoEvent::ConnectionFailed => "connect failed",
-            };
-            info!("WiFi mode: {wifi_mode}");
-            if let Err(error) = display.borrow_mut().show(wifi_mode, None) {
-                info!("WiFi mode display failed: {error:?}");
-            }
-            Ok(())
-        })
+        .connect(
+            &mut force_portal_button,
+            async |wifi_auto_event| -> Result<(), CydError> {
+                let wifi_mode = match wifi_auto_event {
+                    WifiAutoEvent::CaptivePortalReady => "setup CydClock",
+                    WifiAutoEvent::Connecting { .. } => "connecting",
+                    WifiAutoEvent::ConnectionFailed => "connect failed",
+                };
+                info!("WiFi mode: {wifi_mode}");
+                if let Err(error) = display.borrow_mut().show(wifi_mode, None) {
+                    info!("WiFi mode display failed: {error:?}");
+                }
+                Ok(())
+            },
+        )
         .await?;
 
     let timezone_offset_minutes = timezone_field

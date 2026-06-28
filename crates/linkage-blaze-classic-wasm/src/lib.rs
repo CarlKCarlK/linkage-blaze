@@ -8,7 +8,7 @@
 //! Wires the page's `<canvas id="screen">` to a [`CydWasm`] and spawns the
 //! device-agnostic [`ballet`] render loop. The loop is unchanged from the esp32
 //! build; it paces itself to the browser via
-//! [`CydFrameWasm::flush_at`](linkage_blaze_cyd_wasm::CydFrameWasm), which awaits
+//! [`CydFrameWasm::flush`](linkage_blaze_cyd_wasm::CydFrameWasm), which awaits
 //! `requestAnimationFrame`.
 
 use embedded_graphics::mono_font::ascii::FONT_6X10;

@@ -21,7 +21,8 @@ use esp_hal::{
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use linkage_blaze_cyd::{
-    CydEsp, CydError, CydStaticEsp, DEFAULT_FONT, Orientation, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation, RectBuffer, SCREEN_HEIGHT,
+    SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 

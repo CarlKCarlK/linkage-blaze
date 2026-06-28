@@ -137,15 +137,15 @@ impl TileGrid {
         widest * tallest
     }
 
-    /// The tile at `(column, row)` as `(size, top_left)` in physical-screen
+    /// The tile at `(column, row)` as a [`Region`] in physical-screen
     /// coordinates, or `None` if it lies outside the region.
     ///
     /// The final column/row of a grid may be narrower/shorter than the nominal
     /// tile size when the region does not divide evenly by the tile counts, so
-    /// always use the returned `size` rather than the grid's derived tile size
-    /// when allocating a frame.
+    /// always use the returned region's `size` rather than the grid's derived
+    /// tile size when allocating a frame.
     #[must_use]
-    pub(crate) fn tile(&self, column: usize, row: usize) -> Option<(Size, Point)> {
+    pub(crate) fn tile(&self, column: usize, row: usize) -> Option<Region> {
         let tile_width = self.tile_width();
         let tile_height = self.tile_height();
         let column_offset = column * tile_width;
@@ -164,7 +164,7 @@ impl TileGrid {
             self.top_left.x + column_offset as i32,
             self.top_left.y + row_offset as i32,
         );
-        Some((size, top_left))
+        Some(Region::new(top_left, size))
     }
 }
 
@@ -193,10 +193,10 @@ mod tests {
     fn final_row_is_clipped() {
         // Origin y = 34, region height 286 → last row (row 2) starts at offset
         // 192 and is clipped from 96 to 94 px high.
-        let (size, top_left) = BODY_GRID.tile(0, 2).expect("tile (0, 2) is in range");
-        assert_eq!(top_left, Point::new(0, 34 + 192));
-        assert_eq!(size.height, 94);
-        assert_eq!(size.width, 80);
+        let tile = BODY_GRID.tile(0, 2).expect("tile (0, 2) is in range");
+        assert_eq!(tile.top_left, Point::new(0, 34 + 192));
+        assert_eq!(tile.size.height, 94);
+        assert_eq!(tile.size.width, 80);
     }
 
     #[test]
@@ -205,8 +205,8 @@ mod tests {
         let grid = TileGrid::new(Point::new(0, 0), Size::new(240, 288), 3, 3);
         assert_eq!(grid.tile_width(), 80);
         assert_eq!(grid.tile_height(), 96);
-        let (size, _top_left) = grid.tile(2, 2).expect("tile (2, 2) is in range");
-        assert_eq!(size, Size::new(80, 96));
+        let tile = grid.tile(2, 2).expect("tile (2, 2) is in range");
+        assert_eq!(tile.size, Size::new(80, 96));
     }
 
     #[test]
@@ -219,17 +219,16 @@ mod tests {
         assert_eq!(grid.tile_width(), 63);
         assert_eq!(grid.tile_height(), 73);
 
-        let (last_column_size, last_column_top_left) =
-            grid.tile(3, 0).expect("tile (3, 0) is in range");
-        assert_eq!(last_column_top_left, Point::new(5 + 189, 7));
-        assert_eq!(last_column_size.width, 61);
-        assert_eq!(last_column_size.height, 73);
+        let last_column = grid.tile(3, 0).expect("tile (3, 0) is in range");
+        assert_eq!(last_column.top_left, Point::new(5 + 189, 7));
+        assert_eq!(last_column.size.width, 61);
+        assert_eq!(last_column.size.height, 73);
 
-        let (last_row_size, _) = grid.tile(0, 3).expect("tile (0, 3) is in range");
-        assert_eq!(last_row_size.height, 71);
+        let last_row = grid.tile(0, 3).expect("tile (0, 3) is in range");
+        assert_eq!(last_row.size.height, 71);
 
-        let (corner_size, _) = grid.tile(3, 3).expect("tile (3, 3) is in range");
-        assert_eq!(corner_size, Size::new(61, 71));
+        let corner = grid.tile(3, 3).expect("tile (3, 3) is in range");
+        assert_eq!(corner.size, Size::new(61, 71));
 
         // Out of range in either axis is None.
         assert_eq!(grid.tile(4, 0), None);
@@ -287,7 +286,7 @@ mod tests {
     #[test]
     fn tile_grid_is_row_major() {
         // Row-major walk over (column, row): each row left-to-right, top-to-bottom.
-        let top_left = |column, row| BODY_GRID.tile(column, row).expect("tile in range").1;
+        let top_left = |column, row| BODY_GRID.tile(column, row).expect("tile in range").top_left;
         assert_eq!(top_left(0, 0), Point::new(0, 34));
         assert_eq!(top_left(1, 0), Point::new(80, 34));
         assert_eq!(top_left(2, 0), Point::new(160, 34));

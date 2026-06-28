@@ -4074,8 +4074,8 @@ pub fn to_point(xy: (f32, f32)) -> embedded_graphics::prelude::Point {
 ///
 /// ```rust,no_run
 /// # use linkage_blaze_core::Projection;
-/// let ortho = Projection::front_ortho(84.0, 300.0, 1.575);
-/// let persp = Projection::front_perspective(120.0, 160.0, 15.0, 30.0);
+/// let orthographic = Projection::front_orthographic(84.0, 300.0, 1.575);
+/// let perspective = Projection::front_perspective(120.0, 160.0, 15.0, 30.0);
 /// ```
 pub struct Projection {
     rotation: Mat3,
@@ -4092,18 +4092,18 @@ const NEG_X_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0
 impl Projection {
     /// Orthographic front view, looking along negative X: world Y → screen X
     /// (negated), world Z → screen Y (negated).
-    pub const fn front_ortho(center_x: f32, baseline_y: f32, scale: f32) -> Self {
+    pub const fn front_orthographic(center_x: f32, center_y: f32, scale: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
             center_x,
-            center_y: baseline_y,
+            center_y,
             scale,
             focal: None,
         }
     }
 
     /// Perspective front view, looking along negative X (same axes as
-    /// [`Self::front_ortho`]).
+    /// [`Self::front_orthographic`]).
     pub const fn front_perspective(center_x: f32, center_y: f32, scale: f32, focal: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
