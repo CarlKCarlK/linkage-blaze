@@ -3827,63 +3827,6 @@ impl ProjectedDrawItem {
             }
         }
     }
-
-    /// Draw this item onto a [`PixelTarget`] with a tile-origin offset applied.
-    ///
-    /// Identical to [`draw`](Self::draw) except that `origin` is subtracted from
-    /// every pixel coordinate before writing.  Used for tiled rendering where the
-    /// target buffer covers only a sub-region of the full projected canvas.
-    pub fn draw_offset<T: PixelTarget>(
-        &self,
-        target: &mut T,
-        origin: embedded_graphics::prelude::Point,
-    ) {
-        use embedded_graphics::{
-            Drawable,
-            primitives::{Circle, Line, Primitive, PrimitiveStyle},
-        };
-        match *self {
-            ProjectedDrawItem::Stroke {
-                start,
-                end,
-                color,
-                pixel_width,
-            } => {
-                let width = ((pixel_width + 0.5) as u32).max(1);
-                Line::new(to_point(start), to_point(end))
-                    .into_styled(PrimitiveStyle::with_stroke(color, width))
-                    .draw(&mut TiledDrawAdapter {
-                        target,
-                        tile_origin: origin,
-                    })
-                    .expect("drawing onto a TiledDrawAdapter is Infallible");
-            }
-            ProjectedDrawItem::Ellipse {
-                center,
-                axis_a,
-                axis_b,
-                color,
-            } => {
-                fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
-                    pixel_put(target, x - origin.x, y - origin.y, color);
-                });
-            }
-            ProjectedDrawItem::Circle {
-                center,
-                pixel_radius,
-                color,
-            } => {
-                let diameter = (((pixel_radius * 2.0) + 0.5) as u32).max(1);
-                Circle::with_center(to_point(center), diameter)
-                    .into_styled(PrimitiveStyle::with_fill(color))
-                    .draw(&mut TiledDrawAdapter {
-                        target,
-                        tile_origin: origin,
-                    })
-                    .expect("drawing onto a TiledDrawAdapter is Infallible");
-            }
-        }
-    }
 }
 
 /// Maps 3D world-space geometry to 2D pixel-space for a particular view.
