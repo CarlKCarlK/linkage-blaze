@@ -92,9 +92,9 @@ pub struct CalibratedCydEsp<'a> {
 pub struct CydFrameEsp<'a> {
     display: &'a mut CydPanel,
     view: RectView<'a>,
-    // Where this frame presents: set from the `Region` passed to `frame_mut`, so
-    // `flush` needs no separate position argument.
-    top_left: Point,
+    // Where this frame presents and how large it is: set from the `Region`
+    // passed to `frame_mut`, so `flush` needs no separate position argument.
+    region: Region,
     // Default background and foreground colors and font, copied from the owning
     // `CydEsp`, so `clear` and `write_text` can render with the device default style.
     pub(crate) background565: Rgb565,
@@ -135,7 +135,9 @@ impl<'a> CydFrameEsp<'a> {
 
     /// Present this frame's pixels at its region's top-left (set by [`CydEsp::frame_mut`]).
     pub fn flush(&mut self) -> Result<(), CydError> {
-        Ok(self.display.flush_buffer(&self.view, self.top_left)?)
+        Ok(self
+            .display
+            .flush_buffer(&self.view, self.region.top_left)?)
     }
 }
 
@@ -492,7 +494,7 @@ impl CydEsp {
         CydFrameEsp {
             display: &mut self.display,
             view,
-            top_left: region.top_left,
+            region,
             background565: self.background565,
             foreground565: self.foreground565,
             font: self.font,
@@ -651,6 +653,10 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
 
 impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
     type Error = CydError;
+
+    fn region(&self) -> Region {
+        self.region
+    }
 
     fn write_text(&mut self, text: &str) -> &mut Self {
         CydFrameEsp::write_text(self, text)

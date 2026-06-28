@@ -75,8 +75,7 @@ impl Cyd for CydWasm {
         CydFrameWasm {
             context: &self.context,
             pixels,
-            size,
-            top_left: region.top_left,
+            region,
             foreground565: self.foreground565,
             font: self.font,
         }
@@ -92,26 +91,24 @@ impl Cyd for CydWasm {
 pub struct CydFrameWasm<'a> {
     context: &'a CanvasRenderingContext2d,
     pixels: Vec<u16>,
-    size: Size,
-    // Where this frame presents: set from the `Region` passed to `frame_mut`, so
-    // `flush` needs no separate position argument.
-    top_left: Point,
+    // Where this frame presents and how large it is: set from the `Region`
+    // passed to `frame_mut`, so `flush` needs no separate position argument.
+    region: Region,
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
 }
 
 impl CydFrameWasm<'_> {
     fn width(&self) -> usize {
-        self.size.width as usize
+        self.region.size.width as usize
     }
 
     fn height(&self) -> usize {
-        self.size.height as usize
+        self.region.size.height as usize
     }
 
     /// Convert the `Rgb565` buffer to RGBA8 and `putImageData` it at the frame's top-left.
     fn present(&self) {
-        let top_left = self.top_left;
         let mut bytes = Vec::with_capacity(self.pixels.len() * 4);
         for pixel in &self.pixels {
             bytes.push(scale_channel((pixel >> 11) & 0x1f, 31));
@@ -121,12 +118,16 @@ impl CydFrameWasm<'_> {
         }
         let image_data = ImageData::new_with_u8_clamped_array_and_sh(
             Clamped(&bytes),
-            self.size.width,
-            self.size.height,
+            self.region.size.width,
+            self.region.size.height,
         )
         .expect("ImageData dimensions match the pixel buffer");
         self.context
-            .put_image_data(&image_data, f64::from(top_left.x), f64::from(top_left.y))
+            .put_image_data(
+                &image_data,
+                f64::from(self.region.top_left.x),
+                f64::from(self.region.top_left.y),
+            )
             .expect("put_image_data with in-bounds coordinates cannot fail");
     }
 }
@@ -158,7 +159,7 @@ impl DrawTarget for CydFrameWasm<'_> {
 
 impl OriginDimensions for CydFrameWasm<'_> {
     fn size(&self) -> Size {
-        self.size
+        self.region.size
     }
 }
 
@@ -192,6 +193,10 @@ impl PixelTarget for CydFrameWasm<'_> {
 
 impl CydFrame for CydFrameWasm<'_> {
     type Error = Infallible;
+
+    fn region(&self) -> Region {
+        self.region
+    }
 
     fn write_text(&mut self, text: &str) -> &mut Self {
         let style = MonoTextStyle::new(self.font, self.foreground565);
