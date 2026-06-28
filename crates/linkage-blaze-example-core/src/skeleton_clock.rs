@@ -208,6 +208,48 @@ where
     }
 }
 
+/// Draw the skeleton-clock screen *before* the time is known: the status line
+/// reads `WiFi: --` / `--:--:-- --`, and the clock-face background is shown with
+/// no figure or placards. Call this as early as possible (right after the display
+/// is initialized) so the user sees the framed clock immediately; the per-tick
+/// [`skeleton_clock`] loop then overwrites the WiFi text, time and figure as they
+/// become available.
+pub async fn skeleton_clock_splash<CydDevice>(
+    cyd: &mut CydDevice,
+) -> Result<(), Error<CydDevice::Error>>
+where
+    CydDevice: Cyd,
+{
+    cyd.frame_mut(WIFI_STATUS_SIZE)
+        .write_text("WiFi: --")
+        .flush_at(WIFI_STATUS_POINT)
+        .await
+        .map_err(Error::Flush)?;
+
+    cyd.frame_mut(TIME_SIZE)
+        .write_text("--:--:-- --")
+        .flush_at(TIME_POINT)
+        .await
+        .map_err(Error::Flush)?;
+
+    for tile in FIGURE_TILES.tiles() {
+        let mut tile_frame = cyd.frame_mut(tile.size);
+        CLOCK_BACK_BITMAP.draw_at(
+            &mut tile_frame,
+            (
+                CLOCK_BACK_POINT.x - tile.top_left.x,
+                CLOCK_BACK_POINT.y - tile.top_left.y,
+            ),
+        );
+        tile_frame
+            .flush_at(tile.top_left)
+            .await
+            .map_err(Error::Flush)?;
+    }
+
+    Ok(())
+}
+
 // ── Clock time ────────────────────────────────────────────────────────────────
 
 /// Format a 12-hour clock string with AM/PM. The hour is space-padded to two
