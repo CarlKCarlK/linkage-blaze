@@ -14,8 +14,7 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, MarkError, Pose, Projection, Rgb888, linkage, linkage_fixed,
-    to_point,
+    LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed, to_point,
 };
 use log::info;
 use time::OffsetDateTime;
@@ -72,12 +71,12 @@ const BACKGROUND_BITMAP: Image565<239, 319, { 239 * 319 }> =
 
 const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
     tga565_magenta_mask!("../assets/hours.small.tga", 45, 73);
-const HOURS_SIGN_ANCHOR_X: i32 = 22;
+const HOURS_SIGN_ANCHOR_X: f32 = 22.0;
 const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
 
 const MINUTE_SIGN: Image565Mask<45, 77, { 45 * 77 }, { (45 * 77 + 7) / 8 }> =
     tga565_magenta_mask!("../assets/minute.small.tga", 45, 77);
-const MINUTE_SIGN_ANCHOR_X: i32 = 22;
+const MINUTE_SIGN_ANCHOR_X: f32 = 22.0;
 const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
@@ -120,7 +119,7 @@ where
     ClockSyncDevice: ClockSync,
 {
     loop {
-        // Wait for a tick
+        // Wait for a tick and get the time.
         let tick = clock_sync.wait_for_tick().await;
         let local_time = &tick.local_time;
         let (hour_12, minute, _) = h12_m_s(local_time);
@@ -136,40 +135,49 @@ where
         // Convert the time into angles for the head (seconds), right arm (minutes) and left arm (hours) of the figure.
         let params = linkage_params(local_time);
 
-        // After this 'for' loop, this iterator will know the pose of every mark.
+        // Create an iterator that will tell every 3D item and its pose.
         let mut draw_items = LINKAGE.draw_items(&params);
+
+        // Iterate, project to 2D, and collect every 2D items and its pose.
         let projected_items = draw_items
             .by_ref()
             .map(|draw_item| draw_item.project(&PROJECTION))
             .collect::<heapless::Vec<_, { LINKAGE.draw_item_count() }>>();
-        let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
-        let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
-        let hours_anchor = pose_to_point(left_hand_pose);
-        let minute_anchor = pose_to_point(right_hand_pose);
 
-        let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
-        let minute_top_left = Point::new(minute_anchor.x - MINUTE_SIGN_ANCHOR_X, minute_anchor.y);
+        // Using the exhausted iterator, find the position of the middle of the left hand.
+        let (hours_anchor_x, hours_anchor_y) =
+            draw_items.pose_by_mark_name("lMid2")?.project(&PROJECTION);
+        // Find the position of the middle of the right hand.
+        let (minute_anchor_x, minute_anchor_y) =
+            draw_items.pose_by_mark_name("rMid2")?.project(&PROJECTION);
 
-        // Draw the figure (via tiles, to save memory)
-        // Can't use a `for` loop and Iterator because each tile borrows the
-        // CYD's reusable pixel buff. (The "leading iterator" patten.)
+        let hours_top_left = to_point((hours_anchor_x - HOURS_SIGN_ANCHOR_X, hours_anchor_y));
+        let minute_top_left = to_point((minute_anchor_x - MINUTE_SIGN_ANCHOR_X, minute_anchor_y));
+
+        // On each tile ...
+        // (Can't use a `for` loop and Iterator because each tile borrows the
+        // CYD's reusable pixel buff. This is the "lending iterator" patten.)
         let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
         while let Some(mut tile) = tiles.next() {
+            // draw the background bitmap.
             BACKGROUND_BITMAP.draw(&mut tile)?;
 
-            for two_d_item in &two_d_items {
-                two_d_item.draw(&mut tile);
+            // Draw the projected items from the linkage.
+            for projected_item in &projected_items {
+                projected_item.draw(&mut tile);
             }
 
+            // Draw the hour sign and number
             HOURS_SIGN.at(hours_top_left).draw(&mut tile)?;
-            MINUTE_SIGN.at(minute_top_left).draw(&mut tile)?;
-
             draw_centered_sign_value(
                 &mut tile,
                 hours_top_left,
                 HOURS_SIGN_VALUE_CENTER,
                 hour_12 as u32,
             )?;
+
+            // Draw the minute sign and number.
+            MINUTE_SIGN.at(minute_top_left).draw(&mut tile)?;
             draw_centered_sign_value(
                 &mut tile,
                 minute_top_left,
@@ -389,11 +397,6 @@ where
         &FONT_10X20,
         Rgb565::from(PLACARD_TEXT),
     )
-}
-
-// todo0000 shouldn't be needed.
-fn pose_to_point(pose: Pose) -> Point {
-    to_point(PROJECTION.project_pos(pose))
 }
 
 // ── Errors ────────────────────────────────────────────────────────────────────

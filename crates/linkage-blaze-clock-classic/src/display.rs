@@ -233,8 +233,15 @@ impl CydClockDisplay {
         for draw_item in linkage.draw_items(&params) {
             let prim = match draw_item {
                 DrawItem::Stroke(stroke) => {
-                    let start = pose_to_point(stroke.start());
-                    let end = pose_to_point(stroke.end());
+                    let project = |pose: Pose| {
+                        let position = pose.position();
+                        clock_point(Point::new(
+                            CLOCK_CENTER_X + project_x(position, HAND_SCALE),
+                            CLOCK_CENTER_Y + project_y(position, HAND_SCALE),
+                        ))
+                    };
+                    let start = project(stroke.start());
+                    let end = project(stroke.end());
                     if start != end {
                         DrawPrimitive::LineSegment(LineSegment {
                             start,
@@ -350,14 +357,6 @@ fn sphere_to_ellipse(sphere: SphereItem) -> Ellipse {
 
 fn clock_width_pixels(width: f32) -> u16 {
     round_to_u16(width * HAND_SCALE).max(1)
-}
-
-fn pose_to_point(pose: Pose) -> Point {
-    let position = pose.position();
-    clock_point(Point::new(
-        CLOCK_CENTER_X + project_x(position, HAND_SCALE),
-        CLOCK_CENTER_Y + project_y(position, HAND_SCALE),
-    ))
 }
 
 fn round_to_u16(value: f32) -> u16 {
