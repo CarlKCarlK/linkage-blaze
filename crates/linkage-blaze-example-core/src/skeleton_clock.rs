@@ -12,10 +12,9 @@ use core::convert::Infallible;
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embedded_graphics::{
     Drawable,
-    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_7X13, ascii::FONT_10X20},
+    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_7X13, ascii::FONT_10X20},
     pixelcolor::Rgb565,
-    prelude::{DrawTarget, Point, Primitive, Size},
-    primitives::{Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
+    prelude::{DrawTarget, Point, Size},
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
@@ -43,11 +42,6 @@ const FIGURE: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 
 /// Device default foreground/text color the platform shim should construct its
 /// `Cyd` with.
 pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
-// CSS_WHEAT (245, 222, 179) is so light it washes out to gray on the CYD panel
-// (the same low-saturation washout noted for the figure above). Use a deeper,
-// more saturated amber so the sign face reads as a color, not gray. Keep this in
-// sync with the baked-in face color of the hours-sign art (assets/hours.small.tga).
-const PLACARD_FILL: Rgb888 = Rgb888::new(229, 176, 84); // saturated amber sign face
 const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
 
 // ── Background bitmap ──────────────────────────────────────────────────────────
@@ -71,6 +65,20 @@ const HOURS_SIGN_ANCHOR_X: i32 = 22;
 /// Bitmap point (relative to its top-left) where the hour value is centered,
 /// in the open area of the sign body above the baked-in "H".
 const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
+
+/// Hanging "minutes" sign, decoded from a 45×87 24-bit TGA at compile time with
+/// magenta as the transparent color-key. Like the hours sign, the art already
+/// includes the hanger, the sign body, and the "M" label, so it replaces the
+/// vector-drawn minutes placard; only the two-digit minute value is overlaid
+/// (see [`MINUTE_SIGN_*`]).
+const MINUTE_SIGN: Image565Mask<45, 87, { 45 * 87 }, { (45 * 87 + 7) / 8 }> =
+    tga565_magenta_mask!("../assets/minute.small.tga", 45, 87);
+/// Bitmap column the hanger hangs from; the sign is blitted so this column lands
+/// under the hand mark.
+const MINUTE_SIGN_ANCHOR_X: i32 = 22;
+/// Bitmap point (relative to its top-left) where the minute value is centered,
+/// in the open area of the sign body above the baked-in "M".
+const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 60);
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 
@@ -218,10 +226,11 @@ where
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
             let (hour_12, minute, _) = h12_m_s(local_time);
 
-            // Hours sign: blit the bitmap placard (cord, body and baked-in "H")
-            // anchored under the left hand, then overlay the hour value. This is
-            // drawn straight onto the tile (a `PixelTarget`) in tile-local
-            // coordinates, the same way the clock-face background is.
+            // Hours and minutes signs: blit each bitmap placard (hanger, body and
+            // baked-in "H"/"M") anchored under a hand mark, then overlay the
+            // two-digit value. The bitmaps are drawn straight onto the tile (a
+            // `PixelTarget`) in tile-local coordinates, the same way the clock-face
+            // background is; the values go through a `TranslatedDrawTarget`.
             let hours_anchor = pose_to_point(left_hand_pose);
             let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
             HOURS_SIGN.draw_at(
@@ -232,13 +241,29 @@ where
                 ),
             );
 
+            let minute_anchor = pose_to_point(right_hand_pose);
+            let minute_top_left =
+                Point::new(minute_anchor.x - MINUTE_SIGN_ANCHOR_X, minute_anchor.y);
+            MINUTE_SIGN.draw_at(
+                &mut tile_frame,
+                (
+                    minute_top_left.x - tile.top_left.x,
+                    minute_top_left.y - tile.top_left.y,
+                ),
+            );
+
             let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-            draw_centered_hours_value(&mut target, hours_top_left, hour_12 as u32);
-            draw_hanging_placard(
+            draw_centered_sign_value(
                 &mut target,
-                pose_to_point(right_hand_pose),
+                hours_top_left,
+                HOURS_SIGN_VALUE_CENTER,
+                hour_12 as u32,
+            );
+            draw_centered_sign_value(
+                &mut target,
+                minute_top_left,
+                MINUTE_SIGN_VALUE_CENTER,
                 minute as u32,
-                "M",
             );
 
             tile_frame
@@ -346,103 +371,28 @@ fn draw_centered_text<D>(
         .expect("drawing to an Infallible target cannot fail");
 }
 
-/// Overlay the two-digit hour value onto the blitted [`HOURS_SIGN`] bitmap,
-/// centered in the open area of the sign body above its baked-in "H".
-/// `sign_top_left` is the screen point where the bitmap's top-left was drawn.
-fn draw_centered_hours_value<D>(target: &mut D, sign_top_left: Point, number: u32)
-where
+/// Overlay a two-digit value onto a blitted sign bitmap, centered in the open
+/// area of the sign body above its baked-in label. `sign_top_left` is the screen
+/// point where the bitmap's top-left was drawn, and `value_center` is the value's
+/// center relative to that top-left (e.g. [`HOURS_SIGN_VALUE_CENTER`] or
+/// [`MINUTE_SIGN_VALUE_CENTER`]).
+fn draw_centered_sign_value<D>(
+    target: &mut D,
+    sign_top_left: Point,
+    value_center: Point,
+    number: u32,
+) where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let mut value_text = heapless::String::<4>::new();
     core::fmt::write(&mut value_text, format_args!("{:02}", number % 100))
-        .expect("two-digit hour value fits in 4 bytes");
+        .expect("two-digit sign value fits in 4 bytes");
     draw_centered_text(
         target,
         &value_text,
-        sign_top_left + HOURS_SIGN_VALUE_CENTER,
+        sign_top_left + value_center,
         &FONT_10X20,
         Rgb565::from(PLACARD_TEXT),
-    );
-}
-
-/// Draw a hanging number sign anchored at `anchor` (a hand mark in skeleton-clock
-/// coordinates). The sign is fixed size and shows a two-digit value plus a
-/// small label (`"H"` or `"M"`) so the hanging hour and minute are distinguishable.
-fn draw_hanging_placard<D>(target: &mut D, anchor: Point, number: u32, label: &str)
-where
-    D: DrawTarget<Color = Rgb565, Error = Infallible>,
-{
-    const PLACARD_W: i32 = 38;
-    const PLACARD_H: i32 = 28;
-    const PLACARD_BORDER_PX: i32 = 2;
-    const HANGER_PX: i32 = 2;
-    const HANGER_HOOK: i32 = 7;
-    const HANGER_TRIANGLE: i32 = 18;
-
-    let placard_border = Rgb565::from(FIGURE);
-    let placard_text = Rgb565::from(PLACARD_TEXT);
-    let placard_fill = Rgb565::from(PLACARD_FILL);
-
-    let card_left = anchor.x - PLACARD_W / 2;
-    let card_top = anchor.y + HANGER_HOOK + HANGER_TRIANGLE;
-    let card_right = card_left + PLACARD_W;
-    let apex = Point::new(anchor.x, anchor.y + HANGER_HOOK);
-
-    let hanger_style = PrimitiveStyle::with_stroke(placard_border, HANGER_PX as u32);
-    Line::new(anchor, apex)
-        .into_styled(hanger_style)
-        .draw(target)
-        .expect("drawing to an Infallible target cannot fail");
-    Line::new(apex, Point::new(card_left, card_top))
-        .into_styled(hanger_style)
-        .draw(target)
-        .expect("drawing to an Infallible target cannot fail");
-    Line::new(apex, Point::new(card_right, card_top))
-        .into_styled(hanger_style)
-        .draw(target)
-        .expect("drawing to an Infallible target cannot fail");
-
-    let card_style = PrimitiveStyleBuilder::new()
-        .fill_color(placard_fill)
-        .stroke_color(placard_border)
-        .stroke_width(PLACARD_BORDER_PX as u32)
-        .stroke_alignment(StrokeAlignment::Inside)
-        .build();
-    Rectangle::new(
-        Point::new(card_left, card_top),
-        Size::new(PLACARD_W as u32, PLACARD_H as u32),
-    )
-    .into_styled(card_style)
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
-
-    // A center divider makes the small H/M label read as part of the sign
-    // rather than as a third digit.
-    Line::new(
-        Point::new(card_left + 4, card_top + 18),
-        Point::new(card_right - 4, card_top + 18),
-    )
-    .into_styled(PrimitiveStyle::with_stroke(placard_text, 1))
-    .draw(target)
-    .expect("drawing to an Infallible target cannot fail");
-
-    let mut value_text = heapless::String::<4>::new();
-    core::fmt::write(&mut value_text, format_args!("{:02}", number % 100))
-        .expect("two-digit placard value fits in 4 bytes");
-
-    draw_centered_text(
-        target,
-        &value_text,
-        Point::new(card_left + PLACARD_W / 2, card_top + 10),
-        &FONT_10X20,
-        placard_text,
-    );
-    draw_centered_text(
-        target,
-        label,
-        Point::new(card_left + PLACARD_W / 2, card_top + 23),
-        &FONT_6X10,
-        placard_text,
     );
 }
 
