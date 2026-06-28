@@ -106,15 +106,15 @@ pub const FIGURE_TILES: TileGrid = TileGrid::new(
 
 /// Run the skeleton-clock render loop forever, driven by `clock_sync` ticks and
 /// drawn onto `cyd`.
-pub async fn skeleton_clock<S, C>(
-    cyd: &mut S,
-    clock_sync: &C,
-) -> Result<Infallible, SkeletonClockError<S::Error>>
+pub async fn skeleton_clock<CydDevice, ClockSyncDevice>(
+    cyd: &mut CydDevice,
+    clock_sync: &ClockSyncDevice,
+) -> Result<Infallible, Error<CydDevice::Error>>
 where
-    S: Cyd,
-    C: ClockSync,
+    CydDevice: Cyd,
+    ClockSyncDevice: ClockSync,
 {
-    let linkage_view = LINKAGE.view();
+    let linkage = LINKAGE.view();
 
     loop {
         let tick = clock_sync.wait_for_tick().await;
@@ -128,7 +128,7 @@ where
             .write_text(&time_text)
             .flush_at(TIME_POINT)
             .await
-            .map_err(SkeletonClockError::Flush)?;
+            .map_err(Error::Flush)?;
 
         // Shared linkage rendering path, tiled for CYD.
 
@@ -147,7 +147,7 @@ where
                 ),
             );
 
-            let mut draw_items = linkage_view.draw_items(&params);
+            let mut draw_items = linkage.draw_items(&params);
             for draw_item in &mut draw_items {
                 draw_item
                     .project(&PROJECTION)
@@ -203,7 +203,7 @@ where
             tile_frame
                 .flush_at(tile.top_left)
                 .await
-                .map_err(SkeletonClockError::Flush)?;
+                .map_err(Error::Flush)?;
         }
     }
 }
@@ -364,14 +364,14 @@ fn pose_to_point(pose: Pose) -> Point {
 /// Error from the generic skeleton-clock loop, generic over the surface's flush
 /// error `F`.
 #[derive(Debug)]
-pub enum SkeletonClockError<F> {
+pub enum Error<F> {
     /// Flushing a frame to the display failed.
     Flush(F),
     /// A required figure mark was not found.
     Mark(MarkError),
 }
 
-impl<F> From<MarkError> for SkeletonClockError<F> {
+impl<F> From<MarkError> for Error<F> {
     fn from(error: MarkError) -> Self {
         Self::Mark(error)
     }

@@ -52,9 +52,9 @@ const PROJECTION: Projection =
 // ── Generic entry point ────────────────────────────────────────────────────────
 
 /// Run the ballet render loop forever, drawn onto `cyd`.
-pub async fn ballet<S>(cyd: &mut S) -> Result<Infallible, S::Error>
+pub async fn ballet<CydDevice>(cyd: &mut CydDevice) -> Result<Infallible, CydDevice::Error>
 where
-    S: Cyd,
+    CydDevice: Cyd,
 {
     let linkage = LINKAGE.view();
     let text565 = Rgb565::from(FOREGROUND);
