@@ -24,7 +24,7 @@ use embedded_graphics::{
     pixelcolor::{Rgb565, Rgb888},
     prelude::{DrawTarget, Point, Size},
 };
-use linkage_blaze_cyd_core::{Cyd, CydFrame};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, tiling::Region};
 
 /// Number of color columns: gray, red, green, blue.
 pub const COLS: usize = 4;
@@ -69,16 +69,18 @@ where
         let mut column = 0;
         while column < COLS {
             let color = Rgb565::from(cell_color(column, level));
-            let mut frame = cyd.frame_mut(Size::new(CELL_WIDTH, CELL_HEIGHT));
+            let region = Region::new(
+                Point::new(
+                    column as i32 * CELL_WIDTH as i32,
+                    row as i32 * CELL_HEIGHT as i32,
+                ),
+                Size::new(CELL_WIDTH, CELL_HEIGHT),
+            );
+            let mut frame = cyd.frame_mut(region);
             frame
                 .clear(color)
                 .expect("clearing an Infallible frame cannot fail");
-            frame
-                .flush_at(Point::new(
-                    column as i32 * CELL_WIDTH as i32,
-                    row as i32 * CELL_HEIGHT as i32,
-                ))
-                .await?;
+            frame.flush().await?;
             column += 1;
         }
         row += 1;

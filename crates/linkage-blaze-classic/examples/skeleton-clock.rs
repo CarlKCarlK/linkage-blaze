@@ -21,8 +21,8 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, tiling::max_usize};
 use linkage_blaze_example_core::skeleton_clock::{
-    self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_POINT,
-    WIFI_STATUS_SIZE, skeleton_clock,
+    self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_REGION,
+    skeleton_clock,
 };
 use log::info;
 
@@ -55,7 +55,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     // The shared pixel buffer must hold the largest frame: a skeleton-clock tile
     // or a wi-fi or time message.
     const BUFFER_PIXEL_COUNT: usize = max_usize(
-        (WIFI_STATUS_SIZE.width * WIFI_STATUS_SIZE.height) as usize,
+        WIFI_STATUS_REGION.pixel_count(),
         FIGURE_TILE_GRID.max_tile_pixel_count(),
     );
     static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
@@ -93,7 +93,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,
     )?;
 
-    let mut wifi_status_frame = cyd.frame_mut(WIFI_STATUS_SIZE);
+    let mut wifi_status_frame = cyd.frame_mut(WIFI_STATUS_REGION);
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,
@@ -103,20 +103,14 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                     WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
                     WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
                 };
-                wifi_status_frame
-                    .clear()
-                    .write_text(message)
-                    .flush_at(WIFI_STATUS_POINT)?;
+                wifi_status_frame.clear().write_text(message).flush()?;
                 info!("WiFi: {message}");
                 Ok(())
             },
         )
         .await?;
 
-    wifi_status_frame
-        .clear()
-        .write_text("WiFi: OK")
-        .flush_at(WIFI_STATUS_POINT)?;
+    wifi_status_frame.clear().write_text("WiFi: OK").flush()?;
     drop(wifi_status_frame);
     info!("WiFi connected");
 

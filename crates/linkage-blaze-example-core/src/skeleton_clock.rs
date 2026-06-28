@@ -21,7 +21,7 @@ use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
     Cyd, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
-    tiling::{TileGrid, max_u32},
+    tiling::{Region, TileGrid, max_u32},
 };
 
 // ── Palette ──────────────────────────────────────────────────────────────────
@@ -55,11 +55,11 @@ const LINKAGE: LinkageView<3, 6> = LINKAGE1
 
 //todo000 review projections.
 
-const PROJECTION_CENTER_X: f32 = 139.0;
-const PROJECTION_CENTER_Y: f32 = 306.0;
-const PROJECTION_SCALE: f32 = 1.35;
-const PROJECTION: Projection =
-    Projection::front_ortho(PROJECTION_CENTER_X, PROJECTION_CENTER_Y, PROJECTION_SCALE);
+const PROJECTION: Projection = Projection::front_orthographic(
+    /* center x */ 139.0,
+    /* center y */ 306.0,
+    /* scale */ 1.35,
+);
 
 // ── Background bitmap ──────────────────────────────────────────────────────────
 
@@ -83,21 +83,22 @@ const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
 pub const ORIENTATION: Orientation = Orientation::Portrait;
 pub const TOP_FONT: MonoFont<'static> = FONT_7X13;
-pub const WIFI_STATUS_SIZE: Size = Size::new(155, 14);
-pub const WIFI_STATUS_POINT: Point = Point::new(6, 6);
-const TIME_SIZE: Size = Size::new(
-    ORIENTATION.width() - WIFI_STATUS_SIZE.width,
-    WIFI_STATUS_SIZE.height,
-);
-const TIME_POINT: Point = Point::new(
-    WIFI_STATUS_POINT.x + WIFI_STATUS_SIZE.width as i32,
-    WIFI_STATUS_POINT.y,
+pub const WIFI_STATUS_REGION: Region = Region::new(Point::new(6, 6), Size::new(155, 14));
+const TIME_REGION: Region = Region::new(
+    Point::new(
+        WIFI_STATUS_REGION.top_left.x + WIFI_STATUS_REGION.size.width as i32,
+        WIFI_STATUS_REGION.top_left.y,
+    ),
+    Size::new(
+        ORIENTATION.width() - WIFI_STATUS_REGION.size.width,
+        WIFI_STATUS_REGION.size.height,
+    ),
 );
 
 // The figure starts below the top-level display. We will tile to save memory.
 const FIGURE_Y: u32 = max_u32(
-    WIFI_STATUS_POINT.y as u32 + WIFI_STATUS_SIZE.height,
-    TIME_POINT.y as u32 + TIME_SIZE.height,
+    WIFI_STATUS_REGION.top_left.y as u32 + WIFI_STATUS_REGION.size.height,
+    TIME_REGION.top_left.y as u32 + TIME_REGION.size.height,
 );
 pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
     Point::new(0, FIGURE_Y as i32),
@@ -126,9 +127,9 @@ where
         info!("tick {}", text_24h(local_time));
 
         // Write the digital time.
-        cyd.frame_mut(TIME_SIZE)
+        cyd.frame_mut(TIME_REGION)
             .write_text(&text_12h(local_time))
-            .flush_at(TIME_POINT)
+            .flush()
             .await
             .map_err(Error::Flush)?;
 
@@ -202,15 +203,15 @@ pub async fn skeleton_clock_splash<CydDevice>(
 where
     CydDevice: Cyd,
 {
-    cyd.frame_mut(WIFI_STATUS_SIZE)
+    cyd.frame_mut(WIFI_STATUS_REGION)
         .write_text("WiFi: --")
-        .flush_at(WIFI_STATUS_POINT)
+        .flush()
         .await
         .map_err(Error::Flush)?;
 
-    cyd.frame_mut(TIME_SIZE)
+    cyd.frame_mut(TIME_REGION)
         .write_text("--:--:-- --")
-        .flush_at(TIME_POINT)
+        .flush()
         .await
         .map_err(Error::Flush)?;
 

@@ -21,7 +21,11 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{PixelTarget, Rgb888};
 
-use crate::{TouchInputEvent, tiling::TileGrid, translated::TranslatedDrawTarget};
+use crate::{
+    TouchInputEvent,
+    tiling::{Region, TileGrid},
+    translated::TranslatedDrawTarget,
+};
 
 /// A CYD display: hands out cleared, region-sized frames and reads calibrated touch.
 pub trait Cyd {
@@ -31,7 +35,7 @@ pub trait Cyd {
     /// The per-region frame type this device produces.
     ///
     /// Its [`CydFrame::Error`] is pinned to this device's [`Cyd::Error`], so
-    /// `frame.flush_at(..).await?` in generic code propagates a single
+    /// `frame.flush().await?` in generic code propagates a single
     /// `S::Error` (see [`ballet`](../../linkage_blaze_example_core/ballet/index.html)).
     type Frame<'a>: CydFrame<Error = Self::Error>
     where
@@ -40,12 +44,15 @@ pub trait Cyd {
     /// Oriented screen size for the configured orientation.
     fn screen_size(&self) -> Size;
 
-    /// Borrow a frame of `size`, cleared to the device background color.
-    fn frame_mut(&mut self, size: Size) -> Self::Frame<'_>;
+    /// Borrow a frame covering `region`, cleared to the device background color.
+    ///
+    /// The frame remembers its `region`, so [`CydFrame::flush`] presents it at
+    /// the region's top-left with no separate position argument.
+    fn frame_mut(&mut self, region: Region) -> Self::Frame<'_>;
 
     /// Borrow a full-screen frame, cleared to the device background color.
     fn full_frame_mut(&mut self) -> Self::Frame<'_> {
-        self.frame_mut(self.screen_size())
+        self.frame_mut(Region::new(Point::zero(), self.screen_size()))
     }
 
     /// Read the next calibrated, screen-space touch event, if any.
@@ -115,17 +122,16 @@ impl<C: Cyd> Tiles<'_, C> {
             if self.row >= rows {
                 return None;
             }
-            let size_and_top_left = self.grid.tile(self.column, self.row);
+            let region = self.grid.tile(self.column, self.row);
             self.column += 1;
             if self.column >= columns {
                 self.column = 0;
                 self.row += 1;
             }
-            if let Some((size, top_left)) = size_and_top_left {
+            if let Some(region) = region {
                 return Some(Tile {
-                    frame: self.cyd.frame_mut(size),
-                    top_left,
-                    size,
+                    frame: self.cyd.frame_mut(region),
+                    region,
                 });
             }
         }
@@ -140,33 +146,41 @@ impl<C: Cyd> Tiles<'_, C> {
 /// same position.
 pub struct Tile<'a, C: Cyd + 'a> {
     frame: C::Frame<'a>,
-    top_left: Point,
-    size: Size,
+    region: Region,
 }
 
 impl<'a, C: Cyd + 'a> Tile<'a, C> {
+    /// This tile's region (top-left and size) in physical-screen coordinates.
+    #[must_use]
+    pub fn region(&self) -> Region {
+        self.region
+    }
+
     /// This tile's top-left corner in physical-screen coordinates.
     #[must_use]
     pub fn top_left(&self) -> Point {
-        self.top_left
+        self.region.top_left
     }
 
     /// This tile's size in pixels.
     #[must_use]
     pub fn size(&self) -> Size {
-        self.size
+        self.region.size
     }
 
     /// Present this tile's pixels at its [`top_left`](Self::top_left).
     pub async fn flush(&mut self) -> Result<(), C::Error> {
-        self.frame.flush_at(self.top_left).await
+        self.frame.flush().await
     }
 }
 
 impl<'a, C: Cyd + 'a> Dimensions for Tile<'a, C> {
     fn bounding_box(&self) -> Rectangle {
         let bounding_box = self.frame.bounding_box();
-        Rectangle::new(bounding_box.top_left + self.top_left, bounding_box.size)
+        Rectangle::new(
+            bounding_box.top_left + self.region.top_left,
+            bounding_box.size,
+        )
     }
 }
 
@@ -178,25 +192,26 @@ impl<'a, C: Cyd + 'a> DrawTarget for Tile<'a, C> {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        TranslatedDrawTarget::new(&mut self.frame, self.top_left).draw_iter(pixels)
+        TranslatedDrawTarget::new(&mut self.frame, self.region.top_left).draw_iter(pixels)
     }
 }
 
 impl<'a, C: Cyd + 'a> PixelTarget for Tile<'a, C> {
     fn width(&self) -> usize {
-        self.top_left.x as usize + self.frame.width()
+        self.region.top_left.x as usize + self.frame.width()
     }
 
     fn height(&self) -> usize {
-        self.top_left.y as usize + self.frame.height()
+        self.region.top_left.y as usize + self.frame.height()
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        TranslatedDrawTarget::new(&mut self.frame, self.top_left).put_pixel(x, y, color);
+        TranslatedDrawTarget::new(&mut self.frame, self.region.top_left).put_pixel(x, y, color);
     }
 
     fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
-        TranslatedDrawTarget::new(&mut self.frame, self.top_left).put_pixel_565(x, y, rgb565);
+        TranslatedDrawTarget::new(&mut self.frame, self.region.top_left)
+            .put_pixel_565(x, y, rgb565);
     }
 }
 
@@ -211,16 +226,16 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     /// foreground color. Returns `&mut Self` for chaining.
     fn write_text(&mut self, text: &str) -> &mut Self;
 
-    /// Present the frame's pixels at `top_left` (screen coordinates).
+    /// Present the frame's pixels at its region's top-left (screen coordinates).
+    ///
+    /// The frame was created over a [`Region`] by [`Cyd::frame_mut`], so it
+    /// already knows where it lives and needs no position argument.
     ///
     /// The returned future is the render loop's frame boundary. On the MCU it
     /// flushes over SPI and resolves immediately; on WASM it awaits the next
     /// browser animation frame, blits to the canvas, then resolves — so a
-    /// platform-neutral `loop { draw; flush_at(..).await?; }` paces itself to
+    /// platform-neutral `loop { draw; flush().await?; }` paces itself to
     /// each device's natural present point without inverting into a state
     /// machine.
-    fn flush_at(
-        &mut self,
-        top_left: Point,
-    ) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>>;
+    fn flush(&mut self) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>>;
 }

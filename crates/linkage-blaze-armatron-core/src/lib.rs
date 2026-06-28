@@ -16,8 +16,8 @@ use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
 use linkage_blaze_core::{
-    DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage,
-    linkage_fixed, render_draw_items,
+    DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
+    render_draw_items,
 };
 
 // todo00 I hate all these constants.

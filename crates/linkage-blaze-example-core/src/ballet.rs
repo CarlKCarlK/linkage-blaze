@@ -49,7 +49,8 @@ const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>:
 // todo000000 do .view() here
 
 // todo000 still to understand projections.
-const PROJECTION: Projection = Projection::front_ortho(CENTER_X as f32, BASELINE_Y as f32, SCALE);
+const PROJECTION: Projection =
+    Projection::front_orthographic(CENTER_X as f32, BASELINE_Y as f32, SCALE);
 
 // ── Generic entry point ────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ where
             // todo000 review this
             draw_status(&mut cyd_frame, text565, sample_index, last_sample_duration);
             // The frame boundary: immediate on the MCU, next-animation-frame on WASM.
-            cyd_frame.flush_at(Point::new(0, 0)).await?;
+            cyd_frame.flush().await?;
             last_sample_duration = Some(Instant::now() - started);
             // todo000 wasm is so fast, might want code to stop faster than 120fps.
         }

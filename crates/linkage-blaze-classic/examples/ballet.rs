@@ -10,7 +10,7 @@ use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, Orientation};
+use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, Orientation};
 use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ballet};
 use log::info;
 

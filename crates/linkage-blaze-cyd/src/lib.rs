@@ -31,6 +31,7 @@ pub use display::{
 };
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
+use linkage_blaze_cyd_core::tiling::Region;
 pub use linkage_blaze_cyd_core::{
     Cyd as CydDevice, CydFrame as CydFrameTrait, Orientation, SCREEN_HEIGHT, SCREEN_PIXELS,
     SCREEN_WIDTH, TouchInputEvent, tiling,
@@ -91,6 +92,9 @@ pub struct CalibratedCydEsp<'a> {
 pub struct CydFrameEsp<'a> {
     display: &'a mut CydPanel,
     view: RectView<'a>,
+    // Where this frame presents: set from the `Region` passed to `frame_mut`, so
+    // `flush` needs no separate position argument.
+    top_left: Point,
     // Default background and foreground colors and font, copied from the owning
     // `CydEsp`, so `clear` and `write_text` can render with the device default style.
     pub(crate) background565: Rgb565,
@@ -129,8 +133,9 @@ impl<'a> CydFrameEsp<'a> {
         self.view.raw_pixels_mut()
     }
 
-    pub fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
-        Ok(self.display.flush_buffer(&self.view, top_left)?)
+    /// Present this frame's pixels at its region's top-left (set by [`CydEsp::frame_mut`]).
+    pub fn flush(&mut self) -> Result<(), CydError> {
+        Ok(self.display.flush_buffer(&self.view, self.top_left)?)
     }
 }
 
@@ -473,10 +478,11 @@ impl CydEsp {
     }
 
     pub fn full_frame_mut(&mut self) -> CydFrameEsp<'_> {
-        self.frame_mut(self.screen_size())
+        self.frame_mut(Region::new(Point::zero(), self.screen_size()))
     }
 
-    pub fn frame_mut(&mut self, size: Size) -> CydFrameEsp<'_> {
+    pub fn frame_mut(&mut self, region: Region) -> CydFrameEsp<'_> {
+        let size = region.size;
         let mut view = self
             .pixel_buffer
             .view_mut(size.width as usize, size.height as usize);
@@ -486,6 +492,7 @@ impl CydEsp {
         CydFrameEsp {
             display: &mut self.display,
             view,
+            top_left: region.top_left,
             background565: self.background565,
             foreground565: self.foreground565,
             font: self.font,
@@ -615,8 +622,8 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
         CydEsp::screen_size(self)
     }
 
-    fn frame_mut(&mut self, size: Size) -> CydFrameEsp<'_> {
-        CydEsp::frame_mut(self, size)
+    fn frame_mut(&mut self, region: tiling::Region) -> CydFrameEsp<'_> {
+        CydEsp::frame_mut(self, region)
     }
 
     fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
@@ -652,7 +659,7 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
     // Flushing the panel over SPI is synchronous, so this future resolves on its
     // first poll. The `async fn` is the device-agnostic frame boundary the
     // render loop awaits; on the MCU it adds no suspension.
-    async fn flush_at(&mut self, top_left: Point) -> Result<(), CydError> {
-        CydFrameEsp::flush_at(self, top_left)
+    async fn flush(&mut self) -> Result<(), CydError> {
+        CydFrameEsp::flush(self)
     }
 }

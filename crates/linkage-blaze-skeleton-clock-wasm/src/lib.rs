@@ -8,7 +8,7 @@
 //! Wires the page's `<canvas id="screen">` to a [`CydWasm`] and spawns the
 //! device-agnostic [`skeleton_clock`] render loop, driven by a browser-clock
 //! [`WasmClockSync`](crate::clock::WasmClockSync). The loop is unchanged from the
-//! esp32 build; it paces itself via `CydFrameWasm::flush_at`
+//! esp32 build; it paces itself via `CydFrameWasm::flush`
 //! (`requestAnimationFrame`) and ticks once per second via embassy-time.
 
 mod clock;
@@ -18,8 +18,8 @@ use linkage_blaze_cyd_core::{Cyd, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::gamma_ramp::gamma_ramp;
 use linkage_blaze_example_core::skeleton_clock::{
-    BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_POINT, WIFI_STATUS_SIZE,
-    skeleton_clock, skeleton_clock_splash,
+    BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_REGION, skeleton_clock,
+    skeleton_clock_splash,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -61,9 +61,9 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             .expect("flushing the Infallible wasm frame cannot fail");
         // The browser uses the OS clock (no WiFi/NTP), so replace the `WiFi: --`
         // placeholder with `WiFi: OK`; the per-tick loop repaints time and figure.
-        cyd.frame_mut(WIFI_STATUS_SIZE)
+        cyd.frame_mut(WIFI_STATUS_REGION)
             .write_text("WiFi: OK")
-            .flush_at(WIFI_STATUS_POINT)
+            .flush()
             .await
             .expect("flushing the Infallible wasm frame cannot fail");
         // `Ok` is `Infallible` (the loop never returns), so this binding is

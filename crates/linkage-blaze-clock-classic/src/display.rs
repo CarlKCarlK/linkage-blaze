@@ -16,7 +16,7 @@ use linkage_blaze_core::{
     DiskItem, DrawItem, LinkageFixed, LinkageView, Pose, Rgb888, SphereItem, Vec3,
 };
 use linkage_blaze_cyd::{
-    CydEsp, CydError, DrawPrimitive, Ellipse, LineSegment, PixelBuffer, SCREEN_WIDTH,
+    CydError, CydEsp, DrawPrimitive, Ellipse, LineSegment, PixelBuffer, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 

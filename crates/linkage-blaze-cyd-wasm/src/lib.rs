@@ -3,9 +3,9 @@
 //! [`CydWasm`] implements the device-agnostic
 //! [`Cyd`](linkage_blaze_cyd_core::Cyd) trait against an HTML canvas, so the
 //! same generic example code that drives the real esp32 `CydEsp` also runs in a
-//! web page. Its [`CydFrameWasm::flush_at`] awaits the next browser animation
+//! web page. Its [`CydFrameWasm::flush`] awaits the next browser animation
 //! frame (see [`animation_frame`]), blits the frame to the canvas, then
-//! resolves — turning a platform-neutral `loop { draw; flush_at(..).await?; }`
+//! resolves — turning a platform-neutral `loop { draw; flush().await?; }`
 //! into smooth, repaint-paced animation without inverting the loop into a state
 //! machine.
 
@@ -21,7 +21,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::PixelTarget;
-use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation, TouchInputEvent};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation, TouchInputEvent, tiling::Region};
 use wasm_bindgen::Clamped;
 use web_sys::{CanvasRenderingContext2d, ImageData};
 
@@ -66,7 +66,8 @@ impl Cyd for CydWasm {
         self.size
     }
 
-    fn frame_mut(&mut self, size: Size) -> CydFrameWasm<'_> {
+    fn frame_mut(&mut self, region: Region) -> CydFrameWasm<'_> {
+        let size = region.size;
         let pixel_count = size.width as usize * size.height as usize;
         // Every new frame starts cleared to the device background so callers
         // never have to clear it themselves.
@@ -75,6 +76,7 @@ impl Cyd for CydWasm {
             context: &self.context,
             pixels,
             size,
+            top_left: region.top_left,
             foreground565: self.foreground565,
             font: self.font,
         }
@@ -91,6 +93,9 @@ pub struct CydFrameWasm<'a> {
     context: &'a CanvasRenderingContext2d,
     pixels: Vec<u16>,
     size: Size,
+    // Where this frame presents: set from the `Region` passed to `frame_mut`, so
+    // `flush` needs no separate position argument.
+    top_left: Point,
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
 }
@@ -104,8 +109,9 @@ impl CydFrameWasm<'_> {
         self.size.height as usize
     }
 
-    /// Convert the `Rgb565` buffer to RGBA8 and `putImageData` it at `top_left`.
-    fn present(&self, top_left: Point) {
+    /// Convert the `Rgb565` buffer to RGBA8 and `putImageData` it at the frame's top-left.
+    fn present(&self) {
+        let top_left = self.top_left;
         let mut bytes = Vec::with_capacity(self.pixels.len() * 4);
         for pixel in &self.pixels {
             bytes.push(scale_channel((pixel >> 11) & 0x1f, 31));
@@ -195,11 +201,11 @@ impl CydFrame for CydFrameWasm<'_> {
         self
     }
 
-    async fn flush_at(&mut self, top_left: Point) -> Result<(), Infallible> {
+    async fn flush(&mut self) -> Result<(), Infallible> {
         // The frame boundary: yield to the browser, then present the
         // freshly-drawn buffer so it paints on this animation frame.
         next_animation_frame().await;
-        self.present(top_left);
+        self.present();
         Ok(())
     }
 }

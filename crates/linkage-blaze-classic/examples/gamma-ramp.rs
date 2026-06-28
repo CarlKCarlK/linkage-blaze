@@ -12,10 +12,10 @@
 use core::convert::Infallible;
 
 use device_envoy_esp::{Error, init_and_start};
-use embedded_graphics::pixelcolor::{Rgb888, RgbColor};
 use embassy_executor::Spawner;
+use embedded_graphics::pixelcolor::{Rgb888, RgbColor};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, DEFAULT_FONT, Orientation};
+use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation};
 use linkage_blaze_example_core::gamma_ramp::{self, gamma_ramp};
 use log::info;
 

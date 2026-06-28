@@ -23,7 +23,7 @@ use static_cell::StaticCell;
 
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCydEsp, CalibrationConfig, CydEsp, CydError, CydStaticEsp, DEFAULT_FONT, Orientation,
+    CalibratedCydEsp, CalibrationConfig, CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation,
     RawPoint, RawTouchEvent, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
     TouchInputEvent as CydTouchInputEvent,
 };
