@@ -273,7 +273,9 @@ fn figure_relative_xy(screen_xy: (f32, f32)) -> (f32, f32) {
     )
 }
 
-fn figure_relative_projected_draw_item(projected_draw_item: ProjectedDrawItem) -> ProjectedDrawItem {
+fn figure_relative_projected_draw_item(
+    projected_draw_item: ProjectedDrawItem,
+) -> ProjectedDrawItem {
     match projected_draw_item {
         ProjectedDrawItem::Stroke {
             start,
