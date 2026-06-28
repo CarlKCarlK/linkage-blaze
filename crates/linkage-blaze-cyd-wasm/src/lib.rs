@@ -172,6 +172,16 @@ impl PixelTarget for CydFrameWasm<'_> {
         let stride = self.width();
         self.pixels[y * stride + x] = Rgb565::from(color).into_storage();
     }
+
+    /// The frame buffer already stores RGB565, so a decoded image pixel can be
+    /// written verbatim with no RGB888 round-trip.
+    fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
+        if x >= self.width() || y >= self.height() {
+            return;
+        }
+        let stride = self.width();
+        self.pixels[y * stride + x] = rgb565;
+    }
 }
 
 impl CydFrame for CydFrameWasm<'_> {
