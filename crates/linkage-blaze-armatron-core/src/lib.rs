@@ -16,7 +16,7 @@ use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
 use linkage_blaze_core::{
-    CameraProjection, DrawSurface, LinkageFixed, LinkageView, Rgb888, Vec3, linkage,
+    DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage,
     linkage_fixed, render_draw_items,
 };
 
@@ -893,8 +893,8 @@ impl CydSim {
     }
 
     //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-    pub fn projection(&self) -> CameraProjection {
-        CameraProjection::neg_x_perspective(
+    pub fn projection(&self) -> Projection {
+        Projection::front_perspective(
             SCREEN_WIDTH as f32 / 2.0,
             SCREEN_HEIGHT as f32 / 2.0,
             PIXELS_PER_UNIT,
