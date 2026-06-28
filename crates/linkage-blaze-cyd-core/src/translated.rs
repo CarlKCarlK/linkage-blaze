@@ -17,13 +17,13 @@ use linkage_blaze_core::{PixelTarget, Rgb888};
 /// ```text
 /// screen coordinate → TranslatedDrawTarget subtracts origin → tile-local coordinate
 /// ```
-pub struct TranslatedDrawTarget<'a, D> {
+pub(crate) struct TranslatedDrawTarget<'a, D> {
     target: &'a mut D,
     origin: Point,
 }
 
 impl<'a, D> TranslatedDrawTarget<'a, D> {
-    pub fn new(target: &'a mut D, origin: Point) -> Self {
+    pub(crate) fn new(target: &'a mut D, origin: Point) -> Self {
         Self { target, origin }
     }
 }
