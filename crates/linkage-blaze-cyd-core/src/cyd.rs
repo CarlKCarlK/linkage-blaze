@@ -65,15 +65,16 @@ pub trait Cyd {
     ///
     /// The returned [`Tiles`] is a lending/streaming iterator (it does not
     /// implement [`Iterator`], because each [`Tile`] borrows the device's single
-    /// reusable frame buffer). Each tile draws in physical-screen coordinates,
-    /// knows its own position, and is presented with [`Tile::flush`]:
+    /// reusable frame buffer). Each tile draws in the grid region's coordinate
+    /// space, knows its own position within that region, and is presented with
+    /// [`Tile::flush`]:
     ///
     /// ```rust,no_run
     /// # use linkage_blaze_cyd_core::{Cyd, tiling::TileGrid};
     /// # async fn draw<C: Cyd>(cyd: &mut C, grid: TileGrid) -> Result<(), C::Error> {
     /// let mut tiles = cyd.tiles(grid);
     /// while let Some(mut tile) = tiles.next() {
-    ///     // draw into `tile` in screen coordinates...
+    ///     // draw into `tile` in grid-region coordinates...
     ///     tile.flush().await?;
     /// }
     /// # Ok(())
@@ -131,30 +132,33 @@ impl<C: Cyd> Tiles<'_, C> {
             if let Some(region) = region {
                 return Some(Tile {
                     frame: self.cyd.frame_mut(region),
+                    grid_top_left: self.grid.top_left,
                 });
             }
         }
     }
 }
 
-/// A single tile's frame, drawn in physical-screen coordinates.
+/// A single tile's frame, drawn in grid-region coordinates.
 ///
-/// Yielded by [`Tiles::next`]. Drawing commands use physical-screen coordinates
-/// (the tile's [`top_left`](Self::top_left) is subtracted before writing into
-/// the tile-local buffer), and [`flush`](Self::flush) presents the tile at that
-/// same position.
+/// Yielded by [`Tiles::next`]. Drawing commands use the parent grid region's
+/// coordinate space (the grid's top-left is `(0, 0)`), and the tile's
+/// [`top_left`](Self::top_left) is subtracted before writing into the tile-local
+/// buffer. [`flush`](Self::flush) still presents the wrapped frame at its
+/// physical-screen position.
 pub struct Tile<'a, C: Cyd + 'a> {
     frame: C::Frame<'a>,
+    grid_top_left: Point,
 }
 
 impl<'a, C: Cyd + 'a> Tile<'a, C> {
-    /// This tile's region (top-left and size) in physical-screen coordinates.
+    /// This tile's region (top-left and size) in its grid region's coordinates.
     #[must_use]
     pub fn region(&self) -> Region {
-        self.frame.region()
+        Region::new(self.frame.region().top_left - self.grid_top_left, self.frame.region().size)
     }
 
-    /// This tile's top-left corner in physical-screen coordinates.
+    /// This tile's top-left corner in its grid region's coordinates.
     #[must_use]
     pub fn top_left(&self) -> Point {
         self.region().top_left
