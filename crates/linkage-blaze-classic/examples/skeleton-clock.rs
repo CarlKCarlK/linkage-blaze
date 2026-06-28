@@ -21,8 +21,8 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, tiling::max_usize};
 use linkage_blaze_example_core::skeleton_clock::{
-    BACKGROUND, FIGURE_TILES, FOREGROUND, ORIENTATION, SkeletonClockError, TOP_FONT,
-    WIFI_STATUS_POINT, WIFI_STATUS_SIZE, skeleton_clock,
+    self, BACKGROUND, FIGURE_TILES, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_POINT,
+    WIFI_STATUS_SIZE, skeleton_clock,
 };
 use log::info;
 
@@ -38,7 +38,7 @@ enum MainError {
     DeviceEnvoy(Error),
     Core(CoreError),
     CydEsp(CydError),
-    SkeletonClock(SkeletonClockError<CydError>),
+    SkeletonClock(skeleton_clock::Error<CydError>),
 }
 
 #[esp_rtos::main]
