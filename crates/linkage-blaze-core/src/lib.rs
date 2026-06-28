@@ -615,6 +615,55 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     pub fn draw_items<'b>(&'b self, params: &'b [f32; DOF]) -> DrawItemIter<'b, DOF, MARKS> {
         DrawItemIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
     }
+
+    /// The number of [`DrawItem`]s this linkage yields, evaluated at compile time.
+    ///
+    /// Which steps emit a draw item depends only on the linkage's steps and pen
+    /// state (which moves draw, which shapes are emitted), never on the runtime
+    /// parameter values, so the count is a `const` and can size a buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
+    ///     .forward(1.0)
+    ///     .forward(2.0);
+    ///
+    /// const COUNT: usize = LINKAGE.view().draw_item_count();
+    /// assert_eq!(COUNT, 2);
+    /// ```
+    #[must_use]
+    pub const fn draw_item_count(&self) -> usize {
+        let mut count = 0;
+        let mut pen_down = true;
+        let mut marked = [true; MARKS];
+        let mut index = 0;
+        while index < self.steps.len() {
+            match &self.steps[index] {
+                Step::Start => pen_down = true,
+                Step::PenUp => pen_down = false,
+                Step::PenDown => pen_down = true,
+                Step::Mark { index: mark_index } => marked[*mark_index] = pen_down,
+                Step::Restore { index: mark_index } => pen_down = marked[*mark_index],
+                Step::Move(_) | Step::Left(_) | Step::Up(_) => {
+                    if pen_down {
+                        count += 1;
+                    }
+                }
+                Step::Disk(_) | Step::DiskParam(_) | Step::Sphere(_) | Step::SphereParam(_) => {
+                    count += 1;
+                }
+                Step::Yaw(_)
+                | Step::Pitch(_)
+                | Step::Roll(_)
+                | Step::PenColor(_)
+                | Step::PenWidth(_) => {}
+            }
+            index += 1;
+        }
+        count
+    }
 }
 
 impl<'a, const DOF: usize, const MARKS: usize, const N: usize> From<&'a LinkageFixed<DOF, MARKS, N>>

@@ -123,6 +123,7 @@ where
         // Wait for a tick
         let tick = clock_sync.wait_for_tick().await;
         let local_time = &tick.local_time;
+        let (hour_12, minute, _) = h12_m_s(local_time);
         info!("tick {}", text_24h(local_time));
 
         // Write the digital time.
@@ -135,63 +136,49 @@ where
         // Convert the time into angles for the head (seconds), right arm (minutes) and left arm (hours) of the figure.
         let params = linkage_params(local_time);
 
+        // After this 'for' loop, this iterator will know the pose of every mark.
+        let mut draw_items = LINKAGE.draw_items(&params);
+        let two_d_items: heapless::Vec<_, { LINKAGE.draw_item_count() }> = (&mut draw_items)
+            .map(|draw_item| draw_item.project(&PROJECTION))
+            .collect();
+        info!("size of two_d_items is {}", two_d_items.len());
+
         // Draw the figure (via tiles, to save memory)
-        for tile in FIGURE_TILE_GRID.tiles() {
-            let mut tile_frame = cyd.frame_mut(tile.size);
+        // Can't use a `for` loop and Iterator because each tile borrows the
+        // CYD's reusable pixel buff. (The "leading iterator" patten.)
+        let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
+        while let Some(mut tile) = tiles.next() {
+            BACKGROUND_BITMAP.draw(&mut tile)?;
 
-            let mut tile_target = tile.target(&mut tile_frame);
-
-            // todo000 understand tile targets (may no longer apply)
-            BACKGROUND_BITMAP.draw(&mut tile_target)?;
-
-            let mut draw_items = LINKAGE.draw_items(&params);
-            for draw_item in &mut draw_items {
-                // todo00 really understand draw_offset (may no longer apply)
-                draw_item.project(&PROJECTION).draw(&mut tile_target);
+            for two_d_item in &two_d_items {
+                two_d_item.draw(&mut tile);
             }
 
-            // todo000 explain that after we go through all the items we inspect the poses of the marks.
-            // Skeleton-clock-specific foreground overlay: placards hang from hand marks.
             let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
-
-            let (hour_12, minute, _) = h12_m_s(local_time);
-
-            // Hours and minutes signs: each is a bitmap placard (hanger, body
-            // and baked-in "H"/"M") anchored under a hand mark, with its
-            // two-digit value overlaid.
-            //
-            // Each sign is drawn together with its own value before the next
-            // sign, so when two signs overlap a sign occludes the lower sign
-            // *and its number* as one unit (otherwise a lower sign's digits
-            // would float on top of the upper sign's face). The minute sign is
-            // drawn last, so it sits on top.
             let hours_anchor = pose_to_point(left_hand_pose);
-            let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
             let minute_anchor = pose_to_point(right_hand_pose);
+
+            let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
             let minute_top_left =
                 Point::new(minute_anchor.x - MINUTE_SIGN_ANCHOR_X, minute_anchor.y);
 
-            HOURS_SIGN.at(hours_top_left).draw(&mut tile_target)?;
+            HOURS_SIGN.at(hours_top_left).draw(&mut tile)?;
             draw_centered_sign_value(
-                &mut tile_target,
+                &mut tile,
                 hours_top_left,
                 HOURS_SIGN_VALUE_CENTER,
                 hour_12 as u32,
             )?;
-            MINUTE_SIGN.at(minute_top_left).draw(&mut tile_target)?;
+            MINUTE_SIGN.at(minute_top_left).draw(&mut tile)?;
             draw_centered_sign_value(
-                &mut tile_target,
+                &mut tile,
                 minute_top_left,
                 MINUTE_SIGN_VALUE_CENTER,
                 minute as u32,
             )?;
-            drop(tile_target);
 
-            tile_frame
-                .flush_at(tile.top_left)
-                .await
-                .map_err(Error::Flush)?;
+            tile.flush().await.map_err(Error::Flush)?;
         }
     }
 }
@@ -220,15 +207,10 @@ where
         .await
         .map_err(Error::Flush)?;
 
-    for tile in FIGURE_TILE_GRID.tiles() {
-        let mut tile_frame = cyd.frame_mut(tile.size);
-        let mut tile_target = tile.target(&mut tile_frame);
-        BACKGROUND_BITMAP.draw(&mut tile_target)?;
-        drop(tile_target);
-        tile_frame
-            .flush_at(tile.top_left)
-            .await
-            .map_err(Error::Flush)?;
+    let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
+    while let Some(mut tile) = tiles.next() {
+        BACKGROUND_BITMAP.draw(&mut tile)?;
+        tile.flush().await.map_err(Error::Flush)?;
     }
 
     Ok(())
@@ -361,8 +343,8 @@ const fn str_eq(left: &str, right: &str) -> bool {
 // ── Skeleton-clock-specific overlay drawing ──────────────────────────────────
 
 // All overlay drawing happens against a `DrawTarget` whose coordinates are in
-// physical-screen space; `Tile::target` subtracts the tile origin so these
-// functions never need to know they are rendering into a tile.
+// physical-screen space; the `Tile` yielded by `Cyd::tiles` subtracts the tile
+// origin so these functions never need to know they are rendering into a tile.
 
 /// Draw a short string centered (both axes) on `center`.
 fn draw_centered_text<D>(
