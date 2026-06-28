@@ -19,7 +19,7 @@ use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::gamma_ramp::gamma_ramp;
 use linkage_blaze_example_core::skeleton_clock::{
     BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_POINT, WIFI_STATUS_SIZE,
-    skeleton_clock,
+    skeleton_clock, skeleton_clock_splash,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -54,9 +54,13 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
     wasm_bindgen_futures::spawn_local(async move {
         let mut cyd = cyd;
         let clock_sync = WasmClockSync::new();
-        // The browser uses the OS clock (no WiFi/NTP), but mirror the device's
-        // status line so the framed display reads like the real one. Drawn once;
-        // the per-tick loop only repaints the time and figure regions.
+        // Show the framed clock immediately (background + placeholder status),
+        // mirroring the device's startup screen before the first tick lands.
+        skeleton_clock_splash(&mut cyd)
+            .await
+            .expect("flushing the Infallible wasm frame cannot fail");
+        // The browser uses the OS clock (no WiFi/NTP), so replace the `WiFi: --`
+        // placeholder with `WiFi: OK`; the per-tick loop repaints time and figure.
         cyd.frame_mut(WIFI_STATUS_SIZE)
             .write_text("WiFi: OK")
             .flush_at(WIFI_STATUS_POINT)

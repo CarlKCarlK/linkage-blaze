@@ -76,6 +76,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
+    // Show the framed clock immediately, before WiFi/NTP, with placeholder status.
+    skeleton_clock::skeleton_clock_splash(&mut cyd).await?;
+
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
