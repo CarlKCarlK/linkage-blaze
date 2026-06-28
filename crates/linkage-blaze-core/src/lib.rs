@@ -3357,6 +3357,14 @@ impl Pose {
         }
     }
 
+    /// Project this pose's position through `projection` into screen-space `(x, y)`.
+    #[must_use]
+    pub fn project(self, projection: &Projection) -> (f32, f32) {
+        let c = projection.cam(self.position());
+        let k = projection.scale * projection.depth_factor(c[0]);
+        (projection.center_x - c[1] * k, projection.center_y - c[2] * k)
+    }
+
     /// Return the origin pose with identity orientation.
     #[must_use]
     pub const fn start() -> Self {
@@ -3770,15 +3778,15 @@ impl DrawItem {
     pub fn project(self, projection: &Projection) -> ProjectedDrawItem {
         match self {
             DrawItem::Stroke(stroke) => ProjectedDrawItem::Stroke {
-                start: projection.project_pos(stroke.start()),
-                end: projection.project_pos(stroke.end()),
+                start: stroke.start().project(projection),
+                end: stroke.end().project(projection),
                 color: stroke.color(),
                 pixel_width: projection.project_width(stroke.width()),
             },
             DrawItem::Disk(disk) => {
                 let orientation = disk.pose().orientation();
                 ProjectedDrawItem::Ellipse {
-                    center: projection.project_pos(disk.pose()),
+                    center: disk.pose().project(projection),
                     axis_a: projection.project_dir(
                         disk.pose(),
                         orientation.forward(),
@@ -3789,7 +3797,7 @@ impl DrawItem {
                 }
             }
             DrawItem::Sphere(sphere) => ProjectedDrawItem::Circle {
-                center: projection.project_pos(sphere.pose()),
+                center: sphere.pose().project(projection),
                 pixel_radius: projection.project_radius(sphere.pose(), sphere.radius()),
                 color: sphere.color(),
             },
@@ -3904,22 +3912,22 @@ where
     for item in items {
         match item {
             DrawItem::Stroke(s) => surface.stroke(
-                proj.project_pos(s.start()),
-                proj.project_pos(s.end()),
+                s.start().project(proj),
+                s.end().project(proj),
                 s.color(),
                 proj.project_width(s.width()),
             ),
             DrawItem::Disk(d) => {
                 let orient = d.pose().orientation();
                 surface.filled_ellipse(
-                    proj.project_pos(d.pose()),
+                    d.pose().project(proj),
                     proj.project_dir(d.pose(), orient.forward(), d.radius()),
                     proj.project_dir(d.pose(), orient.left(), d.radius()),
                     d.color(),
                 );
             }
             DrawItem::Sphere(s) => surface.filled_circle(
-                proj.project_pos(s.pose()),
+                s.pose().project(proj),
                 proj.project_radius(s.pose(), s.radius()),
                 s.color(),
             ),
@@ -4126,13 +4134,6 @@ impl Projection {
             None => 1.0,
             Some(focal) => focal / (focal + depth).max(focal * 0.05),
         }
-    }
-
-    /// Project a pose's position to pixel-space `(x, y)`.
-    pub fn project_pos(&self, pose: Pose) -> (f32, f32) {
-        let c = self.cam(pose.position());
-        let k = self.scale * self.depth_factor(c[0]);
-        (self.center_x - c[1] * k, self.center_y - c[2] * k)
     }
 
     /// Project a world-space direction vector (scaled by `radius`) to pixel-space.
