@@ -14,7 +14,8 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed, to_point,
+    LinkageFixed, LinkageView, MarkError, ProjectedDrawItem, Projection, Rgb888, linkage,
+    linkage_fixed, to_point,
 };
 use log::info;
 use time::OffsetDateTime;
@@ -104,6 +105,10 @@ pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
     3,
     3,
 );
+const FIGURE_REGION: Region = Region::new(
+    Point::new(0, FIGURE_Y as i32),
+    Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),
+);
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -141,6 +146,7 @@ where
         let projected_items = draw_items
             .by_ref()
             .map(|draw_item| draw_item.project(&PROJECTION))
+            .map(figure_relative_projected_draw_item)
             .collect::<heapless::Vec<_, { LINKAGE.draw_item_count() }>>();
 
         // Using the exhausted iterator, find the position of the middle of the left hand.
@@ -150,8 +156,14 @@ where
         let (minute_anchor_x, minute_anchor_y) =
             draw_items.pose_by_mark_name("rMid2")?.project(&PROJECTION);
 
-        let hours_top_left = to_point((hours_anchor_x - HOURS_SIGN_ANCHOR_X, hours_anchor_y));
-        let minute_top_left = to_point((minute_anchor_x - MINUTE_SIGN_ANCHOR_X, minute_anchor_y));
+        let hours_top_left = figure_relative_point(to_point((
+            hours_anchor_x - HOURS_SIGN_ANCHOR_X,
+            hours_anchor_y,
+        )));
+        let minute_top_left = figure_relative_point(to_point((
+            minute_anchor_x - MINUTE_SIGN_ANCHOR_X,
+            minute_anchor_y,
+        )));
 
         // On each tile ...
         // (Can't use a `for` loop and Iterator because each tile borrows the
@@ -159,7 +171,9 @@ where
         let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
         while let Some(mut tile) = tiles.next() {
             // draw the background bitmap.
-            BACKGROUND_BITMAP.draw(&mut tile)?;
+            BACKGROUND_BITMAP
+                .at(figure_relative_point(Point::zero()))
+                .draw(&mut tile)?;
 
             // Draw the projected items from the linkage.
             for projected_item in &projected_items {
@@ -215,7 +229,9 @@ where
 
     let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
     while let Some(mut tile) = tiles.next() {
-        BACKGROUND_BITMAP.draw(&mut tile)?;
+        BACKGROUND_BITMAP
+            .at(figure_relative_point(Point::zero()))
+            .draw(&mut tile)?;
         tile.flush().await.map_err(Error::Flush)?;
     }
 
@@ -244,6 +260,53 @@ fn text_12h(local_time: &OffsetDateTime) -> heapless::String<24> {
     )
     .expect("clock string fits in 24 bytes");
     text
+}
+
+fn figure_relative_point(screen_point: Point) -> Point {
+    screen_point - FIGURE_REGION.top_left
+}
+
+fn figure_relative_xy(screen_xy: (f32, f32)) -> (f32, f32) {
+    (
+        screen_xy.0 - FIGURE_REGION.top_left.x as f32,
+        screen_xy.1 - FIGURE_REGION.top_left.y as f32,
+    )
+}
+
+fn figure_relative_projected_draw_item(projected_draw_item: ProjectedDrawItem) -> ProjectedDrawItem {
+    match projected_draw_item {
+        ProjectedDrawItem::Stroke {
+            start,
+            end,
+            color,
+            pixel_width,
+        } => ProjectedDrawItem::Stroke {
+            start: figure_relative_xy(start),
+            end: figure_relative_xy(end),
+            color,
+            pixel_width,
+        },
+        ProjectedDrawItem::Ellipse {
+            center,
+            axis_a,
+            axis_b,
+            color,
+        } => ProjectedDrawItem::Ellipse {
+            center: figure_relative_xy(center),
+            axis_a,
+            axis_b,
+            color,
+        },
+        ProjectedDrawItem::Circle {
+            center,
+            pixel_radius,
+            color,
+        } => ProjectedDrawItem::Circle {
+            center: figure_relative_xy(center),
+            pixel_radius,
+            color,
+        },
+    }
 }
 
 /// Format a 24-hour `HH:MM:SS` clock string.
