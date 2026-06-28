@@ -140,8 +140,10 @@ where
             let mut tile_frame = cyd.frame_mut(tile.size);
 
             // todo000 understand tile targets (may no longer apply)
-            let mut tile_target = tile.target(&mut tile_frame);
-            BACKGROUND_BITMAP.draw(&mut tile_target)?;
+            {
+                let mut tile_target = tile.target(&mut tile_frame);
+                BACKGROUND_BITMAP.draw(&mut tile_target)?;
+            }
 
             let mut draw_items = LINKAGE.draw_items(&params);
             for draw_item in &mut draw_items {
@@ -225,8 +227,10 @@ where
 
     for tile in FIGURE_TILE_GRID.tiles() {
         let mut tile_frame = cyd.frame_mut(tile.size);
-        let mut tile_target = tile.target(&mut tile_frame);
-        BACKGROUND_BITMAP.draw(&mut tile_target)?;
+        {
+            let mut tile_target = tile.target(&mut tile_frame);
+            BACKGROUND_BITMAP.draw(&mut tile_target)?;
+        }
         tile_frame
             .flush_at(tile.top_left)
             .await
