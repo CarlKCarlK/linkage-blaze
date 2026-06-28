@@ -2,6 +2,7 @@
 //! act as clock hands, with hour/minute placards hanging from its hands.
 // todo000 the esp32 may not have a reset button for wifi
 
+use core::array::from_fn;
 use core::convert::Infallible;
 
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
@@ -45,29 +46,12 @@ const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
     .combine(LINKAGE0);
 
 // Keep only the three clock-driven parameters, then optimize the fixed linkage.
-const LINKAGE3: LinkageFixed<3, 6, 400> = LINKAGE1
+const LINKAGE: LinkageView<3, 6> = LINKAGE1
     // turn the left foot out jauntily.
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
     .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
-    .compact::<400>();
-
-const LINKAGE: LinkageView<3, 6> = LINKAGE3.view();
-
-/// Const string equality, for the compile-time param-order assert in `linkage_params`.
-const fn str_eq(left: &str, right: &str) -> bool {
-    let (left, right) = (left.as_bytes(), right.as_bytes());
-    if left.len() != right.len() {
-        return false;
-    }
-    let mut i = 0;
-    while i < left.len() {
-        if left[i] != right[i] {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
+    .compact::<385>()
+    .view();
 
 // ── Projection ───────────────────────────────────────────────────────────────
 
@@ -309,42 +293,48 @@ fn text_24h(local_time: &OffsetDateTime) -> heapless::String<9> {
     text
 }
 
-// todo000 seems overly complex.
 fn linkage_params(local_time: &OffsetDateTime) -> [f32; 3] {
-    // `linkage_params` returns parameters positionally, so it depends on the order
-    // the surviving params keep (the order they are defined in the `.lb.rs`), not on
-    // the order of the `retain_param_names` list. Assert that mapping at compile time.
+    // Parameters are positional and depend on the order in the original `.lb.rs`.
+
+    // Index of each clock hand's param: the head shows seconds, the right arm
+    // minutes, the left arm hours.
+    const SECOND_INDEX: usize = 0;
+    const MINUTE_INDEX: usize = 1;
+    const HOUR_INDEX: usize = 2;
+
+    // Each param's range spans this many full turns, read straight from the linkage,
+    // so one clock turn maps to 1 / span of the normalized param.
+    const SECOND_SPAN_TURNS: f32 = param_span_turns(SECOND_INDEX);
+    const MINUTE_SPAN_TURNS: f32 = param_span_turns(MINUTE_INDEX);
+    const HOUR_SPAN_TURNS: f32 = param_span_turns(HOUR_INDEX);
+
+    // Check that everything is as expected.
     const _: () = {
-        assert!(str_eq(LINKAGE.param(0).name(), "head_yrotation"));
-        assert!(str_eq(LINKAGE.param(1).name(), "r_shldr_zrotation"));
-        assert!(str_eq(LINKAGE.param(2).name(), "l_shldr_zrotation"));
+        assert_param_name(SECOND_INDEX, "head_yrotation");
+        assert_param_name(MINUTE_INDEX, "r_shldr_zrotation");
+        assert_param_name(HOUR_INDEX, "l_shldr_zrotation");
+        assert!(SECOND_SPAN_TURNS == 4.0);
+        assert!(MINUTE_SPAN_TURNS == 4.0);
+        assert!(HOUR_SPAN_TURNS == 4.0);
     };
 
-    const PARAM_TURN_PER_CLOCK_TURN: f32 = 0.25;
-
-    const HEAD_FORWARD_PARAM: f32 = 0.5;
+    // Calibration: what param value in 0..1 represents 12:00:00?
+    const HEAD_AT_12_PARAM: f32 = 0.5;
     const RIGHT_ARM_AT_12_PARAM: f32 = 0.4375;
     const LEFT_ARM_AT_12_PARAM: f32 = 0.5625;
 
-    let seconds = local_time.second() as f32;
-    let minutes = local_time.minute() as f32;
-    let hours = (local_time.hour() % 12) as f32;
+    // Find the fraction of a turn for each hand.
+    let seconds_turn = local_time.second() as f32 / 60.0;
+    let minutes_turn = (local_time.minute() as f32 + seconds_turn) / 60.0;
+    let hours_turn = ((local_time.hour() % 12) as f32 + minutes_turn) / 12.0;
 
-    let second_turn = seconds / 60.0;
-    let minute_turn = (minutes + second_turn) / 60.0;
-    let hour_turn = (hours + minute_turn) / 12.0;
-
-    [
-        wrap_unit(HEAD_FORWARD_PARAM + second_turn * PARAM_TURN_PER_CLOCK_TURN),
-        wrap_unit(RIGHT_ARM_AT_12_PARAM + minute_turn * PARAM_TURN_PER_CLOCK_TURN),
-        // The left shoulder's useful range straddles the 0/1 boundary, so use the
-        // signed shortest clock turn around 12 o'clock.
-        wrap_unit(LEFT_ARM_AT_12_PARAM + signed_clock_turn(hour_turn) * PARAM_TURN_PER_CLOCK_TURN),
-    ]
-}
-
-fn signed_clock_turn(turn: f32) -> f32 {
-    if turn > 0.5 { turn - 1.0 } else { turn }
+    // Set each 0.0 to 1.0 parameter in the correct order.
+    from_fn(|index| match index {
+        SECOND_INDEX => wrap_unit(HEAD_AT_12_PARAM + seconds_turn / SECOND_SPAN_TURNS),
+        MINUTE_INDEX => wrap_unit(RIGHT_ARM_AT_12_PARAM + minutes_turn / MINUTE_SPAN_TURNS),
+        HOUR_INDEX => wrap_unit(LEFT_ARM_AT_12_PARAM + hours_turn / HOUR_SPAN_TURNS),
+        _ => unreachable!(),
+    })
 }
 
 fn wrap_unit(value: f32) -> f32 {
@@ -356,6 +346,35 @@ fn wrap_unit(value: f32) -> f32 {
         value += 1.0;
     }
     value
+}
+
+/// Compile-time assert that `LINKAGE`'s param `index` has the expected name.
+const fn assert_param_name(index: usize, name: &str) {
+    assert!(str_eq(LINKAGE.param(index).name(), name));
+}
+
+/// The span of `LINKAGE`'s param `index`, in full turns (1 turn = 360°), read from
+/// the linkage's stored range.
+const fn param_span_turns(index: usize) -> f32 {
+    use core::f32::consts::TAU;
+    let (low, high) = LINKAGE.scan_param_range(index);
+    (high - low) / TAU
+}
+
+/// Const string equality, for the compile-time param-order assert in `linkage_params`.
+const fn str_eq(left: &str, right: &str) -> bool {
+    let (left, right) = (left.as_bytes(), right.as_bytes());
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < left.len() {
+        if left[i] != right[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 // ── Skeleton-clock-specific overlay drawing ──────────────────────────────────

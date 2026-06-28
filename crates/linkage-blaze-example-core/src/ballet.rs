@@ -46,6 +46,8 @@ const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>:
     .pen_width(3.2)
     .combine(LINKAGE0);
 
+// todo000000 do .view() here
+
 // todo000 still to understand projections.
 const PROJECTION: Projection = Projection::front_ortho(CENTER_X as f32, BASELINE_Y as f32, SCALE);
 

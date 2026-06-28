@@ -366,6 +366,45 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         self.steps
     }
 
+    /// Scan the steps for the `(low, high)` legal range of the parameter at
+    /// `index`, as driven by the first step that uses it. Rotation ranges are in
+    /// radians (convert with [`f32::to_degrees`]); translation/disk/sphere ranges
+    /// are in linkage units.
+    ///
+    /// This is an O(steps) linear scan, not a field read. The range is constant
+    /// for a given linkage, so resolve it once — ideally in a `const` — and never
+    /// per frame:
+    ///
+    /// ```ignore
+    /// const HOURS_RANGE: (f32, f32) = LINKAGE.scan_param_range(1);
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if no step drives the parameter at `index`.
+    #[must_use]
+    pub const fn scan_param_range(&self, index: usize) -> (f32, f32) {
+        let mut i = 0;
+        while i < self.steps.len() {
+            let arg = match self.steps[i] {
+                Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) | Step::Move(arg)
+                | Step::Left(arg) | Step::Up(arg) => arg,
+                Step::DiskParam(v) | Step::SphereParam(v) => Arg::Variable(v),
+                _ => {
+                    i += 1;
+                    continue;
+                }
+            };
+            if let Arg::Variable(v) = arg {
+                if v.index() == index {
+                    return (v.low(), v.high());
+                }
+            }
+            i += 1;
+        }
+        panic!("no step drives the parameter at this index")
+    }
+
     /// Return the active mark-name slots.
     #[must_use]
     pub const fn mark_names(&self) -> &'a [&'static str; MARKS] {
