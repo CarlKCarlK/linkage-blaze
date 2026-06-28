@@ -57,8 +57,11 @@ const LINKAGE: LinkageView<3, 6> = LINKAGE1
 
 //todo000 review projections.
 
-// Keep only the
-const PROJECTION: Projection = Projection::front_ortho(141.0, 306.0, 1.35);
+const PROJECTION_CENTER_X: f32 = 139.0;
+const PROJECTION_CENTER_Y: f32 = 306.0;
+const PROJECTION_SCALE: f32 = 1.35;
+const PROJECTION: Projection =
+    Projection::front_ortho(PROJECTION_CENTER_X, PROJECTION_CENTER_Y, PROJECTION_SCALE);
 
 // ── Background bitmap ──────────────────────────────────────────────────────────
 
@@ -67,7 +70,6 @@ const PROJECTION: Projection = Projection::front_ortho(141.0, 306.0, 1.35);
 //todo0000 is tga565! good?
 const CLOCK_BACK_BITMAP: Image565<239, 319, { 239 * 319 }> =
     tga565!("../assets/clock_back.small.tga", 239, 319);
-const CLOCK_BACK_POINT: Point = Point::new(0, 0);
 
 const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
     tga565_magenta_mask!("../assets/hours.small.tga", 45, 73);
@@ -138,42 +140,29 @@ where
         for tile in FIGURE_TILE_GRID.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
 
-            // Skeleton-clock-specific background overlay: blit the clock-face
-            // bitmap. `tile_frame` is a `PixelTarget` in tile-local coordinates,
-            // so a screen point maps to local by subtracting the tile origin;
-            // pixels outside the tile are clipped.
-            CLOCK_BACK_BITMAP.draw_at(
-                &mut tile_frame,
-                (
-                    CLOCK_BACK_POINT.x - tile.top_left.x,
-                    CLOCK_BACK_POINT.y - tile.top_left.y,
-                ),
-            );
+            let mut tile_target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
+            CLOCK_BACK_BITMAP
+                .draw(&mut tile_target)
+                .expect("drawing to an Infallible target cannot fail");
 
             let mut draw_items = LINKAGE.draw_items(&params);
             for draw_item in &mut draw_items {
                 draw_item
                     .project(&PROJECTION)
-                    // todo00 really understand draw_offset
-                    // Shift the figure 2 px toward screen-left by drawing it
-                    // relative to an origin nudged 2 px right (local = screen − origin).
-                    .draw_offset(
-                        &mut tile_frame,
-                        Point::new(tile.top_left.x + 2, tile.top_left.y),
-                    );
+                    .draw_offset(&mut tile_frame, tile.top_left);
             }
 
             // todo000 explain that after we go through all the items we inspect the poses of the marks.
             // Skeleton-clock-specific foreground overlay: placards hang from hand marks.
             let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
+
             let (hour_12, minute, _) = h12_m_s(local_time);
 
-            // Hours and minutes signs: each is a bitmap placard (hanger, body and
-            // baked-in "H"/"M") anchored under a hand mark, with its two-digit
-            // value overlaid. The bitmaps are drawn straight onto the tile (a
-            // `PixelTarget`) in tile-local coordinates, the same way the clock-face
-            // background is; the values go through a `TranslatedDrawTarget`.
+            // Hours and minutes signs: each is a bitmap placard (hanger, body
+            // and baked-in "H"/"M") anchored under a hand mark, with its
+            // two-digit value overlaid. The tile target translates screen
+            // coordinates into tile-local writes for both bitmap blits and text.
             //
             // Each sign is drawn together with its own value before the next sign,
             // so when two signs overlap a sign occludes the lower sign *and its
@@ -237,13 +226,10 @@ where
 
     for tile in FIGURE_TILE_GRID.tiles() {
         let mut tile_frame = cyd.frame_mut(tile.size);
-        CLOCK_BACK_BITMAP.draw_at(
-            &mut tile_frame,
-            (
-                CLOCK_BACK_POINT.x - tile.top_left.x,
-                CLOCK_BACK_POINT.y - tile.top_left.y,
-            ),
-        );
+        let mut tile_target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
+        CLOCK_BACK_BITMAP
+            .draw(&mut tile_target)
+            .expect("drawing to an Infallible target cannot fail");
         tile_frame
             .flush_at(tile.top_left)
             .await
@@ -415,14 +401,10 @@ fn draw_sign<F, const W: usize, const H: usize, const N: usize, const M: usize>(
 ) where
     F: PixelTarget + DrawTarget<Color = Rgb565, Error = Infallible>,
 {
-    sign.draw_at(
-        &mut *frame,
-        (
-            sign_top_left.x - tile_top_left.x,
-            sign_top_left.y - tile_top_left.y,
-        ),
-    );
     let mut target = TranslatedDrawTarget::new(&mut *frame, tile_top_left);
+    sign.at(sign_top_left)
+        .draw(&mut target)
+        .expect("drawing to an Infallible target cannot fail");
     draw_centered_sign_value(&mut target, sign_top_left, value_center, number);
 }
 

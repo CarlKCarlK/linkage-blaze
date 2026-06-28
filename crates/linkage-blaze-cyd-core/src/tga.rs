@@ -20,7 +20,11 @@
 //! Anything outside this subset triggers a `const` panic, so an unsupported file
 //! fails the build rather than at runtime.
 
-use linkage_blaze_core::{pixel_put_565, PixelTarget};
+use embedded_graphics::{
+    Drawable, Pixel,
+    pixelcolor::{Rgb565, raw::RawU16},
+    prelude::{DrawTarget, Point},
+};
 
 /// An opaque RGB565 image decoded from a TGA at compile time.
 ///
@@ -30,6 +34,12 @@ use linkage_blaze_core::{pixel_put_565, PixelTarget};
 pub struct Image565<const W: usize, const H: usize, const N: usize> {
     /// Row-major top-left-origin pixels, one RGB565 value each.
     pub pixels: [u16; N],
+}
+
+/// An [`Image565`] placed at a concrete target position.
+pub struct PlacedImage565<'a, const W: usize, const H: usize, const N: usize> {
+    image: &'a Image565<W, H, N>,
+    top_left: Point,
 }
 
 /// An RGB565 image with a 1-bit-per-pixel opacity mask, decoded from a 24- or
@@ -45,6 +55,18 @@ pub struct Image565Mask<const W: usize, const H: usize, const N: usize, const MA
     /// 1 bit per pixel, row-major: set means opaque. Bit `i` is byte `i / 8`,
     /// bit `i % 8` (LSB first).
     pub opaque: [u8; MASK_N],
+}
+
+/// An [`Image565Mask`] placed at a concrete target position.
+pub struct PlacedImage565Mask<
+    'a,
+    const W: usize,
+    const H: usize,
+    const N: usize,
+    const MASK_N: usize,
+> {
+    image: &'a Image565Mask<W, H, N, MASK_N>,
+    top_left: Point,
 }
 
 /// Little-endian `u16` read at `offset`.
@@ -63,10 +85,16 @@ const fn to_rgb565(red: u8, green: u8, blue: u8) -> u16 {
 /// Validates the 18-byte header against the v1 subset and returns
 /// `(pixel_start, bytes_per_pixel, top_origin)`.
 const fn parse_header(bytes: &[u8], width: usize, height: usize) -> (usize, usize, bool) {
-    assert!(bytes.len() >= 18, "TGA: file shorter than its 18-byte header");
+    assert!(
+        bytes.len() >= 18,
+        "TGA: file shorter than its 18-byte header"
+    );
 
     let color_map_type = bytes[1];
-    assert!(color_map_type == 0, "TGA: color-mapped images are not supported");
+    assert!(
+        color_map_type == 0,
+        "TGA: color-mapped images are not supported"
+    );
 
     let image_type = bytes[2];
     assert!(
@@ -82,8 +110,14 @@ const fn parse_header(bytes: &[u8], width: usize, height: usize) -> (usize, usiz
 
     let file_width = read_u16(bytes, 12) as usize;
     let file_height = read_u16(bytes, 14) as usize;
-    assert!(file_width == width, "TGA: width does not match const argument");
-    assert!(file_height == height, "TGA: height does not match const argument");
+    assert!(
+        file_width == width,
+        "TGA: width does not match const argument"
+    );
+    assert!(
+        file_height == height,
+        "TGA: height does not match const argument"
+    );
 
     let pixel_depth = bytes[16];
     assert!(
@@ -151,25 +185,69 @@ impl<const W: usize, const H: usize, const N: usize> Image565<W, H, N> {
         Self { pixels }
     }
 
-    /// Draws the image with its top-left corner at `top_left` on `target`.
-    ///
-    /// Pixels outside the target are silently clipped (see [`pixel_put`]), so
-    /// only the overlapping region is written.
-    pub fn draw_at<T: PixelTarget>(&self, target: &mut T, top_left: (i32, i32)) {
-        let mut y = 0;
-        while y < H {
-            let mut x = 0;
-            while x < W {
-                pixel_put_565(
-                    target,
-                    top_left.0 + x as i32,
-                    top_left.1 + y as i32,
-                    self.pixels[y * W + x],
-                );
-                x += 1;
-            }
-            y += 1;
+    /// Return a drawable image with its top-left corner at `top_left`.
+    #[must_use]
+    pub const fn at(&self, top_left: Point) -> PlacedImage565<'_, W, H, N> {
+        PlacedImage565 {
+            image: self,
+            top_left,
         }
+    }
+}
+
+impl<const W: usize, const H: usize, const N: usize> Drawable for PlacedImage565<'_, W, H, N> {
+    type Color = Rgb565;
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        target.draw_iter(Image565Pixels {
+            image: self.image,
+            top_left: self.top_left,
+            index: 0,
+        })
+    }
+}
+
+impl<const W: usize, const H: usize, const N: usize> Drawable for Image565<W, H, N> {
+    type Color = Rgb565;
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        self.at(Point::new(0, 0)).draw(target)
+    }
+}
+
+struct Image565Pixels<'a, const W: usize, const H: usize, const N: usize> {
+    image: &'a Image565<W, H, N>,
+    top_left: Point,
+    index: usize,
+}
+
+impl<const W: usize, const H: usize, const N: usize> Iterator for Image565Pixels<'_, W, H, N> {
+    type Item = Pixel<Rgb565>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= N {
+            return None;
+        }
+
+        let index = self.index;
+        self.index += 1;
+        let x = index % W;
+        let y = index / W;
+        Some(Pixel(
+            self.top_left + Point::new(x as i32, y as i32),
+            // todo00000000 (may no longer apply) This once drew pixels
+            // 565->888->565 via `put_pixel`; keep image drawing on an RGB565
+            // target so decoded pixels stay in their native format.
+            Rgb565::from(RawU16::new(self.image.pixels[index])),
+        ))
     }
 }
 
@@ -305,30 +383,78 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize>
         self.opaque[index / 8] & (1 << (index % 8)) != 0
     }
 
-    /// Draws the image with its top-left corner at `top_left` on `target`,
-    /// skipping transparent pixels.
-    ///
-    /// Pixels outside the target are silently clipped (see [`pixel_put`]).
-    pub fn draw_at<T: PixelTarget>(&self, target: &mut T, top_left: (i32, i32)) {
-        let mut y = 0;
-        while y < H {
-            let mut x = 0;
-            while x < W {
-                let index = y * W + x;
-                if self.is_opaque(index) {
-                    // todo00000000 This drew pixels 565->888->565 via `put_pixel`,
-                    // re-packing on every write. Now fixed: `pixel_put_565` hands
-                    // the raw RGB565 straight to RGB565 framebuffers (the CYD
-                    // frames override `put_pixel_565`). NOTE: may no longer apply —
-                    // the old 565->888->565 round-trip was in fact exact (the high
-                    // bits survive), so this was a redundant-work fix, not a
-                    // precision fix; targets without a 565 override still expand.
-                    pixel_put_565(target, top_left.0 + x as i32, top_left.1 + y as i32, self.pixels[index]);
-                }
-                x += 1;
-            }
-            y += 1;
+    /// Return a drawable image with its top-left corner at `top_left`.
+    #[must_use]
+    pub const fn at(&self, top_left: Point) -> PlacedImage565Mask<'_, W, H, N, MASK_N> {
+        PlacedImage565Mask {
+            image: self,
+            top_left,
         }
+    }
+}
+
+impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize> Drawable
+    for PlacedImage565Mask<'_, W, H, N, MASK_N>
+{
+    type Color = Rgb565;
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        target.draw_iter(Image565MaskPixels {
+            image: self.image,
+            top_left: self.top_left,
+            index: 0,
+        })
+    }
+}
+
+impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize> Drawable
+    for Image565Mask<W, H, N, MASK_N>
+{
+    type Color = Rgb565;
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        self.at(Point::new(0, 0)).draw(target)
+    }
+}
+
+struct Image565MaskPixels<'a, const W: usize, const H: usize, const N: usize, const MASK_N: usize> {
+    image: &'a Image565Mask<W, H, N, MASK_N>,
+    top_left: Point,
+    index: usize,
+}
+
+impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize> Iterator
+    for Image565MaskPixels<'_, W, H, N, MASK_N>
+{
+    type Item = Pixel<Rgb565>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.index < N {
+            let index = self.index;
+            self.index += 1;
+            if self.image.is_opaque(index) {
+                let x = index % W;
+                let y = index / W;
+                return Some(Pixel(
+                    self.top_left + Point::new(x as i32, y as i32),
+                    // todo00000000 (may no longer apply) This once drew pixels
+                    // 565->888->565 via `put_pixel`; keep image drawing on an
+                    // RGB565 target so decoded pixels stay in their native
+                    // format.
+                    Rgb565::from(RawU16::new(self.image.pixels[index])),
+                ));
+            }
+        }
+
+        None
     }
 }
 
@@ -361,14 +487,15 @@ macro_rules! tga565 {
 /// ```
 #[macro_export]
 macro_rules! tga565_mask {
-    ($path:expr, $width:expr, $height:expr) => {
-        $crate::Image565Mask::<
+    ($path:expr, $width:expr, $height:expr) => {{
+        type Image = $crate::Image565Mask<
             $width,
             $height,
             { $width * $height },
             { ($width * $height + 7) / 8 },
-        >::from_tga(include_bytes!($path))
-    };
+        >;
+        Image::from_tga(include_bytes!($path))
+    }};
 }
 
 /// Decodes an embedded `.tga` into an [`Image565Mask`] using magenta as the
@@ -382,14 +509,15 @@ macro_rules! tga565_mask {
 /// ```
 #[macro_export]
 macro_rules! tga565_magenta_mask {
-    ($path:expr, $width:expr, $height:expr) => {
-        $crate::Image565Mask::<
+    ($path:expr, $width:expr, $height:expr) => {{
+        type Image = $crate::Image565Mask<
             $width,
             $height,
             { $width * $height },
             { ($width * $height + 7) / 8 },
-        >::from_tga_magenta(include_bytes!($path))
-    };
+        >;
+        Image::from_tga_magenta(include_bytes!($path))
+    }};
 }
 
 /// Decodes an embedded `.tga` into an [`Image565Mask`] using white as the
@@ -403,14 +531,15 @@ macro_rules! tga565_magenta_mask {
 /// ```
 #[macro_export]
 macro_rules! tga565_white_mask {
-    ($path:expr, $width:expr, $height:expr) => {
-        $crate::Image565Mask::<
+    ($path:expr, $width:expr, $height:expr) => {{
+        type Image = $crate::Image565Mask<
             $width,
             $height,
             { $width * $height },
             { ($width * $height + 7) / 8 },
-        >::from_tga_white(include_bytes!($path))
-    };
+        >;
+        Image::from_tga_white(include_bytes!($path))
+    }};
 }
 
 #[cfg(test)]
