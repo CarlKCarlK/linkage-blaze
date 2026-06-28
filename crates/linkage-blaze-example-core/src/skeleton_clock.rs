@@ -146,11 +146,12 @@ where
             }
 
             let mut draw_items = LINKAGE.draw_items(&params);
-            for draw_item in &mut draw_items {
-                draw_item
-                    .project(&PROJECTION)
+            {
+                let mut tile_target = tile.target(&mut tile_frame);
+                for draw_item in &mut draw_items {
                     // todo00 really understand draw_offset (may no longer apply)
-                    .draw_offset(&mut tile_frame, tile.top_left);
+                    draw_item.project(&PROJECTION).draw(&mut tile_target);
+                }
             }
 
             // todo000 explain that after we go through all the items we inspect the poses of the marks.
