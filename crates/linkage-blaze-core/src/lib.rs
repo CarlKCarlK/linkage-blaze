@@ -1359,10 +1359,10 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// All evaluation methods (poses, draw_items, etc.) operate on the view.
     #[must_use]
     #[inline]
-    pub fn view(&self) -> LinkageView<'_, DOF, MARKS> {
+    pub const fn view(&self) -> LinkageView<'_, DOF, MARKS> {
         LinkageView::new(
             &self.params,
-            &self.steps[..self.len],
+            self.steps.split_at(self.len).0,
             &self.mark_names,
             self.mark_len,
         )

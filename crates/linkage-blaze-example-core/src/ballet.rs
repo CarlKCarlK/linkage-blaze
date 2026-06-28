@@ -37,6 +37,7 @@ const BASELINE_Y: i32 = 300;
 const SCALE: f32 = 1.575;
 
 #[allow(long_running_const_eval)]
+// This can take ~8 seconds to compile and will generate a warning.
 const MOTION: BvhMotion<132, 592> = bvh_motion!("../../linkage-blaze-mocap/samples/pirouette.bvh");
 const LINKAGE0: LinkageFixed<{ MOTION.dof() }, 6, 538> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
@@ -46,8 +47,7 @@ const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>:
     .combine(LINKAGE0);
 
 // todo000 still to understand projections.
-const PROJECTION: Projection =
-    Projection::front_ortho(CENTER_X as f32, BASELINE_Y as f32, SCALE);
+const PROJECTION: Projection = Projection::front_ortho(CENTER_X as f32, BASELINE_Y as f32, SCALE);
 
 // ── Generic entry point ────────────────────────────────────────────────────────
 
