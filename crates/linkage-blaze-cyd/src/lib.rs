@@ -174,6 +174,16 @@ impl PixelTarget for CydFrameEsp<'_> {
         let stride = self.width();
         self.raw_pixels_mut()[y * stride + x] = CydEsp::rgb565(color).into_storage();
     }
+
+    /// The frame buffer already stores RGB565, so a decoded image pixel can be
+    /// written verbatim with no RGB888 round-trip.
+    fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
+        if x >= self.width() || y >= self.height() {
+            return;
+        }
+        let stride = self.width();
+        self.raw_pixels_mut()[y * stride + x] = rgb565;
+    }
 }
 
 #[derive(Debug, derive_more::From)]

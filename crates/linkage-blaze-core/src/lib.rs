@@ -3951,6 +3951,29 @@ pub trait PixelTarget {
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888);
+
+    /// Write a pre-packed RGB565 pixel (bit layout `RRRRR_GGGGGG_BBBBB`).
+    ///
+    /// The default expands to RGB888 and forwards to [`put_pixel`](Self::put_pixel);
+    /// framebuffers that natively store RGB565 should override this to store the
+    /// raw value directly and skip the 565→888(→565) reconversion. See
+    /// [`pixel_put_565`].
+    fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
+        self.put_pixel(x, y, rgb565_to_rgb888(rgb565));
+    }
+}
+
+/// Expands a packed RGB565 value (`RRRRR_GGGGGG_BBBBB`) to [`Rgb888`],
+/// replicating each channel's high bits into its low bits so full-scale inputs
+/// stay full-scale.
+pub fn rgb565_to_rgb888(rgb565: u16) -> Rgb888 {
+    let red5 = (rgb565 >> 11) & 0x1f;
+    let green6 = (rgb565 >> 5) & 0x3f;
+    let blue5 = rgb565 & 0x1f;
+    let red = ((red5 << 3) | (red5 >> 2)) as u8;
+    let green = ((green6 << 2) | (green6 >> 4)) as u8;
+    let blue = ((blue5 << 3) | (blue5 >> 2)) as u8;
+    Rgb888::new(red, green, blue)
 }
 
 /// Bounds-checked pixel write for a [`PixelTarget`].  Out-of-bounds writes are
@@ -3965,6 +3988,21 @@ pub fn pixel_put<T: PixelTarget>(target: &mut T, x: i32, y: i32, color: Rgb888) 
         return;
     }
     target.put_pixel(x, y, color);
+}
+
+/// Bounds-checked raw-RGB565 pixel write for a [`PixelTarget`].  Out-of-bounds
+/// writes are silently discarded.  Lets RGB565 framebuffers store a decoded
+/// image pixel without a lossy round-trip through RGB888.
+pub fn pixel_put_565<T: PixelTarget>(target: &mut T, x: i32, y: i32, rgb565: u16) {
+    if x < 0 || y < 0 {
+        return;
+    }
+    let x = x as usize;
+    let y = y as usize;
+    if x >= target.width() || y >= target.height() {
+        return;
+    }
+    target.put_pixel_565(x, y, rgb565);
 }
 
 /// Bridges a [`PixelTarget`] to the embedded-graphics [`DrawTarget`] interface.

@@ -19,14 +19,15 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    CameraProjection, LinkageFixed, MarkError, Pose, Projection, Rgb888, WebColors, linkage,
+    CameraProjection, LinkageFixed, MarkError, Pose, Projection, Rgb888, linkage,
     linkage_fixed, to_point,
 };
 use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, Image565, Orientation, TranslatedDrawTarget, tga565,
+    Cyd, CydFrame, Image565, Image565Mask, Orientation, TranslatedDrawTarget, tga565,
+    tga565_magenta_mask,
     tiling::{TileGrid, max_u32},
 };
 
@@ -42,7 +43,11 @@ const FIGURE: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 
 /// Device default foreground/text color the platform shim should construct its
 /// `Cyd` with.
 pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
-const PLACARD_FILL: Rgb888 = Rgb888::CSS_WHEAT; // light sign face
+// CSS_WHEAT (245, 222, 179) is so light it washes out to gray on the CYD panel
+// (the same low-saturation washout noted for the figure above). Use a deeper,
+// more saturated amber so the sign face reads as a color, not gray. Keep this in
+// sync with the baked-in face color of the hours-sign art (assets/hours.small.tga).
+const PLACARD_FILL: Rgb888 = Rgb888::new(229, 176, 84); // saturated amber sign face
 const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
 
 // ── Background bitmap ──────────────────────────────────────────────────────────
@@ -53,6 +58,19 @@ const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
 const CLOCK_BACK: Image565<239, 319, { 239 * 319 }> =
     tga565!("../assets/clock_back.small.tga", 239, 319);
 const CLOCK_BACK_POINT: Point = Point::new(0, 0);
+
+/// Hanging "hours" sign, decoded from a 45×73 24-bit TGA at compile time with
+/// magenta as the transparent color-key. The art already includes the cord ring,
+/// the sign body, and the "H" label, so it replaces the vector-drawn hours
+/// placard; only the two-digit hour value is overlaid (see [`HOURS_SIGN_*`]).
+const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
+    tga565_magenta_mask!("../assets/hours.small.tga", 45, 73);
+/// Bitmap column the cord ring hangs from; the sign is blitted so this column
+/// lands under the hand mark.
+const HOURS_SIGN_ANCHOR_X: i32 = 22;
+/// Bitmap point (relative to its top-left) where the hour value is centered,
+/// in the open area of the sign body above the baked-in "H".
+const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 
@@ -65,21 +83,20 @@ pub const ORIENTATION: Orientation = Orientation::Portrait;
 /// time band's character-width math below stays correct). 7×13.
 pub const TOP_FONT: MonoFont<'static> = FONT_7X13;
 
-/// Top-left of the WiFi-status band; nudged 3 px right of the screen edge.
-pub const WIFI_STATUS_POINT: Point = Point::new(3, 0);
-
-/// Top-left of the digital time band. The time begins about two-thirds of the
-/// way across the screen and sits 3 px below the top edge.
-const TIME_POINT: Point = Point::new((ORIENTATION.width() * 2 / 3) as i32, 3);
-
 /// Region (size) of the WiFi-status band; the shim draws WiFi messages here.
-/// Spans the whole top of the screen from `WIFI_STATUS_POINT` across to where
-/// the digital time begins (~2/3 of the width), and is 22 px tall.
-pub const WIFI_STATUS_SIZE: Size =
-    Size::new(TIME_POINT.x as u32 - WIFI_STATUS_POINT.x as u32, 22);
+/// Sized for the 7×13 top font: "WiFi: OK" is 8×7 = 56 px wide and the band is
+/// 22 px tall, leaving the rest of the row for the time text.
+pub const WIFI_STATUS_SIZE: Size = Size::new(155, 14);
+/// Top-left of the WiFi-status band.
+pub const WIFI_STATUS_POINT: Point = Point::new(6, 6);
+
 const TIME_SIZE: Size = Size::new(
-    ORIENTATION.width() - TIME_POINT.x as u32,
+    ORIENTATION.width() - WIFI_STATUS_SIZE.width,
     WIFI_STATUS_SIZE.height,
+);
+const TIME_POINT: Point = Point::new(
+    WIFI_STATUS_POINT.x + WIFI_STATUS_SIZE.width as i32,
+    WIFI_STATUS_POINT.y,
 );
 
 const BELOW_WIFI_TIME: u32 = max_u32(
@@ -200,13 +217,23 @@ where
             let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
             let (hour_12, minute, _) = h12_m_s(local_time);
-            let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-            draw_hanging_placard(
-                &mut target,
-                pose_to_point(left_hand_pose),
-                hour_12 as u32,
-                "H",
+
+            // Hours sign: blit the bitmap placard (cord, body and baked-in "H")
+            // anchored under the left hand, then overlay the hour value. This is
+            // drawn straight onto the tile (a `PixelTarget`) in tile-local
+            // coordinates, the same way the clock-face background is.
+            let hours_anchor = pose_to_point(left_hand_pose);
+            let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
+            HOURS_SIGN.draw_at(
+                &mut tile_frame,
+                (
+                    hours_top_left.x - tile.top_left.x,
+                    hours_top_left.y - tile.top_left.y,
+                ),
             );
+
+            let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
+            draw_centered_hours_value(&mut target, hours_top_left, hour_12 as u32);
             draw_hanging_placard(
                 &mut target,
                 pose_to_point(right_hand_pose),
@@ -225,9 +252,8 @@ where
 // ── Clock time ────────────────────────────────────────────────────────────────
 
 /// Format a 12-hour clock string with AM/PM. The hour is space-padded to two
-/// characters (e.g. " 5:04:32 PM" or "12:04:32 PM") and the whole string is
-/// right-justified within the time band (144 px ÷ 7 px/char = 20 chars) so it
-/// sits against the band's right edge.
+/// characters (e.g. " 5:04:32 PM" or "12:04:32 PM") so the colon stays aligned,
+/// but the string starts at the band's left edge with no leading spaces.
 fn text_12h(local_time: &OffsetDateTime) -> heapless::String<24> {
     let (hour_12, minute, second) = h12_m_s(local_time);
     let suffix = if local_time.hour() % 24 < 12 {
@@ -235,17 +261,15 @@ fn text_12h(local_time: &OffsetDateTime) -> heapless::String<24> {
     } else {
         "PM"
     };
-    // Build the time, then right-justify the whole thing to the band width so it
-    // hugs the right edge (leading spaces push it over; the hour stays padded).
-    let mut inner = heapless::String::<16>::new();
+    // The hour is space-padded to two characters (so " 5:04:32 PM" lines up with
+    // "12:04:32 PM"), but the string starts at the left edge with no extra leading
+    // spaces.
+    let mut text = heapless::String::new();
     core::fmt::write(
-        &mut inner,
+        &mut text,
         format_args!("{hour_12:>2}:{minute:02}:{second:02} {suffix}"),
     )
-    .expect("clock string fits in 16 bytes");
-    let mut text = heapless::String::new();
-    core::fmt::write(&mut text, format_args!("{inner:>20}"))
-        .expect("clock string fits in 24 bytes");
+    .expect("clock string fits in 24 bytes");
     text
 }
 
@@ -320,6 +344,25 @@ fn draw_centered_text<D>(
     Text::with_text_style(text, center, MonoTextStyle::new(font, color), text_style)
         .draw(target)
         .expect("drawing to an Infallible target cannot fail");
+}
+
+/// Overlay the two-digit hour value onto the blitted [`HOURS_SIGN`] bitmap,
+/// centered in the open area of the sign body above its baked-in "H".
+/// `sign_top_left` is the screen point where the bitmap's top-left was drawn.
+fn draw_centered_hours_value<D>(target: &mut D, sign_top_left: Point, number: u32)
+where
+    D: DrawTarget<Color = Rgb565, Error = Infallible>,
+{
+    let mut value_text = heapless::String::<4>::new();
+    core::fmt::write(&mut value_text, format_args!("{:02}", number % 100))
+        .expect("two-digit hour value fits in 4 bytes");
+    draw_centered_text(
+        target,
+        &value_text,
+        sign_top_left + HOURS_SIGN_VALUE_CENTER,
+        &FONT_10X20,
+        Rgb565::from(PLACARD_TEXT),
+    );
 }
 
 /// Draw a hanging number sign anchored at `anchor` (a hand mark in skeleton-clock

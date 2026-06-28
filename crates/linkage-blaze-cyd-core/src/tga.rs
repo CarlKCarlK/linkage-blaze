@@ -20,7 +20,7 @@
 //! Anything outside this subset triggers a `const` panic, so an unsupported file
 //! fails the build rather than at runtime.
 
-use linkage_blaze_core::{pixel_put, PixelTarget, Rgb888};
+use linkage_blaze_core::{pixel_put_565, PixelTarget};
 
 /// An opaque RGB565 image decoded from a TGA at compile time.
 ///
@@ -160,8 +160,12 @@ impl<const W: usize, const H: usize, const N: usize> Image565<W, H, N> {
         while y < H {
             let mut x = 0;
             while x < W {
-                let color = rgb565_to_rgb888(self.pixels[y * W + x]);
-                pixel_put(target, top_left.0 + x as i32, top_left.1 + y as i32, color);
+                pixel_put_565(
+                    target,
+                    top_left.0 + x as i32,
+                    top_left.1 + y as i32,
+                    self.pixels[y * W + x],
+                );
                 x += 1;
             }
             y += 1;
@@ -212,6 +216,90 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize>
         Self { pixels, opaque }
     }
 
+    /// Decodes `bytes` (an embedded `.tga`) into an RGB565 image, treating
+    /// magenta (full red, full blue, near-zero green) as the transparent
+    /// color-key instead of using the alpha channel. Useful for art exported
+    /// without alpha, where a magenta backdrop marks the transparent areas.
+    ///
+    /// A pixel is transparent when `red >= 200 && blue >= 200 && green <= 60`,
+    /// which also catches the anti-aliased fringe of the key color. Panics at
+    /// compile time under the same conditions as [`from_tga`](Self::from_tga).
+    pub const fn from_tga_magenta(bytes: &[u8]) -> Self {
+        assert!(N == W * H, "Image565Mask: N must equal W * H");
+        assert!(
+            MASK_N == (W * H + 7) / 8,
+            "Image565Mask: MASK_N must equal (W * H + 7) / 8"
+        );
+        let (pixel_start, bytes_per_pixel, top_origin) = parse_header(bytes, W, H);
+
+        let mut pixels = [0u16; N];
+        let mut opaque = [0u8; MASK_N];
+        let mut y = 0;
+        while y < H {
+            let mut x = 0;
+            while x < W {
+                let offset = source_offset(pixel_start, bytes_per_pixel, top_origin, W, H, x, y);
+                let blue = bytes[offset];
+                let green = bytes[offset + 1];
+                let red = bytes[offset + 2];
+                let index = y * W + x;
+                pixels[index] = to_rgb565(red, green, blue);
+                // Magenta color-key: transparent where red and blue are high and
+                // green is low (covers the anti-aliased fringe of pure magenta).
+                let is_magenta = red >= 200 && blue >= 200 && green <= 60;
+                if !is_magenta {
+                    opaque[index / 8] |= 1 << (index % 8);
+                }
+                x += 1;
+            }
+            y += 1;
+        }
+
+        Self { pixels, opaque }
+    }
+
+    /// Decodes `bytes` (an embedded `.tga`) into an RGB565 image, treating
+    /// white (all channels near full) as the transparent color-key instead of
+    /// using the alpha channel. Useful for art exported on a white backdrop with
+    /// an unused (all-opaque) alpha channel.
+    ///
+    /// A pixel is transparent when `red >= 220 && green >= 220 && blue >= 220`,
+    /// which also catches the anti-aliased fringe of the white key. Panics at
+    /// compile time under the same conditions as [`from_tga`](Self::from_tga).
+    pub const fn from_tga_white(bytes: &[u8]) -> Self {
+        assert!(N == W * H, "Image565Mask: N must equal W * H");
+        assert!(
+            MASK_N == (W * H + 7) / 8,
+            "Image565Mask: MASK_N must equal (W * H + 7) / 8"
+        );
+        let (pixel_start, bytes_per_pixel, top_origin) = parse_header(bytes, W, H);
+
+        let mut pixels = [0u16; N];
+        let mut opaque = [0u8; MASK_N];
+        let mut y = 0;
+        while y < H {
+            let mut x = 0;
+            while x < W {
+                let offset = source_offset(pixel_start, bytes_per_pixel, top_origin, W, H, x, y);
+                let blue = bytes[offset];
+                let green = bytes[offset + 1];
+                let red = bytes[offset + 2];
+                let index = y * W + x;
+                pixels[index] = to_rgb565(red, green, blue);
+                // White color-key: transparent where all channels are near full
+                // (covers the anti-aliased fringe of pure white).
+                let is_white = red >= 220 && green >= 220 && blue >= 220;
+                if !is_white {
+                    opaque[index / 8] |= 1 << (index % 8);
+                }
+                x += 1;
+            }
+            y += 1;
+        }
+
+        Self { pixels, opaque }
+    }
+
     /// Returns whether pixel `index` (row-major) is opaque.
     pub const fn is_opaque(&self, index: usize) -> bool {
         self.opaque[index / 8] & (1 << (index % 8)) != 0
@@ -228,26 +316,20 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize>
             while x < W {
                 let index = y * W + x;
                 if self.is_opaque(index) {
-                    let color = rgb565_to_rgb888(self.pixels[index]);
-                    pixel_put(target, top_left.0 + x as i32, top_left.1 + y as i32, color);
+                    // todo00000000 This drew pixels 565->888->565 via `put_pixel`,
+                    // re-packing on every write. Now fixed: `pixel_put_565` hands
+                    // the raw RGB565 straight to RGB565 framebuffers (the CYD
+                    // frames override `put_pixel_565`). NOTE: may no longer apply —
+                    // the old 565->888->565 round-trip was in fact exact (the high
+                    // bits survive), so this was a redundant-work fix, not a
+                    // precision fix; targets without a 565 override still expand.
+                    pixel_put_565(target, top_left.0 + x as i32, top_left.1 + y as i32, self.pixels[index]);
                 }
                 x += 1;
             }
             y += 1;
         }
     }
-}
-
-/// Expands RGB565 back to RGB888 for drawing onto a [`PixelTarget`], replicating
-/// high bits into the low bits so full-scale channels stay full-scale.
-fn rgb565_to_rgb888(rgb565: u16) -> Rgb888 {
-    let red5 = (rgb565 >> 11) & 0x1f;
-    let green6 = (rgb565 >> 5) & 0x3f;
-    let blue5 = rgb565 & 0x1f;
-    let red = ((red5 << 3) | (red5 >> 2)) as u8;
-    let green = ((green6 << 2) | (green6 >> 4)) as u8;
-    let blue = ((blue5 << 3) | (blue5 >> 2)) as u8;
-    Rgb888::new(red, green, blue)
 }
 
 /// Decodes an embedded `.tga` into an [`Image565`], computing the `N = W * H`
@@ -286,6 +368,48 @@ macro_rules! tga565_mask {
             { $width * $height },
             { ($width * $height + 7) / 8 },
         >::from_tga(include_bytes!($path))
+    };
+}
+
+/// Decodes an embedded `.tga` into an [`Image565Mask`] using magenta as the
+/// transparent color-key (see [`Image565Mask::from_tga_magenta`]), computing the
+/// `N = W * H` and `MASK_N = (W * H + 7) / 8` const arguments for you.
+///
+/// ```rust,ignore
+/// # use linkage_blaze_cyd_core::{tga565_magenta_mask, Image565Mask};
+/// const HOUR_SIGN: Image565Mask<34, 46, { 34 * 46 }, { (34 * 46 + 7) / 8 }> =
+///     tga565_magenta_mask!("../assets/hours.small.tga", 34, 46);
+/// ```
+#[macro_export]
+macro_rules! tga565_magenta_mask {
+    ($path:expr, $width:expr, $height:expr) => {
+        $crate::Image565Mask::<
+            $width,
+            $height,
+            { $width * $height },
+            { ($width * $height + 7) / 8 },
+        >::from_tga_magenta(include_bytes!($path))
+    };
+}
+
+/// Decodes an embedded `.tga` into an [`Image565Mask`] using white as the
+/// transparent color-key (see [`Image565Mask::from_tga_white`]), computing the
+/// `N = W * H` and `MASK_N = (W * H + 7) / 8` const arguments for you.
+///
+/// ```rust,ignore
+/// # use linkage_blaze_cyd_core::{tga565_white_mask, Image565Mask};
+/// const HOUR_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
+///     tga565_white_mask!("../assets/hours.small.tga", 45, 73);
+/// ```
+#[macro_export]
+macro_rules! tga565_white_mask {
+    ($path:expr, $width:expr, $height:expr) => {
+        $crate::Image565Mask::<
+            $width,
+            $height,
+            { $width * $height },
+            { ($width * $height + 7) / 8 },
+        >::from_tga_white(include_bytes!($path))
     };
 }
 
