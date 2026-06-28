@@ -12,14 +12,7 @@
 //! band), and [`max_usize`] combines pixel counts so a shared buffer can be sized
 //! as the max of every frame an app flushes.
 
-use embedded_graphics::{
-    Pixel,
-    prelude::{Dimensions, DrawTarget, Point, Size},
-    primitives::Rectangle,
-};
-use linkage_blaze_core::{PixelTarget, Rgb888};
-
-use crate::translated::TranslatedDrawTarget;
+use embedded_graphics::prelude::{Point, Size};
 
 /// `const fn` maximum of two `usize` values.
 ///
@@ -66,73 +59,6 @@ impl Region {
     #[must_use]
     pub const fn pixel_count(&self) -> usize {
         self.size.width as usize * self.size.height as usize
-    }
-}
-
-/// A single tile produced by [`TileGrid`], in physical-screen coordinates.
-///
-/// The final column/row of a grid may be narrower/shorter than the nominal tile
-/// size when the region does not divide evenly by the tile counts, so always
-/// use `size` rather than the grid's derived tile size when allocating a frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Tile {
-    pub top_left: Point,
-    pub size: Size,
-}
-
-/// A tile-local target that accepts drawing in physical-screen coordinates.
-pub struct TileTarget<'a, D> {
-    translated: TranslatedDrawTarget<'a, D>,
-}
-
-impl Tile {
-    /// Wrap `target` so drawing commands use physical-screen coordinates.
-    ///
-    /// The returned target subtracts this tile's [`top_left`](Self::top_left)
-    /// from every draw operation before writing into the tile-local frame.
-    pub fn target<'a, D>(&self, target: &'a mut D) -> TileTarget<'a, D>
-    where
-        D: DrawTarget + PixelTarget,
-    {
-        TileTarget {
-            translated: TranslatedDrawTarget::new(target, self.top_left),
-        }
-    }
-}
-
-impl<D: DrawTarget> Dimensions for TileTarget<'_, D> {
-    fn bounding_box(&self) -> Rectangle {
-        self.translated.bounding_box()
-    }
-}
-
-impl<D: DrawTarget> DrawTarget for TileTarget<'_, D> {
-    type Color = D::Color;
-    type Error = D::Error;
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
-    {
-        self.translated.draw_iter(pixels)
-    }
-}
-
-impl<D: PixelTarget> PixelTarget for TileTarget<'_, D> {
-    fn width(&self) -> usize {
-        self.translated.width()
-    }
-
-    fn height(&self) -> usize {
-        self.translated.height()
-    }
-
-    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        self.translated.put_pixel(x, y, color);
-    }
-
-    fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
-        self.translated.put_pixel_565(x, y, rgb565);
     }
 }
 
@@ -211,9 +137,15 @@ impl TileGrid {
         widest * tallest
     }
 
-    /// The tile at `(column, row)`, or `None` if it lies outside the region.
+    /// The tile at `(column, row)` as `(size, top_left)` in physical-screen
+    /// coordinates, or `None` if it lies outside the region.
+    ///
+    /// The final column/row of a grid may be narrower/shorter than the nominal
+    /// tile size when the region does not divide evenly by the tile counts, so
+    /// always use the returned `size` rather than the grid's derived tile size
+    /// when allocating a frame.
     #[must_use]
-    pub fn tile(&self, column: usize, row: usize) -> Option<Tile> {
+    pub(crate) fn tile(&self, column: usize, row: usize) -> Option<(Size, Point)> {
         let tile_width = self.tile_width();
         let tile_height = self.tile_height();
         let column_offset = column * tile_width;
@@ -227,53 +159,12 @@ impl TileGrid {
 
         let width = min_usize(tile_width, region_width - column_offset);
         let height = min_usize(tile_height, region_height - row_offset);
-        Some(Tile {
-            top_left: Point::new(
-                self.top_left.x + column_offset as i32,
-                self.top_left.y + row_offset as i32,
-            ),
-            size: Size::new(width as u32, height as u32),
-        })
-    }
-
-    /// Iterate over all tiles in row-major order (each row left-to-right).
-    #[must_use]
-    pub fn tiles(&self) -> TileIter {
-        TileIter {
-            grid: *self,
-            column: 0,
-            row: 0,
-        }
-    }
-}
-
-/// Iterator over the tiles of a [`TileGrid`], yielded in row-major order.
-pub struct TileIter {
-    grid: TileGrid,
-    column: usize,
-    row: usize,
-}
-
-impl Iterator for TileIter {
-    type Item = Tile;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let columns = self.grid.columns();
-        let rows = self.grid.rows();
-        loop {
-            if self.row >= rows {
-                return None;
-            }
-            let tile = self.grid.tile(self.column, self.row);
-            self.column += 1;
-            if self.column >= columns {
-                self.column = 0;
-                self.row += 1;
-            }
-            if tile.is_some() {
-                return tile;
-            }
-        }
+        let size = Size::new(width as u32, height as u32);
+        let top_left = Point::new(
+            self.top_left.x + column_offset as i32,
+            self.top_left.y + row_offset as i32,
+        );
+        Some((size, top_left))
     }
 }
 
@@ -302,10 +193,10 @@ mod tests {
     fn final_row_is_clipped() {
         // Origin y = 34, region height 286 → last row (row 2) starts at offset
         // 192 and is clipped from 96 to 94 px high.
-        let last_row = BODY_GRID.tile(0, 2).expect("tile (0, 2) is in range");
-        assert_eq!(last_row.top_left, Point::new(0, 34 + 192));
-        assert_eq!(last_row.size.height, 94);
-        assert_eq!(last_row.size.width, 80);
+        let (size, top_left) = BODY_GRID.tile(0, 2).expect("tile (0, 2) is in range");
+        assert_eq!(top_left, Point::new(0, 34 + 192));
+        assert_eq!(size.height, 94);
+        assert_eq!(size.width, 80);
     }
 
     #[test]
@@ -314,8 +205,8 @@ mod tests {
         let grid = TileGrid::new(Point::new(0, 0), Size::new(240, 288), 3, 3);
         assert_eq!(grid.tile_width(), 80);
         assert_eq!(grid.tile_height(), 96);
-        let corner = grid.tile(2, 2).expect("tile (2, 2) is in range");
-        assert_eq!(corner.size, Size::new(80, 96));
+        let (size, _top_left) = grid.tile(2, 2).expect("tile (2, 2) is in range");
+        assert_eq!(size, Size::new(80, 96));
     }
 
     #[test]
@@ -328,16 +219,17 @@ mod tests {
         assert_eq!(grid.tile_width(), 63);
         assert_eq!(grid.tile_height(), 73);
 
-        let last_column = grid.tile(3, 0).expect("tile (3, 0) is in range");
-        assert_eq!(last_column.top_left, Point::new(5 + 189, 7));
-        assert_eq!(last_column.size.width, 61);
-        assert_eq!(last_column.size.height, 73);
+        let (last_column_size, last_column_top_left) =
+            grid.tile(3, 0).expect("tile (3, 0) is in range");
+        assert_eq!(last_column_top_left, Point::new(5 + 189, 7));
+        assert_eq!(last_column_size.width, 61);
+        assert_eq!(last_column_size.height, 73);
 
-        let last_row = grid.tile(0, 3).expect("tile (0, 3) is in range");
-        assert_eq!(last_row.size.height, 71);
+        let (last_row_size, _) = grid.tile(0, 3).expect("tile (0, 3) is in range");
+        assert_eq!(last_row_size.height, 71);
 
-        let corner = grid.tile(3, 3).expect("tile (3, 3) is in range");
-        assert_eq!(corner.size, Size::new(61, 71));
+        let (corner_size, _) = grid.tile(3, 3).expect("tile (3, 3) is in range");
+        assert_eq!(corner_size, Size::new(61, 71));
 
         // Out of range in either axis is None.
         assert_eq!(grid.tile(4, 0), None);
@@ -393,13 +285,12 @@ mod tests {
     }
 
     #[test]
-    fn tiles_iter_visits_every_tile_once() {
-        let tiles: heapless::Vec<Tile, 16> = BODY_GRID.tiles().collect();
-        assert_eq!(tiles.len(), 9);
-        // Row-major: first three share the same y, then the next row.
-        assert_eq!(tiles[0].top_left, Point::new(0, 34));
-        assert_eq!(tiles[1].top_left, Point::new(80, 34));
-        assert_eq!(tiles[2].top_left, Point::new(160, 34));
-        assert_eq!(tiles[3].top_left, Point::new(0, 34 + 96));
+    fn tile_grid_is_row_major() {
+        // Row-major walk over (column, row): each row left-to-right, top-to-bottom.
+        let top_left = |column, row| BODY_GRID.tile(column, row).expect("tile in range").1;
+        assert_eq!(top_left(0, 0), Point::new(0, 34));
+        assert_eq!(top_left(1, 0), Point::new(80, 34));
+        assert_eq!(top_left(2, 0), Point::new(160, 34));
+        assert_eq!(top_left(0, 1), Point::new(0, 34 + 96));
     }
 }

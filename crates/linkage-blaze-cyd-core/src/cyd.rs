@@ -14,12 +14,14 @@
 use core::{convert::Infallible, future::Future};
 
 use embedded_graphics::{
+    Pixel,
     pixelcolor::Rgb565,
-    prelude::{DrawTarget, Point, Size},
+    prelude::{Dimensions, DrawTarget, Point, Size},
+    primitives::Rectangle,
 };
-use linkage_blaze_core::PixelTarget;
+use linkage_blaze_core::{PixelTarget, Rgb888};
 
-use crate::TouchInputEvent;
+use crate::{TouchInputEvent, tiling::TileGrid, translated::TranslatedDrawTarget};
 
 /// A CYD display: hands out cleared, region-sized frames and reads calibrated touch.
 pub trait Cyd {
@@ -51,6 +53,151 @@ pub trait Cyd {
     /// Returns `Ok(None)` when there is no pending touch (including devices
     /// constructed without touch). Errors only on a hardware/read failure.
     fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, Self::Error>;
+
+    /// Drive `grid` as a sequence of low-memory tiles.
+    ///
+    /// The returned [`Tiles`] is a lending/streaming iterator (it does not
+    /// implement [`Iterator`], because each [`Tile`] borrows the device's single
+    /// reusable frame buffer). Each tile draws in physical-screen coordinates,
+    /// knows its own position, and is presented with [`Tile::flush`]:
+    ///
+    /// ```rust,no_run
+    /// # use linkage_blaze_cyd_core::{Cyd, tiling::TileGrid};
+    /// # async fn draw<C: Cyd>(cyd: &mut C, grid: TileGrid) -> Result<(), C::Error> {
+    /// let mut tiles = cyd.tiles(grid);
+    /// while let Some(mut tile) = tiles.next() {
+    ///     // draw into `tile` in screen coordinates...
+    ///     tile.flush().await?;
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn tiles(&mut self, grid: TileGrid) -> Tiles<'_, Self>
+    where
+        Self: Sized,
+    {
+        Tiles {
+            cyd: self,
+            grid,
+            column: 0,
+            row: 0,
+        }
+    }
+}
+
+/// A lending/streaming iterator over a [`TileGrid`]'s tiles.
+///
+/// Created by [`Cyd::tiles`]. This deliberately does *not* implement
+/// [`Iterator`]: each [`Tile`] borrows the device's single reusable frame
+/// buffer, so only one tile can be live at a time. Iterate with a
+/// `while let Some(mut tile) = tiles.next()` loop.
+pub struct Tiles<'a, C: Cyd> {
+    cyd: &'a mut C,
+    grid: TileGrid,
+    column: usize,
+    row: usize,
+}
+
+impl<C: Cyd> Tiles<'_, C> {
+    /// Borrow the next tile, cleared to the device background color, or `None`
+    /// once every tile has been yielded.
+    ///
+    /// Tiles are visited in row-major order (each row left-to-right), skipping
+    /// any `(column, row)` that falls entirely outside the region.
+    // This is a lending iterator: each `Tile` borrows the device's single
+    // reusable frame buffer, so it cannot implement `Iterator` (whose `next`
+    // returns an item that outlives the `&mut self` borrow). The `next` name is
+    // the intended call shape, so allow the trait-shape lint here.
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Option<Tile<'_, C>> {
+        let (columns, rows) = (self.grid.columns(), self.grid.rows());
+        loop {
+            if self.row >= rows {
+                return None;
+            }
+            let size_and_top_left = self.grid.tile(self.column, self.row);
+            self.column += 1;
+            if self.column >= columns {
+                self.column = 0;
+                self.row += 1;
+            }
+            if let Some((size, top_left)) = size_and_top_left {
+                return Some(Tile {
+                    frame: self.cyd.frame_mut(size),
+                    top_left,
+                    size,
+                });
+            }
+        }
+    }
+}
+
+/// A single tile's frame, drawn in physical-screen coordinates.
+///
+/// Yielded by [`Tiles::next`]. Drawing commands use physical-screen coordinates
+/// (the tile's [`top_left`](Self::top_left) is subtracted before writing into
+/// the tile-local buffer), and [`flush`](Self::flush) presents the tile at that
+/// same position.
+pub struct Tile<'a, C: Cyd + 'a> {
+    frame: C::Frame<'a>,
+    top_left: Point,
+    size: Size,
+}
+
+impl<'a, C: Cyd + 'a> Tile<'a, C> {
+    /// This tile's top-left corner in physical-screen coordinates.
+    #[must_use]
+    pub fn top_left(&self) -> Point {
+        self.top_left
+    }
+
+    /// This tile's size in pixels.
+    #[must_use]
+    pub fn size(&self) -> Size {
+        self.size
+    }
+
+    /// Present this tile's pixels at its [`top_left`](Self::top_left).
+    pub async fn flush(&mut self) -> Result<(), C::Error> {
+        self.frame.flush_at(self.top_left).await
+    }
+}
+
+impl<'a, C: Cyd + 'a> Dimensions for Tile<'a, C> {
+    fn bounding_box(&self) -> Rectangle {
+        let bounding_box = self.frame.bounding_box();
+        Rectangle::new(bounding_box.top_left + self.top_left, bounding_box.size)
+    }
+}
+
+impl<'a, C: Cyd + 'a> DrawTarget for Tile<'a, C> {
+    type Color = Rgb565;
+    type Error = Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        TranslatedDrawTarget::new(&mut self.frame, self.top_left).draw_iter(pixels)
+    }
+}
+
+impl<'a, C: Cyd + 'a> PixelTarget for Tile<'a, C> {
+    fn width(&self) -> usize {
+        self.top_left.x as usize + self.frame.width()
+    }
+
+    fn height(&self) -> usize {
+        self.top_left.y as usize + self.frame.height()
+    }
+
+    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
+        TranslatedDrawTarget::new(&mut self.frame, self.top_left).put_pixel(x, y, color);
+    }
+
+    fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
+        TranslatedDrawTarget::new(&mut self.frame, self.top_left).put_pixel_565(x, y, rgb565);
+    }
 }
 
 /// A single in-progress frame: a `Rgb565` draw target that can be flushed.
