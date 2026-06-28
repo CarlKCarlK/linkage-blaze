@@ -19,9 +19,9 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydEsp, CydError, CydStaticEsp, tiling::max_usize};
+use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, tiling::max_usize};
 use linkage_blaze_example_core::skeleton_clock::{
-    self, BACKGROUND, FIGURE_TILES, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_POINT,
+    self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_POINT,
     WIFI_STATUS_SIZE, skeleton_clock,
 };
 use log::info;
@@ -56,7 +56,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     // or a wi-fi or time message.
     const BUFFER_PIXEL_COUNT: usize = max_usize(
         (WIFI_STATUS_SIZE.width * WIFI_STATUS_SIZE.height) as usize,
-        FIGURE_TILES.max_tile_pixel_count(),
+        FIGURE_TILE_GRID.max_tile_pixel_count(),
     );
     static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
     let mut cyd = CydEsp::new_display_only(
