@@ -3679,7 +3679,7 @@ impl DrawItem {
     /// Project this 3D/linkage-space item through `projection` into a
     /// 2D/screen-space [`ProjectedDrawItem`] ready to [`draw`](ProjectedDrawItem::draw).
     #[must_use]
-    pub fn project<P: Projection>(self, projection: &P) -> ProjectedDrawItem {
+    pub fn project(self, projection: &Projection) -> ProjectedDrawItem {
         match self {
             DrawItem::Stroke(stroke) => ProjectedDrawItem::Stroke {
                 start: projection.project_pos(stroke.start()),
@@ -3851,17 +3851,6 @@ impl ProjectedDrawItem {
 ///
 /// All `project_*` methods return pixel-space values. Perspective renderers
 /// use the `pose` argument to apply depth-based scaling where needed.
-pub trait Projection {
-    /// Project a pose's position to pixel-space `(x, y)`.
-    fn project_pos(&self, pose: Pose) -> (f32, f32);
-    /// Project a world-space direction vector (scaled by `radius`) to pixel-space.
-    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32);
-    /// Scale a world-space sphere radius to pixel-space.
-    fn project_radius(&self, pose: Pose, radius: f32) -> f32;
-    /// Scale a world-space stroke width to pixel-space.
-    fn project_width(&self, width: f32) -> f32;
-}
-
 /// Draws 2D primitives in pixel space. All coordinates and sizes are pre-scaled.
 pub trait DrawSurface {
     fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32);
@@ -3877,9 +3866,8 @@ pub trait DrawSurface {
 
 /// Render draw items through a projection and surface. Handles the Disk→ellipse
 /// conversion so every renderer automatically gets correct foreshortening.
-pub fn render_draw_items<P, S>(proj: &P, surface: &mut S, items: impl Iterator<Item = DrawItem>)
+pub fn render_draw_items<S>(proj: &Projection, surface: &mut S, items: impl Iterator<Item = DrawItem>)
 where
-    P: Projection,
     S: DrawSurface,
 {
     for item in items {
@@ -4046,11 +4034,11 @@ pub fn to_point(xy: (f32, f32)) -> embedded_graphics::prelude::Point {
 /// Use the named constructors rather than building the matrix by hand:
 ///
 /// ```rust,no_run
-/// # use linkage_blaze_core::CameraProjection;
-/// let ortho = CameraProjection::neg_x_ortho(84.0, 300.0, 1.575);
-/// let persp = CameraProjection::neg_x_perspective(120.0, 160.0, 15.0, 30.0);
+/// # use linkage_blaze_core::Projection;
+/// let ortho = Projection::front_ortho(84.0, 300.0, 1.575);
+/// let persp = Projection::front_perspective(120.0, 160.0, 15.0, 30.0);
 /// ```
-pub struct CameraProjection {
+pub struct Projection {
     rotation: Mat3,
     center_x: f32,
     center_y: f32,
@@ -4061,14 +4049,11 @@ pub struct CameraProjection {
 
 /// World Y → screen X, world Z → screen Y, world X → depth.
 const NEG_X_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
-/// Robot ortho: +Z up, +Y left, drops X. Screen X is sourced from world Y
-/// negated relative to [`NEG_X_BASIS`] so +Y renders to the left.
-const ROBOT_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]]);
 
-impl CameraProjection {
-    /// Orthographic, looking along negative X: world Y → screen X (negated),
-    /// world Z → screen Y (negated). Replaces the old `NegXProjection`.
-    pub const fn neg_x_ortho(center_x: f32, baseline_y: f32, scale: f32) -> Self {
+impl Projection {
+    /// Orthographic front view, looking along negative X: world Y → screen X
+    /// (negated), world Z → screen Y (negated).
+    pub const fn front_ortho(center_x: f32, baseline_y: f32, scale: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
             center_x,
@@ -4078,26 +4063,15 @@ impl CameraProjection {
         }
     }
 
-    /// Perspective, looking along negative X (same axes as [`Self::neg_x_ortho`]).
-    /// Replaces the old `PerspectiveNegXProjection`.
-    pub const fn neg_x_perspective(center_x: f32, center_y: f32, scale: f32, focal: f32) -> Self {
+    /// Perspective front view, looking along negative X (same axes as
+    /// [`Self::front_ortho`]).
+    pub const fn front_perspective(center_x: f32, center_y: f32, scale: f32, focal: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
             center_x,
             center_y,
             scale,
             focal: Some(focal),
-        }
-    }
-
-    /// Robot orthographic view: +Z up, +Y left, drops X.
-    pub const fn robot_ortho(center_x: f32, center_y: f32, scale: f32) -> Self {
-        Self {
-            rotation: ROBOT_BASIS,
-            center_x,
-            center_y,
-            scale,
-            focal: None,
         }
     }
 
@@ -4122,28 +4096,30 @@ impl CameraProjection {
             Some(focal) => focal / (focal + depth).max(focal * 0.05),
         }
     }
-}
 
-impl Projection for CameraProjection {
-    fn project_pos(&self, pose: Pose) -> (f32, f32) {
+    /// Project a pose's position to pixel-space `(x, y)`.
+    pub fn project_pos(&self, pose: Pose) -> (f32, f32) {
         let c = self.cam(pose.position());
         let k = self.scale * self.depth_factor(c[0]);
         (self.center_x - c[1] * k, self.center_y - c[2] * k)
     }
 
-    fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
+    /// Project a world-space direction vector (scaled by `radius`) to pixel-space.
+    pub fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
         let factor = self.depth_factor(self.cam(pose.position())[0]);
         let d = self.cam(world_dir);
         let r = radius * self.scale * factor;
         (-d[1] * r, -d[2] * r)
     }
 
-    fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
+    /// Scale a world-space sphere radius to pixel-space.
+    pub fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
         let factor = self.depth_factor(self.cam(pose.position())[0]);
         radius * self.scale * factor
     }
 
-    fn project_width(&self, width: f32) -> f32 {
+    /// Scale a world-space stroke width to pixel-space.
+    pub fn project_width(&self, width: f32) -> f32 {
         (width * self.scale).max(1.0)
     }
 }

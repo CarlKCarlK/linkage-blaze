@@ -17,7 +17,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{
-    CameraProjection, LinkageFixed, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
+    LinkageFixed, Projection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
     linkage_fixed,
 };
 
@@ -46,8 +46,8 @@ const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>:
     .combine(LINKAGE0);
 
 // todo000 still to understand projections.
-const PROJECTION: CameraProjection =
-    CameraProjection::neg_x_ortho(CENTER_X as f32, BASELINE_Y as f32, SCALE);
+const PROJECTION: Projection =
+    Projection::front_ortho(CENTER_X as f32, BASELINE_Y as f32, SCALE);
 
 // ── Generic entry point ────────────────────────────────────────────────────────
 

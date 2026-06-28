@@ -1,11 +1,5 @@
 //! The generic "skeleton clock" example: a motion-captured figure whose limbs
 //! act as clock hands, with hour/minute placards hanging from its hands.
-//!
-//! This is the device-agnostic core — modeled on device-envoy's
-//! `conway_with_led2d_ir_kepler`. It is generic over a [`CydSurface`] display
-//! and a [`ClockSync`] time source, so the same code runs on a real esp32 CYD
-//! and (later) a WASM-simulated one. Platform shims construct the concrete
-//! devices, handle WiFi/clock setup, and then call [`skeleton_clock`].
 
 use core::convert::Infallible;
 
@@ -18,8 +12,8 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    CameraProjection, LinkageFixed, MarkError, PixelTarget, Pose, Projection, Rgb888, linkage,
-    linkage_fixed, to_point,
+    LinkageFixed, MarkError, PixelTarget, Pose, Projection, Rgb888, linkage, linkage_fixed,
+    to_point,
 };
 use log::info;
 use time::OffsetDateTime;
@@ -32,72 +26,62 @@ use linkage_blaze_cyd_core::{
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-/// Device default background color the platform shim should construct its `Cyd`
-/// with (also used to clear every frame).
 pub const BACKGROUND: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal (13, 13, 11)
-// CSS_WHEAT (245, 222, 179) is so light it reads as plain white on the panel
-// (all channels near max). Use a more saturated warm tan so the figure clearly
-// shows a hue on the real device, the way the colored background numerals do.
 const FIGURE: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
-/// Device default foreground/text color the platform shim should construct its
-/// `Cyd` with.
 pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
 const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
 
+// ── Linkage ────────────────────────────────────────────────────────────
+
+// Load the motion-capture linkage converted *.bvh -> *.lb.rs.
+const LINKAGE0: LinkageFixed<132, 6, 600> =
+    linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
+
+// Prepend a linkage drawing style.
+const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
+    .pen_width(3.5)
+    .pen_color(FIGURE)
+    .combine(LINKAGE0);
+
+// Keep only the three clock-driven parameters, then optimize the fixed linkage.
+const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE1
+    // turn the left foot out jauntily.
+    .freeze_param_name::<131>("l_shin_yrotation", 57.6)
+    .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
+    .compact::<400>();
+
+// ── Projection ───────────────────────────────────────────────────────────────
+
+//todo000 review projections.
+
+// Keep only the
+const PROJECTION: Projection = Projection::front_ortho(141.0, 306.0, 1.35);
+
 // ── Background bitmap ──────────────────────────────────────────────────────────
 
-/// Clock-face background, decoded from a 239×319 32-bit TGA at compile time and
-/// drawn behind the figure in place of the old vector dial. Screen-space
-/// top-left where it is blitted (panel is 240×320 portrait).
-const CLOCK_BACK: Image565<239, 319, { 239 * 319 }> =
+/// Clock-face background bitmap, loaded at compile time.
+//todo0000 we need all these numbers?
+//todo0000 is tga565! good?
+const CLOCK_BACK_BITMAP: Image565<239, 319, { 239 * 319 }> =
     tga565!("../assets/clock_back.small.tga", 239, 319);
 const CLOCK_BACK_POINT: Point = Point::new(0, 0);
 
-/// Hanging "hours" sign, decoded from a 45×73 24-bit TGA at compile time with
-/// magenta as the transparent color-key. The art already includes the cord ring,
-/// the sign body, and the "H" label, so it replaces the vector-drawn hours
-/// placard; only the two-digit hour value is overlaid (see [`HOURS_SIGN_*`]).
 const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
     tga565_magenta_mask!("../assets/hours.small.tga", 45, 73);
-/// Bitmap column the cord ring hangs from; the sign is blitted so this column
-/// lands under the hand mark.
 const HOURS_SIGN_ANCHOR_X: i32 = 22;
-/// Bitmap point (relative to its top-left) where the hour value is centered,
-/// in the open area of the sign body above the baked-in "H".
 const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
 
-/// Hanging "minutes" sign, decoded from a 45×77 TGA at compile time with magenta
-/// as the transparent color-key. Like the hours sign, the art already includes
-/// the hanger, the sign body, and the "M" label, so it replaces the vector-drawn
-/// minutes placard; only the two-digit minute value is overlaid
-/// (see [`MINUTE_SIGN_*`]).
 const MINUTE_SIGN: Image565Mask<45, 77, { 45 * 77 }, { (45 * 77 + 7) / 8 }> =
     tga565_magenta_mask!("../assets/minute.small.tga", 45, 77);
-/// Bitmap column the hanger hangs from; the sign is blitted so this column lands
-/// under the hand mark.
 const MINUTE_SIGN_ANCHOR_X: i32 = 22;
-/// Bitmap point (relative to its top-left) where the minute value is centered,
-/// in the open area of the sign body above the baked-in "M".
 const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 
-/// Screen orientation this example's layout assumes; the platform shim MUST
-/// construct its `Cyd` with this orientation so the layout constants match.
 pub const ORIENTATION: Orientation = Orientation::Portrait;
-
-/// Font for the top WiFi/time texts; every platform shim MUST construct its
-/// `Cyd` with this font so the simulator and the real device match (and so the
-/// time band's character-width math below stays correct). 7×13.
 pub const TOP_FONT: MonoFont<'static> = FONT_7X13;
-
-/// Region (size) of the WiFi-status band; the shim draws WiFi messages here.
-/// Sized for the 7×13 top font: "WiFi: OK" is 8×7 = 56 px wide and the band is
-/// 22 px tall, leaving the rest of the row for the time text.
 pub const WIFI_STATUS_SIZE: Size = Size::new(155, 14);
-/// Top-left of the WiFi-status band.
 pub const WIFI_STATUS_POINT: Point = Point::new(6, 6);
-
 const TIME_SIZE: Size = Size::new(
     ORIENTATION.width() - WIFI_STATUS_SIZE.width,
     WIFI_STATUS_SIZE.height,
@@ -107,62 +91,18 @@ const TIME_POINT: Point = Point::new(
     WIFI_STATUS_POINT.y,
 );
 
-const BELOW_WIFI_TIME: u32 = max_u32(
+const FIGURE_Y: u32 = max_u32(
     WIFI_STATUS_POINT.y as u32 + WIFI_STATUS_SIZE.height,
     TIME_POINT.y as u32 + TIME_SIZE.height,
 );
-
-/// The 3×3 grid of tiles the figure is rendered into, below the status band.
-/// The shim uses this to size its shared pixel buffer.
 pub const FIGURE_TILES: TileGrid = TileGrid::new(
-    Point::new(0, BELOW_WIFI_TIME as i32),
-    Size::new(ORIENTATION.width(), ORIENTATION.height() - BELOW_WIFI_TIME),
+    Point::new(0, FIGURE_Y as i32),
+    Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),
     3,
     3,
 );
 
-// ── Projection ───────────────────────────────────────────────────────────────
-
-//todo000 review projections.
-const PROJECTION: CameraProjection = CameraProjection::neg_x_ortho(141.0, 306.0, 1.35);
-
-// ── Linkage constants ─────────────────────────────────────────────────────────
-
-// Load the raw motion-capture linkage.
-const LINKAGE0: LinkageFixed<132, 6, 600> =
-    linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
-
-// Add the drawing style.
-const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
-    .pen_width(3.5)
-    .pen_color(FIGURE)
-    .combine(LINKAGE0);
-
-// Keep only the three clock-driven parameters, then optimize the fixed linkage.
-const LINKAGE: LinkageFixed<3, 6, 400> = LINKAGE1
-    .freeze_param_name::<131>("l_shin_yrotation", 57.6)
-    .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
-    .compact::<400>();
-
-// ── Errors ────────────────────────────────────────────────────────────────────
-
-/// Error from the generic skeleton-clock loop, generic over the surface's flush
-/// error `F`.
-#[derive(Debug)]
-pub enum SkeletonClockError<F> {
-    /// Flushing a frame to the display failed.
-    Flush(F),
-    /// A required figure mark was not found.
-    Mark(MarkError),
-}
-
-impl<F> From<MarkError> for SkeletonClockError<F> {
-    fn from(error: MarkError) -> Self {
-        Self::Mark(error)
-    }
-}
-
-// ── Generic entry point ────────────────────────────────────────────────────────
+// ── Main function ────────────────────────────────────────────────────────
 
 /// Run the skeleton-clock render loop forever, driven by `clock_sync` ticks and
 /// drawn onto `cyd`.
@@ -199,7 +139,7 @@ where
             // bitmap. `tile_frame` is a `PixelTarget` in tile-local coordinates,
             // so a screen point maps to local by subtracting the tile origin;
             // pixels outside the tile are clipped.
-            CLOCK_BACK.draw_at(
+            CLOCK_BACK_BITMAP.draw_at(
                 &mut tile_frame,
                 (
                     CLOCK_BACK_POINT.x - tile.top_left.x,
@@ -417,4 +357,22 @@ fn draw_centered_sign_value<D>(
 // todo0000 shouldn't be needed.
 fn pose_to_point(pose: Pose) -> Point {
     to_point(PROJECTION.project_pos(pose))
+}
+
+// ── Errors ────────────────────────────────────────────────────────────────────
+
+/// Error from the generic skeleton-clock loop, generic over the surface's flush
+/// error `F`.
+#[derive(Debug)]
+pub enum SkeletonClockError<F> {
+    /// Flushing a frame to the display failed.
+    Flush(F),
+    /// A required figure mark was not found.
+    Mark(MarkError),
+}
+
+impl<F> From<MarkError> for SkeletonClockError<F> {
+    fn from(error: MarkError) -> Self {
+        Self::Mark(error)
+    }
 }
