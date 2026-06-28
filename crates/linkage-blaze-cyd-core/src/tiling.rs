@@ -12,8 +12,12 @@
 //! band), and [`max_usize`] combines pixel counts so a shared buffer can be sized
 //! as the max of every frame an app flushes.
 
-use embedded_graphics::prelude::{DrawTarget, Point, Size};
-use linkage_blaze_core::PixelTarget;
+use embedded_graphics::{
+    Pixel,
+    prelude::{Dimensions, DrawTarget, Point, Size},
+    primitives::Rectangle,
+};
+use linkage_blaze_core::{PixelTarget, Rgb888};
 
 use crate::translated::TranslatedDrawTarget;
 
@@ -76,19 +80,59 @@ pub struct Tile {
     pub size: Size,
 }
 
+/// A tile-local target that accepts drawing in physical-screen coordinates.
+pub struct TileTarget<'a, D> {
+    translated: TranslatedDrawTarget<'a, D>,
+}
+
 impl Tile {
     /// Wrap `target` so drawing commands use physical-screen coordinates.
     ///
     /// The returned target subtracts this tile's [`top_left`](Self::top_left)
     /// from every draw operation before writing into the tile-local frame.
-    pub fn target<'a, D>(
-        &self,
-        target: &'a mut D,
-    ) -> impl DrawTarget<Color = D::Color, Error = D::Error> + PixelTarget + 'a
+    pub fn target<'a, D>(&self, target: &'a mut D) -> TileTarget<'a, D>
     where
-        D: DrawTarget + PixelTarget + 'a,
+        D: DrawTarget + PixelTarget,
     {
-        TranslatedDrawTarget::new(target, self.top_left)
+        TileTarget {
+            translated: TranslatedDrawTarget::new(target, self.top_left),
+        }
+    }
+}
+
+impl<D: DrawTarget> Dimensions for TileTarget<'_, D> {
+    fn bounding_box(&self) -> Rectangle {
+        self.translated.bounding_box()
+    }
+}
+
+impl<D: DrawTarget> DrawTarget for TileTarget<'_, D> {
+    type Color = D::Color;
+    type Error = D::Error;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        self.translated.draw_iter(pixels)
+    }
+}
+
+impl<D: PixelTarget> PixelTarget for TileTarget<'_, D> {
+    fn width(&self) -> usize {
+        self.translated.width()
+    }
+
+    fn height(&self) -> usize {
+        self.translated.height()
+    }
+
+    fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
+        self.translated.put_pixel(x, y, color);
+    }
+
+    fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
+        self.translated.put_pixel_565(x, y, rgb565);
     }
 }
 
