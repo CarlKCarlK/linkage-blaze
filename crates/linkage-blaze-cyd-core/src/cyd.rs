@@ -143,34 +143,25 @@ impl<C: Cyd> Tiles<'_, C> {
 ///
 /// Yielded by [`Tiles::next`]. Drawing commands use the parent grid region's
 /// coordinate space (the grid's top-left is `(0, 0)`), and the tile's
-/// [`top_left`](Self::top_left) is subtracted before writing into the tile-local
-/// buffer. [`flush`](Self::flush) still presents the wrapped frame at its
-/// physical-screen position.
+/// [`grid_region`](Self::grid_region) top-left is subtracted before writing
+/// into the tile-local buffer. [`flush`](Self::flush) still presents the
+/// wrapped frame at its physical-screen position.
 pub struct Tile<'a, C: Cyd + 'a> {
     frame: C::Frame<'a>,
     grid_top_left: Point,
 }
 
 impl<'a, C: Cyd + 'a> Tile<'a, C> {
-    /// This tile's region (top-left and size) in its grid region's coordinates.
+    /// This tile's region (top-left and size) in its parent grid's coordinates.
     #[must_use]
-    pub fn region(&self) -> Region {
-        Region::new(self.frame.region().top_left - self.grid_top_left, self.frame.region().size)
+    pub fn grid_region(&self) -> Region {
+        Region::new(
+            self.frame.region().top_left - self.grid_top_left,
+            self.frame.region().size,
+        )
     }
 
-    /// This tile's top-left corner in its grid region's coordinates.
-    #[must_use]
-    pub fn top_left(&self) -> Point {
-        self.region().top_left
-    }
-
-    /// This tile's size in pixels.
-    #[must_use]
-    pub fn size(&self) -> Size {
-        self.region().size
-    }
-
-    /// Present this tile's pixels at its [`top_left`](Self::top_left).
+    /// Present this tile's pixels at its physical-screen position.
     pub async fn flush(&mut self) -> Result<(), C::Error> {
         self.frame.flush().await
     }
@@ -179,7 +170,10 @@ impl<'a, C: Cyd + 'a> Tile<'a, C> {
 impl<'a, C: Cyd + 'a> Dimensions for Tile<'a, C> {
     fn bounding_box(&self) -> Rectangle {
         let bounding_box = self.frame.bounding_box();
-        Rectangle::new(bounding_box.top_left + self.top_left(), bounding_box.size)
+        Rectangle::new(
+            bounding_box.top_left + self.grid_region().top_left,
+            bounding_box.size,
+        )
     }
 }
 
@@ -191,27 +185,27 @@ impl<'a, C: Cyd + 'a> DrawTarget for Tile<'a, C> {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        let top_left = self.top_left();
+        let top_left = self.grid_region().top_left;
         TranslatedDrawTarget::new(&mut self.frame, top_left).draw_iter(pixels)
     }
 }
 
 impl<'a, C: Cyd + 'a> PixelTarget for Tile<'a, C> {
     fn width(&self) -> usize {
-        self.top_left().x as usize + self.frame.width()
+        self.grid_region().top_left.x as usize + self.frame.width()
     }
 
     fn height(&self) -> usize {
-        self.top_left().y as usize + self.frame.height()
+        self.grid_region().top_left.y as usize + self.frame.height()
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        let top_left = self.top_left();
+        let top_left = self.grid_region().top_left;
         TranslatedDrawTarget::new(&mut self.frame, top_left).put_pixel(x, y, color);
     }
 
     fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
-        let top_left = self.top_left();
+        let top_left = self.grid_region().top_left;
         TranslatedDrawTarget::new(&mut self.frame, top_left).put_pixel_565(x, y, rgb565);
     }
 }
