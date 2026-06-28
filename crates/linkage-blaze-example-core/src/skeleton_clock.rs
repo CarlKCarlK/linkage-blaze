@@ -138,10 +138,17 @@ where
 
         // After this 'for' loop, this iterator will know the pose of every mark.
         let mut draw_items = LINKAGE.draw_items(&params);
-        let two_d_items: heapless::Vec<_, { LINKAGE.draw_item_count() }> = (&mut draw_items)
+        let projected_items = draw_items
+            .by_ref()
             .map(|draw_item| draw_item.project(&PROJECTION))
-            .collect();
-        info!("size of two_d_items is {}", two_d_items.len());
+            .collect::<heapless::Vec<_, { LINKAGE.draw_item_count() }>>();
+        let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
+        let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
+        let hours_anchor = pose_to_point(left_hand_pose);
+        let minute_anchor = pose_to_point(right_hand_pose);
+
+        let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
+        let minute_top_left = Point::new(minute_anchor.x - MINUTE_SIGN_ANCHOR_X, minute_anchor.y);
 
         // Draw the figure (via tiles, to save memory)
         // Can't use a `for` loop and Iterator because each tile borrows the
@@ -154,23 +161,15 @@ where
                 two_d_item.draw(&mut tile);
             }
 
-            let right_hand_pose = draw_items.pose_by_mark_name("rMid2")?;
-            let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
-            let hours_anchor = pose_to_point(left_hand_pose);
-            let minute_anchor = pose_to_point(right_hand_pose);
-
-            let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
-            let minute_top_left =
-                Point::new(minute_anchor.x - MINUTE_SIGN_ANCHOR_X, minute_anchor.y);
-
             HOURS_SIGN.at(hours_top_left).draw(&mut tile)?;
+            MINUTE_SIGN.at(minute_top_left).draw(&mut tile)?;
+
             draw_centered_sign_value(
                 &mut tile,
                 hours_top_left,
                 HOURS_SIGN_VALUE_CENTER,
                 hour_12 as u32,
             )?;
-            MINUTE_SIGN.at(minute_top_left).draw(&mut tile)?;
             draw_centered_sign_value(
                 &mut tile,
                 minute_top_left,
