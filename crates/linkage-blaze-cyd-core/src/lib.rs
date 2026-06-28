@@ -15,7 +15,6 @@ pub use cyd::{Cyd, CydFrame};
 pub use orientation::Orientation;
 pub use tga::{Image565, Image565Mask};
 pub use touch_event::TouchInputEvent;
-pub use translated::TranslatedDrawTarget;
 
 /// Native panel width in pixels (landscape). The CYD panel is fixed hardware.
 pub const SCREEN_WIDTH: usize = 320;

@@ -30,11 +30,10 @@ pub use display::{
     LineSegment,
 };
 // The device abstraction and its neutral support types live in
-// `linkage-blaze-cyd-core`; re-export them so existing call sites
-// (`linkage_blaze_cyd::{Orientation, tiling, TranslatedDrawTarget, ...}`) keep working.
+// `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
 pub use linkage_blaze_cyd_core::{
     Cyd as CydDevice, CydFrame as CydFrameTrait, Orientation, SCREEN_HEIGHT, SCREEN_PIXELS,
-    SCREEN_WIDTH, TouchInputEvent, TranslatedDrawTarget, tiling,
+    SCREEN_WIDTH, TouchInputEvent, tiling,
 };
 pub use text::DEFAULT_FONT;
 pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
@@ -627,8 +626,9 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
         let Some(touch) = self.touch.as_mut() else {
             return Ok(None);
         };
-        Ok(touch.read_raw_touch_event().map(|raw_touch_event| {
-            match raw_touch_event {
+        Ok(touch
+            .read_raw_touch_event()
+            .map(|raw_touch_event| match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
                     let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
                     TouchInputEvent::Down { x, y }
@@ -638,8 +638,7 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
                     TouchInputEvent::Move { x, y }
                 }
                 RawTouchEvent::Up => TouchInputEvent::Up,
-            }
-        }))
+            }))
     }
 }
 

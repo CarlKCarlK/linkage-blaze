@@ -12,7 +12,10 @@
 //! band), and [`max_usize`] combines pixel counts so a shared buffer can be sized
 //! as the max of every frame an app flushes.
 
-use embedded_graphics::prelude::{Point, Size};
+use embedded_graphics::prelude::{DrawTarget, Point, Size};
+use linkage_blaze_core::PixelTarget;
+
+use crate::translated::TranslatedDrawTarget;
 
 /// `const fn` maximum of two `usize` values.
 ///
@@ -71,6 +74,22 @@ impl Region {
 pub struct Tile {
     pub top_left: Point,
     pub size: Size,
+}
+
+impl Tile {
+    /// Wrap `target` so drawing commands use physical-screen coordinates.
+    ///
+    /// The returned target subtracts this tile's [`top_left`](Self::top_left)
+    /// from every draw operation before writing into the tile-local frame.
+    pub fn target<'a, D>(
+        &self,
+        target: &'a mut D,
+    ) -> impl DrawTarget<Color = D::Color, Error = D::Error> + PixelTarget + 'a
+    where
+        D: DrawTarget + PixelTarget + 'a,
+    {
+        TranslatedDrawTarget::new(target, self.top_left)
+    }
 }
 
 /// A rectangular body region split into a grid of `columns` × `rows` tiles.

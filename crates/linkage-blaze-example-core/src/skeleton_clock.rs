@@ -21,9 +21,8 @@ use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, Image565, Image565Mask, Orientation, TranslatedDrawTarget, tga565,
-    tga565_magenta_mask,
-    tiling::{TileGrid, max_u32},
+    Cyd, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
+    tiling::{Tile, TileGrid, max_u32},
 };
 
 // ── Palette ──────────────────────────────────────────────────────────────────
@@ -68,7 +67,7 @@ const PROJECTION: Projection =
 /// Clock-face background bitmap, loaded at compile time.
 //todo0000 we need all these numbers?
 //todo0000 is tga565! good?
-const CLOCK_BACK_BITMAP: Image565<239, 319, { 239 * 319 }> =
+const BACKGROUND_BITMAP: Image565<239, 319, { 239 * 319 }> =
     tga565!("../assets/clock_back.small.tga", 239, 319);
 
 const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
@@ -140,15 +139,15 @@ where
         for tile in FIGURE_TILE_GRID.tiles() {
             let mut tile_frame = cyd.frame_mut(tile.size);
 
-            let mut tile_target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-            CLOCK_BACK_BITMAP
-                .draw(&mut tile_target)
-                .expect("drawing to an Infallible target cannot fail");
+            // todo000 understand tile targets (may no longer apply)
+            let mut tile_target = tile.target(&mut tile_frame);
+            BACKGROUND_BITMAP.draw(&mut tile_target)?;
 
             let mut draw_items = LINKAGE.draw_items(&params);
             for draw_item in &mut draw_items {
                 draw_item
                     .project(&PROJECTION)
+                    // todo00 really understand draw_offset (may no longer apply)
                     .draw_offset(&mut tile_frame, tile.top_left);
             }
 
@@ -177,20 +176,20 @@ where
 
             draw_sign(
                 &mut tile_frame,
-                tile.top_left,
+                tile,
                 &HOURS_SIGN,
                 hours_top_left,
                 HOURS_SIGN_VALUE_CENTER,
                 hour_12 as u32,
-            );
+            )?;
             draw_sign(
                 &mut tile_frame,
-                tile.top_left,
+                tile,
                 &MINUTE_SIGN,
                 minute_top_left,
                 MINUTE_SIGN_VALUE_CENTER,
                 minute as u32,
-            );
+            )?;
 
             tile_frame
                 .flush_at(tile.top_left)
@@ -226,10 +225,8 @@ where
 
     for tile in FIGURE_TILE_GRID.tiles() {
         let mut tile_frame = cyd.frame_mut(tile.size);
-        let mut tile_target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-        CLOCK_BACK_BITMAP
-            .draw(&mut tile_target)
-            .expect("drawing to an Infallible target cannot fail");
+        let mut tile_target = tile.target(&mut tile_frame);
+        BACKGROUND_BITMAP.draw(&mut tile_target)?;
         tile_frame
             .flush_at(tile.top_left)
             .await
@@ -366,8 +363,8 @@ const fn str_eq(left: &str, right: &str) -> bool {
 // ── Skeleton-clock-specific overlay drawing ──────────────────────────────────
 
 // All overlay drawing happens against a `DrawTarget` whose coordinates are in
-// physical-screen space; a `TranslatedDrawTarget` subtracts the tile origin so
-// these functions never need to know they are rendering into a tile.
+// physical-screen space; `Tile::target` subtracts the tile origin so these
+// functions never need to know they are rendering into a tile.
 
 /// Draw a short string centered (both axes) on `center`.
 fn draw_centered_text<D>(
@@ -376,7 +373,8 @@ fn draw_centered_text<D>(
     center: Point,
     font: &'static MonoFont<'static>,
     color: Rgb565,
-) where
+) -> Result<(), Infallible>
+where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let text_style = TextStyleBuilder::new()
@@ -384,28 +382,27 @@ fn draw_centered_text<D>(
         .baseline(Baseline::Middle)
         .build();
     Text::with_text_style(text, center, MonoTextStyle::new(font, color), text_style)
-        .draw(target)
-        .expect("drawing to an Infallible target cannot fail");
+        .draw(target)?;
+    Ok(())
 }
 
-/// Blit a sign bitmap onto `frame` (a tile, `tile_top_left` is its screen
-/// origin) and overlay its two-digit value as a single z-ordered unit, so that an
-/// overlapping later sign occludes both an earlier sign's face and its number.
+/// Blit a sign bitmap onto `frame` and overlay its two-digit value as a single
+/// z-ordered unit, so that an overlapping later sign occludes both an earlier
+/// sign's face and its number.
 fn draw_sign<F, const W: usize, const H: usize, const N: usize, const M: usize>(
     frame: &mut F,
-    tile_top_left: Point,
+    tile: Tile,
     sign: &Image565Mask<W, H, N, M>,
     sign_top_left: Point,
     value_center: Point,
     number: u32,
-) where
+) -> Result<(), Infallible>
+where
     F: PixelTarget + DrawTarget<Color = Rgb565, Error = Infallible>,
 {
-    let mut target = TranslatedDrawTarget::new(&mut *frame, tile_top_left);
-    sign.at(sign_top_left)
-        .draw(&mut target)
-        .expect("drawing to an Infallible target cannot fail");
-    draw_centered_sign_value(&mut target, sign_top_left, value_center, number);
+    let mut target = tile.target(&mut *frame);
+    sign.at(sign_top_left).draw(&mut target)?;
+    draw_centered_sign_value(&mut target, sign_top_left, value_center, number)
 }
 
 /// Overlay a two-digit value onto a blitted sign bitmap, centered in the open
@@ -418,7 +415,8 @@ fn draw_centered_sign_value<D>(
     sign_top_left: Point,
     value_center: Point,
     number: u32,
-) where
+) -> Result<(), Infallible>
+where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let mut value_text = heapless::String::<4>::new();
@@ -430,7 +428,7 @@ fn draw_centered_sign_value<D>(
         sign_top_left + value_center,
         &FONT_10X20,
         Rgb565::from(PLACARD_TEXT),
-    );
+    )
 }
 
 // todo0000 shouldn't be needed.
@@ -453,5 +451,11 @@ pub enum Error<F> {
 impl<F> From<MarkError> for Error<F> {
     fn from(error: MarkError) -> Self {
         Self::Mark(error)
+    }
+}
+
+impl<F> From<Infallible> for Error<F> {
+    fn from(error: Infallible) -> Self {
+        match error {}
     }
 }
