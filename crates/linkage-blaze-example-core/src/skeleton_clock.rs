@@ -18,7 +18,7 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    CameraProjection, LinkageFixed, MarkError, Pose, Projection, Rgb888, linkage,
+    CameraProjection, LinkageFixed, MarkError, PixelTarget, Pose, Projection, Rgb888, linkage,
     linkage_fixed, to_point,
 };
 use log::info;
@@ -66,19 +66,19 @@ const HOURS_SIGN_ANCHOR_X: i32 = 22;
 /// in the open area of the sign body above the baked-in "H".
 const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
 
-/// Hanging "minutes" sign, decoded from a 45×87 24-bit TGA at compile time with
-/// magenta as the transparent color-key. Like the hours sign, the art already
-/// includes the hanger, the sign body, and the "M" label, so it replaces the
-/// vector-drawn minutes placard; only the two-digit minute value is overlaid
+/// Hanging "minutes" sign, decoded from a 45×77 TGA at compile time with magenta
+/// as the transparent color-key. Like the hours sign, the art already includes
+/// the hanger, the sign body, and the "M" label, so it replaces the vector-drawn
+/// minutes placard; only the two-digit minute value is overlaid
 /// (see [`MINUTE_SIGN_*`]).
-const MINUTE_SIGN: Image565Mask<45, 87, { 45 * 87 }, { (45 * 87 + 7) / 8 }> =
-    tga565_magenta_mask!("../assets/minute.small.tga", 45, 87);
+const MINUTE_SIGN: Image565Mask<45, 77, { 45 * 77 }, { (45 * 77 + 7) / 8 }> =
+    tga565_magenta_mask!("../assets/minute.small.tga", 45, 77);
 /// Bitmap column the hanger hangs from; the sign is blitted so this column lands
 /// under the hand mark.
 const MINUTE_SIGN_ANCHOR_X: i32 = 22;
 /// Bitmap point (relative to its top-left) where the minute value is centered,
 /// in the open area of the sign body above the baked-in "M".
-const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 60);
+const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 
@@ -226,41 +226,35 @@ where
             let left_hand_pose = draw_items.pose_by_mark_name("lMid2")?;
             let (hour_12, minute, _) = h12_m_s(local_time);
 
-            // Hours and minutes signs: blit each bitmap placard (hanger, body and
-            // baked-in "H"/"M") anchored under a hand mark, then overlay the
-            // two-digit value. The bitmaps are drawn straight onto the tile (a
+            // Hours and minutes signs: each is a bitmap placard (hanger, body and
+            // baked-in "H"/"M") anchored under a hand mark, with its two-digit
+            // value overlaid. The bitmaps are drawn straight onto the tile (a
             // `PixelTarget`) in tile-local coordinates, the same way the clock-face
             // background is; the values go through a `TranslatedDrawTarget`.
+            //
+            // Each sign is drawn together with its own value before the next sign,
+            // so when two signs overlap a sign occludes the lower sign *and its
+            // number* as one unit (otherwise a lower sign's digits would float on
+            // top of the upper sign's face). The minute sign is drawn last, so it
+            // sits on top.
             let hours_anchor = pose_to_point(left_hand_pose);
             let hours_top_left = Point::new(hours_anchor.x - HOURS_SIGN_ANCHOR_X, hours_anchor.y);
-            HOURS_SIGN.draw_at(
-                &mut tile_frame,
-                (
-                    hours_top_left.x - tile.top_left.x,
-                    hours_top_left.y - tile.top_left.y,
-                ),
-            );
-
             let minute_anchor = pose_to_point(right_hand_pose);
             let minute_top_left =
                 Point::new(minute_anchor.x - MINUTE_SIGN_ANCHOR_X, minute_anchor.y);
-            MINUTE_SIGN.draw_at(
-                &mut tile_frame,
-                (
-                    minute_top_left.x - tile.top_left.x,
-                    minute_top_left.y - tile.top_left.y,
-                ),
-            );
 
-            let mut target = TranslatedDrawTarget::new(&mut tile_frame, tile.top_left);
-            draw_centered_sign_value(
-                &mut target,
+            draw_sign(
+                &mut tile_frame,
+                tile.top_left,
+                &HOURS_SIGN,
                 hours_top_left,
                 HOURS_SIGN_VALUE_CENTER,
                 hour_12 as u32,
             );
-            draw_centered_sign_value(
-                &mut target,
+            draw_sign(
+                &mut tile_frame,
+                tile.top_left,
+                &MINUTE_SIGN,
                 minute_top_left,
                 MINUTE_SIGN_VALUE_CENTER,
                 minute as u32,
@@ -369,6 +363,30 @@ fn draw_centered_text<D>(
     Text::with_text_style(text, center, MonoTextStyle::new(font, color), text_style)
         .draw(target)
         .expect("drawing to an Infallible target cannot fail");
+}
+
+/// Blit a sign bitmap onto `frame` (a tile, `tile_top_left` is its screen
+/// origin) and overlay its two-digit value as a single z-ordered unit, so that an
+/// overlapping later sign occludes both an earlier sign's face and its number.
+fn draw_sign<F, const W: usize, const H: usize, const N: usize, const M: usize>(
+    frame: &mut F,
+    tile_top_left: Point,
+    sign: &Image565Mask<W, H, N, M>,
+    sign_top_left: Point,
+    value_center: Point,
+    number: u32,
+) where
+    F: PixelTarget + DrawTarget<Color = Rgb565, Error = Infallible>,
+{
+    sign.draw_at(
+        &mut *frame,
+        (
+            sign_top_left.x - tile_top_left.x,
+            sign_top_left.y - tile_top_left.y,
+        ),
+    );
+    let mut target = TranslatedDrawTarget::new(&mut *frame, tile_top_left);
+    draw_centered_sign_value(&mut target, sign_top_left, value_center, number);
 }
 
 /// Overlay a two-digit value onto a blitted sign bitmap, centered in the open
