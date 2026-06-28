@@ -131,7 +131,6 @@ impl<C: Cyd> Tiles<'_, C> {
             if let Some(region) = region {
                 return Some(Tile {
                     frame: self.cyd.frame_mut(region),
-                    region,
                 });
             }
         }
@@ -146,26 +145,25 @@ impl<C: Cyd> Tiles<'_, C> {
 /// same position.
 pub struct Tile<'a, C: Cyd + 'a> {
     frame: C::Frame<'a>,
-    region: Region,
 }
 
 impl<'a, C: Cyd + 'a> Tile<'a, C> {
     /// This tile's region (top-left and size) in physical-screen coordinates.
     #[must_use]
     pub fn region(&self) -> Region {
-        self.region
+        self.frame.region()
     }
 
     /// This tile's top-left corner in physical-screen coordinates.
     #[must_use]
     pub fn top_left(&self) -> Point {
-        self.region.top_left
+        self.region().top_left
     }
 
     /// This tile's size in pixels.
     #[must_use]
     pub fn size(&self) -> Size {
-        self.region.size
+        self.region().size
     }
 
     /// Present this tile's pixels at its [`top_left`](Self::top_left).
@@ -177,10 +175,7 @@ impl<'a, C: Cyd + 'a> Tile<'a, C> {
 impl<'a, C: Cyd + 'a> Dimensions for Tile<'a, C> {
     fn bounding_box(&self) -> Rectangle {
         let bounding_box = self.frame.bounding_box();
-        Rectangle::new(
-            bounding_box.top_left + self.region.top_left,
-            bounding_box.size,
-        )
+        Rectangle::new(bounding_box.top_left + self.top_left(), bounding_box.size)
     }
 }
 
@@ -192,26 +187,28 @@ impl<'a, C: Cyd + 'a> DrawTarget for Tile<'a, C> {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        TranslatedDrawTarget::new(&mut self.frame, self.region.top_left).draw_iter(pixels)
+        let top_left = self.top_left();
+        TranslatedDrawTarget::new(&mut self.frame, top_left).draw_iter(pixels)
     }
 }
 
 impl<'a, C: Cyd + 'a> PixelTarget for Tile<'a, C> {
     fn width(&self) -> usize {
-        self.region.top_left.x as usize + self.frame.width()
+        self.top_left().x as usize + self.frame.width()
     }
 
     fn height(&self) -> usize {
-        self.region.top_left.y as usize + self.frame.height()
+        self.top_left().y as usize + self.frame.height()
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        TranslatedDrawTarget::new(&mut self.frame, self.region.top_left).put_pixel(x, y, color);
+        let top_left = self.top_left();
+        TranslatedDrawTarget::new(&mut self.frame, top_left).put_pixel(x, y, color);
     }
 
     fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
-        TranslatedDrawTarget::new(&mut self.frame, self.region.top_left)
-            .put_pixel_565(x, y, rgb565);
+        let top_left = self.top_left();
+        TranslatedDrawTarget::new(&mut self.frame, top_left).put_pixel_565(x, y, rgb565);
     }
 }
 
@@ -221,6 +218,9 @@ impl<'a, C: Cyd + 'a> PixelTarget for Tile<'a, C> {
 pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget {
     /// Error returned when flushing this frame to the panel.
     type Error;
+
+    /// This frame's region (top-left and size) in physical-screen coordinates.
+    fn region(&self) -> Region;
 
     /// Draw `text` at the frame's top-left using the device default font and
     /// foreground color. Returns `&mut Self` for chaining.

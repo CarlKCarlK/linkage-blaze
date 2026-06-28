@@ -387,8 +387,12 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         let mut i = 0;
         while i < self.steps.len() {
             let arg = match self.steps[i] {
-                Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) | Step::Move(arg)
-                | Step::Left(arg) | Step::Up(arg) => arg,
+                Step::Yaw(arg)
+                | Step::Pitch(arg)
+                | Step::Roll(arg)
+                | Step::Move(arg)
+                | Step::Left(arg)
+                | Step::Up(arg) => arg,
                 Step::DiskParam(v) | Step::SphereParam(v) => Arg::Variable(v),
                 _ => {
                     i += 1;
@@ -3362,7 +3366,10 @@ impl Pose {
     pub fn project(self, projection: &Projection) -> (f32, f32) {
         let c = projection.cam(self.position());
         let k = projection.scale * projection.depth_factor(c[0]);
-        (projection.center_x - c[1] * k, projection.center_y - c[2] * k)
+        (
+            projection.center_x - c[1] * k,
+            projection.center_y - c[2] * k,
+        )
     }
 
     /// Return the origin pose with identity orientation.
@@ -3905,8 +3912,11 @@ pub trait DrawSurface {
 
 /// Render draw items through a projection and surface. Handles the Disk→ellipse
 /// conversion so every renderer automatically gets correct foreshortening.
-pub fn render_draw_items<S>(proj: &Projection, surface: &mut S, items: impl Iterator<Item = DrawItem>)
-where
+pub fn render_draw_items<S>(
+    proj: &Projection,
+    surface: &mut S,
+    items: impl Iterator<Item = DrawItem>,
+) where
     S: DrawSurface,
 {
     for item in items {
