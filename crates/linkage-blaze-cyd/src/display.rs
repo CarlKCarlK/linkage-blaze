@@ -23,7 +23,7 @@ use mipidsi::{
 };
 use static_cell::StaticCell;
 
-use crate::{Orientation, RectPixels};
+use crate::{Orientation, RegionPixels};
 
 // 80 MHz measured 10.9 draw+flush fps but produced visible display corruption.
 pub const DISPLAY_SPI_HZ: u32 = 60_000_000;
@@ -409,7 +409,7 @@ impl CydPanel {
 
     pub fn flush_buffer(
         &mut self,
-        buffer: &impl RectPixels,
+        buffer: &impl RegionPixels,
         top_left: Point,
     ) -> Result<(), CydPanelFlushError> {
         let rectangle = Rectangle::new(
@@ -428,11 +428,11 @@ impl CydPanel {
             .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
     }
 
-    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydPanelFlushError> {
-        self.fill_rect(Rectangle::new(Point::new(0, 0), self.screen_size), color)
+    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydPanelFlushError> {
+        self.fill_rectangle(Rectangle::new(Point::new(0, 0), self.screen_size), color)
     }
 
-    pub fn fill_rect(
+    pub fn fill_rectangle(
         &mut self,
         rectangle: Rectangle,
         color: Rgb565,

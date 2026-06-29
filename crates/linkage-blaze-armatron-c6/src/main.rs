@@ -21,7 +21,7 @@ use esp_hal::{
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use linkage_blaze_cyd::{
-    CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation, RectBuffer, SCREEN_HEIGHT,
+    CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation, RegionBuffer, SCREEN_HEIGHT,
     SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
@@ -47,7 +47,7 @@ const PARAM_SPIN_WHOLE_ARM: &str = "spin whole";
 const PARAM_SPIN_HAND: &str = "spin hand";
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
-type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
+type ScreenBuffer = RegionBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
 
 #[derive(Clone, Copy, Debug)]
 enum JoystickControlMode {

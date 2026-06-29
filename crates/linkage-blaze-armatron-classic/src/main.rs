@@ -24,7 +24,7 @@ use static_cell::StaticCell;
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
     CalibratedCydEsp, CalibrationConfig, CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation,
-    RawPoint, RawTouchEvent, RectBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    RawPoint, RawTouchEvent, RegionBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
     TouchInputEvent as CydTouchInputEvent,
 };
 
@@ -46,7 +46,7 @@ const WHITE: Rgb888 = Rgb888::CSS_WHITE;
 const YELLOW: Rgb888 = Rgb888::CSS_YELLOW;
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
-type ScreenBuffer = RectBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
+type ScreenBuffer = RegionBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
 
 #[derive(Debug)]
 enum MainError {

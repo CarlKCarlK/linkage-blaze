@@ -16,14 +16,14 @@ use embedded_graphics::{
     Pixel,
     mono_font::MonoFont,
     pixelcolor::{IntoStorage, Rgb565, Rgb888},
-    prelude::{Dimensions, DrawTarget, Point, Size},
+    prelude::{Dimensions, DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
 };
 use linkage_blaze_core::PixelTarget;
 use static_cell::StaticCell;
 
 use buffer::DynPixelBuffer;
-pub use buffer::{PixelBuffer, RectBuffer, RectPixels, RectView};
+pub use buffer::{PixelBuffer, RegionBuffer, RegionPixels, RegionView};
 pub use calibration::{CalibrationConfig, RawPoint, map_raw_to_screen};
 pub use display::{
     CydPanel, CydPanelFlushError, CydPanelInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
@@ -91,7 +91,7 @@ pub struct CalibratedCydEsp<'a> {
 
 pub struct CydFrameEsp<'a> {
     display: &'a mut CydPanel,
-    view: RectView<'a>,
+    view: RegionView<'a>,
     // Where this frame presents and how large it is: set from the `Region`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
     region: Region,
@@ -106,19 +106,19 @@ pub struct CydFrameEsp<'a> {
 }
 
 impl<'a> CydFrameEsp<'a> {
-    pub fn view_mut(&mut self) -> &mut RectView<'a> {
+    pub fn view_mut(&mut self) -> &mut RegionView<'a> {
         &mut self.view
     }
 
     /// Fill the frame with the device default background color.
     pub fn clear(&mut self) -> &mut Self {
-        self.view.clear(self.background565);
+        self.view.fill(self.background565);
         self
     }
 
     /// Fill the frame with an explicit color.
     pub fn fill(&mut self, color: Rgb565) -> &mut Self {
-        self.view.clear(color);
+        self.view.fill(color);
         self
     }
 
@@ -410,7 +410,7 @@ impl CydEsp {
         // Start every device on a clean background so apps never see boot-time
         // garbage before their first draw.
         let background565 = Self::rgb565(background);
-        display.clear(background565)?;
+        display.fill(background565)?;
 
         Ok(Self {
             display,
@@ -516,7 +516,11 @@ impl CydEsp {
         self.touch.as_mut()?.read_raw_touch_event()
     }
 
-    pub fn flush_at(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
+    pub fn flush_at(
+        &mut self,
+        buffer: &impl RegionPixels,
+        top_left: Point,
+    ) -> Result<(), CydError> {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
@@ -539,7 +543,7 @@ impl CydEsp {
             .view_mut(size.width as usize, size.height as usize);
         // Every new frame starts cleared to the device background so callers
         // never have to clear it themselves.
-        view.clear(self.background565);
+        view.fill(self.background565);
         CydFrameEsp {
             display: &mut self.display,
             view,
@@ -551,18 +555,23 @@ impl CydEsp {
         }
     }
 
-    /// Clear the whole screen to `color`.
+    /// Clear the whole screen to the device default background color.
     ///
-    /// Mirrors embedded-graphics' [`DrawTarget::clear`]. The device is already
+    /// The device is already
     /// cleared to its default background at construction and every frame from
-    /// [`CydEsp::frame_mut`] starts cleared, so this is only needed for an explicit
-    /// non-default full-screen fill.
-    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.display.clear(color)?)
+    /// [`CydEsp::frame_mut`] starts cleared, so this is only needed to return
+    /// the whole panel to the default background between frame workflows.
+    pub fn clear(&mut self) -> Result<(), CydError> {
+        self.fill(self.background565)
     }
 
-    pub fn fill_rect(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.display.fill_rect(rectangle, color)?)
+    /// Fill the whole screen with an explicit color.
+    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.display.fill(color)?)
+    }
+
+    pub fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.display.fill_rectangle(rectangle, color)?)
     }
 
     pub fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), CydError>
@@ -623,16 +632,24 @@ impl CalibratedCydEsp<'_> {
         )
     }
 
-    pub fn flush_at(&mut self, buffer: &impl RectPixels, top_left: Point) -> Result<(), CydError> {
+    pub fn flush_at(
+        &mut self,
+        buffer: &impl RegionPixels,
+        top_left: Point,
+    ) -> Result<(), CydError> {
         self.cyd.flush_at(buffer, top_left)
     }
 
-    pub fn clear(&mut self, color: Rgb565) -> Result<(), CydError> {
-        self.cyd.clear(color)
+    pub fn clear(&mut self) -> Result<(), CydError> {
+        self.cyd.clear()
     }
 
-    pub fn fill_rect(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        self.cyd.fill_rect(rectangle, color)
+    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
+        self.cyd.fill(color)
+    }
+
+    pub fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        self.cyd.fill_rectangle(rectangle, color)
     }
 
     pub fn draw_line_segments(
@@ -714,6 +731,14 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
 
     fn region(&self) -> Region {
         self.region
+    }
+
+    fn clear(&mut self) -> &mut Self {
+        CydFrameEsp::clear(self)
+    }
+
+    fn fill(&mut self, color: Rgb565) -> &mut Self {
+        CydFrameEsp::fill(self, color)
     }
 
     fn write_text(&mut self, text: &str) -> &mut Self {

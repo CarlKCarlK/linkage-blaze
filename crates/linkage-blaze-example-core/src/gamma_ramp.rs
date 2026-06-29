@@ -22,7 +22,7 @@ use core::convert::Infallible;
 
 use embedded_graphics::{
     pixelcolor::{Rgb565, Rgb888},
-    prelude::{DrawTarget, Point, Size},
+    prelude::{Point, Size},
 };
 use linkage_blaze_cyd_core::{Cyd, CydFrame, tiling::Region};
 
@@ -77,9 +77,7 @@ where
                 Size::new(CELL_WIDTH, CELL_HEIGHT),
             );
             let mut frame = cyd.frame_mut(region);
-            frame
-                .clear(color)
-                .expect("clearing an Infallible frame cannot fail");
+            frame.fill(color);
             frame.flush().await?;
             column += 1;
         }

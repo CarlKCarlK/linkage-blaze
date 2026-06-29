@@ -88,7 +88,7 @@ impl CydClockDisplay {
         clock_time: Option<&ClockTime>,
     ) -> Result<(), CydClockDisplayError> {
         if !self.background_cleared {
-            self.cyd.clear(CydEsp::rgb565(BACKGROUND))?;
+            self.cyd.fill(CydEsp::rgb565(BACKGROUND))?;
             self.background_cleared = true;
         }
 
@@ -145,7 +145,7 @@ impl CydClockDisplay {
             fmt::Write::write_char(&mut character_text, character)
                 .expect("single character fits in 4 bytes");
             let mut glyph_buffer = self.glyph_workspace.view_mut(flush_width, flush_height);
-            glyph_buffer.clear(CydEsp::rgb565(BACKGROUND));
+            glyph_buffer.fill(CydEsp::rgb565(BACKGROUND));
             Text::with_baseline(
                 character_text.as_str(),
                 Point::new(0, 0),
@@ -212,7 +212,7 @@ impl CydClockDisplay {
         width: usize,
         height: usize,
     ) -> Result<(), CydClockDisplayError> {
-        self.cyd.fill_rect(
+        self.cyd.fill_rectangle(
             Rectangle::new(
                 top_left,
                 embedded_graphics::prelude::Size::new(width as u32, height as u32),
@@ -279,7 +279,7 @@ fn wifi_label(wifi_mode: &str) -> &str {
 }
 
 fn scale_glyph_in_place(
-    glyph_buffer: &mut linkage_blaze_cyd::RectView<'_>,
+    glyph_buffer: &mut linkage_blaze_cyd::RegionView<'_>,
     glyph_width: usize,
     glyph_height: usize,
     scale: usize,

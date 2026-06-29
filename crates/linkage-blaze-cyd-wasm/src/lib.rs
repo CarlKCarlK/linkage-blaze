@@ -86,6 +86,7 @@ impl Cyd for CydWasm {
             pixels,
             region,
             tile_top_left,
+            background565: self.background565,
             foreground565: self.foreground565,
             font: self.font,
         }
@@ -107,6 +108,7 @@ pub struct CydFrameWasm<'a> {
     // Tile top-left in screen coordinates. Drawing coordinates are translated
     // by this point before reaching the local frame buffer.
     tile_top_left: Point,
+    background565: Rgb565,
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
 }
@@ -126,6 +128,15 @@ impl CydFrameWasm<'_> {
 
     fn local_y(&self, y: i32) -> Option<usize> {
         usize::try_from(y.checked_sub(self.tile_top_left.y)?).ok()
+    }
+
+    pub fn clear(&mut self) -> &mut Self {
+        self.fill(self.background565)
+    }
+
+    pub fn fill(&mut self, color: Rgb565) -> &mut Self {
+        self.pixels.fill(color.into_storage());
+        self
     }
 
     /// Convert the `Rgb565` buffer to RGBA8 and `putImageData` it at the frame's top-left.
@@ -158,7 +169,7 @@ impl DrawTarget for CydFrameWasm<'_> {
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.pixels.fill(color.into_storage());
+        self.fill(color);
         Ok(())
     }
 
@@ -243,6 +254,14 @@ impl CydFrame for CydFrameWasm<'_> {
 
     fn region(&self) -> Region {
         self.region
+    }
+
+    fn clear(&mut self) -> &mut Self {
+        CydFrameWasm::clear(self)
+    }
+
+    fn fill(&mut self, color: Rgb565) -> &mut Self {
+        CydFrameWasm::fill(self, color)
     }
 
     fn write_text(&mut self, text: &str) -> &mut Self {
