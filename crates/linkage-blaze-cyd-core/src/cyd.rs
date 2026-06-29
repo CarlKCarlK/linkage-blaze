@@ -196,9 +196,9 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     /// esp32 the per-pixel path makes the ballet loop ~1/3 slower). `src` must
     /// hold exactly one entry per frame pixel — i.e. the source image's
     /// dimensions must match the frame's. A mismatch returns
-    /// [`BlitSizeError`] rather than panicking or silently corrupting the
+    /// [`CopySizeError`] rather than panicking or silently corrupting the
     /// buffer.
-    fn blit_full_565(&mut self, src: &[u16]) -> Result<(), BlitSizeError>;
+    fn copy_from_565(&mut self, src: &[u16]) -> Result<(), CopySizeError>;
 
     /// Present the frame's pixels at its region's top-left (screen coordinates).
     ///
@@ -214,11 +214,11 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     fn flush(&mut self) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>>;
 }
 
-/// Returned by [`CydFrame::blit_full_565`] when the source buffer's length
+/// Returned by [`CydFrame::copy_from_565`] when the source buffer's length
 /// does not equal the frame's pixel count — i.e. the image's dimensions differ
 /// from the frame's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BlitSizeError {
+pub struct CopySizeError {
     /// Number of pixels supplied by the source image.
     pub src_len: usize,
     /// Number of pixels the destination frame holds.
@@ -314,7 +314,7 @@ mod tests {
             self
         }
 
-        fn blit_full_565(&mut self, _src: &[u16]) -> Result<(), BlitSizeError> {
+        fn copy_from_565(&mut self, _src: &[u16]) -> Result<(), CopySizeError> {
             Ok(())
         }
 

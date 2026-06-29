@@ -186,11 +186,11 @@ impl<const W: usize, const H: usize, const N: usize> Image565<W, H, N> {
     }
 
     /// Bulk-copy this full-frame image into `frame` via
-    /// [`CydFrame::blit_full_565`] — the fast path for a full-screen
+    /// [`CydFrame::copy_from_565`] — the fast path for a full-screen
     /// background. Much cheaper than the per-pixel [`Drawable`] path; returns
-    /// [`BlitSizeError`] if the image's dimensions don't match the frame's.
-    pub fn blit_into<F: crate::CydFrame>(&self, frame: &mut F) -> Result<(), crate::BlitSizeError> {
-        frame.blit_full_565(&self.pixels)
+    /// [`CopySizeError`] if the image's dimensions don't match the frame's.
+    pub fn copy_to<F: crate::CydFrame>(&self, frame: &mut F) -> Result<(), crate::CopySizeError> {
+        frame.copy_from_565(&self.pixels)
     }
 
     /// Return a drawable image with its top-left corner at `top_left`.

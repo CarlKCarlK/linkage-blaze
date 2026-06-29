@@ -10,9 +10,7 @@ use linkage_blaze_core::{
     linkage, linkage_fixed,
 };
 
-use linkage_blaze_cyd_core::{
-    BlitSizeError, Cyd, CydFlushError, CydFrame, Image565, Orientation, tga565,
-};
+use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydFrame, Image565, Orientation, tga565};
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
@@ -68,28 +66,26 @@ where
             // Create a frame to draw into. It uses preallocated memory.
             let mut cyd_frame = cyd.full_frame_mut();
 
-            // Draw the background bitmap into the frame. Uses a single
-            // bulk copy_from_slice (errors at runtime if the bitmap's
-            // dimensions don't match the frame) rather than the per-pixel
-            // path, which made the loop ~1/3 slower on the ESP32 classic.
-            BACKGROUND_BITMAP
-                .blit_into(&mut cyd_frame)
-                .map_err(Error::Blit)?;
+            // Draw the background bitmap into the frame via bulk copy.
+            // .draw(...) works too, but is slower.
+            BACKGROUND_BITMAP.copy_to(&mut cyd_frame)?;
 
             // Apply the mocap params to the linkage and draw everything to the frame.
             for draw_item in LINKAGE.draw_items(&params) {
                 draw_item.project(&PROJECTION).draw(&mut cyd_frame);
             }
 
-            // todo000 review this
             // Create a status line and write it to the frame.
             let status = status_text(sample_index, last_sample_duration)?;
 
             // Send the frame to the display.
-            cyd_frame.write_text(&status).flush().await?;
+            cyd_frame
+                .write_text(&status)
+                .flush()
+                .await
+                .map_err(Error::Flush)?;
 
             last_sample_duration = Some(Instant::now() - started);
-            // todo000 wasm is so fast, might want code to stop faster than 120fps.
         }
     }
 }
@@ -123,21 +119,22 @@ fn status_text(
 #[derive(Debug, derive_more::From)]
 pub struct StatusTextError(pub core::fmt::Error);
 
+// todo0000 review this.
 /// Error from the generic ballet loop, generic over the surface's flush error `F`.
+///
+/// Our own error types ([`StatusTextError`], [`CopySizeError`]) get a derived
+/// `From`, so they propagate with a plain `?`. The device's flush error `F` is
+/// the one exception: a blanket `From<F>` would be greedy enough to collide
+/// with those concrete `From`s (Rust can't rule out a future
+/// `F: CydFlushError == CopySizeError`), so flush is converted explicitly with
+/// `.map_err(Error::Flush)` at the call site.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Formatting the status line failed.
     StatusText(StatusTextError),
     /// The background bitmap's dimensions didn't match the frame's.
-    #[from(ignore)]
-    Blit(BlitSizeError),
+    CopySize(CopySizeError),
     /// Flushing a frame to the display failed.
     #[from(ignore)]
     Flush(F),
-}
-
-impl<F: CydFlushError> From<F> for Error<F> {
-    fn from(error: F) -> Self {
-        Self::Flush(error)
-    }
 }

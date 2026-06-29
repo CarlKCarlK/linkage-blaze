@@ -266,12 +266,12 @@ impl CydFrame for CydFrameWasm<'_> {
         CydFrameWasm::fill(self, color)
     }
 
-    fn blit_full_565(
+    fn copy_from_565(
         &mut self,
         src: &[u16],
-    ) -> Result<(), linkage_blaze_cyd_core::BlitSizeError> {
+    ) -> Result<(), linkage_blaze_cyd_core::CopySizeError> {
         if self.pixels.len() != src.len() {
-            return Err(linkage_blaze_cyd_core::BlitSizeError {
+            return Err(linkage_blaze_cyd_core::CopySizeError {
                 src_len: src.len(),
                 frame_len: self.pixels.len(),
             });
