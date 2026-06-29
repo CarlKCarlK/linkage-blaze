@@ -22,7 +22,9 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::PixelTarget;
-use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation, TouchInputEvent, tiling::Region};
+use linkage_blaze_cyd_core::{
+    Cyd, CydFrame, CydInfallibleError, Orientation, TouchInputEvent, tiling::Region,
+};
 use wasm_bindgen::Clamped;
 use web_sys::{CanvasRenderingContext2d, ImageData};
 
@@ -60,7 +62,7 @@ impl CydWasm {
 impl Cyd for CydWasm {
     // Presenting to a canvas cannot fail, so the device-agnostic render loop
     // never has a real error to propagate.
-    type Error = Infallible;
+    type Error = CydInfallibleError;
     type Frame<'a> = CydFrameWasm<'a>;
 
     fn screen_size(&self) -> Size {
@@ -92,7 +94,7 @@ impl Cyd for CydWasm {
         }
     }
 
-    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, Infallible> {
+    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydInfallibleError> {
         // Touch is not wired up yet; the WASM examples (ballet) do not use it.
         Ok(None)
     }
@@ -246,7 +248,7 @@ impl PixelTarget for CydFrameWasm<'_> {
 }
 
 impl CydFrame for CydFrameWasm<'_> {
-    type Error = Infallible;
+    type Error = CydInfallibleError;
 
     fn tile_top_left(&self) -> Point {
         self.tile_top_left
@@ -272,7 +274,7 @@ impl CydFrame for CydFrameWasm<'_> {
         self
     }
 
-    async fn flush(&mut self) -> Result<(), Infallible> {
+    async fn flush(&mut self) -> Result<(), CydInfallibleError> {
         // The frame boundary: yield to the browser, then present the
         // freshly-drawn buffer so it paints on this animation frame.
         next_animation_frame().await;

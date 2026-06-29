@@ -8,10 +8,11 @@ use core::convert::Infallible;
 
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
-use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, Orientation};
-use linkage_blaze_example_core::ballet::{self, BACKGROUND, FOREGROUND, ballet};
+use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp};
+use linkage_blaze_example_core::ballet::{
+    self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
+};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -48,11 +49,10 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO2,
         p.GPIO4,
         p.GPIO21,
-        // todo000 are there 4 orientations?
-        Orientation::Portrait,
+        ORIENTATION,
         BACKGROUND,
         FOREGROUND,
-        &FONT_6X10,
+        &TOP_FONT,
     )?;
     info!("CYD display initialized");
 

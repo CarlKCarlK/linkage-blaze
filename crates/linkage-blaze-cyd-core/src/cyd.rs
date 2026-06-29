@@ -24,10 +24,22 @@ use crate::{
     tiling::{Region, TileGrid},
 };
 
+/// Error type used by a CYD device or frame.
+///
+/// This marker lets downstream generic examples distinguish device/flush errors
+/// from their own local errors when using `?`.
+pub trait CydFlushError {}
+
+/// Device/flush error for CYD implementations whose presentation path cannot fail.
+#[derive(Debug)]
+pub enum CydInfallibleError {}
+
+impl CydFlushError for CydInfallibleError {}
+
 /// A CYD display: hands out cleared, region-sized frames and reads calibrated touch.
 pub trait Cyd {
     /// Error returned when flushing a frame or reading touch fails.
-    type Error;
+    type Error: CydFlushError;
 
     /// The per-region frame type this device produces.
     ///
@@ -204,7 +216,7 @@ mod tests {
     }
 
     impl Cyd for TestCyd {
-        type Error = Infallible;
+        type Error = CydInfallibleError;
         type Frame<'a> = TestFrame;
 
         fn screen_size(&self) -> Size {
@@ -222,7 +234,7 @@ mod tests {
             }
         }
 
-        fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, Infallible> {
+        fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydInfallibleError> {
             Ok(None)
         }
     }
@@ -258,7 +270,7 @@ mod tests {
     }
 
     impl CydFrame for TestFrame {
-        type Error = Infallible;
+        type Error = CydInfallibleError;
 
         fn tile_top_left(&self) -> Point {
             self.tile_top_left
@@ -280,7 +292,7 @@ mod tests {
             self
         }
 
-        async fn flush(&mut self) -> Result<(), Infallible> {
+        async fn flush(&mut self) -> Result<(), CydInfallibleError> {
             Ok(())
         }
     }

@@ -243,6 +243,8 @@ pub enum CydError {
     CalibrationUnavailable,
 }
 
+impl linkage_blaze_cyd_core::CydFlushError for CydError {}
+
 impl CydEsp {
     /// Total pixel count of the CYD panel — fixed hardware, independent of orientation.
     pub const SCREEN_PIXELS: usize = SCREEN_PIXELS;

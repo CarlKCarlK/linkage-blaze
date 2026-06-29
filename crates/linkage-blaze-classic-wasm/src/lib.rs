@@ -11,10 +11,8 @@
 //! [`CydFrameWasm::flush`](linkage_blaze_cyd_wasm::CydFrameWasm), which awaits
 //! `requestAnimationFrame`.
 
-use embedded_graphics::mono_font::ascii::FONT_6X10;
-use linkage_blaze_cyd_core::Orientation;
 use linkage_blaze_cyd_wasm::CydWasm;
-use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ballet};
+use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
@@ -46,7 +44,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .dyn_into()
         .expect("the element is a <canvas>");
 
-    let size = Orientation::Portrait.size();
+    let size = ORIENTATION.size();
     canvas.set_width(size.width);
     canvas.set_height(size.height);
 
@@ -56,23 +54,15 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .dyn_into()
         .expect("the context is a CanvasRenderingContext2d");
 
-    let cyd = CydWasm::new(
-        context,
-        Orientation::Portrait,
-        BACKGROUND,
-        FOREGROUND,
-        &FONT_6X10,
-    );
+    let cyd = CydWasm::new(context, ORIENTATION, BACKGROUND, FOREGROUND, &TOP_FONT);
 
     // `async move` owns `cyd`, making the spawned future `'static` while `ballet`
     // borrows it for the whole run.
     wasm_bindgen_futures::spawn_local(async move {
         let mut cyd = cyd;
-        // `ballet` loops forever and `CydWasm::Error` is `Infallible`, so its
-        // `Result<Infallible, Infallible>` is uninhabited: both arms bind an
-        // `Infallible` that the empty `match` discharges without any code.
         match ballet(&mut cyd).await {
-            Ok(never) | Err(never) => match never {},
+            Ok(never) => match never {},
+            Err(error) => panic!("ballet stopped: {error:?}"),
         }
     });
 

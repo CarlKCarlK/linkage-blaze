@@ -8,5 +8,6 @@
 
 pub mod ballet;
 pub mod gamma_ramp;
+pub mod infallible;
 #[cfg(feature = "skeleton-clock")]
 pub mod skeleton_clock;

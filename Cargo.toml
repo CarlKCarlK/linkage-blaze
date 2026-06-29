@@ -29,6 +29,13 @@ license = "MIT OR Apache-2.0"
 linkage-blaze-core = { path = "crates/linkage-blaze-core" }
 linkage-blaze-mocap = { path = "crates/linkage-blaze-mocap" }
 
+# Build against the local sister `device-envoy` working copy instead of the
+# published crates.io releases, so `just check-all` catches breakage from
+# in-progress device-envoy changes before they are published.
+[patch.crates-io]
+device-envoy-core = { path = "../mcu/device-envoy/crates/device-envoy-core" }
+device-envoy-esp = { path = "../mcu/device-envoy/crates/device-envoy-esp" }
+
 [profile.dev]
 panic = "abort"
 

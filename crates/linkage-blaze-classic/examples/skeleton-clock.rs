@@ -4,7 +4,7 @@
 // todo000 we need to use color and/or size to tell hours from minutes
 // todo000 we need some wasm preview
 
-use core::convert::Infallible;
+use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_esp::{
     Error,
@@ -93,24 +93,33 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,
     )?;
 
-    let mut wifi_status_frame = cyd.frame_mut(WIFI_STATUS_REGION);
+    // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
+    // reference and mutate it through interior mutability on each event.
+    let wifi_status_frame = RefCell::new(cyd.frame_mut(WIFI_STATUS_REGION));
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,
-            async |wifi_auto_event| -> Result<(), CydError> {
+            async |wifi_auto_event| -> Result<(), Error> {
                 let message = match wifi_auto_event {
                     WifiAutoEvent::CaptivePortalReady => "WiFi: setup SkelClock",
                     WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
                     WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
                 };
-                wifi_status_frame.clear().write_text(message).flush()?;
+                if let Err(error) = wifi_status_frame.borrow_mut().clear().write_text(message).flush()
+                {
+                    info!("WiFi status display failed: {error:?}");
+                }
                 info!("WiFi: {message}");
                 Ok(())
             },
         )
         .await?;
 
-    wifi_status_frame.clear().write_text("WiFi: OK").flush()?;
+    wifi_status_frame
+        .borrow_mut()
+        .clear()
+        .write_text("WiFi: OK")
+        .flush()?;
     drop(wifi_status_frame);
     info!("WiFi connected");
 
