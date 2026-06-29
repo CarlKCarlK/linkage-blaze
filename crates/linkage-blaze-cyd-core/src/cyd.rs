@@ -43,9 +43,10 @@ pub trait Cyd {
 
     /// Borrow a frame covering `region`, cleared to the device background color.
     ///
-    /// Drawing commands are interpreted in a parent tiled coordinate space:
+    /// Drawing commands are interpreted in screen coordinates:
     /// `tile_top_left` is subtracted before pixels are written into the
-    /// frame-local buffer. Regular, non-tiled frames use `(0, 0)`.
+    /// frame-local buffer. Regular, non-tiled frames use `(0, 0)` and therefore
+    /// draw in frame-local coordinates.
     fn frame_mut_with_tile_top_left(
         &mut self,
         region: Region,
@@ -75,9 +76,8 @@ pub trait Cyd {
     ///
     /// The returned [`Tiles`] is a lending/streaming iterator (it does not
     /// implement [`Iterator`], because each yielded frame borrows the device's
-    /// single reusable frame buffer). Each yielded frame draws in the grid
-    /// region's coordinate space via each frame's non-zero
-    /// [`CydFrame::tile_top_left`], and is
+    /// single reusable frame buffer). Each yielded frame draws in screen
+    /// coordinates via each frame's non-zero [`CydFrame::tile_top_left`], and is
     /// presented with [`CydFrame::flush`]:
     ///
     /// ```rust,no_run
@@ -85,7 +85,7 @@ pub trait Cyd {
     /// # async fn draw<C: Cyd>(cyd: &mut C, grid: TileGrid) -> Result<(), C::Error> {
     /// let mut tiles = cyd.tiles(grid);
     /// while let Some(mut frame) = tiles.next() {
-    ///     // draw into `frame` in grid-region coordinates...
+    ///     // draw into `frame` in screen coordinates...
     ///     frame.flush().await?;
     /// }
     /// # Ok(())
@@ -141,7 +141,7 @@ impl<C: Cyd> Tiles<'_, C> {
                 self.row += 1;
             }
             if let Some(region) = region {
-                let tile_top_left = region.top_left - self.grid.top_left;
+                let tile_top_left = region.top_left;
                 return Some(self.cyd.frame_mut_with_tile_top_left(region, tile_top_left));
             }
         }
@@ -155,7 +155,7 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     /// Error returned when flushing this frame to the panel.
     type Error;
 
-    /// This frame's tile top-left in its parent coordinate space.
+    /// This frame's tile top-left in screen coordinates.
     ///
     /// This point is subtracted from input drawing commands before pixels reach
     /// this frame's local backing buffer. Regular, non-tiled frames use `(0, 0)`.
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn tiled_frames_use_tile_top_left_relative_to_grid() {
+    fn tiled_frames_use_screen_tile_top_left() {
         let mut cyd = TestCyd;
         let grid = TileGrid::new(Point::new(10, 20), Size::new(8, 6), 2, 2);
         let mut tiles = cyd.tiles(grid);
@@ -282,7 +282,7 @@ mod tests {
             first.region(),
             Region::new(Point::new(10, 20), Size::new(4, 3))
         );
-        assert_eq!(first.tile_top_left(), Point::new(0, 0));
+        assert_eq!(first.tile_top_left(), Point::new(10, 20));
         drop(first);
 
         let second = tiles.next().expect("second tile exists");
@@ -290,7 +290,7 @@ mod tests {
             second.region(),
             Region::new(Point::new(14, 20), Size::new(4, 3))
         );
-        assert_eq!(second.tile_top_left(), Point::new(4, 0));
+        assert_eq!(second.tile_top_left(), Point::new(14, 20));
         drop(second);
 
         let third = tiles.next().expect("third tile exists");
@@ -298,6 +298,6 @@ mod tests {
             third.region(),
             Region::new(Point::new(10, 23), Size::new(4, 3))
         );
-        assert_eq!(third.tile_top_left(), Point::new(0, 3));
+        assert_eq!(third.tile_top_left(), Point::new(10, 23));
     }
 }

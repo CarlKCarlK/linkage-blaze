@@ -104,8 +104,8 @@ pub struct CydFrameWasm<'a> {
     // Where this frame presents and how large it is: set from the `Region`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
     region: Region,
-    // Tile top-left in the parent coordinate space. Drawing coordinates are
-    // translated by this point before reaching the local frame buffer.
+    // Tile top-left in screen coordinates. Drawing coordinates are translated
+    // by this point before reaching the local frame buffer.
     tile_top_left: Point,
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
