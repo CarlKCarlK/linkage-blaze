@@ -2,6 +2,8 @@
 set -euo pipefail
 
 pages_dir="target/pages"
+manifest_path="pages/demos.tsv"
+selected_demo="${1:-}"
 
 build_demo() {
     local slug="$1"
@@ -35,6 +37,30 @@ build_demo() {
     done
 }
 
+write_index_file() {
+    local path="$1"
+    local body="$2"
+
+    cat > "$path" <<HTML
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Linkage Blaze Demos</title>
+</head>
+<body>
+  <main>
+    <h1>Linkage Blaze Demos</h1>
+    <ul>
+$body
+    </ul>
+  </main>
+</body>
+</html>
+HTML
+}
+
 write_redirect() {
     local path="$1"
     local title="$2"
@@ -57,84 +83,50 @@ write_redirect() {
 HTML
 }
 
-write_site_index() {
-    local path="$pages_dir/index.html"
-
-    cat > "$path" <<'HTML'
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Linkage Blaze Demos</title>
-</head>
-<body>
-  <main>
-    <h1>Linkage Blaze Demos</h1>
-    <ul>
-      <li><a href="./demos/armatron/">Armatron</a></li>
-      <li><a href="./demos/skeleton-clock/">Skeleton Clock</a></li>
-      <li><a href="./demos/dancer/">Dancer</a></li>
-    </ul>
-  </main>
-</body>
-</html>
-HTML
-}
-
-write_demos_index() {
-    local path="$pages_dir/demos/index.html"
-
-    cat > "$path" <<'HTML'
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Linkage Blaze Demos</title>
-</head>
-<body>
-  <main>
-    <h1>Linkage Blaze Demos</h1>
-    <ul>
-      <li><a href="./armatron/">Armatron</a> (<a href="./armatron/v1/">v1</a>)</li>
-      <li><a href="./skeleton-clock/">Skeleton Clock</a> (<a href="./skeleton-clock/v1/">v1</a>)</li>
-      <li><a href="./dancer/">Dancer</a> (<a href="./dancer/v1/">v1</a>)</li>
-    </ul>
-  </main>
-</body>
-</html>
-HTML
-}
+site_index_body=""
+demos_index_body=""
 
 rm -rf "$pages_dir"
 mkdir -p "$pages_dir/demos"
 
-write_site_index
-write_demos_index
+if [[ ! -f "$manifest_path" ]]; then
+    printf 'missing manifest: %s\n' "$manifest_path" >&2
+    exit 1
+fi
 
-build_demo \
-    "armatron" \
-    "Armatron" \
-    "v1" \
-    "crates/linkage-blaze-armatron-wasm" \
-    "linkage_blaze_armatron_wasm" \
-    "v1"
+while IFS=$'\t' read -r slug title current_version crate_dir source_dir out_name version_list; do
+    if [[ -z "$slug" ]]; then
+        continue
+    fi
 
-build_demo \
-    "skeleton-clock" \
-    "Skeleton Clock" \
-    "v1" \
-    "crates/linkage-blaze-skeleton-clock-wasm" \
-    "linkage_blaze_skeleton_clock_wasm" \
-    "v1"
+    if [[ -n "$selected_demo" && "$slug" != "$selected_demo" ]]; then
+        continue
+    fi
 
-build_demo \
-    "dancer" \
-    "Dancer" \
-    "v1" \
-    "crates/linkage-blaze-classic-wasm" \
-    "linkage_blaze_classic_wasm" \
-    "v1"
+    demo_versions_html=""
+    IFS=',' read -ra versions <<< "$version_list"
+    for version in "${versions[@]}"; do
+        if [[ -z "$version" ]]; then
+            continue
+        fi
+        demo_versions_html="${demo_versions_html}<a href=\"./$slug/$version/\">$version</a> "
+    done
+
+    site_index_body="${site_index_body}      <li><a href=\"./demos/$slug/\">$title</a> (latest: <a href=\"./demos/$slug/$current_version/\">$current_version</a>)</li>
+"
+
+    demos_index_body="${demos_index_body}      <li><a href=\"./$slug/\">$title</a> (${demo_versions_html% })</li>
+"
+
+    build_demo "$slug" "$title" "$current_version" "$crate_dir" "$out_name" "${versions[@]}"
+done < "$manifest_path"
+
+if [[ -z "$site_index_body" ]]; then
+    printf 'no demos selected for build\n' >&2
+    exit 1
+fi
+
+write_index_file "$pages_dir/index.html" "$site_index_body"
+write_index_file "$pages_dir/demos/index.html" "$demos_index_body"
 
 printf 'Wrote %s\n' "$pages_dir"
