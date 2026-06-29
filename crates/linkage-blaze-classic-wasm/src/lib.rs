@@ -18,6 +18,17 @@ use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ballet};
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
+const SHOW_CASE_ALIGNMENT_CONTROLS: bool = false;
+
+/// Whether the browser page should show the case/cord alignment tuner.
+///
+/// Set [`SHOW_CASE_ALIGNMENT_CONTROLS`] to `true` while adjusting the framed
+/// device photo, then copy the generated CSS values back into `www/index.html`.
+#[wasm_bindgen]
+pub fn show_case_alignment_controls() -> bool {
+    SHOW_CASE_ALIGNMENT_CONTROLS
+}
+
 /// Start the ballet animation on the canvas with `canvas_id`.
 ///
 /// Sizes the canvas to the simulated portrait CYD panel, then spawns the render
