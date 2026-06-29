@@ -55,7 +55,8 @@ const LINKAGE: LinkageView<3, 6> = LINKAGE1
 // ── Projection ───────────────────────────────────────────────────────────────
 
 const PROJECTION: Projection = Projection::front_orthographic(
-    /* center x */ 139.0, /* center y */ 306.0, /* scale */ 1.35,
+    /* target origin */ Point::new(139, 306),
+    /* scale */ 1.35,
 );
 
 // ── Background bitmap ──────────────────────────────────────────────────────────

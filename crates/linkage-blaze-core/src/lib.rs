@@ -45,7 +45,7 @@ use alloc::vec::Vec;
 pub use math::{Mat3, Vec3};
 
 pub use embedded_graphics::pixelcolor::{Rgb888, WebColors};
-pub use embedded_graphics::prelude::RgbColor;
+pub use embedded_graphics::prelude::{Point, RgbColor};
 use math::degrees_to_radians;
 
 /// A step in the robot arm linkage description.
@@ -3367,8 +3367,8 @@ impl Pose {
         let c = projection.cam(self.position());
         let k = projection.scale * projection.depth_factor(c[0]);
         (
-            projection.center_x - c[1] * k,
-            projection.center_y - c[2] * k,
+            projection.target_origin.x as f32 - c[1] * k,
+            projection.target_origin.y as f32 - c[2] * k,
         )
     }
 
@@ -4077,37 +4077,37 @@ impl<T: PixelTarget> embedded_graphics::geometry::OriginDimensions for PixelTarg
 /// optional perspective divide.
 ///
 /// The `rotation` matrix maps world axes onto camera axes: row 0 is the depth
-/// axis, row 1 is the source of screen X, and row 2 is the source of screen Y.
+/// axis, row 1 is the source of target X, and row 2 is the source of target Y.
 /// `focal` of `None` is orthographic; `Some(f)` applies a focal-length
 /// perspective divide on the depth axis (larger `f` → less foreshortening).
 ///
 /// Use the named constructors rather than building the matrix by hand:
 ///
 /// ```rust,no_run
-/// # use linkage_blaze_core::Projection;
-/// let orthographic = Projection::front_orthographic(84.0, 300.0, 1.575);
-/// let perspective = Projection::front_perspective(120.0, 160.0, 15.0, 30.0);
+/// # use linkage_blaze_core::{Point, Projection};
+/// let orthographic = Projection::front_orthographic(Point::new(84, 300), 1.575);
+/// let perspective = Projection::front_perspective(Point::new(120, 160), 15.0, 30.0);
 /// ```
 pub struct Projection {
     rotation: Mat3,
-    center_x: f32,
-    center_y: f32,
+    target_origin: Point,
     scale: f32,
     /// `None` is orthographic; `Some(focal)` is perspective.
     focal: Option<f32>,
 }
 
-/// World Y → screen X, world Z → screen Y, world X → depth.
+/// World Y → target X, world Z → target Y, world X → depth.
 const NEG_X_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
 
 impl Projection {
-    /// Orthographic front view, looking along negative X: world Y → screen X
-    /// (negated), world Z → screen Y (negated).
-    pub const fn front_orthographic(center_x: f32, center_y: f32, scale: f32) -> Self {
+    /// Orthographic front view, looking along negative X: world Y → target X
+    /// (negated), world Z → target Y (negated). `target_origin` is the point
+    /// in the parent drawing coordinate space where world Y=0 and world Z=0
+    /// project.
+    pub const fn front_orthographic(target_origin: Point, scale: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
-            center_x,
-            center_y,
+            target_origin,
             scale,
             focal: None,
         }
@@ -4115,11 +4115,10 @@ impl Projection {
 
     /// Perspective front view, looking along negative X (same axes as
     /// [`Self::front_orthographic`]).
-    pub const fn front_perspective(center_x: f32, center_y: f32, scale: f32, focal: f32) -> Self {
+    pub const fn front_perspective(target_origin: Point, scale: f32, focal: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
-            center_x,
-            center_y,
+            target_origin,
             scale,
             focal: Some(focal),
         }
