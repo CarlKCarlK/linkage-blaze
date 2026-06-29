@@ -895,8 +895,7 @@ impl CydSim {
     //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
     pub fn projection(&self) -> Projection {
         Projection::front_perspective(
-            SCREEN_WIDTH as f32 / 2.0,
-            SCREEN_HEIGHT as f32 / 2.0,
+            Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
             PIXELS_PER_UNIT,
             30.0,
         )

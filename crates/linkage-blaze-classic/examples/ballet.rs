@@ -11,7 +11,7 @@ use embassy_executor::Spawner;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, Orientation};
-use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ballet};
+use linkage_blaze_example_core::ballet::{self, BACKGROUND, FOREGROUND, ballet};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -22,6 +22,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 #[derive(Debug, derive_more::From)]
 enum MainError {
     CydEsp(CydError),
+    Ballet(ballet::Error<CydError>),
 }
 
 #[esp_rtos::main]
