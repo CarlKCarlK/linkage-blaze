@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Linkage Blaze Editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <div id="layout">
+    <div id="sidebar">
+      <h1>Linkage Blaze</h1>
+      <div id="params"></div>
+      <div id="rk-controls">
+        <button id="rk-toggle">▶ Run IK</button>
+        <button id="rk-step">⏭ Step</button>
+        <div id="distance-display"></div>
+      </div>
+      <div id="target-controls">
+        <button id="prev-target">◀ Prev</button>
+        <span id="target-label">target #0</span>
+        <button id="next-target">Next ▶</button>
+      </div>
+    </div>
+    <div id="view">
+      <canvas id="screen" width="320" height="240"></canvas>
+    </div>
+  </div>
+  <script type="module" src="editor.js"></script>
+</body>
+</html>

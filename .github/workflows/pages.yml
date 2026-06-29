@@ -24,8 +24,8 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Build WASM
-        run: wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
+      - name: Build Pages
+        run: bash .tools/build_pages.sh
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -33,7 +33,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: crates/linkage-blaze-armatron-wasm/www
+          path: target/pages
 
       - name: Deploy to GitHub Pages
         id: deployment

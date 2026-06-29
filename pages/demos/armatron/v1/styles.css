@@ -1,0 +1,51 @@
+:root {
+  color-scheme: dark;
+  background: #111418;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+.shell {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+#fullscreen-btn {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  background: #1e2328cc;
+  color: #ccc;
+  border: 1px solid #414852;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#fullscreen-btn:hover {
+  background: #2a3038cc;
+}
+
+#screen {
+  width: min(96vw, calc(96vh * 4 / 3));
+  aspect-ratio: 4 / 3;
+  height: auto;
+  max-width: 960px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+  border: 1px solid #414852;
+  touch-action: none;
+}

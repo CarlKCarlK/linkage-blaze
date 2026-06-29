@@ -35,6 +35,10 @@ check-all:
 build:
     just check-all
 
+# Build the static GitHub Pages artifact with immutable demo version URLs.
+build-pages:
+    bash .tools/build_pages.sh
+
 # Generate docs and open in browser
 docs:
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc --open

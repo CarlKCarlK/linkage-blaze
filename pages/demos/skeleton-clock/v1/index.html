@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CYD Skeleton-Clock Simulator</title>
+  <meta name="theme-color" content="#191970" />
+  <style>
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      /* desk.jpg tiled and enlarged 200% as the page background. */
+      background: url("./desk.jpg") repeat;
+      background-size: 1024px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* The live display: crisp portrait 2x (240x320 panel -> 480x640).
+       Note: one CYD pixel is two browser pixels here. */
+    .stage {
+      position: relative;
+      z-index: 0; /* stacking context so the cord (z-index:-1) sits behind the case */
+      width: 480px;
+      height: 640px;
+    }
+    #screen {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 480px;
+      height: 640px;
+      image-rendering: pixelated;
+      z-index: 1;
+    }
+    /* The portrait (rotated) device photo, framing the display. Explicit
+       width/height/left/top (browser px) align its screen opening to the 480x640
+       canvas; nudge these four to adjust the fit. */
+    .stage .case {
+      position: absolute;
+      z-index: 0;
+      width: 1087px;
+      height: 1396px;
+      left: -301px;
+      top: -418px;
+      filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
+    }
+    /* Extends the USB cord off the top of the page. Behind the case, ending at
+       the case image's top edge (top: -418px) where the real cord begins. */
+    .stage .cord {
+      position: absolute;
+      z-index: -1;
+      left: 220px;
+      width: 35px;
+      top: -2400px;
+      height: 1982px; /* down to the case image's top edge (-418px) */
+      /* dark grey cord with a lighter sheen stripe from 50%-90% of its width */
+      background: linear-gradient(to right, #333 0 50%, #4d4d4d 50% 90%, #333 90% 100%);
+    }
+    #status {
+      position: fixed;
+      bottom: 8px;
+      left: 8px;
+      color: #b0c4de; /* light steel blue */
+      font: 12px monospace;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="stage">
+    <div class="cord"></div>
+    <img class="case" src="./case.png" alt="CYD device case" />
+    <canvas id="screen" aria-label="CYD skeleton-clock display simulator"></canvas>
+  </div>
+  <div id="status"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+
+</html>
