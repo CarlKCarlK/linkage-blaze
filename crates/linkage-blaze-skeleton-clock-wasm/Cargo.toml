@@ -11,6 +11,9 @@ license.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [dependencies]
 # `skeleton-clock` feature is on by default, pulling device-envoy-core's ClockSync.
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core" }

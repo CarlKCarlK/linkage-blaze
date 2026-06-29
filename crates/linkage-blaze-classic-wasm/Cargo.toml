@@ -11,6 +11,9 @@ license.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [dependencies]
 # Pull in embassy-time's built-in WASM time driver (setTimeout-backed, with full
 # timer-queue support) here in the final WASM crate only. Embassy time drivers
