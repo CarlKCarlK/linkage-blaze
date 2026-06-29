@@ -3863,10 +3863,13 @@ impl ProjectedDrawItem {
                 pixel_width,
             } => {
                 let width = ((pixel_width + 0.5) as u32).max(1);
-                Line::new(to_point(start), to_point(end))
-                    .into_styled(PrimitiveStyle::with_stroke(color, width))
-                    .draw(&mut PixelTargetAdapter(target))
-                    .expect("drawing onto a PixelTargetAdapter is Infallible");
+                Line::new(
+                    embedded_graphics::prelude::Point::new(start.0 as i32, start.1 as i32),
+                    embedded_graphics::prelude::Point::new(end.0 as i32, end.1 as i32),
+                )
+                .into_styled(PrimitiveStyle::with_stroke(color, width))
+                .draw(&mut PixelTargetAdapter(target))
+                .expect("drawing onto a PixelTargetAdapter is Infallible");
             }
             ProjectedDrawItem::Ellipse {
                 center,
@@ -3884,10 +3887,13 @@ impl ProjectedDrawItem {
                 color,
             } => {
                 let diameter = (((pixel_radius * 2.0) + 0.5) as u32).max(1);
-                Circle::with_center(to_point(center), diameter)
-                    .into_styled(PrimitiveStyle::with_fill(color))
-                    .draw(&mut PixelTargetAdapter(target))
-                    .expect("drawing onto a PixelTargetAdapter is Infallible");
+                Circle::with_center(
+                    embedded_graphics::prelude::Point::new(center.0 as i32, center.1 as i32),
+                    diameter,
+                )
+                .into_styled(PrimitiveStyle::with_fill(color))
+                .draw(&mut PixelTargetAdapter(target))
+                .expect("drawing onto a PixelTargetAdapter is Infallible");
             }
         }
     }
@@ -4067,11 +4073,6 @@ impl<T: PixelTarget> embedded_graphics::geometry::OriginDimensions for PixelTarg
     }
 }
 
-/// Converts a `(f32, f32)` screen coordinate to an embedded-graphics [`Point`].
-pub fn to_point(xy: (f32, f32)) -> embedded_graphics::prelude::Point {
-    embedded_graphics::prelude::Point::new(xy.0 as i32, xy.1 as i32)
-}
-
 /// Maps world-space geometry to pixel space via an axis rotation plus an
 /// optional perspective divide.
 ///
@@ -4248,13 +4249,16 @@ impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
             primitives::{Line, Primitive, PrimitiveStyle},
         };
         let width = (pixel_width + 0.5) as u32;
-        Line::new(to_point(start), to_point(end))
-            .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
-            .draw(&mut TiledDrawAdapter {
-                target: self.target,
-                tile_origin: self.tile_origin,
-            })
-            .unwrap();
+        Line::new(
+            embedded_graphics::prelude::Point::new(start.0 as i32, start.1 as i32),
+            embedded_graphics::prelude::Point::new(end.0 as i32, end.1 as i32),
+        )
+        .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
+        .draw(&mut TiledDrawAdapter {
+            target: self.target,
+            tile_origin: self.tile_origin,
+        })
+        .unwrap();
     }
 
     fn filled_ellipse(
@@ -4277,13 +4281,16 @@ impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
             primitives::{Circle, Primitive, PrimitiveStyle},
         };
         let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
-        Circle::with_center(to_point(center), diameter.max(1))
-            .into_styled(PrimitiveStyle::with_fill(color))
-            .draw(&mut TiledDrawAdapter {
-                target: self.target,
-                tile_origin: self.tile_origin,
-            })
-            .unwrap();
+        Circle::with_center(
+            embedded_graphics::prelude::Point::new(center.0 as i32, center.1 as i32),
+            diameter.max(1),
+        )
+        .into_styled(PrimitiveStyle::with_fill(color))
+        .draw(&mut TiledDrawAdapter {
+            target: self.target,
+            tile_origin: self.tile_origin,
+        })
+        .unwrap();
     }
 }
 
