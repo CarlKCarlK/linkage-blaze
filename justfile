@@ -36,8 +36,12 @@ build:
     just check-all
 
 # Build the static GitHub Pages artifact with immutable demo version URLs.
-build-pages:
-    bash .tools/build_pages.sh
+build-pages demo='':
+    bash .tools/build_pages.sh "{{demo}}"
+
+# Freeze the current live web assets for one demo into a new immutable Pages version.
+bump-demo-version demo version='':
+    bash .tools/bump_demo_version.sh "{{demo}}" "{{version}}"
 
 # Generate docs and open in browser
 docs:
