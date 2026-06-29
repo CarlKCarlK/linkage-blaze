@@ -266,6 +266,20 @@ impl CydFrame for CydFrameWasm<'_> {
         CydFrameWasm::fill(self, color)
     }
 
+    fn blit_full_565(
+        &mut self,
+        src: &[u16],
+    ) -> Result<(), linkage_blaze_cyd_core::BlitSizeError> {
+        if self.pixels.len() != src.len() {
+            return Err(linkage_blaze_cyd_core::BlitSizeError {
+                src_len: src.len(),
+                frame_len: self.pixels.len(),
+            });
+        }
+        self.pixels.copy_from_slice(src);
+        Ok(())
+    }
+
     fn write_text(&mut self, text: &str) -> &mut Self {
         let style = MonoTextStyle::new(self.font, self.foreground565);
         Text::with_baseline(text, Point::zero(), style, Baseline::Top)

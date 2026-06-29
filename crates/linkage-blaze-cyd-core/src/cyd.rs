@@ -189,6 +189,17 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     /// foreground color. Returns `&mut Self` for chaining.
     fn write_text(&mut self, text: &str) -> &mut Self;
 
+    /// Bulk-copy a full-frame, row-major RGB565 buffer into this frame.
+    ///
+    /// This is the fast path for a full-screen background: a single
+    /// `copy_from_slice` instead of the per-pixel [`DrawTarget`] path (on the
+    /// esp32 the per-pixel path makes the ballet loop ~1/3 slower). `src` must
+    /// hold exactly one entry per frame pixel — i.e. the source image's
+    /// dimensions must match the frame's. A mismatch returns
+    /// [`BlitSizeError`] rather than panicking or silently corrupting the
+    /// buffer.
+    fn blit_full_565(&mut self, src: &[u16]) -> Result<(), BlitSizeError>;
+
     /// Present the frame's pixels at its region's top-left (screen coordinates).
     ///
     /// The frame was created over a [`Region`] by [`Cyd::frame_mut`], so it
@@ -201,6 +212,17 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     /// each device's natural present point without inverting into a state
     /// machine.
     fn flush(&mut self) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>>;
+}
+
+/// Returned by [`CydFrame::blit_full_565`] when the source buffer's length
+/// does not equal the frame's pixel count — i.e. the image's dimensions differ
+/// from the frame's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlitSizeError {
+    /// Number of pixels supplied by the source image.
+    pub src_len: usize,
+    /// Number of pixels the destination frame holds.
+    pub frame_len: usize,
 }
 
 #[cfg(test)]
@@ -290,6 +312,10 @@ mod tests {
 
         fn write_text(&mut self, _text: &str) -> &mut Self {
             self
+        }
+
+        fn blit_full_565(&mut self, _src: &[u16]) -> Result<(), BlitSizeError> {
+            Ok(())
         }
 
         async fn flush(&mut self) -> Result<(), CydInfallibleError> {

@@ -747,6 +747,21 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
         CydFrameEsp::write_text(self, text)
     }
 
+    fn blit_full_565(
+        &mut self,
+        src: &[u16],
+    ) -> Result<(), linkage_blaze_cyd_core::BlitSizeError> {
+        let dst = self.raw_pixels_mut();
+        if dst.len() != src.len() {
+            return Err(linkage_blaze_cyd_core::BlitSizeError {
+                src_len: src.len(),
+                frame_len: dst.len(),
+            });
+        }
+        dst.copy_from_slice(src);
+        Ok(())
+    }
+
     // Flushing the panel over SPI is synchronous, so this future resolves on its
     // first poll. The `async fn` is the device-agnostic frame boundary the
     // render loop awaits; on the MCU it adds no suspension.

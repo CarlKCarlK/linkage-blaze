@@ -4,18 +4,15 @@
 use core::{convert::Infallible, fmt::Write};
 
 use embassy_time::{Duration, Instant};
-use embedded_graphics::{
-    Drawable,
-    mono_font::{MonoFont, ascii::FONT_6X10},
-};
+use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
 use linkage_blaze_core::{
     LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion, bvh_parse::BvhMotion,
     linkage, linkage_fixed,
 };
 
-use linkage_blaze_cyd_core::{Cyd, CydFlushError, CydFrame, Image565, Orientation, tga565};
-
-use crate::infallible::InfallibleResultExt;
+use linkage_blaze_cyd_core::{
+    BlitSizeError, Cyd, CydFlushError, CydFrame, Image565, Orientation, tga565,
+};
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
@@ -71,8 +68,13 @@ where
             // Create a frame to draw into. It uses preallocated memory.
             let mut cyd_frame = cyd.full_frame_mut();
 
-            // Draw the background bitmap into the frame.
-            BACKGROUND_BITMAP.draw(&mut cyd_frame).unwrap_never();
+            // Draw the background bitmap into the frame. Uses a single
+            // bulk copy_from_slice (errors at runtime if the bitmap's
+            // dimensions don't match the frame) rather than the per-pixel
+            // path, which made the loop ~1/3 slower on the ESP32 classic.
+            BACKGROUND_BITMAP
+                .blit_into(&mut cyd_frame)
+                .map_err(Error::Blit)?;
 
             // Apply the mocap params to the linkage and draw everything to the frame.
             for draw_item in LINKAGE.draw_items(&params) {
@@ -126,6 +128,9 @@ pub struct StatusTextError(pub core::fmt::Error);
 pub enum Error<F> {
     /// Formatting the status line failed.
     StatusText(StatusTextError),
+    /// The background bitmap's dimensions didn't match the frame's.
+    #[from(ignore)]
+    Blit(BlitSizeError),
     /// Flushing a frame to the display failed.
     #[from(ignore)]
     Flush(F),
