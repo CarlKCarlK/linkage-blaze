@@ -9,25 +9,27 @@
 use core::convert::Infallible;
 
 use embassy_time::{Duration, Instant};
+use embedded_graphics::Drawable;
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, Projection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion,
-    linkage, linkage_fixed,
+    LinkageFixed, LinkageView, Projection, Rgb888, bvh_motion, bvh_parse::BvhMotion, linkage,
+    linkage_fixed,
 };
 
-use linkage_blaze_cyd_core::{Cyd, CydFrame};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, Image565, tga565};
 
-// todo00 audit the existing numeric color backlog and add approximate color-name comments.
-// todo000 every numeric color should have a comment telling what it is. (and named colors are better)
 /// Device default background color the platform shim should construct its `Cyd`
 /// with (also used to clear every frame).
-pub const BACKGROUND: Rgb888 = Rgb888::new(10, 28, 36); // very dark blue-green
-pub const FOREGROUND: Rgb888 = Rgb888::CSS_LIGHT_STEEL_BLUE;
-const FIGURE: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
+pub const BACKGROUND: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal
+pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
+const FIGURE: Rgb888 = FOREGROUND;
+
+const BACKGROUND_BITMAP: Image565<240, 320, { 240 * 320 }> =
+    tga565!("../assets/ballet_background.tga", 240, 320);
 
 // todo000 these could be OK, but there are a lot of them. Can't some be done via math?
 const CENTER_X: i32 = 84;
-const BASELINE_Y: i32 = 300;
-const SCALE: f32 = 1.575;
+const BASELINE_Y: i32 = 275;
+const SCALE: f32 = 1.4;
 
 #[allow(long_running_const_eval)]
 // This can take ~8 seconds to compile and will generate a warning.
@@ -58,6 +60,9 @@ where
         for (sample_index, params) in MOTION.samples().enumerate() {
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
+            BACKGROUND_BITMAP
+                .draw(&mut cyd_frame)
+                .expect("drawing the background bitmap into a CYD frame cannot fail");
             for draw_item in LINKAGE.draw_items(&params) {
                 draw_item.project(&PROJECTION).draw(&mut cyd_frame);
             }

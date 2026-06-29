@@ -7,15 +7,13 @@ use embedded_graphics::{
 };
 use static_cell::StaticCell;
 
-// todo000 review this name w.r.t. PixelBuffer.
-pub trait RectPixels {
+pub trait RegionPixels {
     fn width(&self) -> usize;
     fn height(&self) -> usize;
     fn raw_pixels(&self) -> &[u16];
 }
 
-// todo000 review this name w.r.t. PixelBuffer.
-pub struct RectBuffer<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> {
+pub struct RegionBuffer<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> {
     pixels: [u16; PIXEL_COUNT],
 }
 
@@ -23,15 +21,14 @@ pub struct PixelBuffer<const PIXEL_COUNT: usize> {
     pixels: [u16; PIXEL_COUNT],
 }
 
-// todo000 review this name w.r.t. PixelBuffer.
-pub struct RectView<'a> {
+pub struct RegionView<'a> {
     width: usize,
     height: usize,
     pixels: &'a mut [u16],
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize>
-    RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
+    RegionBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     #[must_use]
     pub fn new() -> Self {
@@ -46,11 +43,11 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize>
 
     pub fn init_static(
         storage: &'static StaticCell<Self>,
-    ) -> &'static mut RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT> {
+    ) -> &'static mut RegionBuffer<WIDTH, HEIGHT, PIXEL_COUNT> {
         storage.init_with(Self::new)
     }
 
-    pub fn clear(&mut self, color: Rgb565) {
+    pub fn fill(&mut self, color: Rgb565) {
         self.pixels.fill(color.into_storage());
     }
 
@@ -61,15 +58,15 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize>
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> Default
-    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
+    for RegionBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> RectPixels
-    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
+impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> RegionPixels
+    for RegionBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     fn width(&self) -> usize {
         WIDTH
@@ -85,13 +82,13 @@ impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> RectPixe
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> DrawTarget
-    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
+    for RegionBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     type Color = Rgb565;
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.clear(color);
+        self.fill(color);
         Ok(())
     }
 
@@ -128,10 +125,10 @@ impl<const PIXEL_COUNT: usize> PixelBuffer<PIXEL_COUNT> {
         storage.init_with(Self::new)
     }
 
-    pub fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_> {
+    pub fn view_mut(&mut self, width: usize, height: usize) -> RegionView<'_> {
         let pixel_count = width * height;
         assert!(pixel_count <= PIXEL_COUNT, "view must fit in workspace");
-        RectView {
+        RegionView {
             width,
             height,
             pixels: &mut self.pixels[..pixel_count],
@@ -147,23 +144,23 @@ impl<const PIXEL_COUNT: usize> Default for PixelBuffer<PIXEL_COUNT> {
 
 // todo00 understand this code.
 /// Type-erased draw buffer a [`CydEsp`](crate::CydEsp) can own: it can be initialized
-/// into a `'static` cell and hand out [`RectView`]s. Implemented for every
+/// into a `'static` cell and hand out [`RegionView`]s. Implemented for every
 /// [`PixelBuffer<PIXEL_COUNT>`] so that `CydEsp` can hold a buffer of any size without
 /// itself being generic. Internal only — apps pick the size via the
 /// `PIXEL_COUNT` on their [`CydStaticEsp`](crate::CydStaticEsp).
 pub(crate) trait DynPixelBuffer: 'static {
     /// Borrow a `width`×`height` view out of the buffer (must fit the capacity).
-    fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_>;
+    fn view_mut(&mut self, width: usize, height: usize) -> RegionView<'_>;
 }
 
 impl<const PIXEL_COUNT: usize> DynPixelBuffer for PixelBuffer<PIXEL_COUNT> {
-    fn view_mut(&mut self, width: usize, height: usize) -> RectView<'_> {
+    fn view_mut(&mut self, width: usize, height: usize) -> RegionView<'_> {
         PixelBuffer::view_mut(self, width, height)
     }
 }
 
-impl RectView<'_> {
-    pub fn clear(&mut self, color: Rgb565) {
+impl RegionView<'_> {
+    pub fn fill(&mut self, color: Rgb565) {
         self.pixels.fill(color.into_storage());
     }
 
@@ -172,7 +169,7 @@ impl RectView<'_> {
     }
 }
 
-impl RectPixels for RectView<'_> {
+impl RegionPixels for RegionView<'_> {
     fn width(&self) -> usize {
         self.width
     }
@@ -186,12 +183,12 @@ impl RectPixels for RectView<'_> {
     }
 }
 
-impl DrawTarget for RectView<'_> {
+impl DrawTarget for RegionView<'_> {
     type Color = Rgb565;
     type Error = Infallible;
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.clear(color);
+        self.fill(color);
         Ok(())
     }
 
@@ -214,14 +211,14 @@ impl DrawTarget for RectView<'_> {
     }
 }
 
-impl OriginDimensions for RectView<'_> {
+impl OriginDimensions for RegionView<'_> {
     fn size(&self) -> Size {
         Size::new(self.width as u32, self.height as u32)
     }
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> OriginDimensions
-    for RectBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
+    for RegionBuffer<WIDTH, HEIGHT, PIXEL_COUNT>
 {
     fn size(&self) -> Size {
         Size::new(WIDTH as u32, HEIGHT as u32)
