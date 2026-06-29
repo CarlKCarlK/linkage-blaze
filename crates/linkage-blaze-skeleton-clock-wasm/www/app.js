@@ -1,4 +1,8 @@
-import init, { start, set_time_of_day } from "./pkg/linkage_blaze_skeleton_clock_wasm.js";
+import init, {
+  start,
+  set_time_of_day,
+  show_case_alignment_controls,
+} from "./pkg/linkage_blaze_skeleton_clock_wasm.js";
 
 const status = document.querySelector("#status");
 
@@ -11,6 +15,9 @@ try {
   // JS animation loop or sizing is needed here.
   start("screen");
   buildTimeOfDaySlider(set_time_of_day);
+  if (show_case_alignment_controls()) {
+    await import("./controls.js");
+  }
   status.textContent = "skeleton-clock running";
 } catch (error) {
   status.textContent = `load failed: ${String(error)}`;
