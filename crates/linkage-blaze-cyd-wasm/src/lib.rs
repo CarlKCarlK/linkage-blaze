@@ -17,7 +17,8 @@ use embedded_graphics::{
     Drawable, Pixel,
     mono_font::{MonoFont, MonoTextStyle},
     pixelcolor::{IntoStorage, Rgb565, Rgb888},
-    prelude::{DrawTarget, OriginDimensions, Point, Size},
+    prelude::{Dimensions, DrawTarget, Point, Size},
+    primitives::Rectangle,
     text::{Baseline, Text},
 };
 use linkage_blaze_core::PixelTarget;
@@ -67,6 +68,14 @@ impl Cyd for CydWasm {
     }
 
     fn frame_mut(&mut self, region: Region) -> CydFrameWasm<'_> {
+        self.frame_mut_with_tile_top_left(region, Point::zero())
+    }
+
+    fn frame_mut_with_tile_top_left(
+        &mut self,
+        region: Region,
+        tile_top_left: Point,
+    ) -> CydFrameWasm<'_> {
         let size = region.size;
         let pixel_count = size.width as usize * size.height as usize;
         // Every new frame starts cleared to the device background so callers
@@ -76,6 +85,7 @@ impl Cyd for CydWasm {
             context: &self.context,
             pixels,
             region,
+            tile_top_left,
             foreground565: self.foreground565,
             font: self.font,
         }
@@ -94,6 +104,9 @@ pub struct CydFrameWasm<'a> {
     // Where this frame presents and how large it is: set from the `Region`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
     region: Region,
+    // Tile top-left in the parent coordinate space. Drawing coordinates are
+    // translated by this point before reaching the local frame buffer.
+    tile_top_left: Point,
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
 }
@@ -105,6 +118,14 @@ impl CydFrameWasm<'_> {
 
     fn height(&self) -> usize {
         self.region.size.height as usize
+    }
+
+    fn local_x(&self, x: i32) -> Option<usize> {
+        usize::try_from(x.checked_sub(self.tile_top_left.x)?).ok()
+    }
+
+    fn local_y(&self, y: i32) -> Option<usize> {
+        usize::try_from(y.checked_sub(self.tile_top_left.y)?).ok()
     }
 
     /// Convert the `Rgb565` buffer to RGBA8 and `putImageData` it at the frame's top-left.
@@ -145,11 +166,15 @@ impl DrawTarget for CydFrameWasm<'_> {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        let width = self.width() as i32;
-        let height = self.height() as i32;
         for Pixel(point, color) in pixels {
-            if point.x >= 0 && point.x < width && point.y >= 0 && point.y < height {
-                let index = point.y as usize * self.width() + point.x as usize;
+            let Some(local_x) = self.local_x(point.x) else {
+                continue;
+            };
+            let Some(local_y) = self.local_y(point.y) else {
+                continue;
+            };
+            if local_x < CydFrameWasm::width(self) && local_y < CydFrameWasm::height(self) {
+                let index = local_y * CydFrameWasm::width(self) + local_x;
                 self.pixels[index] = color.into_storage();
             }
         }
@@ -157,42 +182,64 @@ impl DrawTarget for CydFrameWasm<'_> {
     }
 }
 
-impl OriginDimensions for CydFrameWasm<'_> {
-    fn size(&self) -> Size {
-        self.region.size
+impl Dimensions for CydFrameWasm<'_> {
+    fn bounding_box(&self) -> Rectangle {
+        Rectangle::new(self.tile_top_left, self.region.size)
     }
 }
 
 impl PixelTarget for CydFrameWasm<'_> {
     fn width(&self) -> usize {
-        CydFrameWasm::width(self)
+        usize::try_from(self.tile_top_left.x)
+            .expect("tile top-left x must be non-negative")
+            .checked_add(CydFrameWasm::width(self))
+            .expect("frame width must fit in usize")
     }
 
     fn height(&self) -> usize {
-        CydFrameWasm::height(self)
+        usize::try_from(self.tile_top_left.y)
+            .expect("tile top-left y must be non-negative")
+            .checked_add(CydFrameWasm::height(self))
+            .expect("frame height must fit in usize")
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        if x >= self.width() || y >= self.height() {
+        let Some(local_x) = self.local_x(x as i32) else {
+            return;
+        };
+        let Some(local_y) = self.local_y(y as i32) else {
+            return;
+        };
+        if local_x >= CydFrameWasm::width(self) || local_y >= CydFrameWasm::height(self) {
             return;
         }
-        let stride = self.width();
-        self.pixels[y * stride + x] = Rgb565::from(color).into_storage();
+        let stride = CydFrameWasm::width(self);
+        self.pixels[local_y * stride + local_x] = Rgb565::from(color).into_storage();
     }
 
     /// The frame buffer already stores RGB565, so a decoded image pixel can be
     /// written verbatim with no RGB888 round-trip.
     fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
-        if x >= self.width() || y >= self.height() {
+        let Some(local_x) = self.local_x(x as i32) else {
+            return;
+        };
+        let Some(local_y) = self.local_y(y as i32) else {
+            return;
+        };
+        if local_x >= CydFrameWasm::width(self) || local_y >= CydFrameWasm::height(self) {
             return;
         }
-        let stride = self.width();
-        self.pixels[y * stride + x] = rgb565;
+        let stride = CydFrameWasm::width(self);
+        self.pixels[local_y * stride + local_x] = rgb565;
     }
 }
 
 impl CydFrame for CydFrameWasm<'_> {
     type Error = Infallible;
+
+    fn tile_top_left(&self) -> Point {
+        self.tile_top_left
+    }
 
     fn region(&self) -> Region {
         self.region
@@ -200,7 +247,7 @@ impl CydFrame for CydFrameWasm<'_> {
 
     fn write_text(&mut self, text: &str) -> &mut Self {
         let style = MonoTextStyle::new(self.font, self.foreground565);
-        Text::with_baseline(text, Point::new(0, 0), style, Baseline::Top)
+        Text::with_baseline(text, Point::zero(), style, Baseline::Top)
             .draw(self)
             .expect("drawing onto an Infallible frame cannot fail");
         self

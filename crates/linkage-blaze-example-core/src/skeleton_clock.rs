@@ -109,6 +109,7 @@ const FIGURE_REGION: Region = Region::new(
     Point::new(0, FIGURE_Y as i32),
     Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),
 );
+const BACKGROUND_TOP_LEFT_IN_FIGURE: Point = Point::new(0, -(FIGURE_Y as i32));
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -165,14 +166,15 @@ where
             minute_anchor_y,
         )));
 
-        // On each tile ...
-        // (Can't use a `for` loop and Iterator because each tile borrows the
-        // CYD's reusable pixel buff. This is the "lending iterator" patten.)
+        // On each tile-backed frame ...
+        // (Can't use a `for` loop and Iterator because each yielded frame
+        // borrows the CYD's reusable pixel buff. This is the "lending
+        // iterator" patten.)
         let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
         while let Some(mut tile) = tiles.next() {
             // draw the background bitmap.
             BACKGROUND_BITMAP
-                .at(figure_relative_point(Point::zero()))
+                .at(BACKGROUND_TOP_LEFT_IN_FIGURE)
                 .draw(&mut tile)?;
 
             // Draw the projected items from the linkage.
@@ -228,11 +230,11 @@ where
         .map_err(Error::Flush)?;
 
     let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
-    while let Some(mut tile) = tiles.next() {
+    while let Some(mut frame) = tiles.next() {
         BACKGROUND_BITMAP
-            .at(figure_relative_point(Point::zero()))
-            .draw(&mut tile)?;
-        tile.flush().await.map_err(Error::Flush)?;
+            .at(BACKGROUND_TOP_LEFT_IN_FIGURE)
+            .draw(&mut frame)?;
+        frame.flush().await.map_err(Error::Flush)?;
     }
 
     Ok(())
@@ -414,8 +416,9 @@ const fn str_eq(left: &str, right: &str) -> bool {
 // ── Skeleton-clock-specific overlay drawing ──────────────────────────────────
 
 // All overlay drawing happens against a `DrawTarget` whose coordinates are in
-// physical-screen space; the `Tile` yielded by `Cyd::tiles` subtracts the tile
-// origin so these functions never need to know they are rendering into a tile.
+// figure-region space; tiled frames from `Cyd::tiles` subtract the shared
+// figure-region tile top-left so these functions never need to know they are
+// rendering into a tile.
 
 /// Draw a short string centered (both axes) on `center`.
 fn draw_centered_text<D>(
