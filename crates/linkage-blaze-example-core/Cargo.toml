@@ -21,6 +21,7 @@ default = ["skeleton-clock"]
 skeleton-clock = ["dep:device-envoy-core"]
 
 [dependencies]
+derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
 embedded-graphics = { version = "0.8", default-features = false }
 embassy-time = "0.5.1"
 heapless = "0.9.1"

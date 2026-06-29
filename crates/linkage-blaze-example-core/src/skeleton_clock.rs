@@ -21,9 +21,11 @@ use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
+    Cyd, CydFlushError, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
     tiling::{Region, TileGrid, max_u32},
 };
+
+use crate::infallible::InfallibleResultExt;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
@@ -127,8 +129,7 @@ where
         cyd.frame_mut(TIME_REGION)
             .write_text(&text_12h(local_time))
             .flush()
-            .await
-            .map_err(Error::Flush)?;
+            .await?;
 
         // Convert the time into normalized angles for the figure's
         // the head (seconds), right arm (minutes) and left arm (hours).
@@ -140,15 +141,15 @@ where
         // // Iterate 3d items, project to 2D, and collect 2D items and poses.
         let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_count() }>::new();
         for draw_item in draw_items.by_ref() {
-            projected_items.push(draw_item.project(&PROJECTION))?;
+            push_projected_item(&mut projected_items, draw_item.project(&PROJECTION))?;
         }
 
         // Using the exhausted iterator, find the position of the middle of the left hand.
         let (hours_anchor_x, hours_anchor_y) =
-            draw_items.pose_by_mark_name("lMid2")?.project(&PROJECTION);
+            mark_lookup(draw_items.pose_by_mark_name("lMid2"))?.project(&PROJECTION);
         // Find the position of the middle of the right hand.
         let (minute_anchor_x, minute_anchor_y) =
-            draw_items.pose_by_mark_name("rMid2")?.project(&PROJECTION);
+            mark_lookup(draw_items.pose_by_mark_name("rMid2"))?.project(&PROJECTION);
 
         // Figure out where to draw the hour and minute placards.
         let hours_top_left = Point::new(
@@ -166,7 +167,7 @@ where
         // iterator" patten.)
         let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
         while let Some(mut tile) = tiles.next() {
-            BACKGROUND_BITMAP.draw(&mut tile)?;
+            BACKGROUND_BITMAP.draw(&mut tile).unwrap_never();
 
             // Draw the projected items from the linkage.
             for projected_item in &projected_items {
@@ -174,24 +175,27 @@ where
             }
 
             // Draw the hour sign and number
-            HOURS_SIGN.at(hours_top_left).draw(&mut tile)?;
+            HOURS_SIGN.at(hours_top_left).draw(&mut tile).unwrap_never();
             draw_centered_sign_value(
                 &mut tile,
                 hours_top_left,
                 HOURS_SIGN_VALUE_CENTER,
                 hour_12 as u32,
-            )?;
+            );
 
             // Draw the minute sign and number.
-            MINUTE_SIGN.at(minute_top_left).draw(&mut tile)?;
+            MINUTE_SIGN
+                .at(minute_top_left)
+                .draw(&mut tile)
+                .unwrap_never();
             draw_centered_sign_value(
                 &mut tile,
                 minute_top_left,
                 MINUTE_SIGN_VALUE_CENTER,
                 minute as u32,
-            )?;
+            );
 
-            tile.flush().await.map_err(Error::Flush)?;
+            tile.flush().await?;
         }
     }
 }
@@ -211,19 +215,17 @@ where
     cyd.frame_mut(WIFI_STATUS_REGION)
         .write_text("WiFi: --")
         .flush()
-        .await
-        .map_err(Error::Flush)?;
+        .await?;
 
     cyd.frame_mut(TIME_REGION)
         .write_text("--:--:-- --")
         .flush()
-        .await
-        .map_err(Error::Flush)?;
+        .await?;
 
     let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
     while let Some(mut frame) = tiles.next() {
-        BACKGROUND_BITMAP.at(Point::zero()).draw(&mut frame)?;
-        frame.flush().await.map_err(Error::Flush)?;
+        BACKGROUND_BITMAP.draw(&mut frame).unwrap_never();
+        frame.flush().await?;
     }
 
     Ok(())
@@ -367,8 +369,7 @@ fn draw_centered_text<D>(
     center: Point,
     font: &'static MonoFont<'static>,
     color: Rgb565,
-) -> Result<(), Infallible>
-where
+) where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let text_style = TextStyleBuilder::new()
@@ -376,8 +377,8 @@ where
         .baseline(Baseline::Middle)
         .build();
     Text::with_text_style(text, center, MonoTextStyle::new(font, color), text_style)
-        .draw(target)?;
-    Ok(())
+        .draw(target)
+        .unwrap_never();
 }
 
 /// Overlay a two-digit value onto a blitted sign bitmap, centered in the open
@@ -390,8 +391,7 @@ fn draw_centered_sign_value<D>(
     sign_top_left: Point,
     value_center: Point,
     number: u32,
-) -> Result<(), Infallible>
-where
+) where
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let mut value_text = heapless::String::<4>::new();
@@ -403,37 +403,46 @@ where
         sign_top_left + value_center,
         &FONT_10X20,
         Rgb565::from(PLACARD_TEXT),
-    )
+    );
 }
 
 // ── Errors ────────────────────────────────────────────────────────────────────
 
+#[derive(Debug, derive_more::From)]
+pub struct MarkLookupError(pub MarkError);
+
+fn mark_lookup<T>(result: Result<T, MarkError>) -> Result<T, MarkLookupError> {
+    Ok(result?)
+}
+
+#[derive(Debug, derive_more::From)]
+pub struct ProjectedItemOverflowError(pub ProjectedDrawItem);
+
+fn push_projected_item<const N: usize>(
+    projected_items: &mut heapless::Vec<ProjectedDrawItem, N>,
+    projected_draw_item: ProjectedDrawItem,
+) -> Result<(), ProjectedItemOverflowError> {
+    match projected_items.push(projected_draw_item) {
+        Ok(()) => Ok(()),
+        Err(projected_draw_item) => Err(ProjectedItemOverflowError(projected_draw_item)),
+    }
+}
+
 /// Error from the generic skeleton-clock loop, generic over the surface's flush
 /// error `F`.
-#[derive(Debug)]
+#[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
+    #[from(ignore)]
     Flush(F),
     /// A required figure mark was not found.
-    Mark(MarkError),
+    Mark(MarkLookupError),
     /// The projected-items scratch buffer was smaller than the linkage draw-item count.
-    ProjectedItemOverflow(ProjectedDrawItem),
+    ProjectedItemOverflow(ProjectedItemOverflowError),
 }
 
-impl<F> From<MarkError> for Error<F> {
-    fn from(error: MarkError) -> Self {
-        Self::Mark(error)
-    }
-}
-
-impl<F> From<Infallible> for Error<F> {
-    fn from(error: Infallible) -> Self {
-        match error {}
-    }
-}
-
-impl<F> From<ProjectedDrawItem> for Error<F> {
-    fn from(projected_draw_item: ProjectedDrawItem) -> Self {
-        Self::ProjectedItemOverflow(projected_draw_item)
+impl<F: CydFlushError> From<F> for Error<F> {
+    fn from(error: F) -> Self {
+        Self::Flush(error)
     }
 }
