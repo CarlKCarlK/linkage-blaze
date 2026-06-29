@@ -109,7 +109,7 @@ const FIGURE_REGION: Region = Region::new(
     Point::new(0, FIGURE_Y as i32),
     Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),
 );
-const BACKGROUND_TOP_LEFT_IN_FIGURE: Point = Point::new(0, -(FIGURE_Y as i32));
+const BACKGROUND_BITMAP_SHIFT: Point = Point::new(0, -(FIGURE_Y as i32));
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -172,9 +172,9 @@ where
         // iterator" patten.)
         let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
         while let Some(mut tile) = tiles.next() {
-            // draw the background bitmap.
+            // Daw the background bitmap, but it's too big, so shift it to fit the figure region.
             BACKGROUND_BITMAP
-                .at(BACKGROUND_TOP_LEFT_IN_FIGURE)
+                .at(BACKGROUND_BITMAP_SHIFT)
                 .draw(&mut tile)?;
 
             // Draw the projected items from the linkage.
