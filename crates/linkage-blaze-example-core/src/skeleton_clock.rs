@@ -21,7 +21,7 @@ use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFlushError, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
+    Cyd, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
     tiling::{Region, TileGrid, max_u32},
 };
 
@@ -129,7 +129,8 @@ where
         cyd.frame_mut(TIME_REGION)
             .write_text(&text_12h(local_time))
             .flush()
-            .await?;
+            .await
+            .map_err(Error::Flush)?;
 
         // Convert the time into normalized angles for the figure's
         // the head (seconds), right arm (minutes) and left arm (hours).
@@ -195,7 +196,7 @@ where
                 minute as u32,
             );
 
-            tile.flush().await?;
+            tile.flush().await.map_err(Error::Flush)?;
         }
     }
 }
@@ -215,17 +216,19 @@ where
     cyd.frame_mut(WIFI_STATUS_REGION)
         .write_text("WiFi: --")
         .flush()
-        .await?;
+        .await
+        .map_err(Error::Flush)?;
 
     cyd.frame_mut(TIME_REGION)
         .write_text("--:--:-- --")
         .flush()
-        .await?;
+        .await
+        .map_err(Error::Flush)?;
 
     let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
     while let Some(mut frame) = tiles.next() {
         BACKGROUND_BITMAP.draw(&mut frame).unwrap_never();
-        frame.flush().await?;
+        frame.flush().await.map_err(Error::Flush)?;
     }
 
     Ok(())
@@ -430,6 +433,12 @@ fn push_projected_item<const N: usize>(
 
 /// Error from the generic skeleton-clock loop, generic over the surface's flush
 /// error `F`.
+///
+/// Our own error types ([`MarkLookupError`], [`ProjectedItemOverflowError`])
+/// get a derived `From`, so they propagate with a plain `?`. The device's flush
+/// error `F` is the one exception: a blanket `From<F>` would be greedy enough to
+/// collide with those concrete `From`s under coherence, so flush is converted
+/// explicitly with `.map_err(Error::Flush)` at the call site.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
@@ -439,10 +448,4 @@ pub enum Error<F> {
     Mark(MarkLookupError),
     /// The projected-items scratch buffer was smaller than the linkage draw-item count.
     ProjectedItemOverflow(ProjectedItemOverflowError),
-}
-
-impl<F: CydFlushError> From<F> for Error<F> {
-    fn from(error: F) -> Self {
-        Self::Flush(error)
-    }
 }

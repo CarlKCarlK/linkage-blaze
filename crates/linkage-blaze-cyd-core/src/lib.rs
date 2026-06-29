@@ -10,7 +10,7 @@ mod tga;
 pub mod tiling;
 mod touch_event;
 
-pub use cyd::{BlitSizeError, Cyd, CydFlushError, CydFrame, CydInfallibleError, Tiles};
+pub use cyd::{CopySizeError, Cyd, CydFlushError, CydFrame, CydInfallibleError, Tiles};
 pub use orientation::Orientation;
 pub use tga::{Image565, Image565Mask};
 pub use touch_event::TouchInputEvent;

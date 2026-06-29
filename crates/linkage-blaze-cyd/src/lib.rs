@@ -747,13 +747,13 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
         CydFrameEsp::write_text(self, text)
     }
 
-    fn blit_full_565(
+    fn copy_from_565(
         &mut self,
         src: &[u16],
-    ) -> Result<(), linkage_blaze_cyd_core::BlitSizeError> {
+    ) -> Result<(), linkage_blaze_cyd_core::CopySizeError> {
         let dst = self.raw_pixels_mut();
         if dst.len() != src.len() {
-            return Err(linkage_blaze_cyd_core::BlitSizeError {
+            return Err(linkage_blaze_cyd_core::CopySizeError {
                 src_len: src.len(),
                 frame_len: dst.len(),
             });
