@@ -16,7 +16,7 @@ use embedded_graphics::{
     Pixel,
     mono_font::MonoFont,
     pixelcolor::{IntoStorage, Rgb565, Rgb888},
-    prelude::{DrawTarget, OriginDimensions, Point, Size},
+    prelude::{Dimensions, DrawTarget, Point, Size},
     primitives::Rectangle,
 };
 use linkage_blaze_core::PixelTarget;
@@ -95,6 +95,9 @@ pub struct CydFrameEsp<'a> {
     // Where this frame presents and how large it is: set from the `Region`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
     region: Region,
+    // Tile top-left in the parent coordinate space. Drawing coordinates are
+    // translated by this point before reaching the local frame buffer.
+    tile_top_left: Point,
     // Default background and foreground colors and font, copied from the owning
     // `CydEsp`, so `clear` and `write_text` can render with the device default style.
     pub(crate) background565: Rgb565,
@@ -139,6 +142,14 @@ impl<'a> CydFrameEsp<'a> {
             .display
             .flush_buffer(&self.view, self.region.top_left)?)
     }
+
+    fn local_x(&self, x: i32) -> Option<usize> {
+        usize::try_from(x.checked_sub(self.tile_top_left.x)?).ok()
+    }
+
+    fn local_y(&self, y: i32) -> Option<usize> {
+        usize::try_from(y.checked_sub(self.tile_top_left.y)?).ok()
+    }
 }
 
 impl DrawTarget for CydFrameEsp<'_> {
@@ -154,41 +165,71 @@ impl DrawTarget for CydFrameEsp<'_> {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        self.view.draw_iter(pixels)
+        for Pixel(point, color) in pixels {
+            let Some(local_x) = self.local_x(point.x) else {
+                continue;
+            };
+            let Some(local_y) = self.local_y(point.y) else {
+                continue;
+            };
+            if local_x < self.view.width() && local_y < self.view.height() {
+                let index = local_y * self.view.width() + local_x;
+                self.raw_pixels_mut()[index] = color.into_storage();
+            }
+        }
+        Ok(())
     }
 }
 
-impl OriginDimensions for CydFrameEsp<'_> {
-    fn size(&self) -> Size {
-        self.view.size()
+impl Dimensions for CydFrameEsp<'_> {
+    fn bounding_box(&self) -> Rectangle {
+        Rectangle::new(self.tile_top_left, self.view.size())
     }
 }
 
 impl PixelTarget for CydFrameEsp<'_> {
     fn width(&self) -> usize {
-        self.width()
+        usize::try_from(self.tile_top_left.x)
+            .expect("tile top-left x must be non-negative")
+            .checked_add(self.width())
+            .expect("frame width must fit in usize")
     }
 
     fn height(&self) -> usize {
-        self.height()
+        usize::try_from(self.tile_top_left.y)
+            .expect("tile top-left y must be non-negative")
+            .checked_add(self.height())
+            .expect("frame height must fit in usize")
     }
 
     fn put_pixel(&mut self, x: usize, y: usize, color: Rgb888) {
-        if x >= self.width() || y >= self.height() {
+        let Some(local_x) = self.local_x(x as i32) else {
+            return;
+        };
+        let Some(local_y) = self.local_y(y as i32) else {
+            return;
+        };
+        if local_x >= self.view.width() || local_y >= self.view.height() {
             return;
         }
-        let stride = self.width();
-        self.raw_pixels_mut()[y * stride + x] = CydEsp::rgb565(color).into_storage();
+        let stride = self.view.width();
+        self.raw_pixels_mut()[local_y * stride + local_x] = CydEsp::rgb565(color).into_storage();
     }
 
     /// The frame buffer already stores RGB565, so a decoded image pixel can be
     /// written verbatim with no RGB888 round-trip.
     fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
-        if x >= self.width() || y >= self.height() {
+        let Some(local_x) = self.local_x(x as i32) else {
+            return;
+        };
+        let Some(local_y) = self.local_y(y as i32) else {
+            return;
+        };
+        if local_x >= self.view.width() || local_y >= self.view.height() {
             return;
         }
-        let stride = self.width();
-        self.raw_pixels_mut()[y * stride + x] = rgb565;
+        let stride = self.view.width();
+        self.raw_pixels_mut()[local_y * stride + local_x] = rgb565;
     }
 }
 
@@ -484,6 +525,14 @@ impl CydEsp {
     }
 
     pub fn frame_mut(&mut self, region: Region) -> CydFrameEsp<'_> {
+        self.frame_mut_with_tile_top_left(region, Point::zero())
+    }
+
+    pub fn frame_mut_with_tile_top_left(
+        &mut self,
+        region: Region,
+        tile_top_left: Point,
+    ) -> CydFrameEsp<'_> {
         let size = region.size;
         let mut view = self
             .pixel_buffer
@@ -495,6 +544,7 @@ impl CydEsp {
             display: &mut self.display,
             view,
             region,
+            tile_top_left,
             background565: self.background565,
             foreground565: self.foreground565,
             font: self.font,
@@ -624,8 +674,12 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
         CydEsp::screen_size(self)
     }
 
-    fn frame_mut(&mut self, region: tiling::Region) -> CydFrameEsp<'_> {
-        CydEsp::frame_mut(self, region)
+    fn frame_mut_with_tile_top_left(
+        &mut self,
+        region: tiling::Region,
+        tile_top_left: Point,
+    ) -> CydFrameEsp<'_> {
+        CydEsp::frame_mut_with_tile_top_left(self, region, tile_top_left)
     }
 
     fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
@@ -653,6 +707,10 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
 
 impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
     type Error = CydError;
+
+    fn tile_top_left(&self) -> Point {
+        self.tile_top_left
+    }
 
     fn region(&self) -> Region {
         self.region

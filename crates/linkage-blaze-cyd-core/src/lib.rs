@@ -9,9 +9,8 @@ mod orientation;
 mod tga;
 pub mod tiling;
 mod touch_event;
-mod translated;
 
-pub use cyd::{Cyd, CydFrame, Tile, Tiles};
+pub use cyd::{Cyd, CydFrame, Tiles};
 pub use orientation::Orientation;
 pub use tga::{Image565, Image565Mask};
 pub use touch_event::TouchInputEvent;
