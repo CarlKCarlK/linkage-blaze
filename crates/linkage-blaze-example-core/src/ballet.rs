@@ -6,19 +6,12 @@
 //! and (later) a WASM-simulated one. The platform shim constructs the concrete
 //! device and calls [`ballet`].
 
-use core::{convert::Infallible, fmt::Write};
+use core::convert::Infallible;
 
 use embassy_time::{Duration, Instant};
-use embedded_graphics::{
-    Drawable,
-    mono_font::{MonoTextStyle, ascii::FONT_6X10},
-    pixelcolor::Rgb565,
-    prelude::{DrawTarget, Point},
-    text::{Baseline, Text},
-};
 use linkage_blaze_core::{
-    LinkageFixed, Projection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion, linkage,
-    linkage_fixed,
+    LinkageFixed, LinkageView, Projection, Rgb888, WebColors, bvh_motion, bvh_parse::BvhMotion,
+    linkage, linkage_fixed,
 };
 
 use linkage_blaze_cyd_core::{Cyd, CydFrame};
@@ -41,10 +34,11 @@ const SCALE: f32 = 1.575;
 const MOTION: BvhMotion<132, 592> = bvh_motion!("../../linkage-blaze-mocap/samples/pirouette.bvh");
 const LINKAGE0: LinkageFixed<{ MOTION.dof() }, 6, 538> =
     linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
-const LINKAGE: LinkageFixed<{ MOTION.dof() }, 6, 540> = LinkageFixed::<0, 0, 3>::start()
+const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = LinkageFixed::<0, 0, 3>::start()
     .pen_color(FIGURE)
     .pen_width(3.2)
-    .combine(LINKAGE0);
+    .combine::<{ MOTION.dof() }, 6, 538, { MOTION.dof() }, 6, 540>(LINKAGE0)
+    .view();
 
 // todo000000 do .view() here
 
@@ -59,69 +53,48 @@ pub async fn ballet<CydDevice>(cyd: &mut CydDevice) -> Result<Infallible, CydDev
 where
     CydDevice: Cyd,
 {
-    let linkage = LINKAGE.view();
-    let text565 = Rgb565::from(FOREGROUND);
-    let mut last_sample_duration = None;
+    let mut last_sample_duration: Option<Duration> = None;
     loop {
         for (sample_index, params) in MOTION.samples().enumerate() {
             let started = Instant::now();
             let mut cyd_frame = cyd.full_frame_mut();
-            for draw_item in linkage.draw_items(&params) {
+            for draw_item in LINKAGE.draw_items(&params) {
                 draw_item.project(&PROJECTION).draw(&mut cyd_frame);
             }
 
             // todo000 review this
-            draw_status(&mut cyd_frame, text565, sample_index, last_sample_duration);
+            let mut status = heapless::String::<64>::new();
+            if let Some(last_sample_duration) = last_sample_duration {
+                let elapsed_secs = last_sample_duration.as_micros() as f32 * 1e-6_f32;
+                let fps = (1.0_f32 / elapsed_secs).max(0.1);
+                let slomo = 120.0_f32 / fps;
+                core::fmt::write(
+                    &mut status,
+                    format_args!(
+                        "{}/{}  fps {:.1}  slow {:.1}x",
+                        sample_index + 1,
+                        MOTION.sample_count(),
+                        fps,
+                        slomo,
+                    ),
+                )
+                .expect("status text fits in 64 bytes");
+            } else {
+                core::fmt::write(
+                    &mut status,
+                    format_args!(
+                        "{}/{}  fps --.-  slow --.-x",
+                        sample_index + 1,
+                        MOTION.sample_count()
+                    ),
+                )
+                .expect("status text fits in 64 bytes");
+            }
+            cyd_frame.write_text(&status);
             // The frame boundary: immediate on the MCU, next-animation-frame on WASM.
             cyd_frame.flush().await?;
             last_sample_duration = Some(Instant::now() - started);
             // todo000 wasm is so fast, might want code to stop faster than 120fps.
         }
     }
-}
-
-fn draw_status<D>(
-    draw_target: &mut D,
-    text565: Rgb565,
-    sample_index: usize,
-    last_sample_duration: Option<Duration>,
-) where
-    D: DrawTarget<Color = Rgb565, Error = Infallible>,
-{
-    let mut status = heapless::String::<64>::new();
-    if let Some(last_sample_duration) = last_sample_duration {
-        let elapsed_secs = last_sample_duration.as_micros() as f32 * 1e-6_f32;
-        let fps = (1.0_f32 / elapsed_secs).max(0.1);
-        let slomo = 120.0_f32 / fps;
-        Write::write_fmt(
-            &mut status,
-            format_args!(
-                "{}/{}  fps {:.1}  slow {:.1}x",
-                sample_index + 1,
-                MOTION.sample_count(),
-                fps,
-                slomo,
-            ),
-        )
-        .expect("status text fits in 64 bytes");
-    } else {
-        Write::write_fmt(
-            &mut status,
-            format_args!(
-                "{}/{}  fps --.-  slow --.-x",
-                sample_index + 1,
-                MOTION.sample_count()
-            ),
-        )
-        .expect("status text fits in 64 bytes");
-    }
-
-    Text::with_baseline(
-        status.as_str(),
-        Point::new(0, 0),
-        MonoTextStyle::new(&FONT_6X10, text565),
-        Baseline::Top,
-    )
-    .draw(draw_target)
-    .expect("drawing to an Infallible target cannot fail");
 }
