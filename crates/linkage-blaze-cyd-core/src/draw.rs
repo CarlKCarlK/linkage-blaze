@@ -362,6 +362,10 @@ impl PreparedPrimitive {
             return false;
         }
 
+        self.covers_inside_bounds(point_x, point_y)
+    }
+
+    fn covers_inside_bounds(&self, point_x: i32, point_y: i32) -> bool {
         match self.kind {
             PreparedKind::Line(line) => line.covers(point_x, point_y),
             PreparedKind::Ellipse(ellipse) => ellipse.covers(point_x, point_y),
@@ -406,7 +410,7 @@ pub struct PrimitivePixelsIter<'a, const PRIMITIVE_COUNT: usize> {
     pixels: &'a PrimitivePixels<PRIMITIVE_COUNT>,
     x: i32,
     y: i32,
-    active: heapless::Vec<usize, PRIMITIVE_COUNT>,
+    active: heapless::Vec<&'a PreparedPrimitive, PRIMITIVE_COUNT>,
 }
 
 impl<'a, const PRIMITIVE_COUNT: usize> PrimitivePixelsIter<'a, PRIMITIVE_COUNT> {
@@ -423,11 +427,11 @@ impl<'a, const PRIMITIVE_COUNT: usize> PrimitivePixelsIter<'a, PRIMITIVE_COUNT> 
 
     fn rebuild_active(&mut self) {
         self.active.clear();
-        for (primitive_index, primitive) in self.pixels.primitives.iter().enumerate() {
+        for primitive in self.pixels.primitives.iter().rev() {
             if primitive.bounds.contains_y(self.y) {
                 self.active
-                    .push(primitive_index)
-                    .expect("active primitive indices fit active list capacity");
+                    .push(primitive)
+                    .expect("active primitive references fit active list capacity");
             }
         }
     }
@@ -442,12 +446,11 @@ impl<const PRIMITIVE_COUNT: usize> Iterator for PrimitivePixelsIter<'_, PRIMITIV
         }
 
         let mut color = self.pixels.background;
-        for primitive_index in self.active.iter().rev() {
-            let primitive = &self.pixels.primitives[*primitive_index];
+        for primitive in &self.active {
             if !primitive.bounds.contains_x(self.x) {
                 continue;
             }
-            if primitive.covers(self.x, self.y) {
+            if primitive.covers_inside_bounds(self.x, self.y) {
                 color = primitive.color;
                 break;
             }
