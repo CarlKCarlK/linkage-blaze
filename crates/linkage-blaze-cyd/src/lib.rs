@@ -483,6 +483,7 @@ impl CydEsp {
         self.touch.as_mut()?.read_raw_touch_event()
     }
 
+    #[inline]
     pub fn flush_at(
         &mut self,
         buffer: &impl RegionPixels,
@@ -514,10 +515,12 @@ impl CydEsp {
         }
     }
 
+    #[inline]
     fn fill_rectangle_raw(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
         Ok(self.display.fill_rectangle(rectangle, color)?)
     }
 
+    #[inline]
     pub fn draw_line_segments(
         &mut self,
         bounds: Rectangle,
@@ -529,6 +532,7 @@ impl CydEsp {
             .draw_line_segments(bounds, background, segments)?)
     }
 
+    #[inline]
     pub fn draw_primitives(
         &mut self,
         bounds: Rectangle,
@@ -620,6 +624,7 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
     type Error = CydError;
     type Frame<'a> = CydFrameEsp<'a>;
 
+    #[inline]
     fn screen_size(&self) -> Size {
         self.display.size()
     }
@@ -670,10 +675,12 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
             }))
     }
 
+    #[inline]
     fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
         CydEsp::fill_rectangle_raw(self, rectangle, color)
     }
 
+    #[inline]
     fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), CydError>
     where
         I: IntoIterator<Item = Rgb565>,
