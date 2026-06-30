@@ -4086,6 +4086,7 @@ impl<T: PixelTarget> embedded_graphics::geometry::OriginDimensions for PixelTarg
 /// ```rust,no_run
 /// # use linkage_blaze_core::{Point, Projection};
 /// let orthographic = Projection::front_orthographic(Point::new(84, 300), 1.575);
+/// let top = Projection::top_orthographic(Point::new(160, 160), 1.0);
 /// let perspective = Projection::front_perspective(Point::new(120, 160), 15.0, 30.0);
 /// ```
 pub struct Projection {
@@ -4099,6 +4100,9 @@ pub struct Projection {
 /// World Y → target X, world Z → target Y, world X → depth.
 const NEG_X_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
 
+/// World Y → target X, world X → target Y, world Z → depth.
+const NEG_Z_BASIS: Mat3 = Mat3([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]);
+
 impl Projection {
     /// Orthographic front view, looking along negative X: world Y → target X
     /// (negated), world Z → target Y (negated). `target_origin` is the point
@@ -4107,6 +4111,19 @@ impl Projection {
     pub const fn front_orthographic(target_origin: Point, scale: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
+            target_origin,
+            scale,
+            focal: None,
+        }
+    }
+
+    /// Orthographic top view, looking along negative Z: world Y → target X
+    /// (negated), world X → target Y (negated). `target_origin` is the point
+    /// in the parent drawing coordinate space where world Y=0 and world X=0
+    /// project.
+    pub const fn top_orthographic(target_origin: Point, scale: f32) -> Self {
+        Self {
+            rotation: NEG_Z_BASIS,
             target_origin,
             scale,
             focal: None,
@@ -4429,7 +4446,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{Arg, DrawItem, LinkageFixed, Pose, Step, Vec3};
+    use super::{Arg, DrawItem, LinkageFixed, Mat3, Point, Pose, Projection, Step, Vec3};
     #[cfg(feature = "alloc")]
     use super::{LinkageBuf, Rgb888};
     use crate::test_helpers::{
@@ -4490,6 +4507,36 @@ mod tests {
         .forward_param("close hand", 1.0, 0.0)
         .yaw(90.0)
         .forward(1.0);
+
+    fn assert_float_close(actual: f32, expected: f32, tolerance: f32) {
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "actual {actual} was not within {tolerance} of expected {expected}",
+        );
+    }
+
+    #[test]
+    fn top_orthographic_projects_xy_plane() {
+        let projection = Projection::top_orthographic(Point::new(100, 100), 2.0);
+
+        let forward_pose = Pose::new(Mat3::IDENTITY, Vec3::from([3.0, 0.0, 0.0]));
+        let left_pose = Pose::new(Mat3::IDENTITY, Vec3::from([0.0, 4.0, 0.0]));
+        let forward_projected = forward_pose.project(&projection);
+        let left_projected = left_pose.project(&projection);
+
+        assert_float_close(forward_projected.0, 100.0, 1e-5);
+        assert_float_close(forward_projected.1, 94.0, 1e-5);
+        assert_float_close(left_projected.0, 92.0, 1e-5);
+        assert_float_close(left_projected.1, 100.0, 1e-5);
+
+        let forward_axis = projection.project_dir(Pose::start(), Vec3::from([1.0, 0.0, 0.0]), 5.0);
+        let left_axis = projection.project_dir(Pose::start(), Vec3::from([0.0, 1.0, 0.0]), 5.0);
+
+        assert_float_close(forward_axis.0, 0.0, 1e-5);
+        assert_float_close(forward_axis.1, -10.0, 1e-5);
+        assert_float_close(left_axis.0, -10.0, 1e-5);
+        assert_float_close(left_axis.1, 0.0, 1e-5);
+    }
 
     #[test]
     fn zero_pen_width_still_draws() {
