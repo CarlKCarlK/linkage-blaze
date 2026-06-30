@@ -21,7 +21,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{
-    DiskItem, DrawItem, LinkageFixed, Pose, SphereItem, Vec3, linkage, linkage_fixed,
+    DrawItem, LinkageFixed, ProjectedDrawItem, Projection, linkage, linkage_fixed,
 };
 use linkage_blaze_cyd_core::{Cyd, CydFrame, DrawPrimitive, Ellipse, LineSegment, Orientation};
 use log::info;
@@ -53,8 +53,10 @@ pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(240, 8), Siz
 pub const TIME_REGION: Rectangle = Rectangle::new(Point::new(80, 34), Size::new(160, 40));
 
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(80, 80), Size::new(160, 160));
-const CLOCK_CENTER: Point = Point::new(80, 80);
-const HAND_SCALE: f32 = 1.0; // todo000 part of projection?
+const PROJECTION: Projection = Projection::top_orthographic(
+    /* target origin */ Point::new(160, 160),
+    /* scale */ 1.0,
+);
 const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
 const CLOCK_PRIMITIVE_CAPACITY: usize = CLOCK_HANDS.view().draw_item_count();
 
@@ -106,97 +108,75 @@ where
             let Some(primitive) = draw_item_to_primitive(draw_item) else {
                 continue;
             };
-            push_primitive(&mut primitives, primitive)?;
+            if let Err(primitive) = primitives.push(primitive) {
+                return Err(Error::PrimitiveOverflow(primitive));
+            }
         }
         cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &primitives)
             .map_err(Error::Flush)?;
     }
 }
 
-#[derive(Debug, derive_more::From)]
-pub struct PrimitiveOverflowError(pub DrawPrimitive);
-
-fn push_primitive<const N: usize>(
-    primitives: &mut heapless::Vec<DrawPrimitive, N>,
-    primitive: DrawPrimitive,
-) -> Result<(), PrimitiveOverflowError> {
-    match primitives.push(primitive) {
-        Ok(()) => Ok(()),
-        Err(primitive) => Err(PrimitiveOverflowError(primitive)),
-    }
-}
-
 fn draw_item_to_primitive(draw_item: DrawItem) -> Option<DrawPrimitive> {
-    match draw_item {
-        DrawItem::Stroke(stroke) => {
-            let start = clock_pose_point(stroke.start());
-            let end = clock_pose_point(stroke.end());
+    match draw_item.project(&PROJECTION) {
+        ProjectedDrawItem::Stroke {
+            start,
+            end,
+            color,
+            pixel_width,
+        } => {
+            let start = projected_point(start);
+            let end = projected_point(end);
             if start == end {
                 return None;
             }
             Some(DrawPrimitive::LineSegment(LineSegment {
                 start,
                 end,
-                width: clock_width_pixels(stroke.width()),
-                color: Rgb565::from(stroke.color()),
+                width: pixel_width_u16(pixel_width),
+                color: Rgb565::from(color),
             }))
         }
-        DrawItem::Disk(disk) => Some(DrawPrimitive::Ellipse(disk_to_ellipse(disk))),
-        DrawItem::Sphere(sphere) => Some(DrawPrimitive::Ellipse(sphere_to_ellipse(sphere))),
+        ProjectedDrawItem::Ellipse {
+            center,
+            axis_a,
+            axis_b,
+            color,
+        } => Some(DrawPrimitive::Ellipse(Ellipse {
+            center: projected_point(center),
+            axis_a,
+            axis_b,
+            radius: ellipse_bound_radius(axis_a, axis_b),
+            stroke_width: 0,
+            color: Rgb565::from(color),
+            filled: true,
+        })),
+        ProjectedDrawItem::Circle {
+            center,
+            pixel_radius,
+            color,
+        } => Some(DrawPrimitive::Ellipse(Ellipse {
+            center: projected_point(center),
+            axis_a: (pixel_radius, 0.0),
+            axis_b: (0.0, pixel_radius),
+            radius: pixel_radius,
+            stroke_width: 0,
+            color: Rgb565::from(color),
+            filled: true,
+        })),
     }
 }
 
-fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
-    let orientation = disk.pose().orientation();
-    Ellipse {
-        center: clock_pose_point(disk.pose()),
-        axis_a: project_dir(orientation.forward(), disk.radius()),
-        axis_b: project_dir(orientation.left(), disk.radius()),
-        radius: disk.radius() * HAND_SCALE,
-        stroke_width: 0,
-        color: Rgb565::from(disk.color()),
-        filled: true,
-    }
+fn projected_point((x, y): (f32, f32)) -> Point {
+    Point::new(x as i32, y as i32)
 }
 
-fn sphere_to_ellipse(sphere: SphereItem) -> Ellipse {
-    let radius = sphere.radius() * HAND_SCALE;
-    Ellipse {
-        center: clock_pose_point(sphere.pose()),
-        axis_a: (radius, 0.0),
-        axis_b: (0.0, radius),
-        radius,
-        stroke_width: 0,
-        color: Rgb565::from(sphere.color()),
-        filled: true,
-    }
+fn pixel_width_u16(width: f32) -> u16 {
+    ((width + 0.5) as u16).max(1)
 }
 
-fn clock_pose_point(pose: Pose) -> Point {
-    let position = pose.position();
-    Point::new(
-        CLOCK_BOUNDS.top_left.x + CLOCK_CENTER.x + project_x(position, HAND_SCALE),
-        CLOCK_BOUNDS.top_left.y + CLOCK_CENTER.y + project_y(position, HAND_SCALE),
-    )
-}
-
-fn project_x(position: Vec3, scale: f32) -> i32 {
-    -(position[1] * scale) as i32
-}
-
-fn project_y(position: Vec3, scale: f32) -> i32 {
-    -(position[0] * scale) as i32
-}
-
-fn project_dir(world_dir: Vec3, radius: f32) -> (f32, f32) {
-    (
-        -world_dir[1] * radius * HAND_SCALE,
-        -world_dir[0] * radius * HAND_SCALE,
-    )
-}
-
-fn clock_width_pixels(width: f32) -> u16 {
-    ((width * HAND_SCALE + 0.5) as u16).max(1)
+fn ellipse_bound_radius(axis_a: (f32, f32), axis_b: (f32, f32)) -> f32 {
+    (axis_a.0.abs() + axis_b.0.abs()).max(axis_a.1.abs() + axis_b.1.abs())
 }
 
 struct BufferTarget<'a> {
@@ -310,14 +290,13 @@ fn linkage_params(hour_24: u8, minute: u8, second: u8) -> [f32; 2] {
 
 /// Error from the generic clock loop, generic over the surface's flush error `F`.
 ///
-/// Only flushing a frame can fail today; it is converted explicitly with
+/// The device's flush error `F` is converted explicitly with
 /// `.map_err(Error::Flush)` at the call site (the same flush-error convention as
 /// [`skeleton_clock::Error`](crate::skeleton_clock::Error)).
-#[derive(Debug, derive_more::From)]
+#[derive(Debug)]
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
-    #[from(ignore)]
     Flush(F),
     /// The clock linkage produced more draw primitives than the fixed batch allows.
-    PrimitiveOverflow(PrimitiveOverflowError),
+    PrimitiveOverflow(DrawPrimitive),
 }
