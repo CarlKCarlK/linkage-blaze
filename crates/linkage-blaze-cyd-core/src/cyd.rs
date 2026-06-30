@@ -18,7 +18,7 @@ use embedded_graphics::{
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::PixelTarget;
+use linkage_blaze_core::{PixelTarget, Rgb888};
 
 use crate::{TouchInputEvent, tiling::TileGrid};
 
@@ -50,6 +50,23 @@ pub trait Cyd {
 
     /// Oriented screen size for the configured orientation.
     fn screen_size(&self) -> Size;
+
+    /// The device default background color.
+    fn background(&self) -> Rgb888;
+
+    /// The device default foreground/text color.
+    fn foreground(&self) -> Rgb888;
+
+    /// The device default background color in the native `Rgb565` format.
+    fn background_565(&self) -> Rgb565;
+
+    /// The device default foreground/text color in the native `Rgb565` format.
+    fn foreground_565(&self) -> Rgb565;
+
+    /// Convert an `Rgb888` color to the device's native `Rgb565` format.
+    fn to_rgb565(&self, color: Rgb888) -> Rgb565 {
+        Rgb565::from(color)
+    }
 
     /// Borrow a frame covering `region`, cleared to the device background color.
     ///
@@ -87,11 +104,26 @@ pub trait Cyd {
     /// Unlike [`CydFrame::fill`], this is a device-level operation rather than a
     /// frame-local buffered draw. Implementations clip to the physical screen and
     /// treat an empty intersection as a no-op.
-    fn fill_rectangle(
-        &mut self,
-        rectangle: Rectangle,
-        color: Rgb565,
-    ) -> Result<(), Self::Error>;
+    fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), Self::Error>;
+
+    /// Fill `rectangle` immediately from row-major native-color pixels.
+    fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Rgb565>;
+
+    /// Clear the whole screen to the device default background color.
+    ///
+    /// New frames already start cleared to this color. This is for immediately
+    /// returning the physical screen to the default background between frame
+    /// workflows.
+    fn clear(&mut self) -> Result<(), Self::Error> {
+        self.fill(self.background_565())
+    }
+
+    /// Fill the whole screen with an explicit color.
+    fn fill(&mut self, color: Rgb565) -> Result<(), Self::Error> {
+        self.fill_rectangle(Rectangle::new(Point::zero(), self.screen_size()), color)
+    }
 
     /// Drive `grid` as a sequence of low-memory tiles.
     ///
@@ -254,6 +286,22 @@ mod tests {
             Size::new(320, 240)
         }
 
+        fn background(&self) -> Rgb888 {
+            Rgb888::CSS_BLACK
+        }
+
+        fn foreground(&self) -> Rgb888 {
+            Rgb888::CSS_WHITE
+        }
+
+        fn background_565(&self) -> Rgb565 {
+            self.to_rgb565(self.background())
+        }
+
+        fn foreground_565(&self) -> Rgb565 {
+            self.to_rgb565(self.foreground())
+        }
+
         fn frame_mut_with_tile_top_left(
             &mut self,
             region: Rectangle,
@@ -274,6 +322,17 @@ mod tests {
             _rectangle: Rectangle,
             _color: Rgb565,
         ) -> Result<(), CydInfallibleError> {
+            Ok(())
+        }
+
+        fn fill_contiguous<I>(
+            &mut self,
+            _rectangle: Rectangle,
+            _pixels: I,
+        ) -> Result<(), CydInfallibleError>
+        where
+            I: IntoIterator<Item = Rgb565>,
+        {
             Ok(())
         }
     }

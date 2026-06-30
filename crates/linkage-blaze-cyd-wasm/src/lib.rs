@@ -22,9 +22,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::PixelTarget;
-use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, CydInfallibleError, Orientation, TouchInputEvent,
-};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, CydInfallibleError, Orientation, TouchInputEvent};
 use wasm_bindgen::Clamped;
 use web_sys::{CanvasRenderingContext2d, ImageData};
 
@@ -34,6 +32,8 @@ pub use animation_frame::next_animation_frame;
 pub struct CydWasm {
     context: CanvasRenderingContext2d,
     size: Size,
+    background: Rgb888,
+    foreground: Rgb888,
     background565: Rgb565,
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
@@ -52,6 +52,8 @@ impl CydWasm {
         Self {
             context,
             size: orientation.size(),
+            background,
+            foreground,
             background565: Rgb565::from(background),
             foreground565: Rgb565::from(foreground),
             font,
@@ -67,6 +69,22 @@ impl Cyd for CydWasm {
 
     fn screen_size(&self) -> Size {
         self.size
+    }
+
+    fn background(&self) -> Rgb888 {
+        self.background
+    }
+
+    fn foreground(&self) -> Rgb888 {
+        self.foreground
+    }
+
+    fn background_565(&self) -> Rgb565 {
+        self.background565
+    }
+
+    fn foreground_565(&self) -> Rgb565 {
+        self.foreground565
     }
 
     fn frame_mut(&mut self, region: Rectangle) -> CydFrameWasm<'_> {
@@ -112,32 +130,54 @@ impl Cyd for CydWasm {
 
         let pixel_count = rectangle.size.width as usize * rectangle.size.height as usize;
         let mut bytes = Vec::with_capacity(pixel_count * 4);
-        let storage = color.into_storage();
-        let red = scale_channel((storage >> 11) & 0x1f, 31);
-        let green = scale_channel((storage >> 5) & 0x3f, 63);
-        let blue = scale_channel(storage & 0x1f, 31);
         for _pixel_index in 0..pixel_count {
-            bytes.push(red);
-            bytes.push(green);
-            bytes.push(blue);
-            bytes.push(255);
+            push_rgb565_rgba(&mut bytes, color.into_storage());
         }
 
-        let image_data = ImageData::new_with_u8_clamped_array_and_sh(
-            Clamped(&bytes),
-            rectangle.size.width,
-            rectangle.size.height,
-        )
-        .expect("ImageData dimensions match the rectangle");
-        self.context
-            .put_image_data(
-                &image_data,
-                f64::from(rectangle.top_left.x),
-                f64::from(rectangle.top_left.y),
-            )
-            .expect("put_image_data with in-bounds coordinates cannot fail");
+        put_image_data(&self.context, rectangle, &bytes);
         Ok(())
     }
+
+    fn fill_contiguous<I>(
+        &mut self,
+        rectangle: Rectangle,
+        pixels: I,
+    ) -> Result<(), CydInfallibleError>
+    where
+        I: IntoIterator<Item = Rgb565>,
+    {
+        let mut bytes =
+            Vec::with_capacity(rectangle.size.width as usize * rectangle.size.height as usize * 4);
+        for pixel in pixels {
+            push_rgb565_rgba(&mut bytes, pixel.into_storage());
+        }
+
+        put_image_data(&self.context, rectangle, &bytes);
+        Ok(())
+    }
+}
+
+fn put_image_data(context: &CanvasRenderingContext2d, rectangle: Rectangle, bytes: &[u8]) {
+    let image_data = ImageData::new_with_u8_clamped_array_and_sh(
+        Clamped(bytes),
+        rectangle.size.width,
+        rectangle.size.height,
+    )
+    .expect("ImageData dimensions match the rectangle");
+    context
+        .put_image_data(
+            &image_data,
+            f64::from(rectangle.top_left.x),
+            f64::from(rectangle.top_left.y),
+        )
+        .expect("put_image_data with in-bounds coordinates cannot fail");
+}
+
+fn push_rgb565_rgba(bytes: &mut Vec<u8>, pixel: u16) {
+    bytes.push(scale_channel((pixel >> 11) & 0x1f, 31));
+    bytes.push(scale_channel((pixel >> 5) & 0x3f, 63));
+    bytes.push(scale_channel(pixel & 0x1f, 31));
+    bytes.push(255);
 }
 
 /// A single in-progress frame backed by an `Rgb565` pixel buffer.
@@ -306,10 +346,7 @@ impl CydFrame for CydFrameWasm<'_> {
         CydFrameWasm::fill(self, color)
     }
 
-    fn copy_from_565(
-        &mut self,
-        src: &[u16],
-    ) -> Result<(), linkage_blaze_cyd_core::CopySizeError> {
+    fn copy_from_565(&mut self, src: &[u16]) -> Result<(), linkage_blaze_cyd_core::CopySizeError> {
         if self.pixels.len() != src.len() {
             return Err(linkage_blaze_cyd_core::CopySizeError {
                 src_len: src.len(),

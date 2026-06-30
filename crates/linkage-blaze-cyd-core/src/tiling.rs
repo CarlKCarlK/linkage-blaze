@@ -264,7 +264,10 @@ mod tests {
     #[test]
     fn text_band_pixel_count() {
         let text_band = Rectangle::new(Point::new(0, 0), Size::new(240, 34));
-        assert_eq!((text_band.size.width * text_band.size.height) as usize, 8160);
+        assert_eq!(
+            (text_band.size.width * text_band.size.height) as usize,
+            8160
+        );
     }
 
     #[test]

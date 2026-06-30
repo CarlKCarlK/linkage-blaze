@@ -20,30 +20,30 @@ pub enum RawTouchEvent {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum CydTouchInitError {
+pub enum CydTouchEspInitError {
     ConfigureTouchSpi,
     CreateTouchSpiDevice,
 }
 
-pub struct CydTouch {
+pub(crate) struct CydTouchEsp {
     touch_spi_device: CydTouchSpiDevice,
     touch_input: Xpt2046TouchInput<Input<'static>>,
 }
 
-impl CydTouch {
-    pub fn new(
+impl CydTouchEsp {
+    pub(crate) fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,
         mosi_pin: impl PeripheralOutput<'static>,
         miso_pin: impl PeripheralInput<'static>,
         cs_pin: impl OutputPin + 'static,
         irq_pin: impl EspInputPin + 'static,
-    ) -> Result<CydTouch, CydTouchInitError> {
+    ) -> Result<CydTouchEsp, CydTouchEspInitError> {
         let spi_config = spi::master::Config::default()
             .with_frequency(esp_hal::time::Rate::from_hz(TOUCH_SPI_HZ))
             .with_mode(spi::Mode::_0);
         let spi = spi::master::Spi::new(spi, spi_config)
-            .map_err(|_| CydTouchInitError::ConfigureTouchSpi)?
+            .map_err(|_| CydTouchEspInitError::ConfigureTouchSpi)?
             .with_sck(sck_pin)
             .with_mosi(mosi_pin)
             .with_miso(miso_pin);
@@ -52,16 +52,16 @@ impl CydTouch {
         let irq = Input::new(irq_pin, InputConfig::default().with_pull(Pull::Up));
 
         let touch_spi_device = ExclusiveDevice::<_, _, NoDelay>::new_no_delay(spi, cs)
-            .map_err(|_| CydTouchInitError::CreateTouchSpiDevice)?;
+            .map_err(|_| CydTouchEspInitError::CreateTouchSpiDevice)?;
         let touch_input = Xpt2046TouchInput::new(irq);
 
-        Ok(CydTouch {
+        Ok(CydTouchEsp {
             touch_spi_device,
             touch_input,
         })
     }
 
-    pub fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
+    pub(crate) fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
         self.touch_input
             .read_raw_touch_event(&mut self.touch_spi_device)
     }
