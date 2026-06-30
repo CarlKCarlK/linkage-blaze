@@ -3,7 +3,7 @@ use embedded_graphics::{
     prelude::{Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::ProjectedDrawItem;
+use linkage_blaze_core::{DrawItem, ProjectedDrawItem, Projection};
 use micromath::F32Ext;
 
 #[derive(Clone, Copy, Debug)]
@@ -219,32 +219,65 @@ impl Iterator for LineSegmentPixels<'_> {
     }
 }
 
-pub(crate) struct PrimitivePixels {
+pub(crate) struct PrimitivePixels<const PRIMITIVE_COUNT: usize> {
     x0: i32,
     y0: i32,
     width: usize,
     index: usize,
     pixel_count: usize,
     background: Rgb565,
-    primitives: heapless::Vec<PreparedPrimitive, 16>,
+    primitives: heapless::Vec<PreparedPrimitive, PRIMITIVE_COUNT>,
 }
 
-impl PrimitivePixels {
+impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
     #[must_use]
     pub(crate) fn new(
         bounds: Rectangle,
         background: Rgb565,
         draw_items: &[ProjectedDrawItem],
     ) -> Self {
-        let mut primitives = heapless::Vec::<PreparedPrimitive, 16>::new();
+        let mut primitives = heapless::Vec::<PreparedPrimitive, PRIMITIVE_COUNT>::new();
         for draw_item in draw_items {
             if let Some(prepared_primitive) = PreparedPrimitive::from_projected(draw_item) {
                 primitives
                     .push(prepared_primitive)
-                    .expect("at most 16 prepared primitives");
+                    .expect("projected draw items fit the prepared primitive capacity");
             }
         }
 
+        Self::from_primitives(bounds, background, primitives)
+    }
+
+    #[must_use]
+    pub(crate) fn from_draw_items<I>(
+        bounds: Rectangle,
+        background: Rgb565,
+        draw_items: I,
+        projection: &Projection,
+    ) -> Self
+    where
+        I: IntoIterator<Item = DrawItem>,
+    {
+        let mut primitives = heapless::Vec::<PreparedPrimitive, PRIMITIVE_COUNT>::new();
+        for draw_item in draw_items {
+            let projected_draw_item = draw_item.project(projection);
+            if let Some(prepared_primitive) =
+                PreparedPrimitive::from_projected(&projected_draw_item)
+            {
+                primitives
+                    .push(prepared_primitive)
+                    .expect("draw items fit the prepared primitive capacity");
+            }
+        }
+
+        Self::from_primitives(bounds, background, primitives)
+    }
+
+    fn from_primitives(
+        bounds: Rectangle,
+        background: Rgb565,
+        primitives: heapless::Vec<PreparedPrimitive, PRIMITIVE_COUNT>,
+    ) -> Self {
         Self {
             x0: bounds.top_left.x,
             y0: bounds.top_left.y,
@@ -257,7 +290,7 @@ impl PrimitivePixels {
     }
 }
 
-impl Iterator for PrimitivePixels {
+impl<const PRIMITIVE_COUNT: usize> Iterator for PrimitivePixels<PRIMITIVE_COUNT> {
     type Item = Rgb565;
 
     fn next(&mut self) -> Option<Self::Item> {

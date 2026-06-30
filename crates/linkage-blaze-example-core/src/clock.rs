@@ -20,9 +20,7 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use linkage_blaze_core::{
-    LinkageFixed, LinkageView, ProjectedDrawItem, Projection, linkage, linkage_fixed,
-};
+use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation};
 use log::info;
 use static_cell::StaticCell;
@@ -40,6 +38,7 @@ pub const ORIENTATION: Orientation = Orientation::Landscape;
 const TIME_FONT: MonoFont<'static> = FONT_10X20;
 const TIME_TEXT_SCALE: usize = 2;
 const TIME_TEXT_MAX_CHARS: usize = 8; // "12:59 PM"
+const TIME_TEXT_CAPACITY: usize = 16;
 const TIME_TEXT_UNSCALED_WIDTH: usize = TIME_TEXT_MAX_CHARS * 10;
 const TIME_TEXT_UNSCALED_HEIGHT: usize = 20;
 const TIME_TEXT_SCALED_WIDTH: usize = TIME_TEXT_UNSCALED_WIDTH * TIME_TEXT_SCALE;
@@ -105,16 +104,13 @@ where
 
         let params = linkage_params(hour_24, minute, second);
 
-        // Iterate 3D items, project to 2D, and collect the projected items.
-        let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_count() }>::new();
-        for draw_item in LINKAGE.draw_items(&params) {
-            projected_items
-                .push(draw_item.project(&PROJECTION))
-                .map_err(Error::VecOverflow)?;
-        }
-
-        cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &projected_items)
-            .map_err(Error::Flush)?;
+        cyd.draw_linkage_primitives::<{ LINKAGE.draw_item_count() }, _>(
+            CLOCK_BOUNDS,
+            Rgb565::from(BACKGROUND),
+            LINKAGE.draw_items(&params),
+            &PROJECTION,
+        )
+        .map_err(Error::Flush)?;
     }
 }
 
@@ -209,11 +205,11 @@ fn draw_scaled_time<FrameError>(
 // ── Clock time ──────────────────────────────────────────────────────────────────
 
 /// Format a 12-hour clock string with AM/PM.
-fn text_12h(hour_12: u8, minute: u8, hour_24: u8) -> heapless::String<16> {
+fn text_12h(hour_12: u8, minute: u8, hour_24: u8) -> heapless::String<TIME_TEXT_CAPACITY> {
     let meridiem = if hour_24 % 24 < 12 { "AM" } else { "PM" };
     let mut text = heapless::String::new();
     core::fmt::write(&mut text, format_args!("{hour_12}:{minute:02} {meridiem}"))
-        .expect("clock string fits in 16 bytes");
+        .expect("clock string fits in TIME_TEXT_CAPACITY bytes");
     text
 }
 
@@ -236,6 +232,4 @@ fn linkage_params(hour_24: u8, minute: u8, second: u8) -> [f32; 2] {
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
     Flush(F),
-    /// The projected-items scratch buffer was smaller than the linkage draw-item count.
-    VecOverflow(ProjectedDrawItem),
 }
