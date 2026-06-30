@@ -29,6 +29,7 @@ pub use display::{
     CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
     LineSegment,
 };
+use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydFlushError, CydFrame};
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
 pub use linkage_blaze_cyd_core::{
@@ -245,7 +246,7 @@ pub enum CydError {
     CalibrationUnavailable,
 }
 
-impl linkage_blaze_cyd_core::CydFlushError for CydError {}
+impl CydFlushError for CydError {}
 
 impl CydEsp {
     /// Total pixel count of the CYD panel — fixed hardware, independent of orientation.
@@ -492,21 +493,6 @@ impl CydEsp {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
-    fn make_frame_with_tile_top_left(
-        &mut self,
-        region: Rectangle,
-        tile_top_left: Point,
-    ) -> CydFrameEsp<'_> {
-        self.display.make_frame_with_tile_top_left(
-            self.pixel_buffer,
-            region,
-            tile_top_left,
-            self.background565,
-            self.foreground565,
-            self.font,
-        )
-    }
-
     #[inline]
     pub fn draw_line_segments(
         &mut self,
@@ -569,11 +555,11 @@ impl CalibratedCydEsp<'_> {
     }
 
     pub fn clear(&mut self) -> Result<(), CydError> {
-        linkage_blaze_cyd_core::Cyd::clear(self.cyd)
+        Cyd::clear(self.cyd)
     }
 
     pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
-        linkage_blaze_cyd_core::Cyd::fill(self.cyd, color)
+        Cyd::fill(self.cyd, color)
     }
 
     pub fn draw_line_segments(
@@ -607,7 +593,7 @@ impl fmt::Debug for CydEsp {
 // concrete esp `CydEsp` through the `Cyd`/`CydFrame` traits without naming any
 // esp type.
 
-impl linkage_blaze_cyd_core::Cyd for CydEsp {
+impl Cyd for CydEsp {
     type Error = CydError;
     type Frame<'a> = CydFrameEsp<'a>;
 
@@ -637,7 +623,14 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
         region: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameEsp<'_> {
-        CydEsp::make_frame_with_tile_top_left(self, region, tile_top_left)
+        self.display.make_frame_with_tile_top_left(
+            self.pixel_buffer,
+            region,
+            tile_top_left,
+            self.background565,
+            self.foreground565,
+            self.font,
+        )
     }
 
     fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
@@ -676,7 +669,7 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
     }
 }
 
-impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
+impl CydFrame for CydFrameEsp<'_> {
     type Error = CydError;
 
     fn tile_top_left(&self) -> Point {
@@ -699,10 +692,10 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
         CydFrameEsp::write_text(self, text)
     }
 
-    fn copy_from_565(&mut self, src: &[u16]) -> Result<(), linkage_blaze_cyd_core::CopySizeError> {
+    fn copy_from_565(&mut self, src: &[u16]) -> Result<(), CopySizeError> {
         let dst = self.raw_pixels_mut();
         if dst.len() != src.len() {
-            return Err(linkage_blaze_cyd_core::CopySizeError {
+            return Err(CopySizeError {
                 src_len: src.len(),
                 frame_len: dst.len(),
             });
