@@ -554,14 +554,6 @@ impl CalibratedCydEsp<'_> {
         self.cyd.flush_at(buffer, top_left)
     }
 
-    pub fn clear(&mut self) -> Result<(), CydError> {
-        Cyd::clear(self.cyd)
-    }
-
-    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
-        Cyd::fill(self.cyd, color)
-    }
-
     pub fn draw_line_segments(
         &mut self,
         bounds: Rectangle,
