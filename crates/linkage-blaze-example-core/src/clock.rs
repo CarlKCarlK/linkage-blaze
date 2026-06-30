@@ -131,15 +131,15 @@ where
             .map_err(Error::Flush)?;
         let primitives_done = Instant::now();
 
-        info!(
-            "clock timing: wait={}us text={}us params={}us prepare={}us primitives={}us active={}us total={}us",
-            micros(tick_ready - loop_started),
-            micros(text_done - text_started),
-            micros(params_done - params_started),
-            micros(prepare_done - prepare_started),
-            micros(primitives_done - primitives_started),
-            micros(primitives_done - tick_ready),
-            micros(primitives_done - loop_started),
+        // info!(
+        //     "clock timing: wait={}us text={}us params={}us prepare={}us primitives={}us active={}us total={}us",
+        //     micros(tick_ready - loop_started),
+        //     micros(text_done - text_started),
+        //     micros(params_done - params_started),
+        //     micros(prepare_done - prepare_started),
+        //     micros(primitives_done - primitives_started),
+        //     micros(primitives_done - tick_ready),
+        //     micros(primitives_done - loop_started),
         );
     }
 }
