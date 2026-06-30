@@ -1604,26 +1604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "linkage-blaze-clock-classic"
-version = "0.1.4"
-dependencies = [
- "derive_more",
- "device-envoy-esp",
- "embassy-executor",
- "embedded-graphics",
- "esp-backtrace",
- "esp-bootloader-esp-idf",
- "esp-hal",
- "esp-println",
- "esp-rtos",
- "heapless 0.9.3",
- "linkage-blaze-core",
- "linkage-blaze-cyd",
- "log",
- "static_cell",
-]
-
-[[package]]
 name = "linkage-blaze-core"
 version = "0.1.4"
 dependencies = [

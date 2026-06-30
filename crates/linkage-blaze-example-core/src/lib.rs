@@ -6,6 +6,7 @@
 //! holds the generic examples ([`skeleton_clock`], [`ballet`]) written against
 //! the [`Cyd`](linkage_blaze_cyd_core::Cyd) trait.
 
+#[cfg(feature = "ballet")]
 pub mod ballet;
 pub mod gamma_ramp;
 pub mod infallible;
