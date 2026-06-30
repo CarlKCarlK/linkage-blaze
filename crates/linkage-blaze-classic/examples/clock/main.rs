@@ -97,12 +97,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             &mut force_portal_button,
             async |wifi_auto_event| -> Result<(), Error> {
                 let message = match wifi_auto_event {
-                    WifiAutoEvent::CaptivePortalReady => "WiFi: setup CydClock",
-                    WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
-                    WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
+                    WifiAutoEvent::CaptivePortalReady => "WiFi setup",
+                    WifiAutoEvent::Connecting { .. } => "WiFi ...",
+                    WifiAutoEvent::ConnectionFailed => "WiFi fail",
                 };
-                if let Err(error) = wifi_status_frame.borrow_mut().clear().write_text(message).flush()
-                {
+                if let Err(error) = wifi_status_frame.borrow_mut().clear().write_text(message).flush() {
                     info!("WiFi status display failed: {error:?}");
                 }
                 info!("WiFi: {message}");
@@ -114,7 +113,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     wifi_status_frame
         .borrow_mut()
         .clear()
-        .write_text("WiFi: OK")
+        .write_text("WiFi OK")
         .flush()?;
     drop(wifi_status_frame);
     info!("WiFi connected");
