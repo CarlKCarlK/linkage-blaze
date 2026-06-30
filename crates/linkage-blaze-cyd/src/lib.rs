@@ -571,7 +571,7 @@ impl CydEsp {
         Ok(self.display.fill(color)?)
     }
 
-    pub fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+    fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
         Ok(self.display.fill_rectangle(rectangle, color)?)
     }
 
@@ -649,10 +649,6 @@ impl CalibratedCydEsp<'_> {
         self.cyd.fill(color)
     }
 
-    pub fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        self.cyd.fill_rectangle(rectangle, color)
-    }
-
     pub fn draw_line_segments(
         &mut self,
         bounds: Rectangle,
@@ -720,6 +716,10 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
                 }
                 RawTouchEvent::Up => TouchInputEvent::Up,
             }))
+    }
+
+    fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        CydEsp::fill_rectangle(self, rectangle, color)
     }
 }
 

@@ -98,6 +98,46 @@ impl Cyd for CydWasm {
         // Touch is not wired up yet; the WASM examples (ballet) do not use it.
         Ok(None)
     }
+
+    fn fill_rectangle(
+        &mut self,
+        rectangle: Rectangle,
+        color: Rgb565,
+    ) -> Result<(), CydInfallibleError> {
+        let screen_rectangle = Rectangle::new(Point::zero(), self.size);
+        let rectangle = rectangle.intersection(&screen_rectangle);
+        if rectangle.size.width == 0 || rectangle.size.height == 0 {
+            return Ok(());
+        }
+
+        let pixel_count = rectangle.size.width as usize * rectangle.size.height as usize;
+        let mut bytes = Vec::with_capacity(pixel_count * 4);
+        let storage = color.into_storage();
+        let red = scale_channel((storage >> 11) & 0x1f, 31);
+        let green = scale_channel((storage >> 5) & 0x3f, 63);
+        let blue = scale_channel(storage & 0x1f, 31);
+        for _pixel_index in 0..pixel_count {
+            bytes.push(red);
+            bytes.push(green);
+            bytes.push(blue);
+            bytes.push(255);
+        }
+
+        let image_data = ImageData::new_with_u8_clamped_array_and_sh(
+            Clamped(&bytes),
+            rectangle.size.width,
+            rectangle.size.height,
+        )
+        .expect("ImageData dimensions match the rectangle");
+        self.context
+            .put_image_data(
+                &image_data,
+                f64::from(rectangle.top_left.x),
+                f64::from(rectangle.top_left.y),
+            )
+            .expect("put_image_data with in-bounds coordinates cannot fail");
+        Ok(())
+    }
 }
 
 /// A single in-progress frame backed by an `Rgb565` pixel buffer.
