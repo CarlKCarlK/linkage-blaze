@@ -264,8 +264,8 @@ impl CydEsp {
         CydStaticEsp::new()
     }
 
-    // todo000 couldn't this be const and/or inlined and defined elsewhere?
-    // todo000 review rgb565 conversion later.
+    // TODO00 Review whether this helper should remain on `CydEsp`, and whether it
+    // can be `const` or otherwise moved to a more appropriate abstraction.
     #[inline]
     pub fn rgb565(color: Rgb888) -> Rgb565 {
         Rgb565::from(color)
