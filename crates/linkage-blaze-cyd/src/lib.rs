@@ -497,27 +497,14 @@ impl CydEsp {
         region: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameEsp<'_> {
-        let size = region.size;
-        let mut view = self
-            .pixel_buffer
-            .view_mut(size.width as usize, size.height as usize);
-        // Every new frame starts cleared to the device background so callers
-        // never have to clear it themselves.
-        view.fill(self.background565);
-        CydFrameEsp {
-            display: &mut self.display,
-            view,
+        self.display.make_frame_with_tile_top_left(
+            self.pixel_buffer,
             region,
             tile_top_left,
-            background565: self.background565,
-            foreground565: self.foreground565,
-            font: self.font,
-        }
-    }
-
-    #[inline]
-    fn fill_rectangle_raw(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.display.fill_rectangle(rectangle, color)?)
+            self.background565,
+            self.foreground565,
+            self.font,
+        )
     }
 
     #[inline]
@@ -677,7 +664,7 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
 
     #[inline]
     fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        CydEsp::fill_rectangle_raw(self, rectangle, color)
+        Ok(self.display.fill_rectangle(rectangle, color)?)
     }
 
     #[inline]

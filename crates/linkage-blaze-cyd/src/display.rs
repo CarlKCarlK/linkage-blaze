@@ -1,5 +1,6 @@
 use embedded_graphics::{
     draw_target::DrawTarget,
+    mono_font::MonoFont,
     pixelcolor::{Rgb565, raw::RawU16},
     prelude::{Point, Size},
     primitives::Rectangle,
@@ -23,7 +24,7 @@ use mipidsi::{
 };
 use static_cell::StaticCell;
 
-use crate::{Orientation, RegionPixels};
+use crate::{CydFrameEsp, Orientation, RegionPixels, buffer::DynPixelBuffer};
 
 // 80 MHz measured 10.9 draw+flush fps but produced visible display corruption.
 pub const DISPLAY_SPI_HZ: u32 = 60_000_000;
@@ -443,6 +444,31 @@ impl CydDisplayEsp {
                     .map(|pixel| Rgb565::from(RawU16::new(pixel))),
             )
             .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)
+    }
+
+    pub(crate) fn make_frame_with_tile_top_left<'a>(
+        &'a mut self,
+        pixel_buffer: &'a mut dyn DynPixelBuffer,
+        region: Rectangle,
+        tile_top_left: Point,
+        background565: Rgb565,
+        foreground565: Rgb565,
+        font: &'static MonoFont<'static>,
+    ) -> CydFrameEsp<'a> {
+        let size = region.size;
+        let mut view = pixel_buffer.view_mut(size.width as usize, size.height as usize);
+        // Every new frame starts cleared to the device background so callers
+        // never have to clear it themselves.
+        view.fill(background565);
+        CydFrameEsp {
+            display: self,
+            view,
+            region,
+            tile_top_left,
+            background565,
+            foreground565,
+            font,
+        }
     }
 
     pub(crate) fn fill(&mut self, color: Rgb565) -> Result<(), CydDisplayEspFlushError> {
