@@ -14,13 +14,22 @@
 use core::{convert::Infallible, future::Future};
 
 use embedded_graphics::{
-    pixelcolor::Rgb565,
+    pixelcolor::{Rgb565, raw::RawU16},
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
 use linkage_blaze_core::{PixelTarget, Rgb888};
 
-use crate::{TouchInputEvent, tiling::TileGrid};
+use crate::{
+    DrawPrimitive, LineSegment, TouchInputEvent, draw::LineSegmentPixels, draw::PrimitivePixels,
+    tiling::TileGrid,
+};
+
+pub trait RegionPixels {
+    fn width(&self) -> usize;
+    fn height(&self) -> usize;
+    fn raw_pixels(&self) -> &[u16];
+}
 
 /// Error type used by a CYD device or frame.
 ///
@@ -110,6 +119,50 @@ pub trait Cyd {
     fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), Self::Error>
     where
         I: IntoIterator<Item = Rgb565>;
+
+    /// Present a native-color region buffer at `top_left`.
+    fn flush_at(&mut self, buffer: &impl RegionPixels, top_left: Point) -> Result<(), Self::Error> {
+        let rectangle = Rectangle::new(
+            top_left,
+            Size::new(buffer.width() as u32, buffer.height() as u32),
+        );
+        self.fill_contiguous(
+            rectangle,
+            buffer
+                .raw_pixels()
+                .iter()
+                .copied()
+                .map(|pixel| Rgb565::from(RawU16::new(pixel))),
+        )
+    }
+
+    /// Draw line segments immediately inside `bounds`.
+    fn draw_line_segments(
+        &mut self,
+        bounds: Rectangle,
+        background: Rgb565,
+        segments: &[LineSegment],
+    ) -> Result<(), Self::Error> {
+        let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
+        if bounds.size.width == 0 || bounds.size.height == 0 {
+            return Ok(());
+        }
+        self.fill_contiguous(bounds, LineSegmentPixels::new(bounds, background, segments))
+    }
+
+    /// Draw primitive shapes immediately inside `bounds`.
+    fn draw_primitives(
+        &mut self,
+        bounds: Rectangle,
+        background: Rgb565,
+        primitives: &[DrawPrimitive],
+    ) -> Result<(), Self::Error> {
+        let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
+        if bounds.size.width == 0 || bounds.size.height == 0 {
+            return Ok(());
+        }
+        self.fill_contiguous(bounds, PrimitivePixels::new(bounds, background, primitives))
+    }
 
     /// Clear the whole screen to the device default background color.
     ///

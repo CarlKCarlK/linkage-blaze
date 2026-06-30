@@ -23,18 +23,15 @@ use linkage_blaze_core::PixelTarget;
 use static_cell::StaticCell;
 
 use buffer::DynPixelBuffer;
-pub use buffer::{PixelBuffer, RegionBuffer, RegionPixels, RegionView};
+pub use buffer::{PixelBuffer, RegionBuffer, RegionView};
 pub use calibration::{CalibrationConfig, RawPoint, map_raw_to_screen};
-pub use display::{
-    CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
-    LineSegment,
-};
+pub use display::{CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ};
 use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydFlushError, CydFrame};
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
 pub use linkage_blaze_cyd_core::{
-    Cyd as CydDevice, CydFrame as CydFrameTrait, Orientation, SCREEN_HEIGHT, SCREEN_PIXELS,
-    SCREEN_WIDTH, TouchInputEvent, tiling,
+    Cyd as CydDevice, CydFrame as CydFrameTrait, DrawPrimitive, Ellipse, LineSegment, Orientation,
+    RegionPixels, SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH, TouchInputEvent, tiling,
 };
 pub use text::DEFAULT_FONT;
 pub use touch::{CydTouchEspInitError, RawTouchEvent, TOUCH_SPI_HZ};
@@ -483,39 +480,6 @@ impl CydEsp {
     pub fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
         self.touch.as_mut()?.read_raw_touch_event()
     }
-
-    #[inline]
-    pub fn flush_at(
-        &mut self,
-        buffer: &impl RegionPixels,
-        top_left: Point,
-    ) -> Result<(), CydError> {
-        Ok(self.display.flush_buffer(buffer, top_left)?)
-    }
-
-    #[inline]
-    pub fn draw_line_segments(
-        &mut self,
-        bounds: Rectangle,
-        background: Rgb565,
-        segments: &[LineSegment],
-    ) -> Result<(), CydError> {
-        Ok(self
-            .display
-            .draw_line_segments(bounds, background, segments)?)
-    }
-
-    #[inline]
-    pub fn draw_primitives(
-        &mut self,
-        bounds: Rectangle,
-        background: Rgb565,
-        primitives: &[DrawPrimitive],
-    ) -> Result<(), CydError> {
-        Ok(self
-            .display
-            .draw_primitives(bounds, background, primitives)?)
-    }
 }
 
 impl CalibratedCydEsp<'_> {
@@ -544,32 +508,6 @@ impl CalibratedCydEsp<'_> {
                 RawTouchEvent::Up => TouchInputEvent::Up,
             }),
         )
-    }
-
-    pub fn flush_at(
-        &mut self,
-        buffer: &impl RegionPixels,
-        top_left: Point,
-    ) -> Result<(), CydError> {
-        self.cyd.flush_at(buffer, top_left)
-    }
-
-    pub fn draw_line_segments(
-        &mut self,
-        bounds: Rectangle,
-        background: Rgb565,
-        segments: &[LineSegment],
-    ) -> Result<(), CydError> {
-        self.cyd.draw_line_segments(bounds, background, segments)
-    }
-
-    pub fn draw_primitives(
-        &mut self,
-        bounds: Rectangle,
-        background: Rgb565,
-        primitives: &[DrawPrimitive],
-    ) -> Result<(), CydError> {
-        self.cyd.draw_primitives(bounds, background, primitives)
     }
 }
 
@@ -658,6 +596,77 @@ impl Cyd for CydEsp {
         I: IntoIterator<Item = Rgb565>,
     {
         Ok(self.display.fill_contiguous(rectangle, pixels)?)
+    }
+
+    #[inline]
+    fn flush_at(&mut self, buffer: &impl RegionPixels, top_left: Point) -> Result<(), CydError> {
+        Ok(self.display.flush_buffer(buffer, top_left)?)
+    }
+}
+
+impl Cyd for CalibratedCydEsp<'_> {
+    type Error = CydError;
+    type Frame<'a>
+        = CydFrameEsp<'a>
+    where
+        Self: 'a;
+
+    #[inline]
+    fn screen_size(&self) -> Size {
+        self.cyd.display.size()
+    }
+
+    fn background(&self) -> Rgb888 {
+        self.cyd.background
+    }
+
+    fn foreground(&self) -> Rgb888 {
+        self.cyd.foreground
+    }
+
+    fn background_565(&self) -> Rgb565 {
+        self.cyd.background565
+    }
+
+    fn foreground_565(&self) -> Rgb565 {
+        self.cyd.foreground565
+    }
+
+    fn frame_mut_with_tile_top_left(
+        &mut self,
+        region: Rectangle,
+        tile_top_left: Point,
+    ) -> CydFrameEsp<'_> {
+        self.cyd.display.make_frame_with_tile_top_left(
+            self.cyd.pixel_buffer,
+            region,
+            tile_top_left,
+            self.cyd.background565,
+            self.cyd.foreground565,
+            self.cyd.font,
+        )
+    }
+
+    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
+        CalibratedCydEsp::read_touch_input(self)
+    }
+
+    #[inline]
+    fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+        Ok(self.cyd.display.fill_rectangle(rectangle, color)?)
+    }
+
+    #[inline]
+    fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), CydError>
+    where
+        I: IntoIterator<Item = Rgb565>,
+    {
+        Ok(self.cyd.display.fill_contiguous(rectangle, pixels)?)
+    }
+
+    #[inline]
+    fn flush_at(&mut self, buffer: &impl RegionPixels, top_left: Point) -> Result<(), CydError> {
+        Ok(self.cyd.display.flush_buffer(buffer, top_left)?)
     }
 }
 
