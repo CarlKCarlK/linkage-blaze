@@ -212,6 +212,9 @@ impl CydDisplayEsp {
     where
         I: IntoIterator<Item = Rgb565>,
     {
+        if rectangle.size.width == 0 || rectangle.size.height == 0 {
+            return Ok(());
+        }
         self.display
             .fill_contiguous(&rectangle, pixels)
             .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)

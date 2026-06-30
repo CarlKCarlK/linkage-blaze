@@ -146,6 +146,10 @@ impl Cyd for CydWasm {
     where
         I: IntoIterator<Item = Rgb565>,
     {
+        if rectangle.size.width == 0 || rectangle.size.height == 0 {
+            return Ok(());
+        }
+
         let mut bytes =
             Vec::with_capacity(rectangle.size.width as usize * rectangle.size.height as usize * 4);
         for pixel in pixels {

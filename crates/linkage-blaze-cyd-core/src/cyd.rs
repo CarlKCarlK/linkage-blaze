@@ -21,7 +21,7 @@ use embedded_graphics::{
 use linkage_blaze_core::{DrawItem, PixelTarget, ProjectedDrawItem, Projection, Rgb888};
 
 use crate::{
-    LineSegment, TouchInputEvent, draw::LineSegmentPixels, draw::PrimitivePixels, tiling::TileGrid,
+    LineSegment, PrimitivePixels, TouchInputEvent, draw::LineSegmentPixels, tiling::TileGrid,
 };
 
 pub trait RegionPixels {
@@ -115,6 +115,8 @@ pub trait Cyd {
     fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), Self::Error>;
 
     /// Fill `rectangle` immediately from row-major native-color pixels.
+    ///
+    /// Empty rectangles are a no-op.
     fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), Self::Error>
     where
         I: IntoIterator<Item = Rgb565>;
@@ -156,14 +158,20 @@ pub trait Cyd {
         background: Rgb565,
         items: &[ProjectedDrawItem],
     ) -> Result<(), Self::Error> {
+        let primitive_pixels =
+            self.prepare_primitives::<PRIMITIVE_COUNT>(bounds, background, items);
+        self.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
+    }
+
+    /// Compile projected draw items for indexed pixel lookups inside `bounds`.
+    fn prepare_primitives<const PRIMITIVE_COUNT: usize>(
+        &self,
+        bounds: Rectangle,
+        background: Rgb565,
+        items: &[ProjectedDrawItem],
+    ) -> PrimitivePixels<PRIMITIVE_COUNT> {
         let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
-        if bounds.size.width == 0 || bounds.size.height == 0 {
-            return Ok(());
-        }
-        self.fill_contiguous(
-            bounds,
-            PrimitivePixels::<PRIMITIVE_COUNT>::new(bounds, background, items),
-        )
+        PrimitivePixels::from_projected_items(bounds, background, items)
     }
 
     /// Project and draw 3D draw items immediately inside `bounds`.
@@ -177,16 +185,25 @@ pub trait Cyd {
     where
         I: IntoIterator<Item = DrawItem>,
     {
+        let primitive_pixels = self.prepare_linkage_primitives::<PRIMITIVE_COUNT, _>(
+            bounds, background, items, projection,
+        );
+        self.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
+    }
+
+    /// Compile 3D draw items for indexed pixel lookups inside `bounds`.
+    fn prepare_linkage_primitives<const PRIMITIVE_COUNT: usize, I>(
+        &self,
+        bounds: Rectangle,
+        background: Rgb565,
+        items: I,
+        projection: &Projection,
+    ) -> PrimitivePixels<PRIMITIVE_COUNT>
+    where
+        I: IntoIterator<Item = DrawItem>,
+    {
         let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
-        if bounds.size.width == 0 || bounds.size.height == 0 {
-            return Ok(());
-        }
-        self.fill_contiguous(
-            bounds,
-            PrimitivePixels::<PRIMITIVE_COUNT>::from_draw_items(
-                bounds, background, items, projection,
-            ),
-        )
+        PrimitivePixels::from_draw_items(bounds, background, items, projection)
     }
 
     /// Clear the whole screen to the device default background color.
