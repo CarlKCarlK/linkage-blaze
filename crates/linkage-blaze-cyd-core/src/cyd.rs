@@ -18,11 +18,10 @@ use embedded_graphics::{
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::{PixelTarget, Rgb888};
+use linkage_blaze_core::{PixelTarget, ProjectedDrawItem, Rgb888};
 
 use crate::{
-    DrawPrimitive, LineSegment, TouchInputEvent, draw::LineSegmentPixels, draw::PrimitivePixels,
-    tiling::TileGrid,
+    LineSegment, TouchInputEvent, draw::LineSegmentPixels, draw::PrimitivePixels, tiling::TileGrid,
 };
 
 pub trait RegionPixels {
@@ -150,18 +149,18 @@ pub trait Cyd {
         self.fill_contiguous(bounds, LineSegmentPixels::new(bounds, background, segments))
     }
 
-    /// Draw primitive shapes immediately inside `bounds`.
+    /// Draw projected draw items immediately inside `bounds`.
     fn draw_primitives(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
-        primitives: &[DrawPrimitive],
+        items: &[ProjectedDrawItem],
     ) -> Result<(), Self::Error> {
         let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
         if bounds.size.width == 0 || bounds.size.height == 0 {
             return Ok(());
         }
-        self.fill_contiguous(bounds, PrimitivePixels::new(bounds, background, primitives))
+        self.fill_contiguous(bounds, PrimitivePixels::new(bounds, background, items))
     }
 
     /// Clear the whole screen to the device default background color.

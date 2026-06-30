@@ -3,6 +3,7 @@ use embedded_graphics::{
     prelude::{Point, Size},
     primitives::Rectangle,
 };
+use linkage_blaze_core::ProjectedDrawItem;
 use micromath::F32Ext;
 
 #[derive(Clone, Copy, Debug)]
@@ -11,23 +12,6 @@ pub struct LineSegment {
     pub end: Point,
     pub width: u16,
     pub color: Rgb565,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Ellipse {
-    pub center: Point,
-    pub axis_a: (f32, f32), // v0_xy * radius
-    pub axis_b: (f32, f32), // v1_xy * radius
-    pub radius: f32,
-    pub stroke_width: u16,
-    pub color: Rgb565,
-    pub filled: bool,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum DrawPrimitive {
-    LineSegment(LineSegment),
-    Ellipse(Ellipse),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -58,21 +42,33 @@ enum PreparedPrimitive {
 }
 
 impl PreparedPrimitive {
-    fn from_draw_primitive(primitive: &DrawPrimitive) -> Option<Self> {
-        match *primitive {
-            DrawPrimitive::LineSegment(segment) => {
-                if segment.width == 0 {
+    // todo: review the color (Rgb888 -> Rgb565) and number (f32 -> i32/u16)
+    // conversions threaded through here and `ProjectedDrawItem`. Some may be
+    // happening later (per primitive, per frame) than strictly needed — see if
+    // any can move once, earlier, or be dropped entirely.
+    fn from_projected(item: &ProjectedDrawItem) -> Option<Self> {
+        match *item {
+            ProjectedDrawItem::Stroke {
+                start,
+                end,
+                color,
+                pixel_width,
+            } => {
+                let start = point_from_f32(start);
+                let end = point_from_f32(end);
+                let width = pixel_width_u16(pixel_width);
+                if start == end {
                     return None;
                 }
-                let start_x = segment.start.x;
-                let start_y = segment.start.y;
-                let end_x = segment.end.x;
-                let end_y = segment.end.y;
+                let start_x = start.x;
+                let start_y = start.y;
+                let end_x = end.x;
+                let end_y = end.y;
                 let segment_x = end_x - start_x;
                 let segment_y = end_y - start_y;
                 let segment_len_squared = (segment_x as i64) * (segment_x as i64)
                     + (segment_y as i64) * (segment_y as i64);
-                let radius = (i64::from(segment.width) + 1) / 2;
+                let radius = (i64::from(width) + 1) / 2;
                 let radius_squared = radius * radius;
 
                 let min_x = start_x.min(end_x) - radius as i32;
@@ -92,63 +88,76 @@ impl PreparedPrimitive {
                     segment_y,
                     segment_len_squared,
                     radius_squared,
-                    color: segment.color,
+                    color: Rgb565::from(color),
                 })
             }
-            DrawPrimitive::Ellipse(ellipse) => {
-                let det = ellipse.axis_a.0 * ellipse.axis_b.1 - ellipse.axis_a.1 * ellipse.axis_b.0;
-                let det_squared = det * det;
-
-                if det_squared == 0.0 {
-                    return None;
-                }
-
-                let radius = ellipse.radius;
-                let (ax, ay) = ellipse.axis_a;
-                let (bx, by) = ellipse.axis_b;
-
-                let (outer_limit, inner_limit) = if ellipse.filled {
-                    (det_squared, 0.0)
-                } else {
-                    let half_width = ellipse.stroke_width as f32 * 0.5;
-                    let outer_scale = (radius + half_width) / radius;
-                    let inner_scale = if radius > half_width {
-                        (radius - half_width) / radius
-                    } else {
-                        0.0
-                    };
-                    (
-                        det_squared * outer_scale * outer_scale,
-                        det_squared * inner_scale * inner_scale,
-                    )
-                };
-
-                let bounds = Rectangle::new(
-                    Point::new(
-                        ellipse.center.x - radius.ceil() as i32 - 1,
-                        ellipse.center.y - radius.ceil() as i32 - 1,
-                    ),
-                    Size::new(
-                        (2.0 * radius).ceil() as u32 + 2,
-                        (2.0 * radius).ceil() as u32 + 2,
-                    ),
-                );
-
-                Some(PreparedPrimitive::Ellipse {
-                    bounds,
-                    center_x: ellipse.center.x,
-                    center_y: ellipse.center.y,
-                    ax,
-                    ay,
-                    bx,
-                    by,
-                    outer_limit,
-                    inner_limit,
-                    filled: ellipse.filled,
-                    color: ellipse.color,
-                })
-            }
+            ProjectedDrawItem::Ellipse {
+                center,
+                axis_a,
+                axis_b,
+                color,
+            } => Self::prepare_ellipse(
+                point_from_f32(center),
+                axis_a,
+                axis_b,
+                ellipse_bound_radius(axis_a, axis_b),
+                Rgb565::from(color),
+            ),
+            ProjectedDrawItem::Circle {
+                center,
+                pixel_radius,
+                color,
+            } => Self::prepare_ellipse(
+                point_from_f32(center),
+                (pixel_radius, 0.0),
+                (0.0, pixel_radius),
+                pixel_radius,
+                Rgb565::from(color),
+            ),
         }
+    }
+
+    fn prepare_ellipse(
+        center: Point,
+        axis_a: (f32, f32),
+        axis_b: (f32, f32),
+        radius: f32,
+        color: Rgb565,
+    ) -> Option<Self> {
+        let det = axis_a.0 * axis_b.1 - axis_a.1 * axis_b.0;
+        let det_squared = det * det;
+
+        if det_squared == 0.0 {
+            return None;
+        }
+
+        let (ax, ay) = axis_a;
+        let (bx, by) = axis_b;
+
+        let bounds = Rectangle::new(
+            Point::new(
+                center.x - radius.ceil() as i32 - 1,
+                center.y - radius.ceil() as i32 - 1,
+            ),
+            Size::new(
+                (2.0 * radius).ceil() as u32 + 2,
+                (2.0 * radius).ceil() as u32 + 2,
+            ),
+        );
+
+        Some(PreparedPrimitive::Ellipse {
+            bounds,
+            center_x: center.x,
+            center_y: center.y,
+            ax,
+            ay,
+            bx,
+            by,
+            outer_limit: det_squared,
+            inner_limit: 0.0,
+            filled: true,
+            color,
+        })
     }
 
     fn bounds(&self) -> Rectangle {
@@ -225,12 +234,11 @@ impl PrimitivePixels {
     pub(crate) fn new(
         bounds: Rectangle,
         background: Rgb565,
-        draw_primitives: &[DrawPrimitive],
+        draw_items: &[ProjectedDrawItem],
     ) -> Self {
         let mut primitives = heapless::Vec::<PreparedPrimitive, 16>::new();
-        for draw_primitive in draw_primitives {
-            if let Some(prepared_primitive) = PreparedPrimitive::from_draw_primitive(draw_primitive)
-            {
+        for draw_item in draw_items {
+            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(draw_item) {
                 primitives
                     .push(prepared_primitive)
                     .expect("at most 16 prepared primitives");
@@ -389,6 +397,18 @@ fn point_covered_by_prepared_ellipse(
     } else {
         distance_squared <= outer_limit && distance_squared > inner_limit
     }
+}
+
+fn point_from_f32((x, y): (f32, f32)) -> Point {
+    Point::new(x as i32, y as i32)
+}
+
+fn pixel_width_u16(width: f32) -> u16 {
+    ((width + 0.5) as u16).max(1)
+}
+
+fn ellipse_bound_radius(axis_a: (f32, f32), axis_b: (f32, f32)) -> f32 {
+    (axis_a.0.abs() + axis_b.0.abs()).max(axis_a.1.abs() + axis_b.1.abs())
 }
 
 fn point_covered_by_segment(point_x: i32, point_y: i32, segment: LineSegment) -> bool {
