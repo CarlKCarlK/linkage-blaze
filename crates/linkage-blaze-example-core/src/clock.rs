@@ -12,12 +12,16 @@ use core::convert::Infallible;
 
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embedded_graphics::{
-    mono_font::{MonoFont, ascii::FONT_10X20},
+    Drawable,
+    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_10X20},
+    pixelcolor::{IntoStorage, Rgb565},
     pixelcolor::{Rgb888, WebColors},
-    prelude::{Point, Size},
+    prelude::{DrawTarget, OriginDimensions, Point, Size},
+    text::{Baseline, Text},
 };
 use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation, tiling::Region};
 use log::info;
+use static_cell::StaticCell;
 use time::OffsetDateTime;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
@@ -30,12 +34,21 @@ pub const FOREGROUND: Rgb888 = Rgb888::CSS_NAVY; // dark blue clock text
 // ── Screen / region layout ─────────────────────────────────────────────────────
 
 pub const ORIENTATION: Orientation = Orientation::Landscape;
-pub const TOP_FONT: MonoFont<'static> = FONT_10X20;
+pub const TOP_FONT: MonoFont<'static> = FONT_6X10;
+const TIME_FONT: MonoFont<'static> = FONT_10X20;
+const TIME_TEXT_SCALE: usize = 2;
+const TIME_TEXT_MAX_CHARS: usize = 8; // "12:59 PM"
+const TIME_TEXT_UNSCALED_WIDTH: usize = TIME_TEXT_MAX_CHARS * 10;
+const TIME_TEXT_UNSCALED_HEIGHT: usize = 20;
+const TIME_TEXT_SCALED_WIDTH: usize = TIME_TEXT_UNSCALED_WIDTH * TIME_TEXT_SCALE;
+const TIME_TEXT_SCALED_HEIGHT: usize = TIME_TEXT_UNSCALED_HEIGHT * TIME_TEXT_SCALE;
+const TIME_TEXT_UNSCALED_PIXELS: usize = TIME_TEXT_UNSCALED_WIDTH * TIME_TEXT_UNSCALED_HEIGHT;
+const TIME_TEXT_SCALED_PIXELS: usize = TIME_TEXT_SCALED_WIDTH * TIME_TEXT_SCALED_HEIGHT;
 
-/// WiFi/status line, top-left.
-pub const WIFI_STATUS_REGION: Region = Region::new(Point::new(6, 6), Size::new(180, 22));
-/// Digital time read-out, below the status line.
-pub const TIME_REGION: Region = Region::new(Point::new(6, 34), Size::new(220, 22));
+/// WiFi/status line, matching the old esp32 clock layout at the top-right.
+pub const WIFI_STATUS_REGION: Region = Region::new(Point::new(240, 8), Size::new(70, 10));
+/// Digital time read-out, matching the old esp32 clock layout.
+pub const TIME_REGION: Region = Region::new(Point::new(80, 34), Size::new(160, 40));
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -49,19 +62,33 @@ where
     CydDevice: Cyd,
     ClockSyncDevice: ClockSync,
 {
+    static TIME_TEXT_UNSCALED_BUFFER: StaticCell<[u16; TIME_TEXT_UNSCALED_PIXELS]> =
+        StaticCell::new();
+    static TIME_TEXT_SCALED_BUFFER: StaticCell<[u16; TIME_TEXT_SCALED_PIXELS]> = StaticCell::new();
+    let time_text_unscaled_buffer =
+        &mut *TIME_TEXT_UNSCALED_BUFFER.init([0; TIME_TEXT_UNSCALED_PIXELS]);
+    let time_text_scaled_buffer =
+        &mut *TIME_TEXT_SCALED_BUFFER.init([0; TIME_TEXT_SCALED_PIXELS]);
+
     loop {
         // Wait for a tick and get the time.
         let tick = clock_sync.wait_for_tick().await;
         let local_time = &tick.local_time;
+        // todo000 why?
         let clock_time = ClockTime::from_time(local_time);
         info!("tick {}", clock_time.as_str());
 
-        // Write the digital time.
-        cyd.frame_mut(TIME_REGION)
-            .write_text(clock_time.as_str())
-            .flush()
-            .await
-            .map_err(Error::Flush)?;
+        // Draw the time explicitly so the surface default font/color can stay
+        // dedicated to the small WiFi status text, while preserving the old
+        // 2x enlarged clock text look.
+        let mut time_frame = cyd.frame_mut(TIME_REGION);
+        draw_scaled_time(
+            &mut time_frame,
+            clock_time.as_str(),
+            time_text_unscaled_buffer,
+            time_text_scaled_buffer,
+        );
+        time_frame.flush().await.map_err(Error::Flush)?;
 
         // TODO00000 Port the analog clock-hand rendering to the generic `Cyd`
         // trait. The original esp32 `CydClockDisplay::show_clock` (in the old
@@ -138,6 +165,95 @@ where
         // }
         */
     }
+}
+
+struct BufferTarget<'a> {
+    pixels: &'a mut [u16],
+    size: Size,
+}
+
+impl DrawTarget for BufferTarget<'_> {
+    type Color = Rgb565;
+    type Error = Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
+    {
+        let width = self.size.width as usize;
+        let height = self.size.height as usize;
+        for embedded_graphics::Pixel(point, color) in pixels {
+            let Ok(x) = usize::try_from(point.x) else {
+                continue;
+            };
+            let Ok(y) = usize::try_from(point.y) else {
+                continue;
+            };
+            if x < width && y < height {
+                self.pixels[y * width + x] = color.into_storage();
+            }
+        }
+        Ok(())
+    }
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        self.pixels.fill(color.into_storage());
+        Ok(())
+    }
+}
+
+impl OriginDimensions for BufferTarget<'_> {
+    fn size(&self) -> Size {
+        self.size
+    }
+}
+
+fn draw_scaled_time<FrameError>(
+    time_frame: &mut impl CydFrame<Error = FrameError>,
+    text: &str,
+    time_text_unscaled_buffer: &mut [u16; TIME_TEXT_UNSCALED_PIXELS],
+    time_text_scaled_buffer: &mut [u16; TIME_TEXT_SCALED_PIXELS],
+) {
+    let background = Rgb565::from(BACKGROUND);
+    let foreground = Rgb565::from(FOREGROUND);
+    let mut unscaled_target = BufferTarget {
+        pixels: time_text_unscaled_buffer,
+        size: Size::new(
+            TIME_TEXT_UNSCALED_WIDTH as u32,
+            TIME_TEXT_UNSCALED_HEIGHT as u32,
+        ),
+    };
+    unscaled_target
+        .clear(background)
+        .expect("clearing the fixed time buffer cannot fail");
+    Text::with_baseline(
+        text,
+        Point::zero(),
+        MonoTextStyle::new(&TIME_FONT, foreground),
+        Baseline::Top,
+    )
+    .draw(&mut unscaled_target)
+    .expect("drawing text to the fixed time buffer cannot fail");
+
+    for source_y in 0..TIME_TEXT_UNSCALED_HEIGHT {
+        for source_x in 0..TIME_TEXT_UNSCALED_WIDTH {
+            let color =
+                time_text_unscaled_buffer[source_y * TIME_TEXT_UNSCALED_WIDTH + source_x];
+            let scaled_x = source_x * TIME_TEXT_SCALE;
+            let scaled_y = source_y * TIME_TEXT_SCALE;
+            for offset_y in 0..TIME_TEXT_SCALE {
+                for offset_x in 0..TIME_TEXT_SCALE {
+                    time_text_scaled_buffer[(scaled_y + offset_y) * TIME_TEXT_SCALED_WIDTH
+                        + scaled_x
+                        + offset_x] = color;
+                }
+            }
+        }
+    }
+
+    time_frame
+        .copy_from_565(time_text_scaled_buffer)
+        .expect("scaled time buffer must match TIME_REGION exactly");
 }
 
 // ── Clock time ──────────────────────────────────────────────────────────────────

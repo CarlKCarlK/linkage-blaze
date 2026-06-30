@@ -36,6 +36,7 @@ embedded-graphics = { version = "0.8", default-features = false }
 embassy-time = "0.5.1"
 heapless = "0.9.1"
 log = { version = "0.4", default-features = false }
+static_cell = "2.1.1"
 time = { version = "0.3.47", default-features = false }
 linkage-blaze-core.workspace = true
 linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
