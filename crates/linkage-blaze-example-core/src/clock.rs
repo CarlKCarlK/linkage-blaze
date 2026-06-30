@@ -21,7 +21,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{
-    DrawItem, LinkageFixed, ProjectedDrawItem, Projection, linkage, linkage_fixed,
+    DrawItem, LinkageFixed, LinkageView, ProjectedDrawItem, Projection, linkage, linkage_fixed,
 };
 use linkage_blaze_cyd_core::{Cyd, CydFrame, DrawPrimitive, Ellipse, LineSegment, Orientation};
 use log::info;
@@ -57,8 +57,9 @@ const PROJECTION: Projection = Projection::top_orthographic(
     /* target origin */ Point::new(160, 160),
     /* scale */ 1.0,
 );
-const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
-const CLOCK_PRIMITIVE_CAPACITY: usize = CLOCK_HANDS.view().draw_item_count();
+// todo000 reorder the consts.
+const LINKAGE0: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
+const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -103,8 +104,8 @@ where
         }
 
         let params = linkage_params(hour_24, minute, second);
-        let mut primitives = heapless::Vec::<DrawPrimitive, CLOCK_PRIMITIVE_CAPACITY>::new();
-        for draw_item in CLOCK_HANDS.view().draw_items(&params) {
+        let mut primitives = heapless::Vec::<DrawPrimitive, { LINKAGE.draw_item_count() }>::new();
+        for draw_item in LINKAGE.draw_items(&params) {
             let Some(primitive) = draw_item_to_primitive(draw_item) else {
                 continue;
             };
