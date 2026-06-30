@@ -23,7 +23,8 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{CydDevice, CydError, CydEsp, CydStaticEsp};
 use linkage_blaze_example_core::clock::{
-    self, BACKGROUND, FOREGROUND, ORIENTATION, TIME_REGION, TOP_FONT, WIFI_STATUS_REGION, clock,
+    self, BACKGROUND, FOREGROUND, ORIENTATION, TIME_REGION, WIFI_STATUS_FONT, WIFI_STATUS_REGION,
+    clock,
 };
 use log::info;
 
@@ -73,7 +74,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         ORIENTATION,
         BACKGROUND,
         FOREGROUND,
-        &TOP_FONT,
+        &WIFI_STATUS_FONT,
     )?;
     info!("CYD display initialized");
 

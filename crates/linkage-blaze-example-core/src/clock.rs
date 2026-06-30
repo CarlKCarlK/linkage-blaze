@@ -30,15 +30,14 @@ use time::OffsetDateTime;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-/// The clock face is drawn on this background; the esp32 binary uses the same
-/// color as the device per-frame clear color.
-pub const BACKGROUND: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE; // pale parchment
-pub const FOREGROUND: Rgb888 = Rgb888::CSS_NAVY; // dark blue clock text
+pub const BACKGROUND: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE;
+pub const FOREGROUND: Rgb888 = Rgb888::CSS_NAVY;
 
 // ── Screen / region layout ─────────────────────────────────────────────────────
 
 pub const ORIENTATION: Orientation = Orientation::Landscape;
-pub const TOP_FONT: MonoFont<'static> = FONT_6X10;
+
+// todo0000 too complex
 const TIME_FONT: MonoFont<'static> = FONT_10X20;
 const TIME_TEXT_SCALE: usize = 2;
 const TIME_TEXT_MAX_CHARS: usize = 8; // "12:59 PM"
@@ -49,15 +48,16 @@ const TIME_TEXT_SCALED_HEIGHT: usize = TIME_TEXT_UNSCALED_HEIGHT * TIME_TEXT_SCA
 const TIME_TEXT_UNSCALED_PIXELS: usize = TIME_TEXT_UNSCALED_WIDTH * TIME_TEXT_UNSCALED_HEIGHT;
 const TIME_TEXT_SCALED_PIXELS: usize = TIME_TEXT_SCALED_WIDTH * TIME_TEXT_SCALED_HEIGHT;
 
-/// WiFi/status line, matching the old esp32 clock layout at the top-right.
+pub const WIFI_STATUS_FONT: MonoFont<'static> = FONT_6X10;
+
 pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(240, 8), Size::new(70, 10));
-/// Digital time read-out, matching the old esp32 clock layout.
 pub const TIME_REGION: Rectangle = Rectangle::new(Point::new(80, 34), Size::new(160, 40));
+
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(80, 80), Size::new(160, 160));
-const CLOCK_CENTER_X: i32 = 80;
-const CLOCK_CENTER_Y: i32 = 80;
-const HAND_SCALE: f32 = 1.0;
+const CLOCK_CENTER: Point = Point::new(80, 80);
+const HAND_SCALE: f32 = 1.0; // todo000 part of projection?
 const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
+const CLOCK_PRIMITIVE_CAPACITY: usize = CLOCK_HANDS.view().draw_item_count();
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -101,17 +101,28 @@ where
         }
 
         let params = clock_time.params();
-        let mut primitives = heapless::Vec::<DrawPrimitive, 16>::new();
+        let mut primitives = heapless::Vec::<DrawPrimitive, CLOCK_PRIMITIVE_CAPACITY>::new();
         for draw_item in CLOCK_HANDS.view().draw_items(&params) {
             let Some(primitive) = draw_item_to_primitive(draw_item) else {
                 continue;
             };
-            primitives
-                .push(primitive)
-                .expect("clock linkage yields at most 16 draw primitives");
+            push_primitive(&mut primitives, primitive)?;
         }
         cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &primitives)
             .map_err(Error::Flush)?;
+    }
+}
+
+#[derive(Debug, derive_more::From)]
+pub struct PrimitiveOverflowError(pub DrawPrimitive);
+
+fn push_primitive<const N: usize>(
+    primitives: &mut heapless::Vec<DrawPrimitive, N>,
+    primitive: DrawPrimitive,
+) -> Result<(), PrimitiveOverflowError> {
+    match primitives.push(primitive) {
+        Ok(()) => Ok(()),
+        Err(primitive) => Err(PrimitiveOverflowError(primitive)),
     }
 }
 
@@ -164,8 +175,8 @@ fn sphere_to_ellipse(sphere: SphereItem) -> Ellipse {
 fn clock_pose_point(pose: Pose) -> Point {
     let position = pose.position();
     Point::new(
-        CLOCK_BOUNDS.top_left.x + CLOCK_CENTER_X + project_x(position, HAND_SCALE),
-        CLOCK_BOUNDS.top_left.y + CLOCK_CENTER_Y + project_y(position, HAND_SCALE),
+        CLOCK_BOUNDS.top_left.x + CLOCK_CENTER.x + project_x(position, HAND_SCALE),
+        CLOCK_BOUNDS.top_left.y + CLOCK_CENTER.y + project_y(position, HAND_SCALE),
     )
 }
 
@@ -326,11 +337,12 @@ impl ClockTime {
 ///
 /// Only flushing a frame can fail today; it is converted explicitly with
 /// `.map_err(Error::Flush)` at the call site (the same flush-error convention as
-/// [`skeleton_clock::Error`](crate::skeleton_clock::Error)). More variants will
-/// appear once the analog clock-hand rendering is ported and can report linkage
-/// errors.
-#[derive(Debug)]
+/// [`skeleton_clock::Error`](crate::skeleton_clock::Error)).
+#[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
+    #[from(ignore)]
     Flush(F),
+    /// The clock linkage produced more draw primitives than the fixed batch allows.
+    PrimitiveOverflow(PrimitiveOverflowError),
 }
