@@ -18,12 +18,10 @@ name = "ballet"
 path = "examples/ballet.rs"
 required-features = ["esp32", "ballet"]
 
-# Unlike ballet/skeleton-clock, the clock draws directly against `linkage-blaze-cyd`
-# and pulls in no `linkage-blaze-example-core` example module, so it needs only `esp32`.
 [[example]]
 name = "clock"
 path = "examples/clock/main.rs"
-required-features = ["esp32"]
+required-features = ["esp32", "clock"]
 
 [features]
 default = ["esp32"]
@@ -40,6 +38,7 @@ esp32 = [
 # compiled. The example targets above list these in their `required-features`.
 ballet = ["linkage-blaze-example-core/ballet"]
 skeleton-clock = ["linkage-blaze-example-core/skeleton-clock"]
+clock = ["linkage-blaze-example-core/clock"]
 
 [dependencies]
 embedded-graphics = { version = "0.8", default-features = false }

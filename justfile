@@ -20,7 +20,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
     env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
@@ -156,6 +156,7 @@ run-arm-c6:
 # example modules (and ballet's slow `MOTION` const) are never compiled.
 _ballet_args         := _classic_args + " --features ballet"
 _skeleton_clock_args := _classic_args + " --features skeleton-clock"
+_clock_args          := _classic_args + " --features clock"
 
 generate-skeleton-clock:
     cargo run -p linkage-blaze-mocap --example specialize_dance
@@ -172,15 +173,15 @@ run-skeleton-clock-classic:
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
 
 check-clock-classic:
-    cargo +esp check -p linkage-blaze-classic --example clock {{_classic_args}}
+    cargo +esp check -p linkage-blaze-classic --example clock {{_clock_args}}
 
 build-clock-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example clock {{_classic_args}}
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
 
 run-clock-classic:
     just check-clock-classic
     just build-clock-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example clock {{_classic_args}}
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example clock {{_clock_args}}
 
 # ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
 _ballet_wasm_crate := "crates/linkage-blaze-classic-wasm"
