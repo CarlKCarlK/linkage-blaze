@@ -26,7 +26,6 @@ use linkage_blaze_core::{
 use linkage_blaze_cyd_core::{Cyd, CydFrame, DrawPrimitive, Ellipse, LineSegment, Orientation};
 use log::info;
 use static_cell::StaticCell;
-use time::OffsetDateTime;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
@@ -82,9 +81,10 @@ where
         // Wait for a tick and get the time.
         let tick = clock_sync.wait_for_tick().await;
         let local_time = &tick.local_time;
-        // todo000 why?
-        let clock_time = ClockTime::from_time(local_time);
-        info!("tick {}", clock_time.as_str());
+        let (hour_12, minute, second) = h12_m_s(local_time);
+        let hour_24 = local_time.hour();
+        let time_text = text_12h(hour_12, minute, hour_24);
+        info!("tick {}", time_text.as_str());
 
         // Draw the time explicitly so the surface default font/color can stay
         // dedicated to the small WiFi status text, while preserving the old
@@ -93,14 +93,14 @@ where
             let mut time_frame = cyd.frame_mut(TIME_REGION);
             draw_scaled_time(
                 &mut time_frame,
-                clock_time.as_str(),
+                time_text.as_str(),
                 time_text_unscaled_buffer,
                 time_text_scaled_buffer,
             );
             time_frame.flush().await.map_err(Error::Flush)?;
         }
 
-        let params = clock_time.params();
+        let params = linkage_params(hour_24, minute, second);
         let mut primitives = heapless::Vec::<DrawPrimitive, CLOCK_PRIMITIVE_CAPACITY>::new();
         for draw_item in CLOCK_HANDS.view().draw_items(&params) {
             let Some(primitive) = draw_item_to_primitive(draw_item) else {
@@ -289,46 +289,21 @@ fn draw_scaled_time<FrameError>(
 
 // ── Clock time ──────────────────────────────────────────────────────────────────
 
-/// A formatted snapshot of the wall-clock time.
-///
-pub struct ClockTime {
-    text: heapless::String<16>,
-    hour_24: u8,
-    minute: u8,
-    second: u8,
+/// Format a 12-hour clock string with AM/PM.
+fn text_12h(hour_12: u8, minute: u8, hour_24: u8) -> heapless::String<16> {
+    let meridiem = if hour_24 % 24 < 12 { "AM" } else { "PM" };
+    let mut text = heapless::String::new();
+    core::fmt::write(&mut text, format_args!("{hour_12}:{minute:02} {meridiem}"))
+        .expect("clock string fits in 16 bytes");
+    text
 }
 
-impl ClockTime {
-    /// Build a `ClockTime` from `local_time`, formatting a `12:59 PM`-style read-out.
-    pub fn from_time(local_time: &OffsetDateTime) -> Self {
-        let (hour_12, minute, second) = h12_m_s(local_time);
-        let meridiem = if local_time.hour() % 24 < 12 {
-            "AM"
-        } else {
-            "PM"
-        };
-        let mut text = heapless::String::new();
-        core::fmt::write(&mut text, format_args!("{hour_12}:{minute:02} {meridiem}"))
-            .expect("clock string fits in 16 bytes");
-        Self {
-            text,
-            hour_24: local_time.hour(),
-            minute,
-            second,
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.text.as_str()
-    }
-
-    fn params(&self) -> [f32; 2] {
-        let second = self.second as f32 / 60.0;
-        let minute = (self.minute as f32 + second) / 60.0;
-        let hour = ((self.hour_24 % 12) as f32 + minute) / 12.0;
-        let face_spin = (((self.second % 20) as f32) / 20.0 + 0.5) % 1.0;
-        [hour, face_spin]
-    }
+fn linkage_params(hour_24: u8, minute: u8, second: u8) -> [f32; 2] {
+    let second_turn = second as f32 / 60.0;
+    let minute_turn = (minute as f32 + second_turn) / 60.0;
+    let hour = ((hour_24 % 12) as f32 + minute_turn) / 12.0;
+    let face_spin = (((second % 20) as f32) / 20.0 + 0.5) % 1.0;
+    [hour, face_spin]
 }
 
 // ── Errors ────────────────────────────────────────────────────────────────────
