@@ -13,7 +13,14 @@ license.workspace = true
 # traits; this crate never depends on a platform.
 
 [features]
-default = ["skeleton-clock"]
+# Each generic example is gated behind its own feature so a consumer compiles
+# only the example it actually uses — in particular `ballet`'s heavy embedded
+# `MOTION` const is evaluated only when the `ballet` feature is on. Nothing is
+# on by default; every consumer opts in to the examples it needs.
+default = []
+# The `ballet` example embeds a motion-capture const that is slow to evaluate;
+# keep it off unless the `ballet` example is being built.
+ballet = []
 # The `skeleton_clock` example needs device-envoy's `ClockSync` (→ embassy-executor).
 # `ballet` does not, so platforms that only want `ballet` (e.g. the WASM build,
 # which must avoid embassy-executor's unprovided `__pender` arch symbol) can

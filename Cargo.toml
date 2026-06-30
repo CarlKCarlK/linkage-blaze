@@ -12,7 +12,6 @@ members = [
     "crates/linkage-blaze-armatron-wasm",
     "crates/linkage-blaze-armatron-classic",
     "crates/linkage-blaze-armatron-c6",
-    "crates/linkage-blaze-clock-classic",
     "crates/linkage-blaze-classic",
     "crates/linkage-blaze-printer-wasm",
     "crates/linkage-blaze-mocap",

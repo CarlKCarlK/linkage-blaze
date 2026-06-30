@@ -15,8 +15,11 @@ crate-type = ["cdylib", "rlib"]
 wasm-opt = false
 
 [dependencies]
-# `skeleton-clock` feature is on by default, pulling device-envoy-core's ClockSync.
-linkage-blaze-example-core = { path = "../linkage-blaze-example-core" }
+# Enable the `skeleton-clock` example module (pulls device-envoy-core's ClockSync).
+# `gamma_ramp` is ungated, so no feature is needed for the gamma-ramp entry point.
+linkage-blaze-example-core = { path = "../linkage-blaze-example-core", features = [
+    "skeleton-clock",
+] }
 linkage-blaze-cyd-wasm = { path = "../linkage-blaze-cyd-wasm" }
 linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
 device-envoy-core = { version = "0.1.0", default-features = false, features = [

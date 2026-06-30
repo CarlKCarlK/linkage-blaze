@@ -11,16 +11,18 @@ license.workspace = true
 [[example]]
 name = "skeleton-clock"
 path = "examples/skeleton-clock.rs"
-required-features = ["esp32"]
+required-features = ["esp32", "skeleton-clock"]
 
 [[example]]
 name = "ballet"
 path = "examples/ballet.rs"
-required-features = ["esp32"]
+required-features = ["esp32", "ballet"]
 
+# Unlike ballet/skeleton-clock, the clock draws directly against `linkage-blaze-cyd`
+# and pulls in no `linkage-blaze-example-core` example module, so it needs only `esp32`.
 [[example]]
-name = "gamma-ramp"
-path = "examples/gamma-ramp.rs"
+name = "clock"
+path = "examples/clock/main.rs"
 required-features = ["esp32"]
 
 [features]
@@ -33,6 +35,11 @@ esp32 = [
     "esp-println/esp32",
     "esp-bootloader-esp-idf/esp32",
 ]
+# Each example module is gated in `linkage-blaze-example-core`; enable only the
+# one being built so unused modules (and ballet's slow `MOTION` const) are never
+# compiled. The example targets above list these in their `required-features`.
+ballet = ["linkage-blaze-example-core/ballet"]
+skeleton-clock = ["linkage-blaze-example-core/skeleton-clock"]
 
 [dependencies]
 embedded-graphics = { version = "0.8", default-features = false }
@@ -42,7 +49,7 @@ linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
-linkage-blaze-example-core = { path = "../linkage-blaze-example-core" }
+linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
 derive_more = { version = "2.1.1", default-features = false, features = [
     "from",
 ] }

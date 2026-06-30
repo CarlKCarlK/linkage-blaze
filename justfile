@@ -20,10 +20,9 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
     env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example gamma-ramp {{_classic_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-skeleton-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
@@ -148,50 +147,40 @@ run-arm-c6:
     just build-arm-c6
     cargo run -p linkage-blaze-armatron-c6 {{_c6_args}}
 
-# ── linkage-blaze-clock-classic ─────────────────────────────────────────
-
-check-clock-classic:
-    cargo +esp check -p linkage-blaze-clock-classic {{_classic_args}}
-
-build-clock-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-clock-classic {{_classic_args}}
-
-run-clock-classic:
-    just check-clock-classic
-    just build-clock-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-clock-classic {{_classic_args}}
-
 # ── linkage-blaze-classic examples (dance, ballet) ──────────────────────
 #
 # dance and ballet now live as `--example`s in the shared `linkage-blaze-classic`
 # crate. Example binaries land in target/<triple>/release/examples/<name>.
 
-_ballet_args := _classic_args
+# Each example enables only its own `linkage-blaze-example-core` module, so unused
+# example modules (and ballet's slow `MOTION` const) are never compiled.
+_ballet_args         := _classic_args + " --features ballet"
+_skeleton_clock_args := _classic_args + " --features skeleton-clock"
 
 generate-skeleton-clock:
     cargo run -p linkage-blaze-mocap --example specialize_dance
 
 check-skeleton-clock-classic:
-    cargo +esp check -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
+    cargo +esp check -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
 
 build-skeleton-clock-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
 
 run-skeleton-clock-classic:
     just check-skeleton-clock-classic
     just build-skeleton-clock-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example skeleton-clock {{_classic_args}}
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
 
-check-color-ramp-classic:
-    cargo +esp check -p linkage-blaze-classic --example gamma-ramp {{_classic_args}}
+check-clock-classic:
+    cargo +esp check -p linkage-blaze-classic --example clock {{_classic_args}}
 
-build-color-ramp-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example gamma-ramp {{_classic_args}}
+build-clock-classic:
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example clock {{_classic_args}}
 
-run-color-ramp-classic:
-    just check-color-ramp-classic
-    just build-color-ramp-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example gamma-ramp {{_classic_args}}
+run-clock-classic:
+    just check-clock-classic
+    just build-clock-classic
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example clock {{_classic_args}}
 
 # ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
 _ballet_wasm_crate := "crates/linkage-blaze-classic-wasm"
