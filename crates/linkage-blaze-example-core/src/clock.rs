@@ -21,9 +21,9 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{
-    DrawItem, LinkageFixed, LinkageView, ProjectedDrawItem, Projection, linkage, linkage_fixed,
+    LinkageFixed, LinkageView, ProjectedDrawItem, Projection, linkage, linkage_fixed,
 };
-use linkage_blaze_cyd_core::{Cyd, CydFrame, DrawPrimitive, Ellipse, LineSegment, Orientation};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation};
 use log::info;
 use static_cell::StaticCell;
 
@@ -104,80 +104,16 @@ where
         }
 
         let params = linkage_params(hour_24, minute, second);
-        let mut primitives = heapless::Vec::<DrawPrimitive, { LINKAGE.draw_item_count() }>::new();
+        let mut items = heapless::Vec::<ProjectedDrawItem, { LINKAGE.draw_item_count() }>::new();
         for draw_item in LINKAGE.draw_items(&params) {
-            let Some(primitive) = draw_item_to_primitive(draw_item) else {
-                continue;
-            };
-            if let Err(primitive) = primitives.push(primitive) {
-                return Err(Error::PrimitiveOverflow(primitive));
+            let item = draw_item.project(&PROJECTION);
+            if let Err(item) = items.push(item) {
+                return Err(Error::PrimitiveOverflow(item));
             }
         }
-        cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &primitives)
+        cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &items)
             .map_err(Error::Flush)?;
     }
-}
-
-fn draw_item_to_primitive(draw_item: DrawItem) -> Option<DrawPrimitive> {
-    match draw_item.project(&PROJECTION) {
-        ProjectedDrawItem::Stroke {
-            start,
-            end,
-            color,
-            pixel_width,
-        } => {
-            let start = projected_point(start);
-            let end = projected_point(end);
-            if start == end {
-                return None;
-            }
-            Some(DrawPrimitive::LineSegment(LineSegment {
-                start,
-                end,
-                width: pixel_width_u16(pixel_width),
-                color: Rgb565::from(color),
-            }))
-        }
-        ProjectedDrawItem::Ellipse {
-            center,
-            axis_a,
-            axis_b,
-            color,
-        } => Some(DrawPrimitive::Ellipse(Ellipse {
-            center: projected_point(center),
-            axis_a,
-            axis_b,
-            radius: ellipse_bound_radius(axis_a, axis_b),
-            stroke_width: 0,
-            color: Rgb565::from(color),
-            filled: true,
-        })),
-        ProjectedDrawItem::Circle {
-            center,
-            pixel_radius,
-            color,
-        } => Some(DrawPrimitive::Ellipse(Ellipse {
-            center: projected_point(center),
-            axis_a: (pixel_radius, 0.0),
-            axis_b: (0.0, pixel_radius),
-            radius: pixel_radius,
-            stroke_width: 0,
-            color: Rgb565::from(color),
-            filled: true,
-        })),
-    }
-}
-
-fn projected_point((x, y): (f32, f32)) -> Point {
-    Point::new(x as i32, y as i32)
-}
-
-fn pixel_width_u16(width: f32) -> u16 {
-    ((width + 0.5) as u16).max(1)
-}
-
-fn ellipse_bound_radius(axis_a: (f32, f32), axis_b: (f32, f32)) -> f32 {
-    (axis_a.0.abs() + axis_b.0.abs()).max(axis_a.1.abs() + axis_b.1.abs())
 }
 
 struct BufferTarget<'a> {
@@ -298,6 +234,6 @@ fn linkage_params(hour_24: u8, minute: u8, second: u8) -> [f32; 2] {
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
     Flush(F),
-    /// The clock linkage produced more draw primitives than the fixed batch allows.
-    PrimitiveOverflow(DrawPrimitive),
+    /// The clock linkage produced more draw items than the fixed batch allows.
+    PrimitiveOverflow(ProjectedDrawItem),
 }
