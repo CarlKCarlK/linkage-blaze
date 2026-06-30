@@ -31,7 +31,6 @@ pub use display::{
 };
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
-use linkage_blaze_cyd_core::tiling::Region;
 pub use linkage_blaze_cyd_core::{
     Cyd as CydDevice, CydFrame as CydFrameTrait, Orientation, SCREEN_HEIGHT, SCREEN_PIXELS,
     SCREEN_WIDTH, TouchInputEvent, tiling,
@@ -92,9 +91,9 @@ pub struct CalibratedCydEsp<'a> {
 pub struct CydFrameEsp<'a> {
     display: &'a mut CydPanel,
     view: RegionView<'a>,
-    // Where this frame presents and how large it is: set from the `Region`
+    // Where this frame presents and how large it is: set from the `Rectangle`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
-    region: Region,
+    region: Rectangle,
     // Tile top-left in screen coordinates. Drawing coordinates are translated
     // by this point before reaching the local frame buffer.
     tile_top_left: Point,
@@ -527,16 +526,16 @@ impl CydEsp {
     }
 
     pub fn full_frame_mut(&mut self) -> CydFrameEsp<'_> {
-        self.frame_mut(Region::new(Point::zero(), self.screen_size()))
+        self.frame_mut(Rectangle::new(Point::zero(), self.screen_size()))
     }
 
-    pub fn frame_mut(&mut self, region: Region) -> CydFrameEsp<'_> {
+    pub fn frame_mut(&mut self, region: Rectangle) -> CydFrameEsp<'_> {
         self.frame_mut_with_tile_top_left(region, Point::zero())
     }
 
     pub fn frame_mut_with_tile_top_left(
         &mut self,
-        region: Region,
+        region: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameEsp<'_> {
         let size = region.size;
@@ -695,7 +694,7 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
 
     fn frame_mut_with_tile_top_left(
         &mut self,
-        region: tiling::Region,
+        region: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameEsp<'_> {
         CydEsp::frame_mut_with_tile_top_left(self, region, tile_top_left)
@@ -731,7 +730,7 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
         self.tile_top_left
     }
 
-    fn region(&self) -> Region {
+    fn region(&self) -> Rectangle {
         self.region
     }
 

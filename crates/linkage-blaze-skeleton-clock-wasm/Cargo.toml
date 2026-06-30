@@ -16,7 +16,6 @@ wasm-opt = false
 
 [dependencies]
 # Enable the `skeleton-clock` example module (pulls device-envoy-core's ClockSync).
-# `gamma_ramp` is ungated, so no feature is needed for the gamma-ramp entry point.
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", features = [
     "skeleton-clock",
 ] }

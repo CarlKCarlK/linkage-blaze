@@ -17,9 +17,10 @@ use embedded_graphics::{
     pixelcolor::{IntoStorage, Rgb565},
     pixelcolor::{Rgb888, WebColors},
     prelude::{DrawTarget, OriginDimensions, Point, Size},
+    primitives::Rectangle,
     text::{Baseline, Text},
 };
-use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation, tiling::Region};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation};
 use log::info;
 use static_cell::StaticCell;
 use time::OffsetDateTime;
@@ -46,9 +47,9 @@ const TIME_TEXT_UNSCALED_PIXELS: usize = TIME_TEXT_UNSCALED_WIDTH * TIME_TEXT_UN
 const TIME_TEXT_SCALED_PIXELS: usize = TIME_TEXT_SCALED_WIDTH * TIME_TEXT_SCALED_HEIGHT;
 
 /// WiFi/status line, matching the old esp32 clock layout at the top-right.
-pub const WIFI_STATUS_REGION: Region = Region::new(Point::new(240, 8), Size::new(70, 10));
+pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(240, 8), Size::new(70, 10));
 /// Digital time read-out, matching the old esp32 clock layout.
-pub const TIME_REGION: Region = Region::new(Point::new(80, 34), Size::new(160, 40));
+pub const TIME_REGION: Rectangle = Rectangle::new(Point::new(80, 34), Size::new(160, 40));
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ where
         // render the linkage the way `skeleton_clock` does: iterate
         // `CLOCK_HANDS.view().draw_items(&clock_time.params())`, `.project(...)`
         // each into a `ProjectedDrawItem`, and `.draw(&mut frame)` onto a frame
-        // borrowed over the clock-face `Region` (every `CydFrame` is a
+        // borrowed over the clock-face `Rectangle` (every `CydFrame` is a
         // `PixelTarget`).
         /*
         const CLOCK_TOP_LEFT: Point = Point::new(80, 80);
