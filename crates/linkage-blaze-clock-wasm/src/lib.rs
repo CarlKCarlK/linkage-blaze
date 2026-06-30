@@ -12,7 +12,7 @@ use clock::WasmClockSync;
 use linkage_blaze_cyd_core::{Cyd, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::clock::{
-    BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_REGION, clock,
+    BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_REGION, clock,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -51,7 +51,13 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .dyn_into()
         .expect("the context is a CanvasRenderingContext2d");
 
-    let cyd = CydWasm::new(context, ORIENTATION, BACKGROUND, FOREGROUND, &TOP_FONT);
+    let cyd = CydWasm::new(
+        context,
+        ORIENTATION,
+        BACKGROUND,
+        FOREGROUND,
+        &WIFI_STATUS_FONT,
+    );
 
     // `async move` owns `cyd` and the clock, making the spawned future `'static`
     // while `clock` borrows them for the whole run.
