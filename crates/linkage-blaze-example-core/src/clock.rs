@@ -104,14 +104,16 @@ where
         }
 
         let params = linkage_params(hour_24, minute, second);
-        let mut items = heapless::Vec::<ProjectedDrawItem, { LINKAGE.draw_item_count() }>::new();
+
+        // Iterate 3D items, project to 2D, and collect the projected items.
+        let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_count() }>::new();
         for draw_item in LINKAGE.draw_items(&params) {
-            let item = draw_item.project(&PROJECTION);
-            if let Err(item) = items.push(item) {
-                return Err(Error::PrimitiveOverflow(item));
-            }
+            projected_items
+                .push(draw_item.project(&PROJECTION))
+                .map_err(Error::VecOverflow)?;
         }
-        cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &items)
+
+        cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &projected_items)
             .map_err(Error::Flush)?;
     }
 }
@@ -227,13 +229,13 @@ fn linkage_params(hour_24: u8, minute: u8, second: u8) -> [f32; 2] {
 
 /// Error from the generic clock loop, generic over the surface's flush error `F`.
 ///
-/// The device's flush error `F` is converted explicitly with
-/// `.map_err(Error::Flush)` at the call site (the same flush-error convention as
-/// [`skeleton_clock::Error`](crate::skeleton_clock::Error)).
+/// Both variants are converted explicitly at the call site (`.map_err(...)`),
+/// the same flush-error convention as
+/// [`skeleton_clock::Error`](crate::skeleton_clock::Error).
 #[derive(Debug)]
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
     Flush(F),
-    /// The clock linkage produced more draw items than the fixed batch allows.
-    PrimitiveOverflow(ProjectedDrawItem),
+    /// The projected-items scratch buffer was smaller than the linkage draw-item count.
+    VecOverflow(ProjectedDrawItem),
 }

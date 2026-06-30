@@ -143,7 +143,9 @@ where
         // // Iterate 3d items, project to 2D, and collect 2D items and poses.
         let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_count() }>::new();
         for draw_item in draw_items.by_ref() {
-            push_projected_item(&mut projected_items, draw_item.project(&PROJECTION))?;
+            projected_items
+                .push(draw_item.project(&PROJECTION))
+                .map_err(Error::VecOverflow)?;
         }
 
         // Using the exhausted iterator, find the position of the middle of the left hand.
@@ -419,27 +421,13 @@ fn mark_lookup<T>(result: Result<T, MarkError>) -> Result<T, MarkLookupError> {
     Ok(result?)
 }
 
-#[derive(Debug, derive_more::From)]
-pub struct ProjectedItemOverflowError(pub ProjectedDrawItem);
-
-fn push_projected_item<const N: usize>(
-    projected_items: &mut heapless::Vec<ProjectedDrawItem, N>,
-    projected_draw_item: ProjectedDrawItem,
-) -> Result<(), ProjectedItemOverflowError> {
-    match projected_items.push(projected_draw_item) {
-        Ok(()) => Ok(()),
-        Err(projected_draw_item) => Err(ProjectedItemOverflowError(projected_draw_item)),
-    }
-}
-
 /// Error from the generic skeleton-clock loop, generic over the surface's flush
 /// error `F`.
 ///
-/// Our own error types ([`MarkLookupError`], [`ProjectedItemOverflowError`])
-/// get a derived `From`, so they propagate with a plain `?`. The device's flush
-/// error `F` is the one exception: a blanket `From<F>` would be greedy enough to
-/// collide with those concrete `From`s under coherence, so flush is converted
-/// explicitly with `.map_err(Error::Flush)` at the call site.
+/// Our own [`MarkLookupError`] gets a derived `From`, so it propagates with a
+/// plain `?`. The device's flush error `F` and the overflow value are converted
+/// explicitly with `.map_err(...)` at the call site: a blanket `From<F>` would
+/// be greedy enough to collide with that concrete `From` under coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Flushing a frame to the display failed.
@@ -448,5 +436,6 @@ pub enum Error<F> {
     /// A required figure mark was not found.
     Mark(MarkLookupError),
     /// The projected-items scratch buffer was smaller than the linkage draw-item count.
-    ProjectedItemOverflow(ProjectedItemOverflowError),
+    #[from(ignore)]
+    VecOverflow(ProjectedDrawItem),
 }
