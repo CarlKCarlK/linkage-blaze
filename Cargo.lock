@@ -1604,6 +1604,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "linkage-blaze-clock-wasm"
+version = "0.1.4"
+dependencies = [
+ "device-envoy-core",
+ "embassy-executor",
+ "embassy-time",
+ "js-sys",
+ "linkage-blaze-cyd-core",
+ "linkage-blaze-cyd-wasm",
+ "linkage-blaze-example-core",
+ "time",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "linkage-blaze-core"
 version = "0.1.4"
 dependencies = [

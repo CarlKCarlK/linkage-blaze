@@ -23,6 +23,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_clock_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-skeleton-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
@@ -182,6 +183,26 @@ run-clock-classic:
     just check-clock-classic
     just build-clock-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example clock {{_clock_args}}
+
+# ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
+_clock_wasm_crate := "crates/linkage-blaze-clock-wasm"
+_clock_wasm_www   := "crates/linkage-blaze-clock-wasm/www"
+_clock_wasm_port  := "8084"
+
+check-clock-wasm:
+    cargo check -p linkage-blaze-clock-wasm --target wasm32-unknown-unknown
+
+build-clock-wasm:
+    wasm-pack build {{_clock_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_clock_wasm
+
+serve-clock-wasm port=_clock_wasm_port:
+    -lsof -ti:{{port}} | xargs -r kill
+    cd {{_clock_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
+
+run-clock-wasm port=_clock_wasm_port:
+    just check-clock-wasm
+    just build-clock-wasm
+    just serve-clock-wasm {{port}}
 
 # ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
 _ballet_wasm_crate := "crates/linkage-blaze-classic-wasm"

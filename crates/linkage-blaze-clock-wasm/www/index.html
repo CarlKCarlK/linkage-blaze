@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CYD Clock Simulator</title>
+  <meta name="theme-color" content="#191970" />
+  <style>
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      /* desk.jpg tiled and enlarged 200% as the page background. */
+      background: url("./desk.jpg") repeat;
+      background-size: 1024px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* The live display: crisp landscape 2x (320x240 panel -> 640x480).
+       Note: one CYD pixel is two browser pixels here. */
+    .stage {
+      position: relative;
+      z-index: 0; /* stacking context so the cord (z-index:-1) sits behind the case */
+      width: 640px;
+      height: 480px;
+    }
+    #screen {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 640px;
+      height: 480px;
+      image-rendering: pixelated;
+      z-index: 1;
+    }
+    /* The same portrait device photo, rotated 90 degrees clockwise to match the
+       landscape clock panel. These coordinates are the portrait alignment values
+       transformed into landscape space, so the original screen opening still
+       frames the canvas exactly after rotation. */
+    .stage .case {
+      position: absolute;
+      z-index: 0;
+      width: 1087px;
+      height: 1396px;
+      left: 1058px;
+      top: -301px;
+      transform-origin: top left;
+      transform: rotate(90deg);
+      filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
+    }
+    /* The portrait USB cord, rotated 90 degrees clockwise into a right-pointing
+       landscape cord. It ends at the rotated case image's right edge. */
+    .stage .cord {
+      position: absolute;
+      z-index: -1;
+      left: 1058px;
+      top: 220px;
+      width: 1982px;
+      height: 35px;
+      /* dark grey cord with a lighter sheen stripe across its height */
+      background: linear-gradient(to bottom, #333 0 50%, #4d4d4d 50% 90%, #333 90% 100%);
+    }
+    #status {
+      position: fixed;
+      bottom: 8px;
+      left: 8px;
+      color: #b0c4de; /* light steel blue */
+      font: 12px monospace;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="stage">
+    <div class="cord"></div>
+    <img class="case" src="./case.png" alt="CYD device case" />
+    <canvas id="screen" aria-label="CYD clock display simulator"></canvas>
+  </div>
+  <div id="status"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+
+</html>
