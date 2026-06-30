@@ -432,11 +432,14 @@ impl CydPanel {
         self.fill_rectangle(Rectangle::new(Point::new(0, 0), self.screen_size), color)
     }
 
-    pub fn fill_rectangle(
+    pub(crate) fn fill_rectangle(
         &mut self,
         rectangle: Rectangle,
         color: Rgb565,
     ) -> Result<(), CydPanelFlushError> {
+        // TODO0000 Revisit whether this software clipping should stay here or be
+        // delegated to panel hardware/windowing behavior after measuring the
+        // real controller semantics and cost.
         let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let rectangle = rectangle.intersection(&screen_rectangle);
         if rectangle.size.width == 0 || rectangle.size.height == 0 {
@@ -466,6 +469,9 @@ impl CydPanel {
         background: Rgb565,
         segments: &[LineSegment],
     ) -> Result<(), CydPanelFlushError> {
+        // TODO0000 Revisit whether this software clipping should stay here or be
+        // delegated to panel hardware/windowing behavior after measuring the
+        // real controller semantics and cost.
         let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let bounds = bounds.intersection(&screen_rectangle);
         if bounds.size.width == 0 || bounds.size.height == 0 {
@@ -494,6 +500,9 @@ impl CydPanel {
         background: Rgb565,
         draw_primitives: &[DrawPrimitive],
     ) -> Result<(), CydPanelFlushError> {
+        // TODO0000 Revisit whether this software clipping should stay here or be
+        // delegated to panel hardware/windowing behavior after measuring the
+        // real controller semantics and cost.
         let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
         let bounds = bounds.intersection(&screen_rectangle);
         if bounds.size.width == 0 || bounds.size.height == 0 {

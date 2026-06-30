@@ -82,6 +82,17 @@ pub trait Cyd {
     /// constructed without touch). Errors only on a hardware/read failure.
     fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, Self::Error>;
 
+    /// Fill `rectangle` immediately in physical-screen coordinates.
+    ///
+    /// Unlike [`CydFrame::fill`], this is a device-level operation rather than a
+    /// frame-local buffered draw. Implementations clip to the physical screen and
+    /// treat an empty intersection as a no-op.
+    fn fill_rectangle(
+        &mut self,
+        rectangle: Rectangle,
+        color: Rgb565,
+    ) -> Result<(), Self::Error>;
+
     /// Drive `grid` as a sequence of low-memory tiles.
     ///
     /// The returned [`Tiles`] is a lending/streaming iterator (it does not
@@ -256,6 +267,14 @@ mod tests {
 
         fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydInfallibleError> {
             Ok(None)
+        }
+
+        fn fill_rectangle(
+            &mut self,
+            _rectangle: Rectangle,
+            _color: Rgb565,
+        ) -> Result<(), CydInfallibleError> {
+            Ok(())
         }
     }
 

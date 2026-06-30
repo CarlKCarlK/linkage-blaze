@@ -99,8 +99,8 @@ where
         //
         //   * `CydEsp::draw_primitives` / the `DrawPrimitive`, `Ellipse`,
         //     `LineSegment` batch-draw types,
-        //   * `CydEsp::flush_at`, `CydEsp::fill_rectangle`, and the scaled-glyph
-        //     `PixelBuffer`/`RegionView` workspace.
+        //   * `CydEsp::flush_at` and the scaled-glyph `PixelBuffer`/`RegionView`
+        //     workspace.
         //
         // It also uses a bespoke "model +X = up, +Y = left" projection
         // (`project_x`/`project_y`/`project_dir`) that the generic
