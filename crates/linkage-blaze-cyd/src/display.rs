@@ -341,6 +341,23 @@ impl CydDisplayEsp {
         self.screen_size
     }
 
+    #[must_use]
+    fn screen_rectangle(&self) -> Rectangle {
+        Rectangle::new(Point::new(0, 0), self.screen_size)
+    }
+
+    // TODO0000 Revisit whether this software clipping should stay here or be
+    // delegated to panel hardware/windowing behavior after measuring the real
+    // controller semantics and cost.
+    #[must_use]
+    fn clip_to_screen(&self, rectangle: Rectangle) -> Option<Rectangle> {
+        let rectangle = rectangle.intersection(&self.screen_rectangle());
+        if rectangle.size.width == 0 || rectangle.size.height == 0 {
+            return None;
+        }
+        Some(rectangle)
+    }
+
     pub(crate) fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,
@@ -429,7 +446,7 @@ impl CydDisplayEsp {
     }
 
     pub(crate) fn fill(&mut self, color: Rgb565) -> Result<(), CydDisplayEspFlushError> {
-        self.fill_rectangle(Rectangle::new(Point::new(0, 0), self.screen_size), color)
+        self.fill_rectangle(self.screen_rectangle(), color)
     }
 
     pub(crate) fn fill_rectangle(
@@ -437,14 +454,9 @@ impl CydDisplayEsp {
         rectangle: Rectangle,
         color: Rgb565,
     ) -> Result<(), CydDisplayEspFlushError> {
-        // TODO0000 Revisit whether this software clipping should stay here or be
-        // delegated to panel hardware/windowing behavior after measuring the
-        // real controller semantics and cost.
-        let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
-        let rectangle = rectangle.intersection(&screen_rectangle);
-        if rectangle.size.width == 0 || rectangle.size.height == 0 {
+        let Some(rectangle) = self.clip_to_screen(rectangle) else {
             return Ok(());
-        }
+        };
         self.display
             .fill_solid(&rectangle, color)
             .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)
@@ -469,14 +481,9 @@ impl CydDisplayEsp {
         background: Rgb565,
         segments: &[LineSegment],
     ) -> Result<(), CydDisplayEspFlushError> {
-        // TODO0000 Revisit whether this software clipping should stay here or be
-        // delegated to panel hardware/windowing behavior after measuring the
-        // real controller semantics and cost.
-        let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
-        let bounds = bounds.intersection(&screen_rectangle);
-        if bounds.size.width == 0 || bounds.size.height == 0 {
+        let Some(bounds) = self.clip_to_screen(bounds) else {
             return Ok(());
-        }
+        };
 
         let pixel_count = bounds.size.width as usize * bounds.size.height as usize;
         let pixels = LineSegmentPixels {
@@ -500,14 +507,9 @@ impl CydDisplayEsp {
         background: Rgb565,
         draw_primitives: &[DrawPrimitive],
     ) -> Result<(), CydDisplayEspFlushError> {
-        // TODO0000 Revisit whether this software clipping should stay here or be
-        // delegated to panel hardware/windowing behavior after measuring the
-        // real controller semantics and cost.
-        let screen_rectangle = Rectangle::new(Point::new(0, 0), self.screen_size);
-        let bounds = bounds.intersection(&screen_rectangle);
-        if bounds.size.width == 0 || bounds.size.height == 0 {
+        let Some(bounds) = self.clip_to_screen(bounds) else {
             return Ok(());
-        }
+        };
 
         // Prepare primitives (precompute expensive constants, bounds-check)
         let mut prepared = heapless::Vec::<PreparedPrimitive, 16>::new();
