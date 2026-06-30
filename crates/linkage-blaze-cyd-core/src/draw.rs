@@ -219,37 +219,20 @@ impl Iterator for LineSegmentPixels<'_> {
     }
 }
 
-pub(crate) struct PrimitivePixels<const PRIMITIVE_COUNT: usize> {
-    x0: i32,
-    y0: i32,
-    width: usize,
-    index: usize,
-    pixel_count: usize,
+pub struct PrimitivePixels<const PRIMITIVE_COUNT: usize> {
+    bounds: Rectangle,
+    left: i32,
+    top: i32,
+    right_exclusive: i32,
+    bottom_exclusive: i32,
     background: Rgb565,
     primitives: heapless::Vec<PreparedPrimitive, PRIMITIVE_COUNT>,
 }
 
 impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
+    /// Project and compile 3D draw items for indexed pixel lookups.
     #[must_use]
-    pub(crate) fn new(
-        bounds: Rectangle,
-        background: Rgb565,
-        draw_items: &[ProjectedDrawItem],
-    ) -> Self {
-        let mut primitives = heapless::Vec::<PreparedPrimitive, PRIMITIVE_COUNT>::new();
-        for draw_item in draw_items {
-            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(draw_item) {
-                primitives
-                    .push(prepared_primitive)
-                    .expect("projected draw items fit the prepared primitive capacity");
-            }
-        }
-
-        Self::from_primitives(bounds, background, primitives)
-    }
-
-    #[must_use]
-    pub(crate) fn from_draw_items<I>(
+    pub fn from_draw_items<I>(
         bounds: Rectangle,
         background: Rgb565,
         draw_items: I,
@@ -270,40 +253,65 @@ impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
             }
         }
 
-        Self::from_primitives(bounds, background, primitives)
+        Self::new(bounds, background, primitives)
     }
 
-    fn from_primitives(
+    /// Compile already-projected draw items for indexed pixel lookups.
+    #[must_use]
+    pub fn from_projected_items(
+        bounds: Rectangle,
+        background: Rgb565,
+        draw_items: &[ProjectedDrawItem],
+    ) -> Self {
+        let mut primitives = heapless::Vec::<PreparedPrimitive, PRIMITIVE_COUNT>::new();
+        for draw_item in draw_items {
+            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(draw_item) {
+                primitives
+                    .push(prepared_primitive)
+                    .expect("projected draw items fit the prepared primitive capacity");
+            }
+        }
+
+        Self::new(bounds, background, primitives)
+    }
+
+    fn new(
         bounds: Rectangle,
         background: Rgb565,
         primitives: heapless::Vec<PreparedPrimitive, PRIMITIVE_COUNT>,
     ) -> Self {
+        let left = bounds.top_left.x;
+        let top = bounds.top_left.y;
+        let right_exclusive = left
+            .checked_add(bounds.size.width as i32)
+            .expect("compiled primitive bounds right edge must fit in i32");
+        let bottom_exclusive = top
+            .checked_add(bounds.size.height as i32)
+            .expect("compiled primitive bounds bottom edge must fit in i32");
+
         Self {
-            x0: bounds.top_left.x,
-            y0: bounds.top_left.y,
-            width: bounds.size.width as usize,
-            index: 0,
-            pixel_count: bounds.size.width as usize * bounds.size.height as usize,
+            bounds,
+            left,
+            top,
+            right_exclusive,
+            bottom_exclusive,
             background,
             primitives,
         }
     }
-}
 
-impl<const PRIMITIVE_COUNT: usize> Iterator for PrimitivePixels<PRIMITIVE_COUNT> {
-    type Item = Rgb565;
+    #[must_use]
+    pub fn bounds(&self) -> Rectangle {
+        self.bounds
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.pixel_count {
-            return None;
-        }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.left >= self.right_exclusive || self.top >= self.bottom_exclusive
+    }
 
-        let offset_x = self.index % self.width;
-        let offset_y = self.index / self.width;
-        self.index += 1;
-
-        let point_x = self.x0 + offset_x as i32;
-        let point_y = self.y0 + offset_y as i32;
+    #[must_use]
+    pub fn pixel_at(&self, point_x: i32, point_y: i32) -> Rgb565 {
         let mut color = self.background;
         let point = Point::new(point_x, point_y);
 
@@ -368,7 +376,16 @@ impl<const PRIMITIVE_COUNT: usize> Iterator for PrimitivePixels<PRIMITIVE_COUNT>
             }
         }
 
-        Some(color)
+        color
+    }
+
+    #[must_use]
+    pub fn iter(&self) -> impl Iterator<Item = Rgb565> + '_ {
+        (self.top..self.bottom_exclusive)
+            .flat_map(move |point_y| {
+                (self.left..self.right_exclusive).map(move |point_x| (point_x, point_y))
+            })
+            .map(|(point_x, point_y)| self.pixel_at(point_x, point_y))
     }
 }
 

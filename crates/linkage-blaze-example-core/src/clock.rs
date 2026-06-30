@@ -11,6 +11,7 @@
 use core::convert::Infallible;
 
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
+use embassy_time::{Duration, Instant};
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_10X20},
@@ -78,15 +79,22 @@ where
     let time_text_unscaled_buffer =
         &mut *TIME_TEXT_UNSCALED_BUFFER.init([0; TIME_TEXT_UNSCALED_PIXELS]);
     let time_text_scaled_buffer = &mut *TIME_TEXT_SCALED_BUFFER.init([0; TIME_TEXT_SCALED_PIXELS]);
+    let background = Rgb565::from(BACKGROUND);
+    let foreground = Rgb565::from(FOREGROUND);
 
     loop {
+        let loop_started = Instant::now();
+
         // Wait for a tick and get the time.
         let tick = clock_sync.wait_for_tick().await;
+        let tick_ready = Instant::now();
         let local_time = &tick.local_time;
         let (hour_12, minute, second) = h12_m_s(local_time);
         let hour_24 = local_time.hour();
         let time_text = text_12h(hour_12, minute, hour_24);
         info!("tick {}", time_text.as_str());
+
+        let text_started = Instant::now();
 
         // Draw the time explicitly so the surface default font/color can stay
         // dedicated to the small WiFi status text, while preserving the old
@@ -96,22 +104,48 @@ where
             draw_scaled_time(
                 &mut time_frame,
                 time_text.as_str(),
+                background,
+                foreground,
                 time_text_unscaled_buffer,
                 time_text_scaled_buffer,
             );
             time_frame.flush().await.map_err(Error::Flush)?;
         }
+        let text_done = Instant::now();
 
+        let params_started = Instant::now();
         let params = linkage_params(hour_24, minute, second);
+        let params_done = Instant::now();
 
-        cyd.draw_linkage_primitives::<{ LINKAGE.draw_item_count() }, _>(
+        let prepare_started = Instant::now();
+        let primitive_pixels = cyd.prepare_linkage_primitives::<{ LINKAGE.draw_item_count() }, _>(
             CLOCK_BOUNDS,
-            Rgb565::from(BACKGROUND),
+            background,
             LINKAGE.draw_items(&params),
             &PROJECTION,
-        )
-        .map_err(Error::Flush)?;
+        );
+        let prepare_done = Instant::now();
+
+        let primitives_started = Instant::now();
+        cyd.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
+            .map_err(Error::Flush)?;
+        let primitives_done = Instant::now();
+
+        info!(
+            "clock timing: wait={}us text={}us params={}us prepare={}us primitives={}us active={}us total={}us",
+            micros(tick_ready - loop_started),
+            micros(text_done - text_started),
+            micros(params_done - params_started),
+            micros(prepare_done - prepare_started),
+            micros(primitives_done - primitives_started),
+            micros(primitives_done - tick_ready),
+            micros(primitives_done - loop_started),
+        );
     }
+}
+
+fn micros(duration: Duration) -> u64 {
+    duration.as_micros()
 }
 
 struct BufferTarget<'a> {
@@ -158,11 +192,11 @@ impl OriginDimensions for BufferTarget<'_> {
 fn draw_scaled_time<FrameError>(
     time_frame: &mut impl CydFrame<Error = FrameError>,
     text: &str,
+    background: Rgb565,
+    foreground: Rgb565,
     time_text_unscaled_buffer: &mut [u16; TIME_TEXT_UNSCALED_PIXELS],
     time_text_scaled_buffer: &mut [u16; TIME_TEXT_SCALED_PIXELS],
 ) {
-    let background = Rgb565::from(BACKGROUND);
-    let foreground = Rgb565::from(FOREGROUND);
     let mut unscaled_target = BufferTarget {
         pixels: time_text_unscaled_buffer,
         size: Size::new(
