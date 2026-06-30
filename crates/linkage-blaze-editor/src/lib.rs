@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //todo000000 need to update the editor to work with linkage![...], or switch to a simpler pattern of just including the .lb.rs file after LinkageFixed::start() --- IGNORE --- (may no longer apply)
 
-use linkage_blaze_core::{DrawItem, LinkageBuf, RgbColor};
+use linkage_blaze_core::{DrawItem3d, LinkageBuf, RgbColor};
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 #[wasm_bindgen]
@@ -315,23 +315,23 @@ enum Primitive {
     },
 }
 
-impl From<DrawItem> for Primitive {
-    fn from(draw_item: DrawItem) -> Self {
+impl From<DrawItem3d> for Primitive {
+    fn from(draw_item: DrawItem3d) -> Self {
         match draw_item {
-            DrawItem::Stroke(stroke) => Self::Segment {
+            DrawItem3d::Stroke(stroke) => Self::Segment {
                 start: Vec3::from(stroke.start().position().into_array()),
                 end: Vec3::from(stroke.end().position().into_array()),
                 width: stroke.width(),
                 color: Color::from_rgb888(stroke.color()),
             },
-            DrawItem::Disk(disk) => Self::Disk {
+            DrawItem3d::Disk(disk) => Self::Disk {
                 center: Vec3::from(disk.pose().position().into_array()),
                 normal: Vec3::from(disk.pose().orientation().up().into_array()),
                 radius: disk.radius(),
                 width: 0.0,
                 color: Color::from_rgb888(disk.color()),
             },
-            DrawItem::Sphere(sphere) => Self::Sphere {
+            DrawItem3d::Sphere(sphere) => Self::Sphere {
                 center: Vec3::from(sphere.pose().position().into_array()),
                 radius: sphere.radius(),
                 color: Color::from_rgb888(sphere.color()),

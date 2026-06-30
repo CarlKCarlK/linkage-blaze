@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 
 use embedded_graphics_core::pixelcolor::RgbColor;
-use linkage_blaze_core::{DrawItem, LinkageBuf};
+use linkage_blaze_core::{DrawItem3d, LinkageBuf};
 use linkage_blaze_mocap::{
     BvhParameterLayout, MotionSample, build_bvh_linkage_buf, bvh_sample_params,
     discover_bvh_parameters, parse_bvh,
@@ -79,11 +79,11 @@ impl MocapClipWasm {
     }
 }
 
-fn flatten_draw_item(draw_item: DrawItem) -> [f32; STRIDE] {
+fn flatten_draw_item(draw_item: DrawItem3d) -> [f32; STRIDE] {
     let mut record = [0.0; STRIDE];
 
     match draw_item {
-        DrawItem::Stroke(stroke) => {
+        DrawItem3d::Stroke(stroke) => {
             record[0] = 0.0;
             let [x, y, z] = stroke.start().position().into_array();
             record[1] = x;
@@ -99,7 +99,7 @@ fn flatten_draw_item(draw_item: DrawItem) -> [f32; STRIDE] {
             record[9] = color.b() as f32;
             record[10] = stroke.width();
         }
-        DrawItem::Sphere(sphere) => {
+        DrawItem3d::Sphere(sphere) => {
             record[0] = 1.0;
             let [x, y, z] = sphere.pose().position().into_array();
             record[1] = x;
@@ -111,7 +111,7 @@ fn flatten_draw_item(draw_item: DrawItem) -> [f32; STRIDE] {
             record[9] = color.b() as f32;
             record[10] = sphere.radius();
         }
-        DrawItem::Disk(disk) => {
+        DrawItem3d::Disk(disk) => {
             record[0] = 2.0;
             let [x, y, z] = disk.pose().position().into_array();
             record[1] = x;

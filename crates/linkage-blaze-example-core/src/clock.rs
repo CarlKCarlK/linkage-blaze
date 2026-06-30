@@ -22,7 +22,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
-use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation};
+use linkage_blaze_cyd_core::{ContiguousPixels, Cyd, CydFrame, Orientation};
 use log::info;
 use static_cell::StaticCell;
 
@@ -117,17 +117,17 @@ where
         let params = linkage_params(hour_24, minute, second);
         let params_done = Instant::now();
 
-        let prepare_started = Instant::now();
-        let primitive_pixels = cyd.prepare_linkage_primitives::<{ LINKAGE.draw_item_count() }, _>(
-            CLOCK_BOUNDS,
-            background,
-            LINKAGE.draw_items(&params),
-            &PROJECTION,
-        );
-        let prepare_done = Instant::now();
+        let contiguous_pixels =
+            ContiguousPixels::<{ LINKAGE.draw_item_count() }>::from_draw_items_2d(
+                CLOCK_BOUNDS,
+                background,
+                LINKAGE
+                    .draw_items(&params)
+                    .map(|draw_item| draw_item.project(&PROJECTION)),
+            );
 
         let primitives_started = Instant::now();
-        cyd.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
+        cyd.fill_contiguous(contiguous_pixels.bounds(), contiguous_pixels.iter())
             .map_err(Error::Flush)?;
         let primitives_done = Instant::now();
 
@@ -136,11 +136,10 @@ where
         //     micros(tick_ready - loop_started),
         //     micros(text_done - text_started),
         //     micros(params_done - params_started),
-        //     micros(prepare_done - prepare_started),
         //     micros(primitives_done - primitives_started),
         //     micros(primitives_done - tick_ready),
         //     micros(primitives_done - loop_started),
-        );
+        // );
     }
 }
 

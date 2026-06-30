@@ -14,7 +14,7 @@ mod touch_event;
 pub use cyd::{
     CopySizeError, Cyd, CydFlushError, CydFrame, CydInfallibleError, RegionPixels, Tiles,
 };
-pub use draw::{LineSegment, PrimitivePixels};
+pub use draw::{ContiguousPixels, LineSegment};
 pub use orientation::Orientation;
 pub use tga::{Image565, Image565Mask};
 pub use touch_event::TouchInputEvent;
