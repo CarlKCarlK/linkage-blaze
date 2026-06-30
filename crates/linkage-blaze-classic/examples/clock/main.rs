@@ -1,20 +1,17 @@
 #![no_std]
 #![no_main]
 
-// todo000 can't we algorithmly clear the screen?
 // todo000 can't we allocate the largest buffer and then use it for smaller things?
 // todo000 get wifi portal and drawing work at the same time.
-// todo different color hands
-// todo00 may be repeating display code
-// todo00 should start with calibrate to flash
-// todo00 wifi's memory needs means it can't have a full screen memory. I'm not sure what it is doing instead.
+// TODO00000 the analog clock-hand rendering is commented out in the generic
+// `clock` module; see the `TODO00000` there for what it needs to be ported.
 
-use core::{cell::RefCell, convert::Infallible};
+use core::convert::Infallible;
 
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
-    clock_sync::{ClockSync as _, ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
+    clock_sync::{ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
     flash_block::FlashBlockEsp,
     init_and_start,
     wifi_auto::{
@@ -23,20 +20,14 @@ use device_envoy_esp::{
     },
 };
 use embassy_executor::Spawner;
-use embedded_graphics::pixelcolor::{Rgb888, WebColors};
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation};
+use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp};
+use linkage_blaze_example_core::clock::{
+    self, BACKGROUND, FOREGROUND, ORIENTATION, TIME_REGION, TOP_FONT, WIFI_STATUS_REGION, clock,
+};
 use log::info;
-use static_cell::StaticCell;
 
-mod display;
-
-use display::{ClockTime, CydClockDisplay, CydClockDisplayError};
-
-// The clock face is drawn on this background; it must match the per-frame clear
-// color used by `CydClockDisplay`.
-const BACKGROUND: Rgb888 = Rgb888::CSS_ANTIQUE_WHITE; // pale parchment
-const TEXT: Rgb888 = Rgb888::CSS_NAVY; // dark blue clock text
+// ── Binary entry point ────────────────────────────────────────────────────────
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -46,14 +37,9 @@ esp_bootloader_esp_idf::esp_app_desc!();
 #[derive(Debug, derive_more::From)]
 enum MainError {
     DeviceEnvoy(Error),
-    CydEsp(linkage_blaze_cyd::CydError),
-    Display(CydClockDisplayError),
-}
-
-impl From<CoreError> for MainError {
-    fn from(error: CoreError) -> Self {
-        MainError::DeviceEnvoy(error.into())
-    }
+    Core(CoreError),
+    CydEsp(CydError),
+    Clock(clock::Error<CydError>),
 }
 
 #[esp_rtos::main]
@@ -65,14 +51,14 @@ async fn main(spawner: Spawner) -> ! {
 async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
-
     info!("Starting CYD clock with WiFi");
 
-    // todo00 unify: CydClockDisplay still owns its own glyph workspace, so the
-    // CydEsp-owned buffer is zero-sized. Look at moving the glyph rendering onto the
-    // single CydEsp-owned buffer via cyd.frame_mut.
-    static CYD_STATIC: CydStaticEsp<0> = CydEsp::new_static();
-    let cyd = CydEsp::new_display_only(
+    // The shared pixel buffer must hold the largest frame we draw: the digital
+    // time read-out or the wi-fi status line.
+    const BUFFER_PIXEL_COUNT: usize =
+        linkage_blaze_cyd::tiling::max_usize(WIFI_STATUS_REGION.pixel_count(), TIME_REGION.pixel_count());
+    static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
+    let mut cyd = CydEsp::new_display_only(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
@@ -82,13 +68,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO2,
         p.GPIO4,
         p.GPIO21,
-        Orientation::Landscape,
+        ORIENTATION,
         BACKGROUND,
-        TEXT,
-        &DEFAULT_FONT,
+        FOREGROUND,
+        &TOP_FONT,
     )?;
-    static DISPLAY: StaticCell<RefCell<CydClockDisplay>> = StaticCell::new();
-    let display = &*DISPLAY.init(RefCell::new(CydClockDisplay::new(cyd)));
     info!("CYD display initialized");
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
@@ -105,23 +89,35 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,
     )?;
 
+    // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
+    // reference and mutate it through interior mutability on each event.
+    let wifi_status_frame = core::cell::RefCell::new(cyd.frame_mut(WIFI_STATUS_REGION));
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,
             async |wifi_auto_event| -> Result<(), Error> {
-                let wifi_mode = match wifi_auto_event {
-                    WifiAutoEvent::CaptivePortalReady => "setup CydClock",
-                    WifiAutoEvent::Connecting { .. } => "connecting",
-                    WifiAutoEvent::ConnectionFailed => "connect failed",
+                let message = match wifi_auto_event {
+                    WifiAutoEvent::CaptivePortalReady => "WiFi: setup CydClock",
+                    WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
+                    WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
                 };
-                info!("WiFi mode: {wifi_mode}");
-                if let Err(error) = display.borrow_mut().show(wifi_mode, None) {
-                    info!("WiFi mode display failed: {error:?}");
+                if let Err(error) = wifi_status_frame.borrow_mut().clear().write_text(message).flush()
+                {
+                    info!("WiFi status display failed: {error:?}");
                 }
+                info!("WiFi: {message}");
                 Ok(())
             },
         )
         .await?;
+
+    wifi_status_frame
+        .borrow_mut()
+        .clear()
+        .write_text("WiFi: OK")
+        .flush()?;
+    drop(wifi_status_frame);
+    info!("WiFi connected");
 
     let timezone_offset_minutes = timezone_field
         .offset_minutes()?
@@ -135,22 +131,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         Some(ONE_SECOND),
         spawner,
     )?;
+    info!("clock sync ready; entering clock loop");
 
-    info!("WiFi connected; drawing clock");
-    display.borrow_mut().show("connected", None)?;
-
-    loop {
-        let tick = clock_sync.wait_for_tick().await;
-        let local_time = tick.local_time;
-        let clock_time =
-            ClockTime::new(local_time.hour(), local_time.minute(), local_time.second())
-                .map_err(|_| MainError::DeviceEnvoy(Error::FormatError))?;
-        display.borrow_mut().show("connected", Some(&clock_time))?;
-        info!(
-            "time {:02}:{:02}:{:02}",
-            local_time.hour(),
-            local_time.minute(),
-            local_time.second()
-        );
-    }
+    // Hand off to the device-agnostic render loop.
+    Ok(clock(&mut cyd, &clock_sync).await?)
 }

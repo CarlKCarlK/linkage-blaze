@@ -26,6 +26,9 @@ ballet = []
 # which must avoid embassy-executor's unprovided `__pender` arch symbol) can
 # disable this and keep the dependency graph lean.
 skeleton-clock = ["dep:device-envoy-core"]
+# The analog `clock` example, like `skeleton_clock`, needs device-envoy's
+# `ClockSync`.
+clock = ["dep:device-envoy-core"]
 
 [dependencies]
 derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
