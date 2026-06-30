@@ -74,19 +74,19 @@ impl From<CydError> for MainError {
         match error {
             CydError::Flash(_) => MainError::Flash,
             CydError::DisplayInit(error) => match error {
-                linkage_blaze_cyd::CydPanelInitError::ConfigureDisplaySpi => {
+                linkage_blaze_cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
                     MainError::ConfigureDisplaySpi
                 }
-                linkage_blaze_cyd::CydPanelInitError::CreateDisplaySpiDevice => {
+                linkage_blaze_cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
                     MainError::CreateDisplaySpiDevice
                 }
-                linkage_blaze_cyd::CydPanelInitError::InitDisplay => MainError::InitDisplay,
+                linkage_blaze_cyd::CydDisplayEspInitError::InitDisplay => MainError::InitDisplay,
             },
             CydError::TouchInit(error) => match error {
-                linkage_blaze_cyd::CydTouchInitError::ConfigureTouchSpi => {
+                linkage_blaze_cyd::CydTouchEspInitError::ConfigureTouchSpi => {
                     MainError::ConfigureTouchSpi
                 }
-                linkage_blaze_cyd::CydTouchInitError::CreateTouchSpiDevice => {
+                linkage_blaze_cyd::CydTouchEspInitError::CreateTouchSpiDevice => {
                     MainError::CreateTouchSpiDevice
                 }
             },

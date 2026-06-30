@@ -26,7 +26,7 @@ use buffer::DynPixelBuffer;
 pub use buffer::{PixelBuffer, RegionBuffer, RegionPixels, RegionView};
 pub use calibration::{CalibrationConfig, RawPoint, map_raw_to_screen};
 pub use display::{
-    CydPanel, CydPanelFlushError, CydPanelInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
+    CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ, DrawPrimitive, Ellipse,
     LineSegment,
 };
 // The device abstraction and its neutral support types live in
@@ -36,11 +36,14 @@ pub use linkage_blaze_cyd_core::{
     SCREEN_WIDTH, TouchInputEvent, tiling,
 };
 pub use text::DEFAULT_FONT;
-pub use touch::{CydTouch, CydTouchInitError, RawTouchEvent, TOUCH_SPI_HZ};
+pub use touch::{CydTouchEspInitError, RawTouchEvent, TOUCH_SPI_HZ};
+
+use display::CydDisplayEsp;
+use touch::CydTouchEsp;
 
 pub struct CydEsp {
-    display: CydPanel,
-    touch: Option<CydTouch>,
+    display: CydDisplayEsp,
+    touch: Option<CydTouchEsp>,
     calibration_config: Option<CalibrationConfig>,
     calibration_flash_block: Option<FlashBlockEsp>,
     calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
@@ -89,7 +92,7 @@ pub struct CalibratedCydEsp<'a> {
 }
 
 pub struct CydFrameEsp<'a> {
-    display: &'a mut CydPanel,
+    display: &'a mut CydDisplayEsp,
     view: RegionView<'a>,
     // Where this frame presents and how large it is: set from the `Rectangle`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
@@ -135,7 +138,7 @@ impl<'a> CydFrameEsp<'a> {
         self.view.raw_pixels_mut()
     }
 
-    /// Present this frame's pixels at its region's top-left (set by [`CydEsp::frame_mut`]).
+    /// Present this frame's pixels at its region's top-left (set by [`CydDevice::frame_mut`]).
     pub fn flush(&mut self) -> Result<(), CydError> {
         Ok(self
             .display
@@ -235,9 +238,9 @@ impl PixelTarget for CydFrameEsp<'_> {
 #[derive(Debug, derive_more::From)]
 pub enum CydError {
     Flash(device_envoy_esp::Error),
-    DisplayInit(CydPanelInitError),
-    TouchInit(CydTouchInitError),
-    DisplayFlush(CydPanelFlushError),
+    DisplayInit(CydDisplayEspInitError),
+    TouchInit(CydTouchEspInitError),
+    DisplayFlush(CydDisplayEspFlushError),
     TouchUnavailable,
     CalibrationUnavailable,
 }
@@ -268,17 +271,11 @@ impl CydEsp {
         Rgb565::from(color)
     }
 
-    /// Oriented screen size (width, height) for the configured orientation.
-    #[must_use]
-    pub const fn screen_size(&self) -> Size {
-        self.display.size()
-    }
-
     /// Construct a display-only `CydEsp` (no touch) that owns its draw buffer,
     /// initializing the buffer from app-provided [`CydStaticEsp`] storage.
     ///
     /// The app picks the size via `PIXEL_COUNT`; `CydEsp` owns the init protocol. Use
-    /// [`CydEsp::frame_mut`] or [`CydEsp::full_frame_mut`] to render into and flush the owned buffer.
+    /// [`CydDevice::frame_mut`] or [`CydDevice::full_frame_mut`] to render into and flush the owned buffer.
     pub fn new_display_only<const PIXEL_COUNT: usize>(
         statics: &'static CydStaticEsp<PIXEL_COUNT>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
@@ -339,7 +336,7 @@ impl CydEsp {
         calibration_flash_block: FlashBlockEsp,
         calibration_button: device_envoy_esp::button::ButtonEsp<'static>,
     ) -> Result<Self, CydError> {
-        let touch = CydTouch::new(
+        let touch = CydTouchEsp::new(
             touch_spi,
             touch_sck_pin,
             touch_mosi_pin,
@@ -382,7 +379,7 @@ impl CydEsp {
         background: Rgb888,
         foreground: Rgb888,
         font: &'static MonoFont<'static>,
-        touch: Option<CydTouch>,
+        touch: Option<CydTouchEsp>,
         calibration_flash_block: Option<FlashBlockEsp>,
         calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
         pixel_buffer: &'static mut dyn DynPixelBuffer,
@@ -397,7 +394,7 @@ impl CydEsp {
             _ => None,
         };
 
-        let mut display = CydPanel::new(
+        let mut display = CydDisplayEsp::new(
             display_spi,
             display_sck_pin,
             display_mosi_pin,
@@ -426,37 +423,6 @@ impl CydEsp {
             foreground565: Self::rgb565(foreground),
             font,
         })
-    }
-
-    /// The device default background color (cleared at construction and used to
-    /// clear every new frame from [`CydEsp::frame_mut`]).
-    #[must_use]
-    pub fn background(&self) -> Rgb888 {
-        self.background
-    }
-
-    /// The device default foreground/text color (used by [`CydFrameEsp::write_text`]).
-    #[must_use]
-    pub fn foreground(&self) -> Rgb888 {
-        self.foreground
-    }
-
-    /// The device background color in the native `Rgb565` format (pre-computed).
-    #[must_use]
-    pub fn background_565(&self) -> Rgb565 {
-        self.background565
-    }
-
-    /// The device foreground color in the native `Rgb565` format (pre-computed).
-    #[must_use]
-    pub fn foreground_565(&self) -> Rgb565 {
-        self.foreground565
-    }
-
-    /// Convert an `Rgb888` color to the device's native `Rgb565` format.
-    #[must_use]
-    pub fn to_rgb565(&self, color: Rgb888) -> Rgb565 {
-        Rgb565::from(color)
     }
 
     #[must_use]
@@ -525,15 +491,7 @@ impl CydEsp {
         Ok(self.display.flush_buffer(buffer, top_left)?)
     }
 
-    pub fn full_frame_mut(&mut self) -> CydFrameEsp<'_> {
-        self.frame_mut(Rectangle::new(Point::zero(), self.screen_size()))
-    }
-
-    pub fn frame_mut(&mut self, region: Rectangle) -> CydFrameEsp<'_> {
-        self.frame_mut_with_tile_top_left(region, Point::zero())
-    }
-
-    pub fn frame_mut_with_tile_top_left(
+    fn make_frame_with_tile_top_left(
         &mut self,
         region: Rectangle,
         tile_top_left: Point,
@@ -556,30 +514,8 @@ impl CydEsp {
         }
     }
 
-    /// Clear the whole screen to the device default background color.
-    ///
-    /// The device is already
-    /// cleared to its default background at construction and every frame from
-    /// [`CydEsp::frame_mut`] starts cleared, so this is only needed to return
-    /// the whole panel to the default background between frame workflows.
-    pub fn clear(&mut self) -> Result<(), CydError> {
-        self.fill(self.background565)
-    }
-
-    /// Fill the whole screen with an explicit color.
-    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.display.fill(color)?)
-    }
-
-    fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
+    fn fill_rectangle_raw(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
         Ok(self.display.fill_rectangle(rectangle, color)?)
-    }
-
-    pub fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), CydError>
-    where
-        I: IntoIterator<Item = Rgb565>,
-    {
-        Ok(self.display.fill_contiguous(rectangle, pixels)?)
     }
 
     pub fn draw_line_segments(
@@ -642,11 +578,11 @@ impl CalibratedCydEsp<'_> {
     }
 
     pub fn clear(&mut self) -> Result<(), CydError> {
-        self.cyd.clear()
+        linkage_blaze_cyd_core::Cyd::clear(self.cyd)
     }
 
     pub fn fill(&mut self, color: Rgb565) -> Result<(), CydError> {
-        self.cyd.fill(color)
+        linkage_blaze_cyd_core::Cyd::fill(self.cyd, color)
     }
 
     pub fn draw_line_segments(
@@ -685,7 +621,23 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
     type Frame<'a> = CydFrameEsp<'a>;
 
     fn screen_size(&self) -> Size {
-        CydEsp::screen_size(self)
+        self.display.size()
+    }
+
+    fn background(&self) -> Rgb888 {
+        self.background
+    }
+
+    fn foreground(&self) -> Rgb888 {
+        self.foreground
+    }
+
+    fn background_565(&self) -> Rgb565 {
+        self.background565
+    }
+
+    fn foreground_565(&self) -> Rgb565 {
+        self.foreground565
     }
 
     fn frame_mut_with_tile_top_left(
@@ -693,7 +645,7 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
         region: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameEsp<'_> {
-        CydEsp::frame_mut_with_tile_top_left(self, region, tile_top_left)
+        CydEsp::make_frame_with_tile_top_left(self, region, tile_top_left)
     }
 
     fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
@@ -719,7 +671,14 @@ impl linkage_blaze_cyd_core::Cyd for CydEsp {
     }
 
     fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        CydEsp::fill_rectangle(self, rectangle, color)
+        CydEsp::fill_rectangle_raw(self, rectangle, color)
+    }
+
+    fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), CydError>
+    where
+        I: IntoIterator<Item = Rgb565>,
+    {
+        Ok(self.display.fill_contiguous(rectangle, pixels)?)
     }
 }
 
@@ -746,10 +705,7 @@ impl linkage_blaze_cyd_core::CydFrame for CydFrameEsp<'_> {
         CydFrameEsp::write_text(self, text)
     }
 
-    fn copy_from_565(
-        &mut self,
-        src: &[u16],
-    ) -> Result<(), linkage_blaze_cyd_core::CopySizeError> {
+    fn copy_from_565(&mut self, src: &[u16]) -> Result<(), linkage_blaze_cyd_core::CopySizeError> {
         let dst = self.raw_pixels_mut();
         if dst.len() != src.len() {
             return Err(linkage_blaze_cyd_core::CopySizeError {

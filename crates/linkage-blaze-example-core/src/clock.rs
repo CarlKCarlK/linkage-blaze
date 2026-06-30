@@ -68,8 +68,7 @@ where
     static TIME_TEXT_SCALED_BUFFER: StaticCell<[u16; TIME_TEXT_SCALED_PIXELS]> = StaticCell::new();
     let time_text_unscaled_buffer =
         &mut *TIME_TEXT_UNSCALED_BUFFER.init([0; TIME_TEXT_UNSCALED_PIXELS]);
-    let time_text_scaled_buffer =
-        &mut *TIME_TEXT_SCALED_BUFFER.init([0; TIME_TEXT_SCALED_PIXELS]);
+    let time_text_scaled_buffer = &mut *TIME_TEXT_SCALED_BUFFER.init([0; TIME_TEXT_SCALED_PIXELS]);
 
     loop {
         // Wait for a tick and get the time.
@@ -238,15 +237,14 @@ fn draw_scaled_time<FrameError>(
 
     for source_y in 0..TIME_TEXT_UNSCALED_HEIGHT {
         for source_x in 0..TIME_TEXT_UNSCALED_WIDTH {
-            let color =
-                time_text_unscaled_buffer[source_y * TIME_TEXT_UNSCALED_WIDTH + source_x];
+            let color = time_text_unscaled_buffer[source_y * TIME_TEXT_UNSCALED_WIDTH + source_x];
             let scaled_x = source_x * TIME_TEXT_SCALE;
             let scaled_y = source_y * TIME_TEXT_SCALE;
             for offset_y in 0..TIME_TEXT_SCALE {
                 for offset_x in 0..TIME_TEXT_SCALE {
-                    time_text_scaled_buffer[(scaled_y + offset_y) * TIME_TEXT_SCALED_WIDTH
-                        + scaled_x
-                        + offset_x] = color;
+                    time_text_scaled_buffer
+                        [(scaled_y + offset_y) * TIME_TEXT_SCALED_WIDTH + scaled_x + offset_x] =
+                        color;
                 }
             }
         }

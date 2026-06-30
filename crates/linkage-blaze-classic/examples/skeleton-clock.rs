@@ -19,7 +19,7 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, tiling::max_usize};
+use linkage_blaze_cyd::{CydDevice, CydError, CydEsp, CydStaticEsp, tiling::max_usize};
 use linkage_blaze_example_core::skeleton_clock::{
     self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_REGION,
     skeleton_clock,
@@ -105,7 +105,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                     WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
                     WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
                 };
-                if let Err(error) = wifi_status_frame.borrow_mut().clear().write_text(message).flush()
+                if let Err(error) = wifi_status_frame
+                    .borrow_mut()
+                    .clear()
+                    .write_text(message)
+                    .flush()
                 {
                     info!("WiFi status display failed: {error:?}");
                 }

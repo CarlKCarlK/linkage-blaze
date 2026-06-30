@@ -98,13 +98,13 @@ impl From<CydError> for MainError {
     fn from(error: CydError) -> Self {
         match error {
             CydError::DisplayInit(error) => match error {
-                linkage_blaze_cyd::CydPanelInitError::ConfigureDisplaySpi => {
+                linkage_blaze_cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
                     MainError::ConfigureDisplaySpi
                 }
-                linkage_blaze_cyd::CydPanelInitError::CreateDisplaySpiDevice => {
+                linkage_blaze_cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
                     MainError::CreateDisplaySpiDevice
                 }
-                linkage_blaze_cyd::CydPanelInitError::InitDisplay => MainError::InitDisplay,
+                linkage_blaze_cyd::CydDisplayEspInitError::InitDisplay => MainError::InitDisplay,
             },
             CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
             _ => MainError::FlushFrameBuffer,

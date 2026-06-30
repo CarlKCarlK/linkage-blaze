@@ -35,14 +35,14 @@ type CydDisplayInterface = SpiInterface<'static, CydDisplaySpiDevice, Output<'st
 type CydDisplayDevice = mipidsi::Display<CydDisplayInterface, ILI9341Rgb565, Output<'static>>;
 
 #[derive(Clone, Copy, Debug)]
-pub enum CydPanelInitError {
+pub enum CydDisplayEspInitError {
     ConfigureDisplaySpi,
     CreateDisplaySpiDevice,
     InitDisplay,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum CydPanelFlushError {
+pub enum CydDisplayEspFlushError {
     FlushFrameBuffer,
 }
 
@@ -329,19 +329,19 @@ impl PreparedPrimitive {
     }
 }
 
-pub struct CydPanel {
+pub(crate) struct CydDisplayEsp {
     display: CydDisplayDevice,
     screen_size: Size,
 }
 
-impl CydPanel {
+impl CydDisplayEsp {
     /// Oriented screen size stored at init time.
     #[must_use]
     pub const fn size(&self) -> Size {
         self.screen_size
     }
 
-    pub fn new(
+    pub(crate) fn new(
         spi: impl spi::master::Instance + 'static,
         sck_pin: impl PeripheralOutput<'static>,
         mosi_pin: impl PeripheralOutput<'static>,
@@ -351,12 +351,12 @@ impl CydPanel {
         rst_pin: impl OutputPin + 'static,
         backlight_pin: impl OutputPin + 'static,
         orientation: Orientation,
-    ) -> Result<CydPanel, CydPanelInitError> {
+    ) -> Result<CydDisplayEsp, CydDisplayEspInitError> {
         let spi_config = spi::master::Config::default()
             .with_frequency(esp_hal::time::Rate::from_hz(DISPLAY_SPI_HZ))
             .with_mode(spi::Mode::_0);
         let spi = spi::master::Spi::new(spi, spi_config)
-            .map_err(|_| CydPanelInitError::ConfigureDisplaySpi)?
+            .map_err(|_| CydDisplayEspInitError::ConfigureDisplaySpi)?
             .with_sck(sck_pin)
             .with_mosi(mosi_pin)
             .with_miso(miso_pin);
@@ -367,7 +367,7 @@ impl CydPanel {
         let mut backlight = Output::new(backlight_pin, Level::High, OutputConfig::default());
 
         let spi_device = ExclusiveDevice::<_, _, NoDelay>::new_no_delay(spi, cs)
-            .map_err(|_| CydPanelInitError::CreateDisplaySpiDevice)?;
+            .map_err(|_| CydDisplayEspInitError::CreateDisplaySpiDevice)?;
 
         static SPI_BUFFER: StaticCell<[u8; DISPLAY_SPI_BUFFER_LEN]> = StaticCell::new();
         let spi_buffer = SPI_BUFFER.init([0u8; DISPLAY_SPI_BUFFER_LEN]);
@@ -397,21 +397,21 @@ impl CydPanel {
             .color_order(ColorOrder::Bgr)
             .orientation(display_orientation)
             .init(&mut delay)
-            .map_err(|_| CydPanelInitError::InitDisplay)?;
+            .map_err(|_| CydDisplayEspInitError::InitDisplay)?;
 
         backlight.set_high();
 
-        Ok(CydPanel {
+        Ok(CydDisplayEsp {
             display,
             screen_size,
         })
     }
 
-    pub fn flush_buffer(
+    pub(crate) fn flush_buffer(
         &mut self,
         buffer: &impl RegionPixels,
         top_left: Point,
-    ) -> Result<(), CydPanelFlushError> {
+    ) -> Result<(), CydDisplayEspFlushError> {
         let rectangle = Rectangle::new(
             top_left,
             Size::new(buffer.width() as u32, buffer.height() as u32),
@@ -425,10 +425,10 @@ impl CydPanel {
                     .copied()
                     .map(|pixel| Rgb565::from(RawU16::new(pixel))),
             )
-            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
+            .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)
     }
 
-    pub fn fill(&mut self, color: Rgb565) -> Result<(), CydPanelFlushError> {
+    pub(crate) fn fill(&mut self, color: Rgb565) -> Result<(), CydDisplayEspFlushError> {
         self.fill_rectangle(Rectangle::new(Point::new(0, 0), self.screen_size), color)
     }
 
@@ -436,7 +436,7 @@ impl CydPanel {
         &mut self,
         rectangle: Rectangle,
         color: Rgb565,
-    ) -> Result<(), CydPanelFlushError> {
+    ) -> Result<(), CydDisplayEspFlushError> {
         // TODO0000 Revisit whether this software clipping should stay here or be
         // delegated to panel hardware/windowing behavior after measuring the
         // real controller semantics and cost.
@@ -447,28 +447,28 @@ impl CydPanel {
         }
         self.display
             .fill_solid(&rectangle, color)
-            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
+            .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)
     }
 
-    pub fn fill_contiguous<I>(
+    pub(crate) fn fill_contiguous<I>(
         &mut self,
         rectangle: Rectangle,
         pixels: I,
-    ) -> Result<(), CydPanelFlushError>
+    ) -> Result<(), CydDisplayEspFlushError>
     where
         I: IntoIterator<Item = Rgb565>,
     {
         self.display
             .fill_contiguous(&rectangle, pixels)
-            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
+            .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)
     }
 
-    pub fn draw_line_segments(
+    pub(crate) fn draw_line_segments(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
         segments: &[LineSegment],
-    ) -> Result<(), CydPanelFlushError> {
+    ) -> Result<(), CydDisplayEspFlushError> {
         // TODO0000 Revisit whether this software clipping should stay here or be
         // delegated to panel hardware/windowing behavior after measuring the
         // real controller semantics and cost.
@@ -491,15 +491,15 @@ impl CydPanel {
 
         self.display
             .fill_contiguous(&bounds, pixels)
-            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
+            .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)
     }
 
-    pub fn draw_primitives(
+    pub(crate) fn draw_primitives(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
         draw_primitives: &[DrawPrimitive],
-    ) -> Result<(), CydPanelFlushError> {
+    ) -> Result<(), CydDisplayEspFlushError> {
         // TODO0000 Revisit whether this software clipping should stay here or be
         // delegated to panel hardware/windowing behavior after measuring the
         // real controller semantics and cost.
@@ -530,7 +530,7 @@ impl CydPanel {
 
         self.display
             .fill_contiguous(&bounds, pixels)
-            .map_err(|_| CydPanelFlushError::FlushFrameBuffer)
+            .map_err(|_| CydDisplayEspFlushError::FlushFrameBuffer)
     }
 }
 
