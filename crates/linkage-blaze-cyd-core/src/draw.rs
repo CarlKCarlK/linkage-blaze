@@ -1,8 +1,4 @@
-use embedded_graphics::{
-    pixelcolor::Rgb565,
-    prelude::{Point, Size},
-    primitives::Rectangle,
-};
+use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
 use linkage_blaze_core::{DrawItem, ProjectedDrawItem, Projection};
 use micromath::F32Ext;
 
@@ -15,30 +11,61 @@ pub struct LineSegment {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum PreparedPrimitive {
-    Line {
-        bounds: Rectangle,
-        start_x: i32,
-        start_y: i32,
-        segment_x: i32,
-        segment_y: i32,
-        segment_len_squared: i64,
-        radius_squared: i64,
-        color: Rgb565,
-    },
-    Ellipse {
-        bounds: Rectangle,
-        center_x: i32,
-        center_y: i32,
-        ax: f32,
-        ay: f32,
-        bx: f32,
-        by: f32,
-        outer_limit: f32,
-        inner_limit: f32,
-        filled: bool,
-        color: Rgb565,
-    },
+struct PreparedBounds {
+    left: i32,
+    top: i32,
+    right_exclusive: i32,
+    bottom_exclusive: i32,
+}
+
+impl PreparedBounds {
+    fn contains(&self, point_x: i32, point_y: i32) -> bool {
+        self.contains_x(point_x) && self.contains_y(point_y)
+    }
+
+    fn contains_x(&self, point_x: i32) -> bool {
+        self.left <= point_x && point_x < self.right_exclusive
+    }
+
+    fn contains_y(&self, point_y: i32) -> bool {
+        self.top <= point_y && point_y < self.bottom_exclusive
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PreparedPrimitive {
+    bounds: PreparedBounds,
+    color: Rgb565,
+    kind: PreparedKind,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PreparedKind {
+    Line(PreparedLine),
+    Ellipse(PreparedEllipse),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PreparedLine {
+    start_x: i64,
+    start_y: i64,
+    end_x: i64,
+    end_y: i64,
+    segment_x: i64,
+    segment_y: i64,
+    segment_len_squared: i64,
+    radius_squared: i64,
+    radius_squared_times_len_squared: i64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PreparedEllipse {
+    center_x: i32,
+    center_y: i32,
+    quadratic_xx: f32,
+    quadratic_xy: f32,
+    quadratic_yy: f32,
+    outer_limit: f32,
 }
 
 impl PreparedPrimitive {
@@ -64,10 +91,9 @@ impl PreparedPrimitive {
                 let start_y = start.y;
                 let end_x = end.x;
                 let end_y = end.y;
-                let segment_x = end_x - start_x;
-                let segment_y = end_y - start_y;
-                let segment_len_squared = (segment_x as i64) * (segment_x as i64)
-                    + (segment_y as i64) * (segment_y as i64);
+                let segment_x = i64::from(end_x - start_x);
+                let segment_y = i64::from(end_y - start_y);
+                let segment_len_squared = segment_x * segment_x + segment_y * segment_y;
                 let radius = (i64::from(width) + 1) / 2;
                 let radius_squared = radius * radius;
 
@@ -75,20 +101,28 @@ impl PreparedPrimitive {
                 let max_x = start_x.max(end_x) + radius as i32;
                 let min_y = start_y.min(end_y) - radius as i32;
                 let max_y = start_y.max(end_y) + radius as i32;
-                let bounds = Rectangle::new(
-                    Point::new(min_x, min_y),
-                    Size::new((max_x - min_x + 1) as u32, (max_y - min_y + 1) as u32),
-                );
 
-                Some(PreparedPrimitive::Line {
-                    bounds,
-                    start_x,
-                    start_y,
-                    segment_x,
-                    segment_y,
-                    segment_len_squared,
-                    radius_squared,
+                Some(PreparedPrimitive {
+                    bounds: PreparedBounds {
+                        left: min_x,
+                        top: min_y,
+                        right_exclusive: max_x + 1,
+                        bottom_exclusive: max_y + 1,
+                    },
                     color: Rgb565::from(color),
+                    kind: PreparedKind::Line(PreparedLine {
+                        start_x: i64::from(start_x),
+                        start_y: i64::from(start_y),
+                        end_x: i64::from(end_x),
+                        end_y: i64::from(end_y),
+                        segment_x,
+                        segment_y,
+                        segment_len_squared,
+                        radius_squared,
+                        radius_squared_times_len_squared: radius_squared
+                            .checked_mul(segment_len_squared)
+                            .expect("prepared line radius and length product must fit in i64"),
+                    }),
                 })
             }
             ProjectedDrawItem::Ellipse {
@@ -133,38 +167,33 @@ impl PreparedPrimitive {
 
         let (ax, ay) = axis_a;
         let (bx, by) = axis_b;
+        let quadratic_xx = by * by + ay * ay;
+        let quadratic_xy = -2.0 * (by * bx + ay * ax);
+        let quadratic_yy = bx * bx + ax * ax;
 
-        let bounds = Rectangle::new(
-            Point::new(
-                center.x - radius.ceil() as i32 - 1,
-                center.y - radius.ceil() as i32 - 1,
-            ),
-            Size::new(
-                (2.0 * radius).ceil() as u32 + 2,
-                (2.0 * radius).ceil() as u32 + 2,
-            ),
-        );
+        let radius = radius.ceil() as i32 + 1;
+        let left = center.x - radius;
+        let top = center.y - radius;
+        let right_exclusive = center.x + radius;
+        let bottom_exclusive = center.y + radius;
 
-        Some(PreparedPrimitive::Ellipse {
-            bounds,
-            center_x: center.x,
-            center_y: center.y,
-            ax,
-            ay,
-            bx,
-            by,
-            outer_limit: det_squared,
-            inner_limit: 0.0,
-            filled: true,
+        Some(PreparedPrimitive {
+            bounds: PreparedBounds {
+                left,
+                top,
+                right_exclusive,
+                bottom_exclusive,
+            },
             color,
+            kind: PreparedKind::Ellipse(PreparedEllipse {
+                center_x: center.x,
+                center_y: center.y,
+                quadratic_xx,
+                quadratic_xy,
+                quadratic_yy,
+                outer_limit: det_squared,
+            }),
         })
-    }
-
-    fn bounds(&self) -> Rectangle {
-        match *self {
-            PreparedPrimitive::Line { bounds, .. } => bounds,
-            PreparedPrimitive::Ellipse { bounds, .. } => bounds,
-        }
     }
 }
 
@@ -312,114 +341,163 @@ impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
 
     #[must_use]
     pub fn pixel_at(&self, point_x: i32, point_y: i32) -> Rgb565 {
-        let mut color = self.background;
-        let point = Point::new(point_x, point_y);
-
-        for primitive in &self.primitives {
-            if !primitive.bounds().contains(point) {
-                continue;
-            }
-
-            match *primitive {
-                PreparedPrimitive::Line {
-                    start_x,
-                    start_y,
-                    segment_x,
-                    segment_y,
-                    segment_len_squared,
-                    radius_squared,
-                    color: primitive_color,
-                    ..
-                } => {
-                    if point_covered_by_prepared_segment(
-                        point_x,
-                        point_y,
-                        start_x,
-                        start_y,
-                        segment_x,
-                        segment_y,
-                        segment_len_squared,
-                        radius_squared,
-                    ) {
-                        color = primitive_color;
-                    }
-                }
-                PreparedPrimitive::Ellipse {
-                    center_x,
-                    center_y,
-                    ax,
-                    ay,
-                    bx,
-                    by,
-                    outer_limit,
-                    inner_limit,
-                    filled,
-                    color: primitive_color,
-                    ..
-                } => {
-                    if point_covered_by_prepared_ellipse(
-                        point_x,
-                        point_y,
-                        center_x,
-                        center_y,
-                        ax,
-                        ay,
-                        bx,
-                        by,
-                        outer_limit,
-                        inner_limit,
-                        filled,
-                    ) {
-                        color = primitive_color;
-                    }
-                }
+        for primitive in self.primitives.iter().rev() {
+            if primitive.covers(point_x, point_y) {
+                return primitive.color;
             }
         }
 
-        color
+        self.background
     }
 
     #[must_use]
-    pub fn iter(&self) -> impl Iterator<Item = Rgb565> + '_ {
-        (self.top..self.bottom_exclusive)
-            .flat_map(move |point_y| {
-                (self.left..self.right_exclusive).map(move |point_x| (point_x, point_y))
-            })
-            .map(|(point_x, point_y)| self.pixel_at(point_x, point_y))
+    pub fn iter(&self) -> PrimitivePixelsIter<'_, PRIMITIVE_COUNT> {
+        PrimitivePixelsIter::new(self)
     }
 }
 
-fn point_covered_by_prepared_segment(
+impl PreparedPrimitive {
+    fn covers(&self, point_x: i32, point_y: i32) -> bool {
+        if !self.bounds.contains(point_x, point_y) {
+            return false;
+        }
+
+        match self.kind {
+            PreparedKind::Line(line) => line.covers(point_x, point_y),
+            PreparedKind::Ellipse(ellipse) => ellipse.covers(point_x, point_y),
+        }
+    }
+}
+
+impl PreparedLine {
+    fn covers(&self, point_x: i32, point_y: i32) -> bool {
+        point_covered_by_prepared_segment_fast(
+            point_x,
+            point_y,
+            self.start_x,
+            self.start_y,
+            self.end_x,
+            self.end_y,
+            self.segment_x,
+            self.segment_y,
+            self.segment_len_squared,
+            self.radius_squared,
+            self.radius_squared_times_len_squared,
+        )
+    }
+}
+
+impl PreparedEllipse {
+    fn covers(&self, point_x: i32, point_y: i32) -> bool {
+        point_covered_by_prepared_ellipse(
+            point_x,
+            point_y,
+            self.center_x,
+            self.center_y,
+            self.quadratic_xx,
+            self.quadratic_xy,
+            self.quadratic_yy,
+            self.outer_limit,
+        )
+    }
+}
+
+pub struct PrimitivePixelsIter<'a, const PRIMITIVE_COUNT: usize> {
+    pixels: &'a PrimitivePixels<PRIMITIVE_COUNT>,
+    x: i32,
+    y: i32,
+    active: heapless::Vec<usize, PRIMITIVE_COUNT>,
+}
+
+impl<'a, const PRIMITIVE_COUNT: usize> PrimitivePixelsIter<'a, PRIMITIVE_COUNT> {
+    fn new(pixels: &'a PrimitivePixels<PRIMITIVE_COUNT>) -> Self {
+        let mut primitive_pixels_iter = Self {
+            pixels,
+            x: pixels.left,
+            y: pixels.top,
+            active: heapless::Vec::new(),
+        };
+        primitive_pixels_iter.rebuild_active();
+        primitive_pixels_iter
+    }
+
+    fn rebuild_active(&mut self) {
+        self.active.clear();
+        for (primitive_index, primitive) in self.pixels.primitives.iter().enumerate() {
+            if primitive.bounds.contains_y(self.y) {
+                self.active
+                    .push(primitive_index)
+                    .expect("active primitive indices fit active list capacity");
+            }
+        }
+    }
+}
+
+impl<const PRIMITIVE_COUNT: usize> Iterator for PrimitivePixelsIter<'_, PRIMITIVE_COUNT> {
+    type Item = Rgb565;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.x >= self.pixels.right_exclusive || self.y >= self.pixels.bottom_exclusive {
+            return None;
+        }
+
+        let mut color = self.pixels.background;
+        for primitive_index in self.active.iter().rev() {
+            let primitive = &self.pixels.primitives[*primitive_index];
+            if !primitive.bounds.contains_x(self.x) {
+                continue;
+            }
+            if primitive.covers(self.x, self.y) {
+                color = primitive.color;
+                break;
+            }
+        }
+
+        self.x += 1;
+        if self.x >= self.pixels.right_exclusive {
+            self.x = self.pixels.left;
+            self.y += 1;
+            if self.y < self.pixels.bottom_exclusive {
+                self.rebuild_active();
+            }
+        }
+
+        Some(color)
+    }
+}
+
+fn point_covered_by_prepared_segment_fast(
     point_x: i32,
     point_y: i32,
-    start_x: i32,
-    start_y: i32,
-    segment_x: i32,
-    segment_y: i32,
+    start_x: i64,
+    start_y: i64,
+    end_x: i64,
+    end_y: i64,
+    segment_x: i64,
+    segment_y: i64,
     segment_len_squared: i64,
     radius_squared: i64,
+    radius_squared_times_len_squared: i64,
 ) -> bool {
-    if segment_len_squared == 0 {
-        let distance_x = (point_x - start_x) as i64;
-        let distance_y = (point_y - start_y) as i64;
+    let point_x = i64::from(point_x);
+    let point_y = i64::from(point_y);
+    let point_from_start_x = point_x - start_x;
+    let point_from_start_y = point_y - start_y;
+
+    let dot = point_from_start_x * segment_x + point_from_start_y * segment_y;
+    if dot <= 0 {
+        return point_from_start_x * point_from_start_x + point_from_start_y * point_from_start_y
+            <= radius_squared;
+    }
+
+    if dot >= segment_len_squared {
+        let distance_x = point_x - end_x;
+        let distance_y = point_y - end_y;
         return distance_x * distance_x + distance_y * distance_y <= radius_squared;
     }
 
-    const PROJECTION_SCALE: i64 = 1024;
-    let point_from_start_x = (point_x - start_x) as i64;
-    let point_from_start_y = (point_y - start_y) as i64;
-    let projection = (point_from_start_x * (segment_x as i64)
-        + point_from_start_y * (segment_y as i64))
-        * PROJECTION_SCALE
-        / segment_len_squared;
-    let projection = projection.clamp(0, PROJECTION_SCALE);
-
-    let closest_x = start_x as i64 + ((segment_x as i64) * projection) / PROJECTION_SCALE;
-    let closest_y = start_y as i64 + ((segment_y as i64) * projection) / PROJECTION_SCALE;
-    let distance_x = (point_x as i64) - closest_x;
-    let distance_y = (point_y as i64) - closest_y;
-
-    distance_x * distance_x + distance_y * distance_y <= radius_squared
+    let cross = point_from_start_x * segment_y - point_from_start_y * segment_x;
+    cross * cross <= radius_squared_times_len_squared
 }
 
 fn point_covered_by_prepared_ellipse(
@@ -427,26 +505,16 @@ fn point_covered_by_prepared_ellipse(
     point_y: i32,
     center_x: i32,
     center_y: i32,
-    ax: f32,
-    ay: f32,
-    bx: f32,
-    by: f32,
+    quadratic_xx: f32,
+    quadratic_xy: f32,
+    quadratic_yy: f32,
     outer_limit: f32,
-    inner_limit: f32,
-    filled: bool,
 ) -> bool {
     let dx = (point_x - center_x) as f32;
     let dy = (point_y - center_y) as f32;
+    let distance_squared = quadratic_xx * dx * dx + quadratic_xy * dx * dy + quadratic_yy * dy * dy;
 
-    let u = by * dx - bx * dy;
-    let v = ax * dy - ay * dx;
-    let distance_squared = u * u + v * v;
-
-    if filled {
-        distance_squared <= outer_limit
-    } else {
-        distance_squared <= outer_limit && distance_squared > inner_limit
-    }
+    distance_squared <= outer_limit
 }
 
 fn point_from_f32((x, y): (f32, f32)) -> Point {
