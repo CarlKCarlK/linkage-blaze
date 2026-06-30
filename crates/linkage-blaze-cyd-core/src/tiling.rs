@@ -8,16 +8,20 @@
 //! The primary type is [`TileGrid`]: callers give it a rectangular body region
 //! and the number of tile columns and rows; it derives the per-tile size with
 //! ceiling division and clips the final column/row to the region edges.
-//! [`Region`] describes a single rectangle (for example a full-width text
+//! [`Rectangle`] describes a single rectangle (for example a full-width text
 //! band), and [`max_usize`] combines pixel counts so a shared buffer can be sized
 //! as the max of every frame an app flushes.
 
-use embedded_graphics::prelude::{Point, Size};
+use embedded_graphics::{
+    prelude::{Point, Size},
+    primitives::Rectangle,
+};
 
 /// `const fn` maximum of two `usize` values.
 ///
 /// Useful for sizing a shared `PixelBuffer<N>` as the largest of several frame
-/// pixel counts, e.g. `max_usize(text_band.pixel_count(), grid.max_tile_pixel_count())`.
+/// pixel counts, e.g.
+/// `max_usize((text_band.size.width * text_band.size.height) as usize, grid.max_tile_pixel_count())`.
 #[must_use]
 pub const fn max_usize(first: usize, second: usize) -> usize {
     if first > second { first } else { second }
@@ -40,26 +44,6 @@ pub const fn max_u32(first: u32, second: u32) -> u32 {
 pub const fn div_ceil_usize(n: usize, d: usize) -> usize {
     assert!(d > 0, "divisor must be non-zero");
     n / d + if n % d == 0 { 0 } else { 1 }
-}
-
-/// A single rectangular screen region in physical-screen coordinates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Region {
-    pub top_left: Point,
-    pub size: Size,
-}
-
-impl Region {
-    #[must_use]
-    pub const fn new(top_left: Point, size: Size) -> Self {
-        Self { top_left, size }
-    }
-
-    /// Number of pixels the region covers (`width * height`).
-    #[must_use]
-    pub const fn pixel_count(&self) -> usize {
-        self.size.width as usize * self.size.height as usize
-    }
 }
 
 /// A rectangular body region split into a grid of `columns` × `rows` tiles.
@@ -137,7 +121,7 @@ impl TileGrid {
         widest * tallest
     }
 
-    /// The tile at `(column, row)` as a [`Region`] in physical-screen
+    /// The tile at `(column, row)` as a [`Rectangle`] in physical-screen
     /// coordinates, or `None` if it lies outside the region.
     ///
     /// The final column/row of a grid may be narrower/shorter than the nominal
@@ -145,7 +129,7 @@ impl TileGrid {
     /// always use the returned region's `size` rather than the grid's derived
     /// tile size when allocating a frame.
     #[must_use]
-    pub(crate) fn tile(&self, column: usize, row: usize) -> Option<Region> {
+    pub(crate) fn tile(&self, column: usize, row: usize) -> Option<Rectangle> {
         let tile_width = self.tile_width();
         let tile_height = self.tile_height();
         let column_offset = column * tile_width;
@@ -164,7 +148,7 @@ impl TileGrid {
             self.top_left.x + column_offset as i32,
             self.top_left.y + row_offset as i32,
         );
-        Some(Region::new(top_left, size))
+        Some(Rectangle::new(top_left, size))
     }
 }
 
@@ -279,8 +263,8 @@ mod tests {
 
     #[test]
     fn text_band_pixel_count() {
-        let text_band = Region::new(Point::new(0, 0), Size::new(240, 34));
-        assert_eq!(text_band.pixel_count(), 8160);
+        let text_band = Rectangle::new(Point::new(0, 0), Size::new(240, 34));
+        assert_eq!((text_band.size.width * text_band.size.height) as usize, 8160);
     }
 
     #[test]

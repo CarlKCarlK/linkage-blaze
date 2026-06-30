@@ -16,7 +16,6 @@ mod clock;
 use clock::WasmClockSync;
 use linkage_blaze_cyd_core::{Cyd, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
-use linkage_blaze_example_core::gamma_ramp::gamma_ramp;
 use linkage_blaze_example_core::skeleton_clock::{
     BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_REGION, skeleton_clock,
     skeleton_clock_splash,
@@ -81,43 +80,6 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         // irrefutable; only a `Mark` lookup failure can surface here.
         let Err(error) = skeleton_clock(&mut cyd, &clock_sync).await;
         web_sys::console::error_1(&format!("skeleton_clock stopped: {error:?}").into());
-    });
-
-    Ok(())
-}
-
-/// Paint the gamma-calibration ramp on the canvas with `canvas_id`.
-///
-/// The WASM `Rgb565`→RGBA expansion is linear, so on a calibrated monitor these
-/// patches are the intended (sRGB) reference to compare against the device.
-#[wasm_bindgen]
-pub fn start_gamma_ramp(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
-    let document = web_sys::window()
-        .expect("a browser window exists")
-        .document()
-        .expect("the window has a document");
-    let canvas: HtmlCanvasElement = document
-        .get_element_by_id(canvas_id)
-        .expect("the canvas element exists")
-        .dyn_into()
-        .expect("the element is a <canvas>");
-
-    let size = ORIENTATION.size();
-    canvas.set_width(size.width);
-    canvas.set_height(size.height);
-
-    let context: CanvasRenderingContext2d = canvas
-        .get_context("2d")?
-        .expect("the canvas supports a 2d context")
-        .dyn_into()
-        .expect("the context is a CanvasRenderingContext2d");
-
-    let cyd = CydWasm::new(context, ORIENTATION, BACKGROUND, FOREGROUND, &TOP_FONT);
-
-    wasm_bindgen_futures::spawn_local(async move {
-        let mut cyd = cyd;
-        let Err(error) = gamma_ramp(&mut cyd).await;
-        web_sys::console::error_1(&format!("gamma_ramp stopped: {error:?}").into());
     });
 
     Ok(())

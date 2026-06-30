@@ -16,13 +16,11 @@ use core::{convert::Infallible, future::Future};
 use embedded_graphics::{
     pixelcolor::Rgb565,
     prelude::{DrawTarget, Point, Size},
+    primitives::Rectangle,
 };
 use linkage_blaze_core::PixelTarget;
 
-use crate::{
-    TouchInputEvent,
-    tiling::{Region, TileGrid},
-};
+use crate::{TouchInputEvent, tiling::TileGrid};
 
 /// Error type used by a CYD device or frame.
 ///
@@ -61,7 +59,7 @@ pub trait Cyd {
     /// draw in frame-local coordinates.
     fn frame_mut_with_tile_top_left(
         &mut self,
-        region: Region,
+        region: Rectangle,
         tile_top_left: Point,
     ) -> Self::Frame<'_>;
 
@@ -69,13 +67,13 @@ pub trait Cyd {
     ///
     /// The frame remembers its `region`, so [`CydFrame::flush`] presents it at
     /// the region's top-left with no separate position argument.
-    fn frame_mut(&mut self, region: Region) -> Self::Frame<'_> {
+    fn frame_mut(&mut self, region: Rectangle) -> Self::Frame<'_> {
         self.frame_mut_with_tile_top_left(region, Point::zero())
     }
 
     /// Borrow a full-screen frame, cleared to the device background color.
     fn full_frame_mut(&mut self) -> Self::Frame<'_> {
-        self.frame_mut(Region::new(Point::zero(), self.screen_size()))
+        self.frame_mut(Rectangle::new(Point::zero(), self.screen_size()))
     }
 
     /// Read the next calibrated, screen-space touch event, if any.
@@ -177,7 +175,7 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     }
 
     /// This frame's region (top-left and size) in physical-screen coordinates.
-    fn region(&self) -> Region;
+    fn region(&self) -> Rectangle;
 
     /// Fill this frame with the device default background color.
     fn clear(&mut self) -> &mut Self;
@@ -202,7 +200,7 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
 
     /// Present the frame's pixels at its region's top-left (screen coordinates).
     ///
-    /// The frame was created over a [`Region`] by [`Cyd::frame_mut`], so it
+    /// The frame was created over a [`Rectangle`] by [`Cyd::frame_mut`], so it
     /// already knows where it lives and needs no position argument.
     ///
     /// The returned future is the render loop's frame boundary. On the MCU it
@@ -233,7 +231,7 @@ mod tests {
     struct TestCyd;
 
     struct TestFrame {
-        region: Region,
+        region: Rectangle,
         tile_top_left: Point,
     }
 
@@ -247,7 +245,7 @@ mod tests {
 
         fn frame_mut_with_tile_top_left(
             &mut self,
-            region: Region,
+            region: Rectangle,
             tile_top_left: Point,
         ) -> TestFrame {
             TestFrame {
@@ -298,7 +296,7 @@ mod tests {
             self.tile_top_left
         }
 
-        fn region(&self) -> Region {
+        fn region(&self) -> Rectangle {
             self.region
         }
 
@@ -332,7 +330,7 @@ mod tests {
         let first = tiles.next().expect("first tile exists");
         assert_eq!(
             first.region(),
-            Region::new(Point::new(10, 20), Size::new(4, 3))
+            Rectangle::new(Point::new(10, 20), Size::new(4, 3))
         );
         assert_eq!(first.tile_top_left(), Point::new(10, 20));
         drop(first);
@@ -340,7 +338,7 @@ mod tests {
         let second = tiles.next().expect("second tile exists");
         assert_eq!(
             second.region(),
-            Region::new(Point::new(14, 20), Size::new(4, 3))
+            Rectangle::new(Point::new(14, 20), Size::new(4, 3))
         );
         assert_eq!(second.tile_top_left(), Point::new(14, 20));
         drop(second);
@@ -348,7 +346,7 @@ mod tests {
         let third = tiles.next().expect("third tile exists");
         assert_eq!(
             third.region(),
-            Region::new(Point::new(10, 23), Size::new(4, 3))
+            Rectangle::new(Point::new(10, 23), Size::new(4, 3))
         );
         assert_eq!(third.tile_top_left(), Point::new(10, 23));
     }

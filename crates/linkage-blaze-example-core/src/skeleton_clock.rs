@@ -11,6 +11,7 @@ use embedded_graphics::{
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_7X13, ascii::FONT_10X20},
     pixelcolor::Rgb565,
     prelude::{DrawTarget, Point, Size},
+    primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
@@ -22,7 +23,7 @@ use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
     Cyd, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
-    tiling::{Region, TileGrid, max_u32},
+    tiling::{TileGrid, max_u32},
 };
 
 use crate::infallible::InfallibleResultExt;
@@ -83,8 +84,8 @@ const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
 pub const ORIENTATION: Orientation = Orientation::Portrait;
 pub const TOP_FONT: MonoFont<'static> = FONT_7X13;
-pub const WIFI_STATUS_REGION: Region = Region::new(Point::new(6, 6), Size::new(155, 14));
-const TIME_REGION: Region = Region::new(
+pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(6, 6), Size::new(155, 14));
+const TIME_REGION: Rectangle = Rectangle::new(
     Point::new(
         WIFI_STATUS_REGION.top_left.x + WIFI_STATUS_REGION.size.width as i32,
         WIFI_STATUS_REGION.top_left.y,

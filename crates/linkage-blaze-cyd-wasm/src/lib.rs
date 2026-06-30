@@ -23,7 +23,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::PixelTarget;
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, CydInfallibleError, Orientation, TouchInputEvent, tiling::Region,
+    Cyd, CydFrame, CydInfallibleError, Orientation, TouchInputEvent,
 };
 use wasm_bindgen::Clamped;
 use web_sys::{CanvasRenderingContext2d, ImageData};
@@ -69,13 +69,13 @@ impl Cyd for CydWasm {
         self.size
     }
 
-    fn frame_mut(&mut self, region: Region) -> CydFrameWasm<'_> {
+    fn frame_mut(&mut self, region: Rectangle) -> CydFrameWasm<'_> {
         self.frame_mut_with_tile_top_left(region, Point::zero())
     }
 
     fn frame_mut_with_tile_top_left(
         &mut self,
-        region: Region,
+        region: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameWasm<'_> {
         let size = region.size;
@@ -104,9 +104,9 @@ impl Cyd for CydWasm {
 pub struct CydFrameWasm<'a> {
     context: &'a CanvasRenderingContext2d,
     pixels: Vec<u16>,
-    // Where this frame presents and how large it is: set from the `Region`
+    // Where this frame presents and how large it is: set from the `Rectangle`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
-    region: Region,
+    region: Rectangle,
     // Tile top-left in screen coordinates. Drawing coordinates are translated
     // by this point before reaching the local frame buffer.
     tile_top_left: Point,
@@ -254,7 +254,7 @@ impl CydFrame for CydFrameWasm<'_> {
         self.tile_top_left
     }
 
-    fn region(&self) -> Region {
+    fn region(&self) -> Rectangle {
         self.region
     }
 

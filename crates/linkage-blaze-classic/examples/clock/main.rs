@@ -55,8 +55,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // The shared pixel buffer must hold the largest frame we draw: the digital
     // time read-out or the wi-fi status line.
-    const BUFFER_PIXEL_COUNT: usize =
-        linkage_blaze_cyd::tiling::max_usize(WIFI_STATUS_REGION.pixel_count(), TIME_REGION.pixel_count());
+    const BUFFER_PIXEL_COUNT: usize = linkage_blaze_cyd::tiling::max_usize(
+        (WIFI_STATUS_REGION.size.width * WIFI_STATUS_REGION.size.height) as usize,
+        (TIME_REGION.size.width * TIME_REGION.size.height) as usize,
+    );
     static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
     let mut cyd = CydEsp::new_display_only(
         &CYD_STATIC,
