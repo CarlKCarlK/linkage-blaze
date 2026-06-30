@@ -1660,6 +1660,7 @@ dependencies = [
  "embedded-graphics",
  "heapless 0.8.0",
  "linkage-blaze-core",
+ "micromath",
 ]
 
 [[package]]

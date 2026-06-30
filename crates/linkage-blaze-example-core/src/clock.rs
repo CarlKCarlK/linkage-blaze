@@ -20,7 +20,10 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use linkage_blaze_cyd_core::{Cyd, CydFrame, Orientation};
+use linkage_blaze_core::{
+    DiskItem, DrawItem, LinkageFixed, Pose, SphereItem, Vec3, linkage, linkage_fixed,
+};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, DrawPrimitive, Ellipse, LineSegment, Orientation};
 use log::info;
 use static_cell::StaticCell;
 use time::OffsetDateTime;
@@ -50,6 +53,11 @@ const TIME_TEXT_SCALED_PIXELS: usize = TIME_TEXT_SCALED_WIDTH * TIME_TEXT_SCALED
 pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(240, 8), Size::new(70, 10));
 /// Digital time read-out, matching the old esp32 clock layout.
 pub const TIME_REGION: Rectangle = Rectangle::new(Point::new(80, 34), Size::new(160, 40));
+const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(80, 80), Size::new(160, 160));
+const CLOCK_CENTER_X: i32 = 80;
+const CLOCK_CENTER_Y: i32 = 80;
+const HAND_SCALE: f32 = 1.0;
+const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
 
 // ── Main function ────────────────────────────────────────────────────────
 
@@ -81,90 +89,103 @@ where
         // Draw the time explicitly so the surface default font/color can stay
         // dedicated to the small WiFi status text, while preserving the old
         // 2x enlarged clock text look.
-        let mut time_frame = cyd.frame_mut(TIME_REGION);
-        draw_scaled_time(
-            &mut time_frame,
-            clock_time.as_str(),
-            time_text_unscaled_buffer,
-            time_text_scaled_buffer,
-        );
-        time_frame.flush().await.map_err(Error::Flush)?;
-
-        // TODO00000 Port the analog clock-hand rendering to the generic `Cyd`
-        // trait. The original esp32 `CydClockDisplay::show_clock` (in the old
-        // `examples/clock/display.rs`) is commented out below because it depends
-        // on rendering methods that exist only on the concrete `CydEsp`, not on
-        // the device-agnostic `Cyd`/`CydFrame` traits:
-        //
-        //   * `CydEsp::draw_primitives` / the `DrawPrimitive`, `Ellipse`,
-        //     `LineSegment` batch-draw types,
-        //   * `CydEsp::flush_at` and the scaled-glyph `PixelBuffer`/`RegionView`
-        //     workspace.
-        //
-        // It also uses a bespoke "model +X = up, +Y = left" projection
-        // (`project_x`/`project_y`/`project_dir`) that the generic
-        // `linkage_blaze_core::Projection` cannot yet express: `front_orthographic`
-        // maps world Z (not world X) to screen Y, and there is no public
-        // constructor for a custom rotation basis (see the `todo0000` on
-        // `Projection`). Once a custom-rotation `Projection` constructor lands,
-        // render the linkage the way `skeleton_clock` does: iterate
-        // `CLOCK_HANDS.view().draw_items(&clock_time.params())`, `.project(...)`
-        // each into a `ProjectedDrawItem`, and `.draw(&mut frame)` onto a frame
-        // borrowed over the clock-face `Rectangle` (every `CydFrame` is a
-        // `PixelTarget`).
-        /*
-        const CLOCK_TOP_LEFT: Point = Point::new(80, 80);
-        const CLOCK_CENTER_X: i32 = 80;
-        const CLOCK_CENTER_Y: i32 = 80;
-        const HAND_SCALE: f32 = 1.0;
-        const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
-
-        // Map the time onto the linkage's two normalized params: the hands
-        // (hour, derived from h/m/s) and the slowly spinning face.
-        // let second = seconds as f32 / 60.0;
-        // let minute = (minutes as f32 + second) / 60.0;
-        // let hour = ((hours % 12) as f32 + minute) / 12.0;
-        // let face_spin = (((seconds % 20) as f32) / 20.0 + 0.5) % 1.0;
-        // let params = [hour, face_spin];
-        for draw_item in CLOCK_HANDS.view().draw_items(&params) {
-            let prim = match draw_item {
-                DrawItem::Stroke(stroke) => {
-                    let project = |pose: Pose| {
-                        let position = pose.position();
-                        clock_point(Point::new(
-                            CLOCK_CENTER_X + project_x(position, HAND_SCALE),
-                            CLOCK_CENTER_Y + project_y(position, HAND_SCALE),
-                        ))
-                    };
-                    let start = project(stroke.start());
-                    let end = project(stroke.end());
-                    if start != end {
-                        DrawPrimitive::LineSegment(LineSegment {
-                            start,
-                            end,
-                            width: clock_width_pixels(stroke.width()),
-                            color: CydEsp::rgb565(stroke.color()),
-                        })
-                    } else {
-                        continue;
-                    }
-                }
-                DrawItem::Disk(disk) => DrawPrimitive::Ellipse(disk_to_ellipse(disk)),
-                DrawItem::Sphere(sphere) => DrawPrimitive::Ellipse(sphere_to_ellipse(sphere)),
-            };
-            // ... collect into a heapless::Vec<DrawPrimitive, 16> and
-            // cyd.draw_primitives(CLOCK_BOUNDS, CydEsp::rgb565(BACKGROUND), &primitives)?;
+        {
+            let mut time_frame = cyd.frame_mut(TIME_REGION);
+            draw_scaled_time(
+                &mut time_frame,
+                clock_time.as_str(),
+                time_text_unscaled_buffer,
+                time_text_scaled_buffer,
+            );
+            time_frame.flush().await.map_err(Error::Flush)?;
         }
 
-        // Convention: model +X = up, +Y = left.
-        // screen_x = -model_y, screen_y = -model_x.
-        // fn project_x(pos: Vec3, scale: f32) -> i32 { -(pos[1] * scale) as i32 }
-        // fn project_y(pos: Vec3, scale: f32) -> i32 { -(pos[0] * scale) as i32 }
-        // fn project_dir(world_x: f32, world_y: f32, r: f32) -> (f32, f32) {
-        //     (-world_y * r, -world_x * r)
-        // }
-        */
+        let params = clock_time.params();
+        let mut primitives = heapless::Vec::<DrawPrimitive, 16>::new();
+        for draw_item in CLOCK_HANDS.view().draw_items(&params) {
+            let Some(primitive) = draw_item_to_primitive(draw_item) else {
+                continue;
+            };
+            primitives
+                .push(primitive)
+                .expect("clock linkage yields at most 16 draw primitives");
+        }
+        cyd.draw_primitives(CLOCK_BOUNDS, Rgb565::from(BACKGROUND), &primitives)
+            .map_err(Error::Flush)?;
     }
+}
+
+fn draw_item_to_primitive(draw_item: DrawItem) -> Option<DrawPrimitive> {
+    match draw_item {
+        DrawItem::Stroke(stroke) => {
+            let start = clock_pose_point(stroke.start());
+            let end = clock_pose_point(stroke.end());
+            if start == end {
+                return None;
+            }
+            Some(DrawPrimitive::LineSegment(LineSegment {
+                start,
+                end,
+                width: clock_width_pixels(stroke.width()),
+                color: Rgb565::from(stroke.color()),
+            }))
+        }
+        DrawItem::Disk(disk) => Some(DrawPrimitive::Ellipse(disk_to_ellipse(disk))),
+        DrawItem::Sphere(sphere) => Some(DrawPrimitive::Ellipse(sphere_to_ellipse(sphere))),
+    }
+}
+
+fn disk_to_ellipse(disk: DiskItem) -> Ellipse {
+    let orientation = disk.pose().orientation();
+    Ellipse {
+        center: clock_pose_point(disk.pose()),
+        axis_a: project_dir(orientation.forward(), disk.radius()),
+        axis_b: project_dir(orientation.left(), disk.radius()),
+        radius: disk.radius() * HAND_SCALE,
+        stroke_width: 0,
+        color: Rgb565::from(disk.color()),
+        filled: true,
+    }
+}
+
+fn sphere_to_ellipse(sphere: SphereItem) -> Ellipse {
+    let radius = sphere.radius() * HAND_SCALE;
+    Ellipse {
+        center: clock_pose_point(sphere.pose()),
+        axis_a: (radius, 0.0),
+        axis_b: (0.0, radius),
+        radius,
+        stroke_width: 0,
+        color: Rgb565::from(sphere.color()),
+        filled: true,
+    }
+}
+
+fn clock_pose_point(pose: Pose) -> Point {
+    let position = pose.position();
+    Point::new(
+        CLOCK_BOUNDS.top_left.x + CLOCK_CENTER_X + project_x(position, HAND_SCALE),
+        CLOCK_BOUNDS.top_left.y + CLOCK_CENTER_Y + project_y(position, HAND_SCALE),
+    )
+}
+
+fn project_x(position: Vec3, scale: f32) -> i32 {
+    -(position[1] * scale) as i32
+}
+
+fn project_y(position: Vec3, scale: f32) -> i32 {
+    -(position[0] * scale) as i32
+}
+
+fn project_dir(world_dir: Vec3, radius: f32) -> (f32, f32) {
+    (
+        -world_dir[1] * radius * HAND_SCALE,
+        -world_dir[0] * radius * HAND_SCALE,
+    )
+}
+
+fn clock_width_pixels(width: f32) -> u16 {
+    ((width * HAND_SCALE + 0.5) as u16).max(1)
 }
 
 struct BufferTarget<'a> {
@@ -259,17 +280,17 @@ fn draw_scaled_time<FrameError>(
 
 /// A formatted snapshot of the wall-clock time.
 ///
-/// Once the analog clock-hand rendering is ported (see the `TODO00000` in
-/// [`clock`]), this should also carry the raw hour/minute/second so it can drive
-/// the linkage params.
 pub struct ClockTime {
     text: heapless::String<16>,
+    hour_24: u8,
+    minute: u8,
+    second: u8,
 }
 
 impl ClockTime {
     /// Build a `ClockTime` from `local_time`, formatting a `12:59 PM`-style read-out.
     pub fn from_time(local_time: &OffsetDateTime) -> Self {
-        let (hour_12, minute, _second) = h12_m_s(local_time);
+        let (hour_12, minute, second) = h12_m_s(local_time);
         let meridiem = if local_time.hour() % 24 < 12 {
             "AM"
         } else {
@@ -278,11 +299,24 @@ impl ClockTime {
         let mut text = heapless::String::new();
         core::fmt::write(&mut text, format_args!("{hour_12}:{minute:02} {meridiem}"))
             .expect("clock string fits in 16 bytes");
-        Self { text }
+        Self {
+            text,
+            hour_24: local_time.hour(),
+            minute,
+            second,
+        }
     }
 
     pub fn as_str(&self) -> &str {
         self.text.as_str()
+    }
+
+    fn params(&self) -> [f32; 2] {
+        let second = self.second as f32 / 60.0;
+        let minute = (self.minute as f32 + second) / 60.0;
+        let hour = ((self.hour_24 % 12) as f32 + minute) / 12.0;
+        let face_spin = (((self.second % 20) as f32) / 20.0 + 0.5) % 1.0;
+        [hour, face_spin]
     }
 }
 
