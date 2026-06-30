@@ -606,21 +606,21 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// # Examples
     ///
     /// ```rust
-    /// # use linkage_blaze_core::{LinkageFixed, DrawItem};
+    /// # use linkage_blaze_core::{DrawItem3d, LinkageFixed};
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
     /// let view = LINKAGE.view();
     /// let has_stroke = view.draw_items(&[])
-    ///     .any(|item| matches!(item, DrawItem::Stroke(_)));
+    ///     .any(|item| matches!(item, DrawItem3d::Stroke(_)));
     /// assert!(has_stroke);
     /// ```
     pub fn draw_items<'b>(&'b self, params: &'b [f32; DOF]) -> DrawItemIter<'b, DOF, MARKS> {
         DrawItemIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
     }
 
-    /// The number of [`DrawItem`]s this linkage yields, evaluated at compile time.
+    /// The number of [`DrawItem3d`]s this linkage yields, evaluated at compile time.
     ///
     /// Which steps emit a draw item depends only on the linkage's steps and pen
     /// state (which moves draw, which shapes are emitted), never on the runtime
@@ -3579,7 +3579,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
 }
 
 /// Iterator over draw items from a LinkageView (does not require const N).
-/// Iterator over [`DrawItem`]s produced by evaluating a linkage.
+/// Iterator over [`DrawItem3d`]s produced by evaluating a linkage.
 ///
 /// Obtain via [`LinkageView::draw_items`]. After exhausting the iterator the
 /// [`pose_by_mark_name`](DrawItemIter::pose_by_mark_name) method lets you query the final
@@ -3648,7 +3648,7 @@ pub enum MarkError {
 }
 
 impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemIter<'_, DOF, MARKS> {
-    type Item = DrawItem;
+    type Item = DrawItem3d;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.index < self.steps.len() {
@@ -3681,7 +3681,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemIter<'_, DOF, MA
                 Step::Move(_) | Step::Left(_) | Step::Up(_)
                     if matches!(pen_style.pen(), PenState::Down) =>
                 {
-                    return Some(DrawItem::Stroke(StrokeSegment {
+                    return Some(DrawItem3d::Stroke(StrokeSegment {
                         start: start_pose,
                         end: self.pose,
                         color: pen_style.color(),
@@ -3689,28 +3689,28 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemIter<'_, DOF, MA
                     }));
                 }
                 Step::Disk(radius) => {
-                    return Some(DrawItem::Disk(DiskItem {
+                    return Some(DrawItem3d::Disk(DiskItem {
                         pose: start_pose,
                         radius: *radius,
                         color: pen_style.color(),
                     }));
                 }
                 Step::DiskParam(var_arg) => {
-                    return Some(DrawItem::Disk(DiskItem {
+                    return Some(DrawItem3d::Disk(DiskItem {
                         pose: start_pose,
                         radius: var_arg.resolve(self.params),
                         color: pen_style.color(),
                     }));
                 }
                 Step::Sphere(radius) => {
-                    return Some(DrawItem::Sphere(SphereItem {
+                    return Some(DrawItem3d::Sphere(SphereItem {
                         pose: start_pose,
                         radius: *radius,
                         color: pen_style.color(),
                     }));
                 }
                 Step::SphereParam(var_arg) => {
-                    return Some(DrawItem::Sphere(SphereItem {
+                    return Some(DrawItem3d::Sphere(SphereItem {
                         pose: start_pose,
                         radius: var_arg.resolve(self.params),
                         color: pen_style.color(),
@@ -3770,29 +3770,29 @@ impl SphereItem {
     }
 }
 
-/// A draw item produced by a linkage: a line stroke, a filled disk, or a sphere.
+/// A 3D draw item produced by a linkage: a line stroke, a filled disk, or a sphere.
 #[derive(Clone, Copy, Debug)]
-pub enum DrawItem {
+pub enum DrawItem3d {
     Stroke(StrokeSegment),
     Disk(DiskItem),
     Sphere(SphereItem),
 }
 
-impl DrawItem {
-    /// Project this 3D/linkage-space item through `projection` into a
-    /// 2D/screen-space [`ProjectedDrawItem`] ready to [`draw`](ProjectedDrawItem::draw).
+impl DrawItem3d {
+    /// Project this 3D/linkage-space item through `projection` into pixel-space
+    /// [`DrawItem2d`] ready to [`draw`](DrawItem2d::draw).
     #[must_use]
-    pub fn project(self, projection: &Projection) -> ProjectedDrawItem {
+    pub fn project(self, projection: &Projection) -> DrawItem2d {
         match self {
-            DrawItem::Stroke(stroke) => ProjectedDrawItem::Stroke {
+            DrawItem3d::Stroke(stroke) => DrawItem2d::Stroke {
                 start: stroke.start().project(projection),
                 end: stroke.end().project(projection),
                 color: stroke.color(),
                 pixel_width: projection.project_width(stroke.width()),
             },
-            DrawItem::Disk(disk) => {
+            DrawItem3d::Disk(disk) => {
                 let orientation = disk.pose().orientation();
-                ProjectedDrawItem::Ellipse {
+                DrawItem2d::Ellipse {
                     center: disk.pose().project(projection),
                     axis_a: projection.project_dir(
                         disk.pose(),
@@ -3803,7 +3803,7 @@ impl DrawItem {
                     color: disk.color(),
                 }
             }
-            DrawItem::Sphere(sphere) => ProjectedDrawItem::Circle {
+            DrawItem3d::Sphere(sphere) => DrawItem2d::Circle {
                 center: sphere.pose().project(projection),
                 pixel_radius: projection.project_radius(sphere.pose(), sphere.radius()),
                 color: sphere.color(),
@@ -3812,14 +3812,15 @@ impl DrawItem {
     }
 }
 
-/// A [`DrawItem`] after projection into 2D pixel space, ready to draw onto a
+/// A pixel-space 2D draw item, ready to draw onto a
 /// [`PixelTarget`].
 ///
-/// Obtain one with [`DrawItem::project`]. All coordinates and sizes are in
-/// pixels. The `color` stays [`Rgb888`]; the target performs any conversion
-/// (for example to `Rgb565`) at its pixel boundary.
+/// Obtain one with [`DrawItem3d::project`], or construct one directly when you
+/// already have pixel-space geometry. All coordinates and sizes are in pixels.
+/// The `color` stays [`Rgb888`]; the target performs any conversion (for
+/// example to `Rgb565`) at its pixel boundary.
 #[derive(Clone, Copy, Debug)]
-pub enum ProjectedDrawItem {
+pub enum DrawItem2d {
     /// A line stroke from `start` to `end` with the given pixel width.
     Stroke {
         start: (f32, f32),
@@ -3844,7 +3845,7 @@ pub enum ProjectedDrawItem {
     },
 }
 
-impl ProjectedDrawItem {
+impl DrawItem2d {
     /// Draw this item onto a [`PixelTarget`].
     ///
     /// Strokes use the embedded-graphics [`Line`](embedded_graphics::primitives::Line)
@@ -3856,7 +3857,7 @@ impl ProjectedDrawItem {
             primitives::{Circle, Line, Primitive, PrimitiveStyle},
         };
         match *self {
-            ProjectedDrawItem::Stroke {
+            DrawItem2d::Stroke {
                 start,
                 end,
                 color,
@@ -3871,7 +3872,7 @@ impl ProjectedDrawItem {
                 .draw(&mut PixelTargetAdapter(target))
                 .expect("drawing onto a PixelTargetAdapter is Infallible");
             }
-            ProjectedDrawItem::Ellipse {
+            DrawItem2d::Ellipse {
                 center,
                 axis_a,
                 axis_b,
@@ -3881,7 +3882,7 @@ impl ProjectedDrawItem {
                     pixel_put(target, x, y, color);
                 });
             }
-            ProjectedDrawItem::Circle {
+            DrawItem2d::Circle {
                 center,
                 pixel_radius,
                 color,
@@ -3921,19 +3922,19 @@ pub trait DrawSurface {
 pub fn render_draw_items<S>(
     proj: &Projection,
     surface: &mut S,
-    items: impl Iterator<Item = DrawItem>,
+    items: impl Iterator<Item = DrawItem3d>,
 ) where
     S: DrawSurface,
 {
     for item in items {
         match item {
-            DrawItem::Stroke(s) => surface.stroke(
+            DrawItem3d::Stroke(s) => surface.stroke(
                 s.start().project(proj),
                 s.end().project(proj),
                 s.color(),
                 proj.project_width(s.width()),
             ),
-            DrawItem::Disk(d) => {
+            DrawItem3d::Disk(d) => {
                 let orient = d.pose().orientation();
                 surface.filled_ellipse(
                     d.pose().project(proj),
@@ -3942,7 +3943,7 @@ pub fn render_draw_items<S>(
                     d.color(),
                 );
             }
-            DrawItem::Sphere(s) => surface.filled_circle(
+            DrawItem3d::Sphere(s) => surface.filled_circle(
                 s.pose().project(proj),
                 proj.project_radius(s.pose(), s.radius()),
                 s.color(),
@@ -4446,7 +4447,7 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{Arg, DrawItem, LinkageFixed, Mat3, Point, Pose, Projection, Step, Vec3};
+    use super::{Arg, DrawItem3d, LinkageFixed, Mat3, Point, Pose, Projection, Step, Vec3};
     #[cfg(feature = "alloc")]
     use super::{LinkageBuf, Rgb888};
     use crate::test_helpers::{
@@ -4550,7 +4551,7 @@ mod tests {
             .expect("zero-width pen should still produce a stroke");
 
         match draw_item {
-            DrawItem::Stroke(stroke_segment) => {
+            DrawItem3d::Stroke(stroke_segment) => {
                 assert_eq!(stroke_segment.width(), 0.0);
             }
             _ => panic!("expected stroke from zero-width pen"),
@@ -5397,8 +5398,8 @@ mod tests {
     }
 
     fn assert_draw_items_close(
-        mut left: impl Iterator<Item = DrawItem>,
-        mut right: impl Iterator<Item = DrawItem>,
+        mut left: impl Iterator<Item = DrawItem3d>,
+        mut right: impl Iterator<Item = DrawItem3d>,
         tolerance: f32,
     ) {
         loop {
@@ -5411,18 +5412,18 @@ mod tests {
         }
     }
 
-    fn assert_draw_item_close(left: DrawItem, right: DrawItem, tolerance: f32) {
+    fn assert_draw_item_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
         match (left, right) {
-            (DrawItem::Stroke(left), DrawItem::Stroke(right)) => {
+            (DrawItem3d::Stroke(left), DrawItem3d::Stroke(right)) => {
                 assert_pose_close(left.start(), right.start(), tolerance);
                 assert_pose_close(left.end(), right.end(), tolerance);
                 assert!((left.width() - right.width()).abs() <= tolerance);
             }
-            (DrawItem::Disk(left), DrawItem::Disk(right)) => {
+            (DrawItem3d::Disk(left), DrawItem3d::Disk(right)) => {
                 assert_pose_close(left.pose(), right.pose(), tolerance);
                 assert!((left.radius() - right.radius()).abs() <= tolerance);
             }
-            (DrawItem::Sphere(left), DrawItem::Sphere(right)) => {
+            (DrawItem3d::Sphere(left), DrawItem3d::Sphere(right)) => {
                 assert_pose_close(left.pose(), right.pose(), tolerance);
                 assert!((left.radius() - right.radius()).abs() <= tolerance);
             }

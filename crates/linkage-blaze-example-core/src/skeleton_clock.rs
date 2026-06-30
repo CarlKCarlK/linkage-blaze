@@ -15,8 +15,7 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, MarkError, ProjectedDrawItem, Projection, Rgb888, linkage,
-    linkage_fixed,
+    DrawItem2d, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
 };
 use log::info;
 use time::OffsetDateTime;
@@ -437,5 +436,5 @@ pub enum Error<F> {
     Mark(MarkLookupError),
     /// The projected-items scratch buffer was smaller than the linkage draw-item count.
     #[from(ignore)]
-    VecOverflow(ProjectedDrawItem),
+    VecOverflow(DrawItem2d),
 }

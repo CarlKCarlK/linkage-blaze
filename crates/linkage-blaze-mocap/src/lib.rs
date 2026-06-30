@@ -926,7 +926,7 @@ Frame Time: 0.0333333
             .view()
             .draw_items(&params)
             .find_map(|draw_item| match draw_item {
-                linkage_blaze_core::DrawItem::Stroke(stroke) => Some(stroke),
+                linkage_blaze_core::DrawItem3d::Stroke(stroke) => Some(stroke),
                 _ => None,
             })
             .expect("offset should draw a stroke");

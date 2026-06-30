@@ -1,6 +1,6 @@
 use std::{env, fs, process};
 
-use linkage_blaze_core::{DrawItem, LinkageBuf};
+use linkage_blaze_core::{DrawItem3d, LinkageBuf};
 
 fn main() {
     if let Err(error) = run() {
@@ -29,7 +29,7 @@ fn run() -> Result<(), String> {
     }
 
     for (segment_index, draw_item) in linkage.view().draw_items(&params).enumerate() {
-        let DrawItem::Stroke(segment) = draw_item else {
+        let DrawItem3d::Stroke(segment) = draw_item else {
             continue;
         };
         let start = segment.start().position();

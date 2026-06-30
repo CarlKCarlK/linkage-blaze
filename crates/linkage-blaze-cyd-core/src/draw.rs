@@ -1,5 +1,5 @@
 use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
-use linkage_blaze_core::{DrawItem, ProjectedDrawItem, Projection};
+use linkage_blaze_core::{DrawItem2d, DrawItem3d, Projection};
 use micromath::F32Ext;
 
 #[derive(Clone, Copy, Debug)]
@@ -70,12 +70,12 @@ struct PreparedEllipse {
 
 impl PreparedPrimitive {
     // todo: review the color (Rgb888 -> Rgb565) and number (f32 -> i32/u16)
-    // conversions threaded through here and `ProjectedDrawItem`. Some may be
+    // conversions threaded through here and `DrawItem2d`. Some may be
     // happening later (per primitive, per frame) than strictly needed — see if
     // any can move once, earlier, or be dropped entirely.
-    fn from_projected(item: &ProjectedDrawItem) -> Option<Self> {
+    fn from_projected(item: &DrawItem2d) -> Option<Self> {
         match *item {
-            ProjectedDrawItem::Stroke {
+            DrawItem2d::Stroke {
                 start,
                 end,
                 color,
@@ -125,7 +125,7 @@ impl PreparedPrimitive {
                     }),
                 })
             }
-            ProjectedDrawItem::Ellipse {
+            DrawItem2d::Ellipse {
                 center,
                 axis_a,
                 axis_b,
@@ -137,7 +137,7 @@ impl PreparedPrimitive {
                 ellipse_bound_radius(axis_a, axis_b),
                 Rgb565::from(color),
             ),
-            ProjectedDrawItem::Circle {
+            DrawItem2d::Circle {
                 center,
                 pixel_radius,
                 color,
@@ -248,29 +248,29 @@ impl Iterator for LineSegmentPixels<'_> {
     }
 }
 
-pub struct PrimitivePixels<const PRIMITIVE_COUNT: usize> {
+pub struct ContiguousPixels<const PIXEL_SOURCE_COUNT: usize> {
     bounds: Rectangle,
     left: i32,
     top: i32,
     right_exclusive: i32,
     bottom_exclusive: i32,
     background: Rgb565,
-    primitives: heapless::Vec<PreparedPrimitive, PRIMITIVE_COUNT>,
+    primitives: heapless::Vec<PreparedPrimitive, PIXEL_SOURCE_COUNT>,
 }
 
-impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
+impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
     /// Project and compile 3D draw items for indexed pixel lookups.
     #[must_use]
-    pub fn from_draw_items<I>(
+    pub fn from_draw_items_3d<I>(
         bounds: Rectangle,
         background: Rgb565,
         draw_items: I,
         projection: &Projection,
     ) -> Self
     where
-        I: IntoIterator<Item = DrawItem>,
+        I: IntoIterator<Item = DrawItem3d>,
     {
-        let mut primitives = heapless::Vec::<PreparedPrimitive, PRIMITIVE_COUNT>::new();
+        let mut primitives = heapless::Vec::<PreparedPrimitive, PIXEL_SOURCE_COUNT>::new();
         for draw_item in draw_items {
             let projected_draw_item = draw_item.project(projection);
             if let Some(prepared_primitive) =
@@ -287,14 +287,13 @@ impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
 
     /// Compile already-projected draw items for indexed pixel lookups.
     #[must_use]
-    pub fn from_projected_items(
-        bounds: Rectangle,
-        background: Rgb565,
-        draw_items: &[ProjectedDrawItem],
-    ) -> Self {
-        let mut primitives = heapless::Vec::<PreparedPrimitive, PRIMITIVE_COUNT>::new();
+    pub fn from_draw_items_2d<I>(bounds: Rectangle, background: Rgb565, draw_items: I) -> Self
+    where
+        I: IntoIterator<Item = DrawItem2d>,
+    {
+        let mut primitives = heapless::Vec::<PreparedPrimitive, PIXEL_SOURCE_COUNT>::new();
         for draw_item in draw_items {
-            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(draw_item) {
+            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(&draw_item) {
                 primitives
                     .push(prepared_primitive)
                     .expect("projected draw items fit the prepared primitive capacity");
@@ -307,7 +306,7 @@ impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
     fn new(
         bounds: Rectangle,
         background: Rgb565,
-        primitives: heapless::Vec<PreparedPrimitive, PRIMITIVE_COUNT>,
+        primitives: heapless::Vec<PreparedPrimitive, PIXEL_SOURCE_COUNT>,
     ) -> Self {
         let left = bounds.top_left.x;
         let top = bounds.top_left.y;
@@ -351,8 +350,8 @@ impl<const PRIMITIVE_COUNT: usize> PrimitivePixels<PRIMITIVE_COUNT> {
     }
 
     #[must_use]
-    pub fn iter(&self) -> PrimitivePixelsIter<'_, PRIMITIVE_COUNT> {
-        PrimitivePixelsIter::new(self)
+    pub fn iter(&self) -> ContiguousPixelsIter<'_, PIXEL_SOURCE_COUNT> {
+        ContiguousPixelsIter::new(self)
     }
 }
 
@@ -406,23 +405,23 @@ impl PreparedEllipse {
     }
 }
 
-pub struct PrimitivePixelsIter<'a, const PRIMITIVE_COUNT: usize> {
-    pixels: &'a PrimitivePixels<PRIMITIVE_COUNT>,
+pub struct ContiguousPixelsIter<'a, const PIXEL_SOURCE_COUNT: usize> {
+    pixels: &'a ContiguousPixels<PIXEL_SOURCE_COUNT>,
     x: i32,
     y: i32,
-    active: heapless::Vec<&'a PreparedPrimitive, PRIMITIVE_COUNT>,
+    active: heapless::Vec<&'a PreparedPrimitive, PIXEL_SOURCE_COUNT>,
 }
 
-impl<'a, const PRIMITIVE_COUNT: usize> PrimitivePixelsIter<'a, PRIMITIVE_COUNT> {
-    fn new(pixels: &'a PrimitivePixels<PRIMITIVE_COUNT>) -> Self {
-        let mut primitive_pixels_iter = Self {
+impl<'a, const PIXEL_SOURCE_COUNT: usize> ContiguousPixelsIter<'a, PIXEL_SOURCE_COUNT> {
+    fn new(pixels: &'a ContiguousPixels<PIXEL_SOURCE_COUNT>) -> Self {
+        let mut contiguous_pixels_iter = Self {
             pixels,
             x: pixels.left,
             y: pixels.top,
             active: heapless::Vec::new(),
         };
-        primitive_pixels_iter.rebuild_active();
-        primitive_pixels_iter
+        contiguous_pixels_iter.rebuild_active();
+        contiguous_pixels_iter
     }
 
     fn rebuild_active(&mut self) {
@@ -437,7 +436,7 @@ impl<'a, const PRIMITIVE_COUNT: usize> PrimitivePixelsIter<'a, PRIMITIVE_COUNT> 
     }
 }
 
-impl<const PRIMITIVE_COUNT: usize> Iterator for PrimitivePixelsIter<'_, PRIMITIVE_COUNT> {
+impl<const PIXEL_SOURCE_COUNT: usize> Iterator for ContiguousPixelsIter<'_, PIXEL_SOURCE_COUNT> {
     type Item = Rgb565;
 
     fn next(&mut self) -> Option<Self::Item> {

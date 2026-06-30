@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 use embedded_graphics_core::pixelcolor::RgbColor;
 use linkage_blaze_core::{
-    DrawItem, LinkageFixed, Pose, Rgb888, Vec3, WebColors, linkage, linkage_fixed,
+    DrawItem3d, LinkageFixed, Pose, Rgb888, Vec3, WebColors, linkage, linkage_fixed,
 };
 
 const BUILD_X_MM: f32 = 220.0;
@@ -31,7 +31,7 @@ pub fn draw_items_from(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
         .flat_map(|item| {
             let mut record = [0f32; 12];
             match item {
-                DrawItem::Stroke(s) => {
+                DrawItem3d::Stroke(s) => {
                     record[0] = 0.0;
                     let [x, y, z] = s.start().position().into_array();
                     record[1] = x;
@@ -47,7 +47,7 @@ pub fn draw_items_from(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
                     record[9] = c.b() as f32;
                     record[10] = s.width();
                 }
-                DrawItem::Sphere(s) => {
+                DrawItem3d::Sphere(s) => {
                     record[0] = 1.0;
                     let [x, y, z] = s.pose().position().into_array();
                     record[1] = x;
@@ -59,7 +59,7 @@ pub fn draw_items_from(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
                     record[9] = c.b() as f32;
                     record[10] = s.radius();
                 }
-                DrawItem::Disk(d) => {
+                DrawItem3d::Disk(d) => {
                     record[0] = 2.0;
                     let [x, y, z] = d.pose().position().into_array();
                     record[1] = x;

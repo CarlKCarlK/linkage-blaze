@@ -18,10 +18,10 @@ use embedded_graphics::{
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::{DrawItem, PixelTarget, ProjectedDrawItem, Projection, Rgb888};
+use linkage_blaze_core::{DrawItem2d, DrawItem3d, PixelTarget, Projection, Rgb888};
 
 use crate::{
-    LineSegment, PrimitivePixels, TouchInputEvent, draw::LineSegmentPixels, tiling::TileGrid,
+    ContiguousPixels, LineSegment, TouchInputEvent, draw::LineSegmentPixels, tiling::TileGrid,
 };
 
 pub trait RegionPixels {
@@ -156,7 +156,7 @@ pub trait Cyd {
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
-        items: &[ProjectedDrawItem],
+        items: &[DrawItem2d],
     ) -> Result<(), Self::Error> {
         let primitive_pixels =
             self.prepare_primitives::<PRIMITIVE_COUNT>(bounds, background, items);
@@ -168,10 +168,10 @@ pub trait Cyd {
         &self,
         bounds: Rectangle,
         background: Rgb565,
-        items: &[ProjectedDrawItem],
-    ) -> PrimitivePixels<PRIMITIVE_COUNT> {
+        items: &[DrawItem2d],
+    ) -> ContiguousPixels<PRIMITIVE_COUNT> {
         let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
-        PrimitivePixels::from_projected_items(bounds, background, items)
+        ContiguousPixels::from_draw_items_2d(bounds, background, items.iter().copied())
     }
 
     /// Project and draw 3D draw items immediately inside `bounds`.
@@ -183,7 +183,7 @@ pub trait Cyd {
         projection: &Projection,
     ) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = DrawItem>,
+        I: IntoIterator<Item = DrawItem3d>,
     {
         let primitive_pixels = self.prepare_linkage_primitives::<PRIMITIVE_COUNT, _>(
             bounds, background, items, projection,
@@ -198,12 +198,12 @@ pub trait Cyd {
         background: Rgb565,
         items: I,
         projection: &Projection,
-    ) -> PrimitivePixels<PRIMITIVE_COUNT>
+    ) -> ContiguousPixels<PRIMITIVE_COUNT>
     where
-        I: IntoIterator<Item = DrawItem>,
+        I: IntoIterator<Item = DrawItem3d>,
     {
         let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
-        PrimitivePixels::from_draw_items(bounds, background, items, projection)
+        ContiguousPixels::from_draw_items_3d(bounds, background, items, projection)
     }
 
     /// Clear the whole screen to the device default background color.
