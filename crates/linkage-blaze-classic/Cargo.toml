@@ -9,6 +9,11 @@ license.workspace = true
 # the motion data they embed. The library target exists only to host the
 # precomputed-frames regression test (see `src/lib.rs`).
 [[example]]
+name = "armatron"
+path = "examples/armatron.rs"
+required-features = ["esp32", "armatron"]
+
+[[example]]
 name = "skeleton-clock"
 path = "examples/skeleton-clock.rs"
 required-features = ["esp32", "skeleton-clock"]
@@ -36,6 +41,7 @@ esp32 = [
 # Each example module is gated in `linkage-blaze-example-core`; enable only the
 # one being built so unused modules (and ballet's slow `MOTION` const) are never
 # compiled. The example targets above list these in their `required-features`.
+armatron = ["linkage-blaze-example-core/armatron"]
 ballet = ["linkage-blaze-example-core/ballet"]
 skeleton-clock = ["linkage-blaze-example-core/skeleton-clock"]
 clock = ["linkage-blaze-example-core/clock"]
@@ -47,8 +53,10 @@ log = { version = "0.4", default-features = false }
 linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
+linkage-blaze-armatron-core = { path = "../linkage-blaze-armatron-core" }
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
+embassy-time = "0.5.1"
 derive_more = { version = "2.1.1", default-features = false, features = [
     "from",
 ] }

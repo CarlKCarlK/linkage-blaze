@@ -18,7 +18,7 @@ check-all:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example armatron {{_armatron_args}}
     env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
@@ -115,25 +115,24 @@ _bundle-docs:
 check-cyd:
     cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
 
-# ── linkage-blaze-armatron-classic ───────────────────────────────────────
-
-_arm_classic_elf := "target/xtensa-esp32-none-elf/release/linkage-blaze-armatron-classic"
-
-# Build and report flash + RAM usage for the ESP32 classic target
-size-arm-classic:
-    just build-arm-classic
-    source ~/export-esp.sh && python3 .tools/elf_size.py {{_arm_classic_elf}}
-
-check-arm-classic:
-    cargo +esp check -p linkage-blaze-armatron-classic {{_classic_args}}
-
-build-arm-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
-
-run-arm-classic:
-    just check-arm-classic
-    just build-arm-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-armatron-classic {{_classic_args}}
+# ── linkage-blaze-armatron-classic (old standalone crate — to be deleted) ────
+#
+# _arm_classic_elf := "target/xtensa-esp32-none-elf/release/linkage-blaze-armatron-classic"
+#
+# size-arm-classic:
+#     just build-arm-classic
+#     source ~/export-esp.sh && python3 .tools/elf_size.py {{_arm_classic_elf}}
+#
+# check-arm-classic:
+#     cargo +esp check -p linkage-blaze-armatron-classic {{_classic_args}}
+#
+# build-arm-classic:
+#     source ~/export-esp.sh && cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
+#
+# run-arm-classic:
+#     just check-arm-classic
+#     just build-arm-classic
+#     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-armatron-classic {{_classic_args}}
 
 # ── linkage-blaze-armatron-c6 ───────────────────────────────────────────
 
@@ -155,6 +154,7 @@ run-arm-c6:
 
 # Each example enables only its own `linkage-blaze-example-core` module, so unused
 # example modules (and ballet's slow `MOTION` const) are never compiled.
+_armatron_args       := _classic_args + " --features armatron"
 _ballet_args         := _classic_args + " --features ballet"
 _skeleton_clock_args := _classic_args + " --features skeleton-clock"
 _clock_args          := _classic_args + " --features clock"
@@ -183,6 +183,17 @@ run-clock-classic:
     just check-clock-classic
     just build-clock-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example clock {{_clock_args}}
+
+check-armatron-classic:
+    cargo +esp check -p linkage-blaze-classic --example armatron {{_armatron_args}}
+
+build-armatron-classic:
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example armatron {{_armatron_args}}
+
+run-armatron-classic:
+    just check-armatron-classic
+    just build-armatron-classic
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example armatron {{_armatron_args}}
 
 # ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
 _clock_wasm_crate := "crates/linkage-blaze-clock-wasm"

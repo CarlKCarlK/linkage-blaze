@@ -18,6 +18,8 @@ license.workspace = true
 # `MOTION` const is evaluated only when the `ballet` feature is on. Nothing is
 # on by default; every consumer opts in to the examples it needs.
 default = []
+# The `armatron` example — calibration geometry helpers used by the ESP32 armatron binary.
+armatron = []
 # The `ballet` example embeds a motion-capture const that is slow to evaluate;
 # keep it off unless the `ballet` example is being built.
 ballet = []
