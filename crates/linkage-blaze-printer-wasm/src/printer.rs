@@ -30,7 +30,7 @@ pub struct PrinterSim {
     pub current_index: usize,
     print_linkage: LinkageBuf<0, 0>,
     print_position: (f32, f32, f32),
-    print_draw_items: Vec<f32>,
+    print_draw_items_3d_flat: Vec<f32>,
 }
 
 impl PrinterSim {
@@ -40,7 +40,7 @@ impl PrinterSim {
             current_index: 0,
             print_linkage: LinkageBuf::start(),
             print_position: (0.0, 0.0, 0.0),
-            print_draw_items: Vec::new(),
+            print_draw_items_3d_flat: Vec::new(),
         }
     }
 
@@ -48,7 +48,7 @@ impl PrinterSim {
         self.current_index = 0;
         self.print_linkage = LinkageBuf::start();
         self.print_position = (0.0, 0.0, 0.0);
-        self.print_draw_items.clear();
+        self.print_draw_items_3d_flat.clear();
     }
 
     pub fn advance(&mut self, count: usize) {
@@ -90,17 +90,17 @@ impl PrinterSim {
         self.segments.len()
     }
 
-    pub fn print_draw_item_count(&self) -> usize {
-        self.print_draw_items.len() / DRAW_ITEM_STRIDE
+    pub fn print_draw_item_3d_count(&self) -> usize {
+        self.print_draw_items_3d_flat.len() / DRAW_ITEM_STRIDE
     }
 
     pub fn print_linkage_step_count(&self) -> usize {
         self.print_linkage.len()
     }
 
-    pub fn print_draw_items_flat_since(&self, from_item: usize) -> Vec<f32> {
-        let start = (from_item * DRAW_ITEM_STRIDE).min(self.print_draw_items.len());
-        self.print_draw_items[start..].to_vec()
+    pub fn print_draw_items_3d_flat_since(&self, from_item: usize) -> Vec<f32> {
+        let start = (from_item * DRAW_ITEM_STRIDE).min(self.print_draw_items_3d_flat.len());
+        self.print_draw_items_3d_flat[start..].to_vec()
     }
 
     pub fn extrusion_segments_flat(&self) -> Vec<f32> {
@@ -164,11 +164,11 @@ impl PrinterSim {
             .pen_up();
         self.print_linkage = linkage;
         self.print_position = (segment.x1, segment.y1, segment.z1);
-        self.push_print_draw_item(segment, color, width);
+        self.push_print_draw_item_3d(segment, color, width);
     }
 
-    fn push_print_draw_item(&mut self, segment: &Segment, color: Rgb888, width: f32) {
-        self.print_draw_items.extend_from_slice(&[
+    fn push_print_draw_item_3d(&mut self, segment: &Segment, color: Rgb888, width: f32) {
+        self.print_draw_items_3d_flat.extend_from_slice(&[
             0.0,
             segment.x0,
             segment.y0,
@@ -200,19 +200,19 @@ G1 X10 Y10 E2.0
 ",
         );
 
-        assert_eq!(printer_sim.print_draw_item_count(), 0);
+        assert_eq!(printer_sim.print_draw_item_3d_count(), 0);
         let initial_step_count = printer_sim.print_linkage_step_count();
 
         printer_sim.advance(1);
-        assert_eq!(printer_sim.print_draw_item_count(), 1);
+        assert_eq!(printer_sim.print_draw_item_3d_count(), 1);
         assert!(printer_sim.print_linkage_step_count() > initial_step_count);
 
-        let first_batch = printer_sim.print_draw_items_flat_since(0);
+        let first_batch = printer_sim.print_draw_items_3d_flat_since(0);
         assert_eq!(first_batch.len(), DRAW_ITEM_STRIDE);
 
         printer_sim.advance(2);
-        assert_eq!(printer_sim.print_draw_item_count(), 3);
-        let second_batch = printer_sim.print_draw_items_flat_since(1);
+        assert_eq!(printer_sim.print_draw_item_3d_count(), 3);
+        let second_batch = printer_sim.print_draw_items_3d_flat_since(1);
         assert_eq!(second_batch.len(), DRAW_ITEM_STRIDE * 2);
     }
 
@@ -220,12 +220,12 @@ G1 X10 Y10 E2.0
     fn reset_clears_print_linkage() {
         let mut printer_sim = PrinterSim::new("G1 X10 Y0 E1.0\n");
         printer_sim.advance(1);
-        assert!(printer_sim.print_draw_item_count() > 0);
+        assert!(printer_sim.print_draw_item_3d_count() > 0);
         assert!(printer_sim.print_linkage_step_count() > LinkageBuf::<0>::start().len());
 
         printer_sim.reset();
 
-        assert_eq!(printer_sim.print_draw_item_count(), 0);
+        assert_eq!(printer_sim.print_draw_item_3d_count(), 0);
         assert_eq!(
             printer_sim.print_linkage_step_count(),
             LinkageBuf::<0>::start().len()

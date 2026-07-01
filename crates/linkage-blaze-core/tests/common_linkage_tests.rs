@@ -41,8 +41,8 @@ pub fn assert_linkages_equivalent<const DOF: usize, const MARKS: usize>(
     );
 
     // Count draw items - both should produce the same number
-    let fixed_items: Vec<_> = linkage_fixed.view().draw_items(params).collect();
-    let buf_items: Vec<_> = linkage_buf.view().draw_items(params).collect();
+    let fixed_items: Vec<_> = linkage_fixed.view().draw_items_3d(params).collect();
+    let buf_items: Vec<_> = linkage_buf.view().draw_items_3d(params).collect();
     assert_eq!(
         fixed_items.len(),
         buf_items.len(),

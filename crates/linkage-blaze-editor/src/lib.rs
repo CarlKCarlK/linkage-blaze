@@ -50,8 +50,8 @@ fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, S
     }
 
     let mut primitives = Vec::new();
-    for draw_item in view.draw_items(&params) {
-        primitives.push(Primitive::from(draw_item));
+    for draw_item_3d in view.draw_items_3d(&params) {
+        primitives.push(Primitive::from(draw_item_3d));
     }
 
     Ok(result_json(&primitives, &editor_params))
@@ -316,8 +316,8 @@ enum Primitive {
 }
 
 impl From<DrawItem3d> for Primitive {
-    fn from(draw_item: DrawItem3d) -> Self {
-        match draw_item {
+    fn from(draw_item_3d: DrawItem3d) -> Self {
+        match draw_item_3d {
             DrawItem3d::Stroke(stroke) => Self::Segment {
                 start: Vec3::from(stroke.start().position().into_array()),
                 end: Vec3::from(stroke.end().position().into_array()),

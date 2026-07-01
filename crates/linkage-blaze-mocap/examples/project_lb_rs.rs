@@ -28,8 +28,8 @@ fn run() -> Result<(), String> {
         params[param_index] = param.default();
     }
 
-    for (segment_index, draw_item) in linkage.view().draw_items(&params).enumerate() {
-        let DrawItem3d::Stroke(segment) = draw_item else {
+    for (segment_index, draw_item_3d) in linkage.view().draw_items_3d(&params).enumerate() {
+        let DrawItem3d::Stroke(segment) = draw_item_3d else {
             continue;
         };
         let start = segment.start().position();

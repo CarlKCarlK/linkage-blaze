@@ -56,8 +56,8 @@ impl MocapClipWasm {
         Ok(self
             .linkage
             .view()
-            .draw_items(&params)
-            .flat_map(flatten_draw_item)
+            .draw_items_3d(&params)
+            .flat_map(flatten_draw_item_3d)
             .collect())
     }
 
@@ -79,10 +79,10 @@ impl MocapClipWasm {
     }
 }
 
-fn flatten_draw_item(draw_item: DrawItem3d) -> [f32; STRIDE] {
+fn flatten_draw_item_3d(draw_item_3d: DrawItem3d) -> [f32; STRIDE] {
     let mut record = [0.0; STRIDE];
 
-    match draw_item {
+    match draw_item_3d {
         DrawItem3d::Stroke(stroke) => {
             record[0] = 0.0;
             let [x, y, z] = stroke.start().position().into_array();

@@ -17,7 +17,7 @@ use static_cell::StaticCell;
 
 use linkage_blaze_core::{
     DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
-    render_draw_items,
+    render_draw_items_3d,
 };
 
 // todo00 I hate all these constants.
@@ -618,10 +618,10 @@ impl CydSim {
             buffer,
             result: Ok(()),
         };
-        render_draw_items(
+        render_draw_items_3d(
             &self.projection(),
             &mut surface,
-            linkage.draw_items(&self.params),
+            linkage.draw_items_3d(&self.params),
         );
         surface.result
     }

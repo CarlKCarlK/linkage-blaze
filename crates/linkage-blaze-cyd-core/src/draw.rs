@@ -264,17 +264,17 @@ impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
     pub fn from_draw_items_3d<I>(
         bounds: Rectangle,
         background: Rgb565,
-        draw_items: I,
+        draw_items_3d: I,
         projection: &Projection,
     ) -> Self
     where
         I: IntoIterator<Item = DrawItem3d>,
     {
         let mut primitives = heapless::Vec::<PreparedPrimitive, PIXEL_SOURCE_COUNT>::new();
-        for draw_item in draw_items {
-            let projected_draw_item = draw_item.project(projection);
+        for draw_item_3d in draw_items_3d {
+            let draw_item_2d = draw_item_3d.project(projection);
             if let Some(prepared_primitive) =
-                PreparedPrimitive::from_projected(&projected_draw_item)
+                PreparedPrimitive::from_projected(&draw_item_2d)
             {
                 primitives
                     .push(prepared_primitive)
@@ -287,13 +287,17 @@ impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
 
     /// Compile already-projected draw items for indexed pixel lookups.
     #[must_use]
-    pub fn from_draw_items_2d<I>(bounds: Rectangle, background: Rgb565, draw_items: I) -> Self
-    where
-        I: IntoIterator<Item = DrawItem2d>,
+    pub fn from_draw_items_2d(
+        bounds: Rectangle,
+        background: Rgb565,
+        draw_items_2d: impl IntoIterator<Item = DrawItem2d>,
+    ) -> Self
     {
         let mut primitives = heapless::Vec::<PreparedPrimitive, PIXEL_SOURCE_COUNT>::new();
-        for draw_item in draw_items {
-            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(&draw_item) {
+        for draw_item_2d in draw_items_2d {
+            if let Some(prepared_primitive) =
+                PreparedPrimitive::from_projected(&draw_item_2d)
+            {
                 primitives
                     .push(prepared_primitive)
                     .expect("projected draw items fit the prepared primitive capacity");

@@ -864,7 +864,7 @@ Frame Time: 0.0333333
         assert_eq!(params[1], 0.5);
         assert_eq!(params[2], 0.5);
         assert!(params[6] > 0.5);
-        assert!(linkage.view().draw_items(&params).count() >= 5);
+        assert!(linkage.view().draw_items_3d(&params).count() >= 5);
     }
 
     #[test]
@@ -883,7 +883,7 @@ Frame Time: 0.0333333
         );
         assert!(source.contains(".mark(\"depth 1\") // chest"));
         assert!(source.contains(".restore(\"depth 1\") // chest"));
-        assert!(linkage.view().draw_items(&[0.5; 32]).count() >= 5);
+        assert!(linkage.view().draw_items_3d(&[0.5; 32]).count() >= 5);
     }
 
     #[test]
@@ -924,8 +924,8 @@ Frame Time: 0.0333333
             bvh_sample_params::<1>(&layout, &clip.samples[0]).expect("params should build");
         let stroke = linkage
             .view()
-            .draw_items(&params)
-            .find_map(|draw_item| match draw_item {
+            .draw_items_3d(&params)
+            .find_map(|draw_item_3d| match draw_item_3d {
                 linkage_blaze_core::DrawItem3d::Stroke(stroke) => Some(stroke),
                 _ => None,
             })
@@ -955,7 +955,7 @@ Frame Time: 0.0333333
         assert!(clip.joints.len() > 40);
         assert!(clip.samples.len() > 500);
         assert!(layout.len() > 120);
-        assert!(linkage.view().draw_items(&params).count() > 40);
+        assert!(linkage.view().draw_items_3d(&params).count() > 40);
     }
 
     #[test]
@@ -970,6 +970,6 @@ Frame Time: 0.0333333
 
         assert!(source.starts_with("linkage![\n"));
         assert!(source.trim_end().ends_with(']'));
-        assert!(linkage.view().draw_items(&[0.5; 256]).count() > 40);
+        assert!(linkage.view().draw_items_3d(&[0.5; 256]).count() > 40);
     }
 }

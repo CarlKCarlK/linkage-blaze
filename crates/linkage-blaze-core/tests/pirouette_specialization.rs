@@ -49,9 +49,9 @@ fn pirouette_body_evaluates_without_alloc_storage() {
     assert_pose_finite(pose);
 
     let mut item_count = 0;
-    for draw_item in view.draw_items(&params) {
+    for draw_item_3d in view.draw_items_3d(&params) {
         item_count += 1;
-        match draw_item {
+        match draw_item_3d {
             DrawItem3d::Stroke(stroke_segment) => {
                 assert_pose_finite(stroke_segment.start());
                 assert_pose_finite(stroke_segment.end());
@@ -89,14 +89,14 @@ fn pirouette_body_matches_full_linkage_with_frozen_defaults() {
         1e-3,
     );
 
-    let mut full_items = full_view.draw_items(&full_params);
-    let mut body_items = body_view.draw_items(&body_params);
+    let mut full_draw_items_3d = full_view.draw_items_3d(&full_params);
+    let mut body_draw_items_3d = body_view.draw_items_3d(&body_params);
     let mut item_count = 0;
     loop {
-        match (full_items.next(), body_items.next()) {
+        match (full_draw_items_3d.next(), body_draw_items_3d.next()) {
             (Some(full_item), Some(body_item)) => {
                 item_count += 1;
-                assert_draw_item_close(full_item, body_item, 1e-3);
+                assert_draw_item_3d_close(full_item, body_item, 1e-3);
             }
             (None, None) => break,
             (Some(_), None) => panic!("specialized linkage emitted fewer draw items"),
@@ -125,8 +125,8 @@ fn pirouette_body_optimized_matches_original() {
         assert_pose_close(full.final_pose(&params), opt.final_pose(&params), 1e-4);
 
         let mut n = 0;
-        for (u, o) in full.draw_items(&params).zip(opt.draw_items(&params)) {
-            assert_draw_item_close(u, o, 1e-4);
+        for (u, o) in full.draw_items_3d(&params).zip(opt.draw_items_3d(&params)) {
+            assert_draw_item_3d_close(u, o, 1e-4);
             n += 1;
         }
         assert!(n > 0);
@@ -196,7 +196,7 @@ fn full_pirouette_defaults() -> [f32; 132] {
     values
 }
 
-fn assert_draw_item_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
+fn assert_draw_item_3d_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
     match (left, right) {
         (DrawItem3d::Stroke(left), DrawItem3d::Stroke(right)) => {
             assert_pose_close(left.start(), right.start(), tolerance);

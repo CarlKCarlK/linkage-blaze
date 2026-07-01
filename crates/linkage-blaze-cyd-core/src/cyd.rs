@@ -152,19 +152,19 @@ pub trait Cyd {
     }
 
     /// Draw projected draw items immediately inside `bounds`.
-    fn draw_primitives<const PRIMITIVE_COUNT: usize>(
+    fn draw_items_2d<const PRIMITIVE_COUNT: usize>(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
         items: &[DrawItem2d],
     ) -> Result<(), Self::Error> {
         let primitive_pixels =
-            self.prepare_primitives::<PRIMITIVE_COUNT>(bounds, background, items);
+            self.prepare_draw_items_2d::<PRIMITIVE_COUNT>(bounds, background, items);
         self.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
     }
 
     /// Compile projected draw items for indexed pixel lookups inside `bounds`.
-    fn prepare_primitives<const PRIMITIVE_COUNT: usize>(
+    fn prepare_draw_items_2d<const PRIMITIVE_COUNT: usize>(
         &self,
         bounds: Rectangle,
         background: Rgb565,
@@ -175,7 +175,7 @@ pub trait Cyd {
     }
 
     /// Project and draw 3D draw items immediately inside `bounds`.
-    fn draw_linkage_primitives<const PRIMITIVE_COUNT: usize, I>(
+    fn draw_items_3d<const PRIMITIVE_COUNT: usize, I>(
         &mut self,
         bounds: Rectangle,
         background: Rgb565,
@@ -185,14 +185,14 @@ pub trait Cyd {
     where
         I: IntoIterator<Item = DrawItem3d>,
     {
-        let primitive_pixels = self.prepare_linkage_primitives::<PRIMITIVE_COUNT, _>(
+        let primitive_pixels = self.prepare_draw_items_3d::<PRIMITIVE_COUNT, _>(
             bounds, background, items, projection,
         );
         self.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
     }
 
     /// Compile 3D draw items for indexed pixel lookups inside `bounds`.
-    fn prepare_linkage_primitives<const PRIMITIVE_COUNT: usize, I>(
+    fn prepare_draw_items_3d<const PRIMITIVE_COUNT: usize, I>(
         &self,
         bounds: Rectangle,
         background: Rgb565,
