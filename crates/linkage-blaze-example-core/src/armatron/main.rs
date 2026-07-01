@@ -7,6 +7,7 @@
 //! frame boundary.
 
 pub mod calibration;
+mod controlled;
 pub mod reverse_kinematics;
 
 use core::convert::Infallible;
@@ -132,13 +133,6 @@ pub const DOF: usize = LINKAGE.dof();
 const BASE_YAW_PARAM: usize = 0;
 const BASE_PITCH_PARAM: usize = 1;
 const DOLLY_PARAM: usize = 2;
-const LOWER_ARM_PARAM: usize = 6;
-const SPIN_WHOLE_ARM_PARAM: usize = 7;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ControlledKnob {
-    Param(usize),
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TouchInputOutcome {
@@ -177,10 +171,6 @@ where
     let show_fps = false;
     let mut fps = None;
     let mut touch_cursor = None;
-    let controlled_knobs = [
-        ControlledKnob::Param(LOWER_ARM_PARAM),
-        ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
-    ];
 
     loop {
         let touch = cyd.read_touch_input()?;
@@ -211,24 +201,12 @@ where
                 show_fps,
                 fps,
                 touch_cursor,
-                &controlled_knobs,
             ) {
                 Ok(()) => {}
                 Err(infallible) => match infallible {},
             }
             frame.flush().await?;
         }
-    }
-}
-
-fn knob_fill_style(
-    controlled_knobs: &[ControlledKnob; 2],
-    knob: ControlledKnob,
-) -> PrimitiveStyle<Rgb565> {
-    if controlled_knobs[0] == knob || controlled_knobs[1] == knob {
-        fill_style(GREEN)
-    } else {
-        fill_style(SIM_YELLOW)
     }
 }
 
@@ -318,11 +296,10 @@ pub fn draw_armatron<D: DrawTarget<Color = Rgb565>>(
     show_fps: bool,
     fps: Option<u32>,
     touch_cursor: Option<(f32, f32)>,
-    controlled_knobs: &[ControlledKnob; 2],
 ) -> Result<(), D::Error> {
     target.clear(rgb565_from_rgb888(SIM_BLACK))?;
     draw_linkage(LINKAGE, target, params)?;
-    draw_sliders(target, params, target_seed, controlled_knobs)?;
+    draw_sliders(target, params, target_seed)?;
     draw_report(target, params)?;
     draw_version(target)?;
     draw_fps(target, show_fps, fps)?;
@@ -347,7 +324,6 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
     buffer: &mut D,
     params: &[f32; DOF],
     target_seed: u8,
-    controlled_knobs: &[ControlledKnob; 2],
 ) -> Result<(), D::Error> {
     let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
     let mut target_label = TargetLabel::new();
@@ -362,10 +338,7 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
     let tilt_knob_y =
         TILT_TOP + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - params[BASE_PITCH_PARAM]));
     Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
-        .into_styled(knob_fill_style(
-            controlled_knobs,
-            ControlledKnob::Param(BASE_PITCH_PARAM),
-        ))
+        .into_styled(fill_style(SIM_YELLOW))
         .draw(buffer)?;
 
     Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top).draw(buffer)?;
@@ -448,10 +421,7 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
         let knob_x =
             SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
         Circle::with_center(Point::new(knob_x, slider_y + 8), 9)
-            .into_styled(knob_fill_style(
-                controlled_knobs,
-                ControlledKnob::Param(param_index),
-            ))
+            .into_styled(fill_style(SIM_YELLOW))
             .draw(buffer)?;
     }
 
@@ -471,10 +441,7 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
     let view_knob_x = VIEW_SLIDER_LEFT
         + round_to_i32((VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * params[BASE_YAW_PARAM]);
     Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
-        .into_styled(knob_fill_style(
-            controlled_knobs,
-            ControlledKnob::Param(BASE_YAW_PARAM),
-        ))
+        .into_styled(fill_style(SIM_YELLOW))
         .draw(buffer)?;
     Ok(())
 }
