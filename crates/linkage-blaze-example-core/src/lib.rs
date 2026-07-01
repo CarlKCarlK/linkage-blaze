@@ -7,6 +7,7 @@
 //! against the [`Cyd`](linkage_blaze_cyd_core::Cyd) trait.
 
 #[cfg(feature = "armatron")]
+#[path = "armatron/main.rs"]
 pub mod armatron;
 #[cfg(feature = "ballet")]
 pub mod ballet;

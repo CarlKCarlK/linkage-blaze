@@ -1,13 +1,15 @@
 //! Generic helpers for the armatron example.
 //!
-//! Calibration geometry and the device-agnostic game loop live here.
+//! The device-agnostic game loop lives here.
 //!
 //! # Platform integration
 //!
 //! Implement [`ArmatronPlatform`] for your target device and hand it to
 //! [`armatron`] alongside a [`Cyd`](linkage_blaze_cyd_core::Cyd) display.
 //! The generic loop updates the armatron state, dispatches touch input, and calls
-//! back into your platform for calibration management and frame flushing.
+//! back into your platform for frame flushing.
+
+pub mod calibration;
 
 use core::convert::Infallible;
 
@@ -35,89 +37,6 @@ pub const BLACK: Rgb888 = Rgb888::new(0, 0, 0); // black
 pub const WHITE: Rgb888 = Rgb888::new(255, 255, 255); // white
 pub const YELLOW: Rgb888 = Rgb888::new(255, 255, 0); // yellow
 
-// ── Calibration cross geometry ────────────────────────────────────────────────
-
-pub const CALIBRATION_CROSS_MARGIN: i32 = 28;
-pub const CALIBRATION_CROSS_HALF_SIZE: i32 = 18;
-pub const CALIBRATION_CENTER_DOT_RADIUS: i32 = 3;
-
-#[derive(Clone, Copy)]
-pub enum CalibrationCorner {
-    UpperLeft,
-    UpperRight,
-    LowerRight,
-    LowerLeft,
-}
-
-pub fn calibration_corner_for_index(calibration_index: usize) -> Option<CalibrationCorner> {
-    match calibration_index {
-        0 => Some(CalibrationCorner::UpperLeft),
-        1 => Some(CalibrationCorner::UpperRight),
-        2 => Some(CalibrationCorner::LowerRight),
-        3 => Some(CalibrationCorner::LowerLeft),
-        _ => None,
-    }
-}
-
-pub fn calibration_corner_center(
-    calibration_corner: CalibrationCorner,
-    width: u16,
-    height: u16,
-) -> Point {
-    let width = width as i32;
-    let height = height as i32;
-    match calibration_corner {
-        CalibrationCorner::UpperLeft => {
-            Point::new(CALIBRATION_CROSS_MARGIN, CALIBRATION_CROSS_MARGIN)
-        }
-        CalibrationCorner::UpperRight => Point::new(
-            width - 1 - CALIBRATION_CROSS_MARGIN,
-            CALIBRATION_CROSS_MARGIN,
-        ),
-        CalibrationCorner::LowerRight => Point::new(
-            width - 1 - CALIBRATION_CROSS_MARGIN,
-            height - 1 - CALIBRATION_CROSS_MARGIN,
-        ),
-        CalibrationCorner::LowerLeft => Point::new(
-            CALIBRATION_CROSS_MARGIN,
-            height - 1 - CALIBRATION_CROSS_MARGIN,
-        ),
-    }
-}
-
-/// Draw a calibration crosshair with a center dot onto `target`.
-pub fn draw_calibration_cross<E>(
-    target: &mut impl DrawTarget<Color = Rgb565, Error = E>,
-    calibration_corner: CalibrationCorner,
-    width: u16,
-    height: u16,
-) -> Result<(), E> {
-    let center = calibration_corner_center(calibration_corner, width, height);
-    let left = Point::new(center.x - CALIBRATION_CROSS_HALF_SIZE, center.y);
-    let right = Point::new(center.x + CALIBRATION_CROSS_HALF_SIZE, center.y);
-    let top = Point::new(center.x, center.y - CALIBRATION_CROSS_HALF_SIZE);
-    let bottom = Point::new(center.x, center.y + CALIBRATION_CROSS_HALF_SIZE);
-
-    Line::new(left, right)
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::from(YELLOW), 4))
-        .draw(target)?;
-    Line::new(top, bottom)
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::from(YELLOW), 4))
-        .draw(target)?;
-
-    Circle::new(
-        Point::new(
-            center.x - CALIBRATION_CENTER_DOT_RADIUS,
-            center.y - CALIBRATION_CENTER_DOT_RADIUS,
-        ),
-        (CALIBRATION_CENTER_DOT_RADIUS * 2 + 1) as u32,
-    )
-    .into_styled(PrimitiveStyle::with_fill(Rgb565::from(WHITE)))
-    .draw(target)?;
-
-    Ok(())
-}
-
 // ── Armatron state constants ─────────────────────────────────────────────────
 
 // todo00 I hate all these constants.
@@ -144,10 +63,6 @@ const SLIDER_STEP: i32 = 32;
 const VIEW_SLIDER_LEFT: i32 = 40;
 const VIEW_SLIDER_RIGHT: i32 = 252;
 const VIEW_SLIDER_Y: i32 = 226;
-const CALIBRATE_BUTTON_LEFT: i32 = 288;
-const CALIBRATE_BUTTON_TOP: i32 = 212;
-const CALIBRATE_BUTTON_WIDTH: u32 = 30;
-const CALIBRATE_BUTTON_HEIGHT: u32 = 14;
 const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
@@ -203,12 +118,12 @@ const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 // Section 3: target traversal (pen up) then target disk (commented out).
 // todo0000000 can we use functions to avoid double allocation?
 const CAMERA_CONTROL: LinkageFixed<3, 1, 8> =
-    linkage_fixed!("../../linkage-blaze-armatron-core/src/camera_control.lb.rs");
+    linkage_fixed!("../../../linkage-blaze-armatron-core/src/camera_control.lb.rs");
 const GRID_9X9: LinkageFixed<0, 1, 81> =
-    linkage_fixed!("../../linkage-blaze-armatron-core/src/grid_9x9.lb.rs");
+    linkage_fixed!("../../../linkage-blaze-armatron-core/src/grid_9x9.lb.rs");
 const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);
 const ARMATRON1: LinkageFixed<6, 1, 25> =
-    linkage_fixed!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
+    linkage_fixed!("../../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
 const LINKAGE0: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE: LinkageFixed<15, 4, 159> = LINKAGE0
@@ -238,7 +153,122 @@ pub enum ControlledKnob {
 pub enum TouchInputOutcome {
     Unchanged,
     Changed,
-    CalibrationRequested,
+}
+
+// ── ArmatronPlatform trait ────────────────────────────────────────────────────
+
+/// Platform-specific hooks for the armatron game loop.
+///
+/// Implement this for your target device and pass it to [`armatron`].
+/// The method gives the generic loop a consistent interface for frame rendering:
+///
+/// - [`draw_and_flush`](ArmatronPlatform::draw_and_flush): render the armatron frame into the platform
+///   frame buffer and flush it to the display.
+pub trait ArmatronPlatform {
+    /// The [`Cyd`]-compatible display device this platform drives.
+    type CydDevice: Cyd;
+
+    /// Error type returned by platform operations.
+    ///
+    /// Must be convertible from the device's flush/touch error so that
+    /// `cyd.read_touch_input()` errors propagate via `?` in the generic loop.
+    type Error: From<<Self::CydDevice as Cyd>::Error>;
+
+    /// Render the armatron frame into the platform frame buffer and flush to the display.
+    fn draw_and_flush(
+        &mut self,
+        cyd: &mut Self::CydDevice,
+        params: &[f32; DOF],
+        target_seed: u8,
+        reverse_kinematics_playing: bool,
+        show_fps: bool,
+        fps: Option<u32>,
+        touch_cursor: Option<(f32, f32)>,
+        controlled_knobs: &[ControlledKnob; 2],
+    ) -> Result<(), Self::Error>;
+}
+
+// ── Generic armatron loop ─────────────────────────────────────────────────────
+
+/// Run the armatron example forever.
+///
+/// Each iteration:
+/// 1. Reads the next touch event from [`Cyd::read_touch_input`].
+/// 2. Updates local armatron params, touch, fps, and reverse-kinematics state.
+/// 3. If the frame changed, calls [`ArmatronPlatform::draw_and_flush`] to render and present.
+///
+/// Calibration is intentionally outside this game loop. Platform setup must
+/// provide calibrated touch before calling [`armatron`]. The temporary
+/// [`calibration`] module exists only so current platform examples can share
+/// calibration UI helpers until that responsibility moves into the CYD device
+/// layer.
+pub fn armatron<C, P>(cyd: &mut C, platform: &mut P) -> Result<Infallible, P::Error>
+where
+    C: Cyd,
+    P: ArmatronPlatform<CydDevice = C>,
+{
+    let mut params = default_params(LINKAGE.view());
+    randomize_target_params(&mut params, 0);
+
+    let mut target_seed = 0;
+    let mut active_control = None;
+    let mut reverse_kinematics_run = None;
+    let mut reverse_kinematics_playing = false;
+    let mut previous_tick = None;
+    let show_fps = false;
+    let mut fps = None;
+    let mut rk_step_hold_active = false;
+    let mut touch_cursor = None;
+    let controlled_knobs = [
+        ControlledKnob::Param(LOWER_ARM_PARAM),
+        ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
+    ];
+
+    loop {
+        let touch = cyd.read_touch_input().map_err(Into::into)?;
+        let now = Instant::now();
+        let previous_tick_before_frame = previous_tick;
+        let first_tick = previous_tick_before_frame.is_none();
+        let reverse_kinematics_changed = tick_reverse_kinematics_at(
+            &mut params,
+            &mut reverse_kinematics_run,
+            &mut reverse_kinematics_playing,
+            rk_step_hold_active,
+            &mut previous_tick,
+            now,
+        );
+        let fps_draw_requested = update_fps(show_fps, previous_tick_before_frame, now, &mut fps);
+        let touch_input_outcome = touch.map_or(TouchInputOutcome::Unchanged, |touch_input_event| {
+            handle_touch_input_event(
+                touch_input_event,
+                &mut params,
+                &mut target_seed,
+                &mut active_control,
+                &mut reverse_kinematics_run,
+                &mut reverse_kinematics_playing,
+                &mut previous_tick,
+                &mut rk_step_hold_active,
+                &mut touch_cursor,
+            )
+        });
+
+        let draw_requested = matches!(touch_input_outcome, TouchInputOutcome::Changed)
+            || first_tick
+            || reverse_kinematics_changed
+            || fps_draw_requested;
+        if draw_requested {
+            platform.draw_and_flush(
+                cyd,
+                &params,
+                target_seed,
+                reverse_kinematics_playing,
+                show_fps,
+                fps,
+                touch_cursor,
+                &controlled_knobs,
+            )?;
+        }
+    }
 }
 
 fn knob_fill_style(
@@ -411,7 +441,6 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
 
     draw_reverse_kinematics_run_button(buffer, reverse_kinematics_playing)?;
     draw_reverse_kinematics_step_button(buffer)?;
-    draw_calibrate_button(buffer)?;
 
     Rectangle::new(
         Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
@@ -504,24 +533,6 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
             ControlledKnob::Param(BASE_YAW_PARAM),
         ))
         .draw(buffer)?;
-    Ok(())
-}
-
-fn draw_calibrate_button<D: DrawTarget<Color = Rgb565>>(buffer: &mut D) -> Result<(), D::Error> {
-    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
-    Rectangle::new(
-        Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
-        Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
-    )
-    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-    .draw(buffer)?;
-    Text::with_baseline(
-        "cal",
-        Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
-        text_style,
-        Baseline::Top,
-    )
-    .draw(buffer)?;
     Ok(())
 }
 
@@ -741,7 +752,6 @@ enum ActiveControl {
     NextTarget,
     ToggleReverseKinematics,
     StepReverseKinematics,
-    Calibrate,
 }
 
 #[derive(Clone, Copy)]
@@ -941,7 +951,7 @@ fn handle_touch_input_event(
     match touch_input_event {
         TouchInputEvent::Down { x, y } => {
             *touch_cursor = Some((x, y));
-            if touch_down(
+            touch_down(
                 x,
                 y,
                 params,
@@ -951,13 +961,8 @@ fn handle_touch_input_event(
                 reverse_kinematics_playing,
                 previous_tick,
                 rk_step_hold_active,
-            ) {
-                touch_up(active_control, rk_step_hold_active);
-                *touch_cursor = None;
-                TouchInputOutcome::CalibrationRequested
-            } else {
-                TouchInputOutcome::Changed
-            }
+            );
+            TouchInputOutcome::Changed
         }
         TouchInputEvent::Move { x, y } => {
             *touch_cursor = Some((x, y));
@@ -990,13 +995,9 @@ fn touch_down(
     reverse_kinematics_playing: &mut bool,
     previous_tick: &mut Option<Instant>,
     rk_step_hold_active: &mut bool,
-) -> bool {
+) {
     *active_control = control_at(x, y);
     match *active_control {
-        Some(ActiveControl::Calibrate) => {
-            *active_control = None;
-            true
-        }
         Some(ActiveControl::PreviousTarget) => {
             clear_reverse_kinematics(
                 reverse_kinematics_run,
@@ -1006,7 +1007,6 @@ fn touch_down(
             *target_seed = target_seed.wrapping_sub(1);
             randomize_target_params(params, *target_seed);
             *active_control = None;
-            false
         }
         Some(ActiveControl::NextTarget) => {
             clear_reverse_kinematics(
@@ -1017,7 +1017,6 @@ fn touch_down(
             *target_seed = target_seed.wrapping_add(1);
             randomize_target_params(params, *target_seed);
             *active_control = None;
-            false
         }
         Some(ActiveControl::ToggleReverseKinematics) => {
             toggle_reverse_kinematics(
@@ -1027,12 +1026,10 @@ fn touch_down(
                 previous_tick,
             );
             *active_control = None;
-            false
         }
         Some(ActiveControl::StepReverseKinematics) => {
             *rk_step_hold_active = true;
             step_reverse_kinematics(params, reverse_kinematics_run, reverse_kinematics_playing);
-            false
         }
         _ => {
             update_touch(
@@ -1044,7 +1041,6 @@ fn touch_down(
                 reverse_kinematics_playing,
                 previous_tick,
             );
-            false
         }
     }
 }
@@ -1095,8 +1091,7 @@ fn update_touch(
         ActiveControl::PreviousTarget
         | ActiveControl::NextTarget
         | ActiveControl::ToggleReverseKinematics
-        | ActiveControl::StepReverseKinematics
-        | ActiveControl::Calibrate => {}
+        | ActiveControl::StepReverseKinematics => {}
     }
 }
 
@@ -1351,15 +1346,6 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
     {
         return Some(ActiveControl::XyView);
     }
-    if (CALIBRATE_BUTTON_LEFT as f32
-        ..=(CALIBRATE_BUTTON_LEFT + CALIBRATE_BUTTON_WIDTH as i32) as f32)
-        .contains(&x)
-        && (CALIBRATE_BUTTON_TOP as f32
-            ..=(CALIBRATE_BUTTON_TOP + CALIBRATE_BUTTON_HEIGHT as i32) as f32)
-            .contains(&y)
-    {
-        return Some(ActiveControl::Calibrate);
-    }
     for slider_offset in 0..ARM_PARAM_COUNT {
         let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
         if x >= SLIDER_LEFT as f32 && (y - (slider_y + 8) as f32).abs() <= 13.0 {
@@ -1497,144 +1483,5 @@ impl FpsReport {
         }
 
         core::str::from_utf8(&self.bytes[..self.len]).expect("fps report is ASCII")
-    }
-}
-
-// ── ArmatronPlatform trait ────────────────────────────────────────────────────
-
-/// Platform-specific hooks for the armatron game loop.
-///
-/// Implement this for your target device and pass it to [`armatron`].
-/// The three methods give the generic loop a consistent interface for
-/// calibration management and frame rendering:
-///
-/// - [`ensure_calibrated`](ArmatronPlatform::ensure_calibrated): block until touch is calibrated,
-///   running the calibration UI if needed.
-/// - [`remove_calibration`](ArmatronPlatform::remove_calibration): invalidate the current
-///   calibration so the next [`ensure_calibrated`](ArmatronPlatform::ensure_calibrated) call
-///   triggers a fresh calibration flow.
-/// - [`draw_and_flush`](ArmatronPlatform::draw_and_flush): render the armatron frame into the platform
-///   frame buffer and flush it to the display.
-pub trait ArmatronPlatform {
-    /// The [`Cyd`]-compatible display device this platform drives.
-    type CydDevice: Cyd;
-
-    /// Error type returned by platform operations.
-    ///
-    /// Must be convertible from the device's flush/touch error so that
-    /// `cyd.read_touch_input()` errors propagate via `?` in the generic loop.
-    type Error: From<<Self::CydDevice as Cyd>::Error>;
-
-    /// Block until touch calibration is complete.
-    ///
-    /// Checks whether a fresh calibration is needed (e.g. no stored config or
-    /// the hardware recalibration button was pressed) and if so, runs the
-    /// calibration UI. Returns `Ok(())` once the device is ready for touch input.
-    fn ensure_calibrated(&mut self, cyd: &mut Self::CydDevice) -> Result<(), Self::Error>;
-
-    /// Remove the current calibration config.
-    ///
-    /// Called when the user taps the on-screen "cal" button. The next call to
-    /// [`ensure_calibrated`](Self::ensure_calibrated) will then run a fresh calibration flow.
-    fn remove_calibration(&mut self, cyd: &mut Self::CydDevice);
-
-    /// Render the armatron frame into the platform frame buffer and flush to the display.
-    fn draw_and_flush(
-        &mut self,
-        cyd: &mut Self::CydDevice,
-        params: &[f32; DOF],
-        target_seed: u8,
-        reverse_kinematics_playing: bool,
-        show_fps: bool,
-        fps: Option<u32>,
-        touch_cursor: Option<(f32, f32)>,
-        controlled_knobs: &[ControlledKnob; 2],
-    ) -> Result<(), Self::Error>;
-}
-
-// ── Generic armatron loop ─────────────────────────────────────────────────────
-
-/// Run the armatron example forever.
-///
-/// Each iteration:
-/// 1. Calls [`ArmatronPlatform::ensure_calibrated`] — blocks if calibration is needed.
-/// 2. Reads the next touch event from [`Cyd::read_touch_input`].
-/// 3. Updates local armatron params, touch, fps, and reverse-kinematics state.
-/// 4. If calibration was requested, calls [`ArmatronPlatform::remove_calibration`].
-/// 5. If the frame changed, calls [`ArmatronPlatform::draw_and_flush`] to render and present.
-pub fn armatron<C, P>(cyd: &mut C, platform: &mut P) -> Result<Infallible, P::Error>
-where
-    C: Cyd,
-    P: ArmatronPlatform<CydDevice = C>,
-{
-    let mut params = default_params(LINKAGE.view());
-    randomize_target_params(&mut params, 0);
-
-    let mut target_seed = 0;
-    let mut active_control = None;
-    let mut reverse_kinematics_run = None;
-    let mut reverse_kinematics_playing = false;
-    let mut previous_tick = None;
-    let show_fps = false;
-    let mut fps = None;
-    let mut rk_step_hold_active = false;
-    let mut touch_cursor = None;
-    let controlled_knobs = [
-        ControlledKnob::Param(LOWER_ARM_PARAM),
-        ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
-    ];
-
-    loop {
-        platform.ensure_calibrated(cyd)?;
-        let touch = cyd.read_touch_input().map_err(Into::into)?;
-        let now = Instant::now();
-        let previous_tick_before_frame = previous_tick;
-        let first_tick = previous_tick_before_frame.is_none();
-        let reverse_kinematics_changed = tick_reverse_kinematics_at(
-            &mut params,
-            &mut reverse_kinematics_run,
-            &mut reverse_kinematics_playing,
-            rk_step_hold_active,
-            &mut previous_tick,
-            now,
-        );
-        let fps_draw_requested = update_fps(show_fps, previous_tick_before_frame, now, &mut fps);
-        let touch_input_outcome = touch.map_or(TouchInputOutcome::Unchanged, |touch_input_event| {
-            handle_touch_input_event(
-                touch_input_event,
-                &mut params,
-                &mut target_seed,
-                &mut active_control,
-                &mut reverse_kinematics_run,
-                &mut reverse_kinematics_playing,
-                &mut previous_tick,
-                &mut rk_step_hold_active,
-                &mut touch_cursor,
-            )
-        });
-
-        if matches!(touch_input_outcome, TouchInputOutcome::CalibrationRequested) {
-            previous_tick = None;
-            fps = None;
-            platform.remove_calibration(cyd);
-            continue;
-        }
-
-        let draw_requested = matches!(touch_input_outcome, TouchInputOutcome::Changed)
-            || first_tick
-            || reverse_kinematics_changed
-            || fps_draw_requested;
-        if draw_requested {
-            platform.draw_and_flush(
-                cyd,
-                &params,
-                target_seed,
-                reverse_kinematics_playing,
-                show_fps,
-                fps,
-                touch_cursor,
-                &controlled_knobs,
-            )?;
-        }
     }
 }
