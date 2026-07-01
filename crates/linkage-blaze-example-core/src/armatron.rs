@@ -1,20 +1,18 @@
 //! Generic helpers for the armatron example.
 //!
-//! Calibration geometry and the [`CydSim`] simulation live here; the
-//! device-agnostic game loop is [`armatron`].
+//! Calibration geometry and the device-agnostic game loop live here.
 //!
 //! # Platform integration
 //!
 //! Implement [`ArmatronPlatform`] for your target device and hand it to
 //! [`armatron`] alongside a [`Cyd`](linkage_blaze_cyd_core::Cyd) display.
-//! The generic loop drives [`CydSim`] ticks, dispatches touch input, and calls
+//! The generic loop updates the armatron state, dispatches touch input, and calls
 //! back into your platform for calibration management and frame flushing.
 
 use core::convert::Infallible;
 
 use embassy_time::Instant;
 use embedded_graphics::{
-    Drawable,
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point, Size},
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
@@ -120,7 +118,7 @@ pub fn draw_calibration_cross<E>(
     Ok(())
 }
 
-// ── CydSim ────────────────────────────────────────────────────────────────────
+// ── Armatron state constants ─────────────────────────────────────────────────
 
 // todo00 I hate all these constants.
 pub const SCREEN_WIDTH: usize = 320;
@@ -222,7 +220,7 @@ const LINKAGE: LinkageFixed<15, 4, 159> = LINKAGE0
 // Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
 const REVERSE_KINEMATICS_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 
-const DOF: usize = LINKAGE.dof();
+pub const DOF: usize = LINKAGE.dof();
 
 const BASE_YAW_PARAM: usize = 0;
 const BASE_PITCH_PARAM: usize = 1;
@@ -230,21 +228,6 @@ const DOLLY_PARAM: usize = 2;
 const BEND_ELBOW_PARAM: usize = 4;
 const LOWER_ARM_PARAM: usize = 6;
 const SPIN_WHOLE_ARM_PARAM: usize = 7;
-
-pub struct CydSim {
-    params: [f32; DOF],
-    target_seed: u8,
-    active_control: Option<ActiveControl>,
-    reverse_kinematics_run: Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: bool,
-    previous_tick: Option<Instant>,
-    show_fps: bool,
-    fps: Option<u32>,
-    calibration_requested: bool,
-    rk_step_hold_active: bool,
-    touch_cursor: Option<(f32, f32)>,
-    controlled_knobs: [ControlledKnob; 2],
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlledKnob {
@@ -258,749 +241,14 @@ pub enum TouchInputOutcome {
     CalibrationRequested,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TickOut {
-    Calibrate,
-    Draw,
-    Nada,
-}
-
-impl CydSim {
-    pub const WIDTH: usize = SCREEN_WIDTH;
-    pub const HEIGHT: usize = SCREEN_HEIGHT;
-    pub const WIDTH_U16: u16 = Self::WIDTH as u16;
-    pub const HEIGHT_U16: u16 = Self::HEIGHT as u16;
-
-    #[must_use]
-    pub fn param_count() -> usize {
-        DOF
-    }
-
-    #[must_use]
-    pub fn param_index(name: &str) -> Option<usize> {
-        let params = LINKAGE.view().params();
-        (0..DOF).rev().find(|&param_index| params[param_index].name() == name)
-    }
-
-    #[must_use]
-    pub fn param_name(index: usize) -> &'static str {
-        LINKAGE.view().param(index).name()
-    }
-
-    #[must_use]
-    pub fn param_default(index: usize) -> f32 {
-        LINKAGE.view().param(index).default()
-    }
-
-    #[must_use]
-    pub fn get_param(&self, index: usize) -> f32 {
-        assert!(index < DOF, "param index out of range");
-        self.params[index]
-    }
-
-    pub fn set_param_by_index(&mut self, index: usize, value: f32) {
-        assert!(index < DOF, "param index out of range");
-        self.params[index] = value.clamp(0.0, 1.0);
-    }
-
-    pub fn draw_view_only<D: DrawTarget<Color = Rgb565>>(
-        &self,
-        target: &mut D,
-    ) -> Result<(), D::Error> {
-        target.clear(rgb565_from_rgb888(SIM_BLACK))?;
-        self.draw_linkage(LINKAGE.view(), target)?;
-        Ok(())
-    }
-
-    #[must_use]
-    pub fn new() -> Self {
-        Self::new_inner(false)
-    }
-
-    #[must_use]
-    pub fn new_with_fps() -> Self {
-        Self::new_inner(true)
-    }
-
-    fn new_inner(show_fps: bool) -> Self {
-        let mut params = default_params(LINKAGE.view());
-        randomize_target_params(&mut params, 0);
-
-        Self {
-            params,
-            target_seed: 0,
-            active_control: None,
-            reverse_kinematics_run: None,
-            reverse_kinematics_playing: false,
-            previous_tick: None,
-            show_fps,
-            fps: None,
-            calibration_requested: false,
-            rk_step_hold_active: false,
-            touch_cursor: None,
-            controlled_knobs: [
-                ControlledKnob::Param(LOWER_ARM_PARAM),
-                ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
-            ],
-        }
-    }
-
-    #[must_use]
-    pub const fn width(&self) -> usize {
-        Self::WIDTH
-    }
-
-    #[must_use]
-    pub const fn height(&self) -> usize {
-        Self::HEIGHT
-    }
-
-    pub fn take_calibration_request(&mut self) -> bool {
-        let calibration_requested = self.calibration_requested;
-        self.calibration_requested = false;
-        calibration_requested
-    }
-
-    #[must_use]
-    pub fn touch_cursor(&self) -> Option<(f32, f32)> {
-        self.touch_cursor
-    }
-
-    pub fn set_lower_arm_and_spin_whole(&mut self, lower_arm: f32, spin_whole: f32) -> bool {
-        self.set_controlled_knobs(
-            ControlledKnob::Param(LOWER_ARM_PARAM),
-            ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
-        );
-        self.set_param_pair(LOWER_ARM_PARAM, lower_arm, SPIN_WHOLE_ARM_PARAM, spin_whole)
-    }
-
-    pub fn set_controlled_knobs(&mut self, first: ControlledKnob, second: ControlledKnob) {
-        self.controlled_knobs = [first, second];
-    }
-
-    pub fn set_param_pair(
-        &mut self,
-        first_index: usize,
-        first_value: f32,
-        second_index: usize,
-        second_value: f32,
-    ) -> bool {
-        assert!(first_index < DOF, "first_index out of range");
-        assert!(second_index < DOF, "second_index out of range");
-
-        let first_value = first_value.clamp(0.0, 1.0);
-        let second_value = second_value.clamp(0.0, 1.0);
-
-        let mut changed = false;
-        if self.params[first_index] != first_value {
-            self.params[first_index] = first_value;
-            changed = true;
-        }
-        if self.params[second_index] != second_value {
-            self.params[second_index] = second_value;
-            changed = true;
-        }
-
-        changed
-    }
-
-    /// Set the base joint params that control the view orientation.
-    ///
-    /// `z_mix` maps directly to base pitch, `xy_mix` to base yaw rotation.
-    pub fn set_view_mixes(&mut self, z_mix: f32, xy_mix: f32) -> bool {
-        let z_mix = z_mix.clamp(0.0, 1.0);
-        let xy_mix = xy_mix.clamp(0.0, 1.0);
-
-        let mut changed = false;
-
-        if self.params[BASE_PITCH_PARAM] != z_mix {
-            self.params[BASE_PITCH_PARAM] = z_mix;
-            changed = true;
-        }
-        if self.params[BASE_YAW_PARAM] != xy_mix {
-            self.params[BASE_YAW_PARAM] = xy_mix;
-            changed = true;
-        }
-
-        changed
-    }
-
-    fn knob_fill_style(&self, knob: ControlledKnob) -> PrimitiveStyle<Rgb565> {
-        if self.controlled_knobs[0] == knob || self.controlled_knobs[1] == knob {
-            fill_style(GREEN)
-        } else {
-            fill_style(SIM_YELLOW)
-        }
-    }
-
-    fn touch_down(&mut self, x: f32, y: f32) {
-        self.active_control = control_at(x, y);
-        if matches!(self.active_control, Some(ActiveControl::Calibrate)) {
-            self.calibration_requested = true;
-            self.active_control = None;
-            return;
-        }
-        if matches!(self.active_control, Some(ActiveControl::PreviousTarget)) {
-            self.clear_reverse_kinematics();
-            self.target_seed = self.target_seed.wrapping_sub(1);
-            randomize_target_params(&mut self.params, self.target_seed);
-            self.active_control = None;
-            return;
-        }
-        if matches!(self.active_control, Some(ActiveControl::NextTarget)) {
-            self.clear_reverse_kinematics();
-            self.target_seed = self.target_seed.wrapping_add(1);
-            randomize_target_params(&mut self.params, self.target_seed);
-            self.active_control = None;
-            return;
-        }
-        if matches!(
-            self.active_control,
-            Some(ActiveControl::ToggleReverseKinematics)
-        ) {
-            self.toggle_reverse_kinematics();
-            self.active_control = None;
-            return;
-        }
-        if matches!(
-            self.active_control,
-            Some(ActiveControl::StepReverseKinematics)
-        ) {
-            self.rk_step_hold_active = true;
-            self.step_reverse_kinematics();
-            return;
-        }
-        self.update_touch(x, y);
-    }
-
-    fn touch_move(&mut self, x: f32, y: f32) {
-        self.update_touch(x, y);
-    }
-
-    fn touch_up(&mut self) {
-        self.active_control = None;
-        self.rk_step_hold_active = false;
-    }
-
-    pub fn handle_touch_input_event(
-        &mut self,
-        touch_input_event: TouchInputEvent,
-    ) -> TouchInputOutcome {
-        match touch_input_event {
-            TouchInputEvent::Down { x, y } => {
-                self.touch_cursor = Some((x, y));
-                self.touch_down(x, y);
-                if self.take_calibration_request() {
-                    self.touch_up();
-                    self.touch_cursor = None;
-                    TouchInputOutcome::CalibrationRequested
-                } else {
-                    TouchInputOutcome::Changed
-                }
-            }
-            TouchInputEvent::Move { x, y } => {
-                self.touch_cursor = Some((x, y));
-                self.touch_move(x, y);
-                TouchInputOutcome::Changed
-            }
-            TouchInputEvent::Up => {
-                self.touch_cursor = None;
-                self.touch_up();
-                TouchInputOutcome::Changed
-            }
-        }
-    }
-
-    pub fn tick(&mut self, now: Instant, touch_input_event: Option<TouchInputEvent>) -> TickOut {
-        let previous_tick = self.previous_tick;
-        let first_tick = previous_tick.is_none();
-        let reverse_kinematics_changed = self.tick_reverse_kinematics_at(now);
-        let fps_draw_requested = self.update_fps(previous_tick, now);
-        let touch_input_outcome = touch_input_event.map_or(TouchInputOutcome::Unchanged, |event| {
-            self.handle_touch_input_event(event)
-        });
-
-        match touch_input_outcome {
-            TouchInputOutcome::CalibrationRequested => {
-                self.previous_tick = None;
-                self.fps = None;
-                TickOut::Calibrate
-            }
-            TouchInputOutcome::Changed
-                if first_tick || reverse_kinematics_changed || fps_draw_requested =>
-            {
-                TickOut::Draw
-            }
-            TouchInputOutcome::Changed => TickOut::Draw,
-            TouchInputOutcome::Unchanged
-                if first_tick || reverse_kinematics_changed || fps_draw_requested =>
-            {
-                TickOut::Draw
-            }
-            TouchInputOutcome::Unchanged => TickOut::Nada,
-        }
-    }
-
-    pub fn start_reverse_kinematics(&mut self) {
-        self.ensure_reverse_kinematics_run();
-        self.reverse_kinematics_playing = true;
-        self.previous_tick = None;
-    }
-
-    pub fn stop_reverse_kinematics(&mut self) {
-        self.reverse_kinematics_playing = false;
-        self.previous_tick = None;
-    }
-
-    fn clear_reverse_kinematics(&mut self) {
-        self.reverse_kinematics_run = None;
-        self.reverse_kinematics_playing = false;
-        self.previous_tick = None;
-    }
-
-    fn ensure_reverse_kinematics_run(&mut self) {
-        if self.reverse_kinematics_run.is_none() {
-            self.reverse_kinematics_run = Some(ReverseKinematicsRun::new(&self.params));
-        }
-    }
-
-    pub fn toggle_reverse_kinematics(&mut self) {
-        if self.is_reverse_kinematics_running() {
-            self.stop_reverse_kinematics();
-        } else {
-            self.start_reverse_kinematics();
-        }
-    }
-
-    #[must_use]
-    pub const fn is_reverse_kinematics_running(&self) -> bool {
-        self.reverse_kinematics_playing
-    }
-
-    pub fn tick_reverse_kinematics_at(&mut self, now: Instant) -> bool {
-        let dt_seconds = self.previous_tick.map_or(0.0, |previous_tick| {
-            now.saturating_duration_since(previous_tick).as_micros() as f32 / 1_000_000.0
-        });
-        self.previous_tick = Some(now);
-        self.tick_reverse_kinematics(dt_seconds)
-    }
-
-    fn update_fps(&mut self, previous_tick: Option<Instant>, now: Instant) -> bool {
-        if !self.show_fps {
-            return false;
-        }
-
-        let Some(previous_tick) = previous_tick else {
-            return false;
-        };
-        let frame_micros = now.saturating_duration_since(previous_tick).as_micros();
-        if frame_micros == 0 {
-            return false;
-        }
-
-        let fps = (1_000_000 / frame_micros).min(999) as u32;
-        self.fps = Some(fps);
-        true
-    }
-
-    fn tick_reverse_kinematics(&mut self, dt_seconds: f32) -> bool {
-        if !self.reverse_kinematics_playing && !self.rk_step_hold_active {
-            return false;
-        }
-
-        let Some(mut run) = self.reverse_kinematics_run.take() else {
-            self.reverse_kinematics_playing = false;
-            return false;
-        };
-
-        let mut search_running = false;
-        for _ in 0..RK_SEARCH_CANDIDATES_PER_TICK {
-            if !run.tick_search_candidate() {
-                break;
-            }
-            search_running = true;
-        }
-        let visible_moving = move_params_toward(
-            &mut self.params,
-            &run.best_params,
-            reverse_kinematics_visible_param_step(dt_seconds),
-        );
-        let running = search_running || visible_moving;
-        if running {
-            self.reverse_kinematics_run = Some(run);
-        } else {
-            self.reverse_kinematics_playing = false;
-        }
-        running
-    }
-
-    pub fn step_reverse_kinematics(&mut self) -> bool {
-        self.ensure_reverse_kinematics_run();
-        self.reverse_kinematics_playing = false;
-
-        let Some(mut run) = self.reverse_kinematics_run.take() else {
-            return false;
-        };
-
-        let search_running = run.tick_search_candidate();
-        let visible_moving = move_params_toward(
-            &mut self.params,
-            &run.best_params,
-            RK_SINGLE_STEP_VISIBLE_PARAM_STEP,
-        );
-        let running = search_running || visible_moving;
-        if running {
-            self.reverse_kinematics_run = Some(run);
-        }
-        running
-    }
-
-    /// Run a no-allocation local reverse-kinematics search over the six arm parameters.
-    ///
-    /// This tries each arm parameter in both directions, keeps improvements, and
-    /// shrinks the step when stuck.
-    pub fn reverse_kinematics(&mut self) -> f32 {
-        reverse_kinematics(&mut self.params)
-    }
-
-    pub fn target_distance(&self) -> f32 {
-        compute_target_distance(
-            REVERSE_KINEMATICS_LINKAGE.view(),
-            LINKAGE.view(),
-            &self.params,
-        )
-    }
-
-    fn update_touch(&mut self, x: f32, y: f32) {
-        let Some(active_control) = self.active_control else {
-            return;
-        };
-
-        match active_control {
-            ActiveControl::RightSlider(param_index) => {
-                self.clear_reverse_kinematics();
-                let value = ((x - SLIDER_TRACK_LEFT as f32)
-                    / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
-                    .clamp(0.0, 1.0);
-                self.params[param_index] = value;
-            }
-            ActiveControl::Tilt => {
-                self.params[BASE_PITCH_PARAM] =
-                    (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32).clamp(0.0, 1.0);
-            }
-            ActiveControl::Dolly => {
-                self.params[DOLLY_PARAM] =
-                    ((y - DOLLY_TOP as f32) / (DOLLY_BOTTOM - DOLLY_TOP) as f32).clamp(0.0, 1.0);
-            }
-            ActiveControl::XyView => {
-                self.params[BASE_YAW_PARAM] = ((x - VIEW_SLIDER_LEFT as f32)
-                    / (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32)
-                    .clamp(0.0, 1.0);
-            }
-            ActiveControl::PreviousTarget => {}
-            ActiveControl::NextTarget => {}
-            ActiveControl::ToggleReverseKinematics => {}
-            ActiveControl::StepReverseKinematics => {}
-            ActiveControl::Calibrate => {}
-        }
-    }
-
-    fn draw_linkage<D: DrawTarget<Color = Rgb565>>(
-        &self,
-        linkage: LinkageView<'_, 15, 4>,
-        buffer: &mut D,
-    ) -> Result<(), D::Error> {
-        let mut surface = ArmatronSurface {
-            buffer,
-            result: Ok(()),
-        };
-        render_draw_items_3d(
-            &self.projection(),
-            &mut surface,
-            linkage.draw_items_3d(&self.params),
-        );
-        surface.result
-    }
-
-    fn draw_sliders<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
-        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
-        let mut target_label = TargetLabel::new();
-
-        // z (base pitch) slider
-        Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top).draw(buffer)?;
-        Line::new(
-            Point::new(TILT_X, TILT_TOP),
-            Point::new(TILT_X, TILT_BOTTOM),
-        )
-        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-        .draw(buffer)?;
-        let tilt_knob_y = TILT_TOP
-            + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - self.params[BASE_PITCH_PARAM]));
-        Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
-            .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_PITCH_PARAM)))
-            .draw(buffer)?;
-
-        // dolly slider (disconnected — shown in gray)
-        Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top).draw(buffer)?;
-        Line::new(
-            Point::new(DOLLY_X, DOLLY_TOP),
-            Point::new(DOLLY_X, DOLLY_BOTTOM),
-        )
-        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-        .draw(buffer)?;
-        let dolly_knob_y =
-            DOLLY_TOP + round_to_i32((DOLLY_BOTTOM - DOLLY_TOP) as f32 * self.params[DOLLY_PARAM]);
-        Circle::with_center(Point::new(DOLLY_X, dolly_knob_y), 9)
-            .into_styled(fill_style(SIM_YELLOW))
-            .draw(buffer)?;
-
-        self.draw_reverse_kinematics_run_button(buffer)?;
-        self.draw_reverse_kinematics_step_button(buffer)?;
-        self.draw_calibrate_button(buffer)?;
-
-        // target prev/next/label
-        Rectangle::new(
-            Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
-            Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
-        )
-        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)?;
-        Text::with_baseline(
-            "prev",
-            Point::new(
-                PREV_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
-                TARGET_CONTROL_TOP + 2,
-            ),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-        Text::with_baseline(
-            target_label.as_str(self.target_seed),
-            Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-        Rectangle::new(
-            Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
-            Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
-        )
-        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)?;
-        Text::with_baseline(
-            "next",
-            Point::new(
-                NEXT_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
-                TARGET_CONTROL_TOP + 2,
-            ),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-
-        // 6 arm param sliders (right side)
-        for slider_offset in 0..ARM_PARAM_COUNT {
-            let param_index = ARM_PARAM_START + slider_offset;
-            let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
-            let value = self.params[param_index];
-
-            Text::with_baseline(
-                LINKAGE.view().param(param_index).name(),
-                Point::new(SLIDER_LEFT, slider_y - 12),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(buffer)?;
-
-            Line::new(
-                Point::new(SLIDER_TRACK_LEFT, slider_y + 8),
-                Point::new(SLIDER_RIGHT, slider_y + 8),
-            )
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-            .draw(buffer)?;
-
-            let knob_x =
-                SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
-            Circle::with_center(Point::new(knob_x, slider_y + 8), 9)
-                .into_styled(self.knob_fill_style(ControlledKnob::Param(param_index)))
-                .draw(buffer)?;
-        }
-
-        // x/y view (base yaw) slider
-        Text::with_baseline(
-            "x/y view",
-            Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y - 15),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-        Line::new(
-            Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
-            Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
-        )
-        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-        .draw(buffer)?;
-        let view_knob_x = VIEW_SLIDER_LEFT
-            + round_to_i32(
-                (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * self.params[BASE_YAW_PARAM],
-            );
-        Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
-            .into_styled(self.knob_fill_style(ControlledKnob::Param(BASE_YAW_PARAM)))
-            .draw(buffer)?;
-        Ok(())
-    }
-
-    fn draw_calibrate_button<D: DrawTarget<Color = Rgb565>>(
-        &self,
-        buffer: &mut D,
-    ) -> Result<(), D::Error> {
-        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
-        Rectangle::new(
-            Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
-            Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
-        )
-        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)?;
-        Text::with_baseline(
-            "cal",
-            Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-        Ok(())
-    }
-
-    fn draw_reverse_kinematics_run_button<D: DrawTarget<Color = Rgb565>>(
-        &self,
-        buffer: &mut D,
-    ) -> Result<(), D::Error> {
-        if self.is_reverse_kinematics_running() {
-            Rectangle::new(
-                Point::new(RK_RUN_LEFT + 4, RK_CONTROL_TOP + 4),
-                Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
-            )
-            .into_styled(fill_style(SIM_WHITE))
-            .draw(buffer)?;
-        } else {
-            Triangle::new(
-                Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
-                Point::new(RK_RUN_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
-                Point::new(
-                    RK_RUN_LEFT + RK_BUTTON_SIZE,
-                    RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
-                ),
-            )
-            .into_styled(fill_style(GREEN))
-            .draw(buffer)?;
-        }
-        Ok(())
-    }
-
-    fn draw_reverse_kinematics_step_button<D: DrawTarget<Color = Rgb565>>(
-        &self,
-        buffer: &mut D,
-    ) -> Result<(), D::Error> {
-        Rectangle::new(
-            Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
-            Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
-        )
-        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-        .draw(buffer)?;
-        Rectangle::new(
-            Point::new(
-                RK_STEP_LEFT + RK_BUTTON_SIZE - 5,
-                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2 - 5,
-            ),
-            Size::new(2, 10),
-        )
-        .into_styled(fill_style(SIM_WHITE))
-        .draw(buffer)?;
-        Triangle::new(
-            Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + 4),
-            Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + RK_BUTTON_SIZE - 4),
-            Point::new(
-                RK_STEP_LEFT + RK_BUTTON_SIZE - 7,
-                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
-            ),
-        )
-        .into_styled(fill_style(GREEN))
-        .draw(buffer)?;
-        Ok(())
-    }
-
-    fn draw_report<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
-        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
-        let mut report = DistanceReport::new();
-        Text::with_baseline(
-            report.as_str(self.target_distance()),
-            Point::new(DISTANCE_REPORT_LEFT, 5),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-        Ok(())
-    }
-
-    fn draw_fps<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
-        if !self.show_fps {
-            return Ok(());
-        }
-
-        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
-        let mut report = FpsReport::new();
-        Text::with_baseline(
-            report.as_str(self.fps),
-            Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-        Ok(())
-    }
-
-    fn draw_version<D: DrawTarget<Color = Rgb565>>(&self, buffer: &mut D) -> Result<(), D::Error> {
-        let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
-        Text::with_baseline(
-            VERSION_TEXT,
-            Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(buffer)?;
-        Ok(())
-    }
-
-    fn draw_touch_cursor<D: DrawTarget<Color = Rgb565>>(
-        &self,
-        buffer: &mut D,
-    ) -> Result<(), D::Error> {
-        if let Some((x, y)) = self.touch_cursor {
-            let x = x as i32;
-            let y = y as i32;
-            let radius = 5;
-            let cursor_style = PrimitiveStyle::with_fill(rgb565_from_rgb888(CYAN));
-            Circle::new(Point::new(x - radius, y - radius), (radius * 2 + 1) as u32)
-                .into_styled(cursor_style)
-                .draw(buffer)?;
-        }
-        Ok(())
-    }
-
-    //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-    pub fn projection(&self) -> Projection {
-        Projection::front_perspective(
-            Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
-            PIXELS_PER_UNIT,
-            30.0,
-        )
-    }
-}
-
-impl Default for CydSim {
-    fn default() -> Self {
-        Self::new()
+fn knob_fill_style(
+    controlled_knobs: &[ControlledKnob; 2],
+    knob: ControlledKnob,
+) -> PrimitiveStyle<Rgb565> {
+    if controlled_knobs[0] == knob || controlled_knobs[1] == knob {
+        fill_style(GREEN)
+    } else {
+        fill_style(SIM_YELLOW)
     }
 }
 
@@ -1083,23 +331,329 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
     }
 }
 
-impl Drawable for CydSim {
-    type Color = Rgb565;
-    type Output = ();
+pub fn draw_armatron<D: DrawTarget<Color = Rgb565>>(
+    target: &mut D,
+    params: &[f32; DOF],
+    target_seed: u8,
+    reverse_kinematics_playing: bool,
+    show_fps: bool,
+    fps: Option<u32>,
+    touch_cursor: Option<(f32, f32)>,
+    controlled_knobs: &[ControlledKnob; 2],
+) -> Result<(), D::Error> {
+    target.clear(rgb565_from_rgb888(SIM_BLACK))?;
+    draw_linkage(LINKAGE.view(), target, params)?;
+    draw_sliders(
+        target,
+        params,
+        target_seed,
+        reverse_kinematics_playing,
+        controlled_knobs,
+    )?;
+    draw_report(target, params)?;
+    draw_version(target)?;
+    draw_fps(target, show_fps, fps)?;
+    draw_touch_cursor(target, touch_cursor)?;
+    Ok(())
+}
 
-    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
-    where
-        D: DrawTarget<Color = Self::Color>,
-    {
-        target.clear(rgb565_from_rgb888(SIM_BLACK))?;
-        self.draw_linkage(LINKAGE.view(), target)?;
-        self.draw_sliders(target)?;
-        self.draw_report(target)?;
-        self.draw_version(target)?;
-        self.draw_fps(target)?;
-        self.draw_touch_cursor(target)?;
-        Ok(())
+fn draw_linkage<D: DrawTarget<Color = Rgb565>>(
+    linkage: LinkageView<'_, 15, 4>,
+    buffer: &mut D,
+    params: &[f32; DOF],
+) -> Result<(), D::Error> {
+    let mut surface = ArmatronSurface {
+        buffer,
+        result: Ok(()),
+    };
+    render_draw_items_3d(&projection(), &mut surface, linkage.draw_items_3d(params));
+    surface.result
+}
+
+fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
+    buffer: &mut D,
+    params: &[f32; DOF],
+    target_seed: u8,
+    reverse_kinematics_playing: bool,
+    controlled_knobs: &[ControlledKnob; 2],
+) -> Result<(), D::Error> {
+    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
+    let mut target_label = TargetLabel::new();
+
+    Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top).draw(buffer)?;
+    Line::new(
+        Point::new(TILT_X, TILT_TOP),
+        Point::new(TILT_X, TILT_BOTTOM),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
+    .draw(buffer)?;
+    let tilt_knob_y =
+        TILT_TOP + round_to_i32((TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - params[BASE_PITCH_PARAM]));
+    Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
+        .into_styled(knob_fill_style(
+            controlled_knobs,
+            ControlledKnob::Param(BASE_PITCH_PARAM),
+        ))
+        .draw(buffer)?;
+
+    Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top).draw(buffer)?;
+    Line::new(
+        Point::new(DOLLY_X, DOLLY_TOP),
+        Point::new(DOLLY_X, DOLLY_BOTTOM),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
+    .draw(buffer)?;
+    let dolly_knob_y =
+        DOLLY_TOP + round_to_i32((DOLLY_BOTTOM - DOLLY_TOP) as f32 * params[DOLLY_PARAM]);
+    Circle::with_center(Point::new(DOLLY_X, dolly_knob_y), 9)
+        .into_styled(fill_style(SIM_YELLOW))
+        .draw(buffer)?;
+
+    draw_reverse_kinematics_run_button(buffer, reverse_kinematics_playing)?;
+    draw_reverse_kinematics_step_button(buffer)?;
+    draw_calibrate_button(buffer)?;
+
+    Rectangle::new(
+        Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
+        Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+    .draw(buffer)?;
+    Text::with_baseline(
+        "prev",
+        Point::new(
+            PREV_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
+            TARGET_CONTROL_TOP + 2,
+        ),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+    Text::with_baseline(
+        target_label.as_str(target_seed),
+        Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+    Rectangle::new(
+        Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
+        Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+    .draw(buffer)?;
+    Text::with_baseline(
+        "next",
+        Point::new(
+            NEXT_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
+            TARGET_CONTROL_TOP + 2,
+        ),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+
+    for slider_offset in 0..ARM_PARAM_COUNT {
+        let param_index = ARM_PARAM_START + slider_offset;
+        let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
+        let value = params[param_index];
+
+        Text::with_baseline(
+            LINKAGE.view().param(param_index).name(),
+            Point::new(SLIDER_LEFT, slider_y - 12),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(buffer)?;
+
+        Line::new(
+            Point::new(SLIDER_TRACK_LEFT, slider_y + 8),
+            Point::new(SLIDER_RIGHT, slider_y + 8),
+        )
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
+        .draw(buffer)?;
+
+        let knob_x =
+            SLIDER_TRACK_LEFT + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
+        Circle::with_center(Point::new(knob_x, slider_y + 8), 9)
+            .into_styled(knob_fill_style(
+                controlled_knobs,
+                ControlledKnob::Param(param_index),
+            ))
+            .draw(buffer)?;
     }
+
+    Text::with_baseline(
+        "x/y view",
+        Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y - 15),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+    Line::new(
+        Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
+        Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
+    .draw(buffer)?;
+    let view_knob_x = VIEW_SLIDER_LEFT
+        + round_to_i32((VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * params[BASE_YAW_PARAM]);
+    Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
+        .into_styled(knob_fill_style(
+            controlled_knobs,
+            ControlledKnob::Param(BASE_YAW_PARAM),
+        ))
+        .draw(buffer)?;
+    Ok(())
+}
+
+fn draw_calibrate_button<D: DrawTarget<Color = Rgb565>>(buffer: &mut D) -> Result<(), D::Error> {
+    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
+    Rectangle::new(
+        Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
+        Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+    .draw(buffer)?;
+    Text::with_baseline(
+        "cal",
+        Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+    Ok(())
+}
+
+fn draw_reverse_kinematics_run_button<D: DrawTarget<Color = Rgb565>>(
+    buffer: &mut D,
+    reverse_kinematics_playing: bool,
+) -> Result<(), D::Error> {
+    if reverse_kinematics_playing {
+        Rectangle::new(
+            Point::new(RK_RUN_LEFT + 4, RK_CONTROL_TOP + 4),
+            Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
+        )
+        .into_styled(fill_style(SIM_WHITE))
+        .draw(buffer)?;
+    } else {
+        Triangle::new(
+            Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
+            Point::new(RK_RUN_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
+            Point::new(
+                RK_RUN_LEFT + RK_BUTTON_SIZE,
+                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+            ),
+        )
+        .into_styled(fill_style(GREEN))
+        .draw(buffer)?;
+    }
+    Ok(())
+}
+
+fn draw_reverse_kinematics_step_button<D: DrawTarget<Color = Rgb565>>(
+    buffer: &mut D,
+) -> Result<(), D::Error> {
+    Rectangle::new(
+        Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
+        Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+    .draw(buffer)?;
+    Rectangle::new(
+        Point::new(
+            RK_STEP_LEFT + RK_BUTTON_SIZE - 5,
+            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2 - 5,
+        ),
+        Size::new(2, 10),
+    )
+    .into_styled(fill_style(SIM_WHITE))
+    .draw(buffer)?;
+    Triangle::new(
+        Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + 4),
+        Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + RK_BUTTON_SIZE - 4),
+        Point::new(
+            RK_STEP_LEFT + RK_BUTTON_SIZE - 7,
+            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+        ),
+    )
+    .into_styled(fill_style(GREEN))
+    .draw(buffer)?;
+    Ok(())
+}
+
+fn draw_report<D: DrawTarget<Color = Rgb565>>(
+    buffer: &mut D,
+    params: &[f32; DOF],
+) -> Result<(), D::Error> {
+    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
+    let mut report = DistanceReport::new();
+    Text::with_baseline(
+        report.as_str(target_distance(params)),
+        Point::new(DISTANCE_REPORT_LEFT, 5),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+    Ok(())
+}
+
+fn draw_fps<D: DrawTarget<Color = Rgb565>>(
+    buffer: &mut D,
+    show_fps: bool,
+    fps: Option<u32>,
+) -> Result<(), D::Error> {
+    if !show_fps {
+        return Ok(());
+    }
+
+    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
+    let mut report = FpsReport::new();
+    Text::with_baseline(
+        report.as_str(fps),
+        Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+    Ok(())
+}
+
+fn draw_version<D: DrawTarget<Color = Rgb565>>(buffer: &mut D) -> Result<(), D::Error> {
+    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
+    Text::with_baseline(
+        VERSION_TEXT,
+        Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
+        text_style,
+        Baseline::Top,
+    )
+    .draw(buffer)?;
+    Ok(())
+}
+
+fn draw_touch_cursor<D: DrawTarget<Color = Rgb565>>(
+    buffer: &mut D,
+    touch_cursor: Option<(f32, f32)>,
+) -> Result<(), D::Error> {
+    if let Some((x, y)) = touch_cursor {
+        let x = x as i32;
+        let y = y as i32;
+        let radius = 5;
+        let cursor_style = PrimitiveStyle::with_fill(rgb565_from_rgb888(CYAN));
+        Circle::new(Point::new(x - radius, y - radius), (radius * 2 + 1) as u32)
+            .into_styled(cursor_style)
+            .draw(buffer)?;
+    }
+    Ok(())
+}
+
+//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
+fn projection() -> Projection {
+    Projection::front_perspective(
+        Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
+        PIXELS_PER_UNIT,
+        30.0,
+    )
 }
 
 // ── FrameBuffer ────────────────────────────────────────────────────────────────
@@ -1373,6 +927,316 @@ impl ReverseKinematicsRun {
 
 // ── Private helper functions ───────────────────────────────────────────────────
 
+fn handle_touch_input_event(
+    touch_input_event: TouchInputEvent,
+    params: &mut [f32; DOF],
+    target_seed: &mut u8,
+    active_control: &mut Option<ActiveControl>,
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+    previous_tick: &mut Option<Instant>,
+    rk_step_hold_active: &mut bool,
+    touch_cursor: &mut Option<(f32, f32)>,
+) -> TouchInputOutcome {
+    match touch_input_event {
+        TouchInputEvent::Down { x, y } => {
+            *touch_cursor = Some((x, y));
+            if touch_down(
+                x,
+                y,
+                params,
+                target_seed,
+                active_control,
+                reverse_kinematics_run,
+                reverse_kinematics_playing,
+                previous_tick,
+                rk_step_hold_active,
+            ) {
+                touch_up(active_control, rk_step_hold_active);
+                *touch_cursor = None;
+                TouchInputOutcome::CalibrationRequested
+            } else {
+                TouchInputOutcome::Changed
+            }
+        }
+        TouchInputEvent::Move { x, y } => {
+            *touch_cursor = Some((x, y));
+            update_touch(
+                x,
+                y,
+                params,
+                active_control,
+                reverse_kinematics_run,
+                reverse_kinematics_playing,
+                previous_tick,
+            );
+            TouchInputOutcome::Changed
+        }
+        TouchInputEvent::Up => {
+            *touch_cursor = None;
+            touch_up(active_control, rk_step_hold_active);
+            TouchInputOutcome::Changed
+        }
+    }
+}
+
+fn touch_down(
+    x: f32,
+    y: f32,
+    params: &mut [f32; DOF],
+    target_seed: &mut u8,
+    active_control: &mut Option<ActiveControl>,
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+    previous_tick: &mut Option<Instant>,
+    rk_step_hold_active: &mut bool,
+) -> bool {
+    *active_control = control_at(x, y);
+    match *active_control {
+        Some(ActiveControl::Calibrate) => {
+            *active_control = None;
+            true
+        }
+        Some(ActiveControl::PreviousTarget) => {
+            clear_reverse_kinematics(
+                reverse_kinematics_run,
+                reverse_kinematics_playing,
+                previous_tick,
+            );
+            *target_seed = target_seed.wrapping_sub(1);
+            randomize_target_params(params, *target_seed);
+            *active_control = None;
+            false
+        }
+        Some(ActiveControl::NextTarget) => {
+            clear_reverse_kinematics(
+                reverse_kinematics_run,
+                reverse_kinematics_playing,
+                previous_tick,
+            );
+            *target_seed = target_seed.wrapping_add(1);
+            randomize_target_params(params, *target_seed);
+            *active_control = None;
+            false
+        }
+        Some(ActiveControl::ToggleReverseKinematics) => {
+            toggle_reverse_kinematics(
+                params,
+                reverse_kinematics_run,
+                reverse_kinematics_playing,
+                previous_tick,
+            );
+            *active_control = None;
+            false
+        }
+        Some(ActiveControl::StepReverseKinematics) => {
+            *rk_step_hold_active = true;
+            step_reverse_kinematics(params, reverse_kinematics_run, reverse_kinematics_playing);
+            false
+        }
+        _ => {
+            update_touch(
+                x,
+                y,
+                params,
+                active_control,
+                reverse_kinematics_run,
+                reverse_kinematics_playing,
+                previous_tick,
+            );
+            false
+        }
+    }
+}
+
+fn touch_up(active_control: &mut Option<ActiveControl>, rk_step_hold_active: &mut bool) {
+    *active_control = None;
+    *rk_step_hold_active = false;
+}
+
+fn update_touch(
+    x: f32,
+    y: f32,
+    params: &mut [f32; DOF],
+    active_control: &Option<ActiveControl>,
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+    previous_tick: &mut Option<Instant>,
+) {
+    let Some(active_control) = *active_control else {
+        return;
+    };
+
+    match active_control {
+        ActiveControl::RightSlider(param_index) => {
+            clear_reverse_kinematics(
+                reverse_kinematics_run,
+                reverse_kinematics_playing,
+                previous_tick,
+            );
+            let value = ((x - SLIDER_TRACK_LEFT as f32)
+                / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
+                .clamp(0.0, 1.0);
+            params[param_index] = value;
+        }
+        ActiveControl::Tilt => {
+            params[BASE_PITCH_PARAM] =
+                (1.0 - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32).clamp(0.0, 1.0);
+        }
+        ActiveControl::Dolly => {
+            params[DOLLY_PARAM] =
+                ((y - DOLLY_TOP as f32) / (DOLLY_BOTTOM - DOLLY_TOP) as f32).clamp(0.0, 1.0);
+        }
+        ActiveControl::XyView => {
+            params[BASE_YAW_PARAM] = ((x - VIEW_SLIDER_LEFT as f32)
+                / (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32)
+                .clamp(0.0, 1.0);
+        }
+        ActiveControl::PreviousTarget
+        | ActiveControl::NextTarget
+        | ActiveControl::ToggleReverseKinematics
+        | ActiveControl::StepReverseKinematics
+        | ActiveControl::Calibrate => {}
+    }
+}
+
+fn toggle_reverse_kinematics(
+    params: &[f32; DOF],
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+    previous_tick: &mut Option<Instant>,
+) {
+    if *reverse_kinematics_playing {
+        *reverse_kinematics_playing = false;
+        *previous_tick = None;
+    } else {
+        ensure_reverse_kinematics_run(params, reverse_kinematics_run);
+        *reverse_kinematics_playing = true;
+        *previous_tick = None;
+    }
+}
+
+fn clear_reverse_kinematics(
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+    previous_tick: &mut Option<Instant>,
+) {
+    *reverse_kinematics_run = None;
+    *reverse_kinematics_playing = false;
+    *previous_tick = None;
+}
+
+fn ensure_reverse_kinematics_run(
+    params: &[f32; DOF],
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+) {
+    if reverse_kinematics_run.is_none() {
+        *reverse_kinematics_run = Some(ReverseKinematicsRun::new(params));
+    }
+}
+
+fn tick_reverse_kinematics_at(
+    params: &mut [f32; DOF],
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+    rk_step_hold_active: bool,
+    previous_tick: &mut Option<Instant>,
+    now: Instant,
+) -> bool {
+    let dt_seconds = previous_tick.map_or(0.0, |previous_tick| {
+        now.saturating_duration_since(previous_tick).as_micros() as f32 / 1_000_000.0
+    });
+    *previous_tick = Some(now);
+    tick_reverse_kinematics(
+        params,
+        reverse_kinematics_run,
+        reverse_kinematics_playing,
+        rk_step_hold_active,
+        dt_seconds,
+    )
+}
+
+fn tick_reverse_kinematics(
+    params: &mut [f32; DOF],
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+    rk_step_hold_active: bool,
+    dt_seconds: f32,
+) -> bool {
+    if !*reverse_kinematics_playing && !rk_step_hold_active {
+        return false;
+    }
+
+    let Some(mut run) = reverse_kinematics_run.take() else {
+        *reverse_kinematics_playing = false;
+        return false;
+    };
+
+    let mut search_running = false;
+    for _ in 0..RK_SEARCH_CANDIDATES_PER_TICK {
+        if !run.tick_search_candidate() {
+            break;
+        }
+        search_running = true;
+    }
+    let visible_moving = move_params_toward(
+        params,
+        &run.best_params,
+        reverse_kinematics_visible_param_step(dt_seconds),
+    );
+    let running = search_running || visible_moving;
+    if running {
+        *reverse_kinematics_run = Some(run);
+    } else {
+        *reverse_kinematics_playing = false;
+    }
+    running
+}
+
+fn step_reverse_kinematics(
+    params: &mut [f32; DOF],
+    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
+    reverse_kinematics_playing: &mut bool,
+) -> bool {
+    ensure_reverse_kinematics_run(params, reverse_kinematics_run);
+    *reverse_kinematics_playing = false;
+
+    let Some(mut run) = reverse_kinematics_run.take() else {
+        return false;
+    };
+
+    let search_running = run.tick_search_candidate();
+    let visible_moving =
+        move_params_toward(params, &run.best_params, RK_SINGLE_STEP_VISIBLE_PARAM_STEP);
+    let running = search_running || visible_moving;
+    if running {
+        *reverse_kinematics_run = Some(run);
+    }
+    running
+}
+
+fn update_fps(
+    show_fps: bool,
+    previous_tick: Option<Instant>,
+    now: Instant,
+    fps: &mut Option<u32>,
+) -> bool {
+    if !show_fps {
+        return false;
+    }
+
+    let Some(previous_tick) = previous_tick else {
+        return false;
+    };
+    let frame_micros = now.saturating_duration_since(previous_tick).as_micros();
+    if frame_micros == 0 {
+        return false;
+    }
+
+    *fps = Some((1_000_000 / frame_micros).min(999) as u32);
+    true
+}
+
 fn move_params_toward(
     params: &mut [f32; DOF],
     target_params: &[f32; DOF],
@@ -1427,75 +1291,8 @@ fn compute_target_distance(
     distance(arm_tip(rk_linkage, params), target_center(linkage, params))
 }
 
-fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
-    let mut best_distance =
-        compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
-    let mut step = RK_INITIAL_STEP;
-
-    while step >= RK_MIN_STEP {
-        let mut improved = false;
-
-        for candidate_index in 0..ARM_PARAM_COUNT {
-            let param_index = ARM_PARAM_START + candidate_index;
-            let original = params[param_index];
-
-            let high = (original + step).min(1.0);
-            if high != original {
-                params[param_index] = high;
-                let distance = compute_target_distance(
-                    REVERSE_KINEMATICS_LINKAGE.view(),
-                    LINKAGE.view(),
-                    params,
-                );
-                if distance < best_distance {
-                    best_distance = distance;
-                    improved = true;
-                    continue;
-                }
-            }
-
-            let low = (original - step).max(0.0);
-            if low != original {
-                params[param_index] = low;
-                let distance = compute_target_distance(
-                    REVERSE_KINEMATICS_LINKAGE.view(),
-                    LINKAGE.view(),
-                    params,
-                );
-                if distance < best_distance {
-                    best_distance = distance;
-                    improved = true;
-                    continue;
-                }
-            }
-
-            params[param_index] = original;
-        }
-
-        for pair_index in 0..RK_PAIRED_CANDIDATES.len() {
-            let bend_original = params[BEND_ELBOW_PARAM];
-            let spin_original = params[SPIN_WHOLE_ARM_PARAM];
-            if !apply_paired_candidate(params, pair_index, step) {
-                continue;
-            }
-
-            let distance =
-                compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params);
-            if distance < best_distance {
-                best_distance = distance;
-                improved = true;
-            } else {
-                params[BEND_ELBOW_PARAM] = bend_original;
-                params[SPIN_WHOLE_ARM_PARAM] = spin_original;
-            }
-        }
-
-        if !improved {
-            step *= 0.5;
-        }
-    }
-
-    best_distance
+fn target_distance(params: &[f32; DOF]) -> f32 {
+    compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params)
 }
 
 fn randomize_target_params(params: &mut [f32; DOF], seed: u8) {
@@ -1716,7 +1513,7 @@ impl FpsReport {
 /// - [`remove_calibration`](ArmatronPlatform::remove_calibration): invalidate the current
 ///   calibration so the next [`ensure_calibrated`](ArmatronPlatform::ensure_calibrated) call
 ///   triggers a fresh calibration flow.
-/// - [`draw_and_flush`](ArmatronPlatform::draw_and_flush): render a drawable into the platform
+/// - [`draw_and_flush`](ArmatronPlatform::draw_and_flush): render the armatron frame into the platform
 ///   frame buffer and flush it to the display.
 pub trait ArmatronPlatform {
     /// The [`Cyd`]-compatible display device this platform drives.
@@ -1737,43 +1534,107 @@ pub trait ArmatronPlatform {
 
     /// Remove the current calibration config.
     ///
-    /// Called when [`CydSim`] signals [`TickOut::Calibrate`] (the user tapped
-    /// the on-screen "cal" button). The next call to
-    /// [`ensure_calibrated`](Self::ensure_calibrated) will then run a fresh
-    /// calibration flow.
+    /// Called when the user taps the on-screen "cal" button. The next call to
+    /// [`ensure_calibrated`](Self::ensure_calibrated) will then run a fresh calibration flow.
     fn remove_calibration(&mut self, cyd: &mut Self::CydDevice);
 
-    /// Render `drawable` into the platform frame buffer and flush to the display.
-    fn draw_and_flush<D>(&mut self, cyd: &mut Self::CydDevice, drawable: &D) -> Result<(), Self::Error>
-    where
-        D: Drawable<Color = Rgb565, Output = ()>;
+    /// Render the armatron frame into the platform frame buffer and flush to the display.
+    fn draw_and_flush(
+        &mut self,
+        cyd: &mut Self::CydDevice,
+        params: &[f32; DOF],
+        target_seed: u8,
+        reverse_kinematics_playing: bool,
+        show_fps: bool,
+        fps: Option<u32>,
+        touch_cursor: Option<(f32, f32)>,
+        controlled_knobs: &[ControlledKnob; 2],
+    ) -> Result<(), Self::Error>;
 }
 
 // ── Generic armatron loop ─────────────────────────────────────────────────────
 
-/// Run the armatron simulation forever.
+/// Run the armatron example forever.
 ///
 /// Each iteration:
 /// 1. Calls [`ArmatronPlatform::ensure_calibrated`] — blocks if calibration is needed.
 /// 2. Reads the next touch event from [`Cyd::read_touch_input`].
-/// 3. Passes both to [`CydSim::tick`].
-/// 4. On [`TickOut::Calibrate`]: calls [`ArmatronPlatform::remove_calibration`] so the
-///    next iteration triggers a fresh calibration flow.
-/// 5. On [`TickOut::Draw`]: calls [`ArmatronPlatform::draw_and_flush`] to render and present.
-/// 6. On [`TickOut::Nada`]: does nothing.
+/// 3. Updates local armatron params, touch, fps, and reverse-kinematics state.
+/// 4. If calibration was requested, calls [`ArmatronPlatform::remove_calibration`].
+/// 5. If the frame changed, calls [`ArmatronPlatform::draw_and_flush`] to render and present.
 pub fn armatron<C, P>(cyd: &mut C, platform: &mut P) -> Result<Infallible, P::Error>
 where
     C: Cyd,
     P: ArmatronPlatform<CydDevice = C>,
 {
-    let mut cyd_sim = CydSim::new();
+    let mut params = default_params(LINKAGE.view());
+    randomize_target_params(&mut params, 0);
+
+    let mut target_seed = 0;
+    let mut active_control = None;
+    let mut reverse_kinematics_run = None;
+    let mut reverse_kinematics_playing = false;
+    let mut previous_tick = None;
+    let show_fps = false;
+    let mut fps = None;
+    let mut rk_step_hold_active = false;
+    let mut touch_cursor = None;
+    let controlled_knobs = [
+        ControlledKnob::Param(LOWER_ARM_PARAM),
+        ControlledKnob::Param(SPIN_WHOLE_ARM_PARAM),
+    ];
+
     loop {
         platform.ensure_calibrated(cyd)?;
         let touch = cyd.read_touch_input().map_err(Into::into)?;
-        match cyd_sim.tick(Instant::now(), touch) {
-            TickOut::Calibrate => platform.remove_calibration(cyd),
-            TickOut::Draw => platform.draw_and_flush(cyd, &cyd_sim)?,
-            TickOut::Nada => {}
+        let now = Instant::now();
+        let previous_tick_before_frame = previous_tick;
+        let first_tick = previous_tick_before_frame.is_none();
+        let reverse_kinematics_changed = tick_reverse_kinematics_at(
+            &mut params,
+            &mut reverse_kinematics_run,
+            &mut reverse_kinematics_playing,
+            rk_step_hold_active,
+            &mut previous_tick,
+            now,
+        );
+        let fps_draw_requested = update_fps(show_fps, previous_tick_before_frame, now, &mut fps);
+        let touch_input_outcome = touch.map_or(TouchInputOutcome::Unchanged, |touch_input_event| {
+            handle_touch_input_event(
+                touch_input_event,
+                &mut params,
+                &mut target_seed,
+                &mut active_control,
+                &mut reverse_kinematics_run,
+                &mut reverse_kinematics_playing,
+                &mut previous_tick,
+                &mut rk_step_hold_active,
+                &mut touch_cursor,
+            )
+        });
+
+        if matches!(touch_input_outcome, TouchInputOutcome::CalibrationRequested) {
+            previous_tick = None;
+            fps = None;
+            platform.remove_calibration(cyd);
+            continue;
+        }
+
+        let draw_requested = matches!(touch_input_outcome, TouchInputOutcome::Changed)
+            || first_tick
+            || reverse_kinematics_changed
+            || fps_draw_requested;
+        if draw_requested {
+            platform.draw_and_flush(
+                cyd,
+                &params,
+                target_seed,
+                reverse_kinematics_playing,
+                show_fps,
+                fps,
+                touch_cursor,
+                &controlled_knobs,
+            )?;
         }
     }
 }
