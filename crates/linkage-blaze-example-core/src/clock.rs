@@ -22,7 +22,7 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
-use linkage_blaze_cyd_core::{ContiguousPixels, Cyd, CydFrame, Orientation};
+use linkage_blaze_cyd_core::{ContiguousPixels, Cyd, CydFrame, DrawItem3dExt, Orientation};
 use log::info;
 use profont::PROFONT_18_POINT;
 
@@ -139,7 +139,10 @@ fn draw_time<FrameError>(
     time_frame.fill(background);
     Text::with_text_style(
         text,
-        Point::new(time_frame.region().size.width as i32 / 2, TIME_TEXT_TOP_PADDING),
+        Point::new(
+            time_frame.region().size.width as i32 / 2,
+            TIME_TEXT_TOP_PADDING,
+        ),
         MonoTextStyle::new(&TIME_FONT, foreground),
         time_style,
     )

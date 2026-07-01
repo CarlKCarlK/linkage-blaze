@@ -10,7 +10,9 @@ use linkage_blaze_core::{
     linkage, linkage_fixed,
 };
 
-use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydFrame, Image565, Orientation, tga565};
+use linkage_blaze_cyd_core::{
+    CopySizeError, Cyd, CydFrame, DrawItem3dExt, Image565, Orientation, tga565,
+};
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 

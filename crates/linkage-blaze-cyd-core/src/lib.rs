@@ -4,17 +4,19 @@
 //!
 //! See [`cyd`] for the [`Cyd`] device trait and its [`CydFrame`].
 
-mod cyd;
 mod contiguous_pixels;
+mod cyd;
+mod draw_item_2d;
 mod orientation;
 mod tga;
 pub mod tiling;
 mod touch_event;
 
+pub use contiguous_pixels::ContiguousPixels;
 pub use cyd::{
     CopySizeError, Cyd, CydFlushError, CydFrame, CydInfallibleError, RegionPixels, Tiles,
 };
-pub use contiguous_pixels::ContiguousPixels;
+pub use draw_item_2d::{DrawItem2d, DrawItem3dExt};
 pub use orientation::Orientation;
 pub use tga::{Image565, Image565Mask};
 pub use touch_event::TouchInputEvent;

@@ -18,9 +18,9 @@ use embedded_graphics::{
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::{DrawItem2d, DrawItem3d, PixelTarget, Projection, Rgb888};
+use linkage_blaze_core::{DrawItem3d, PixelTarget, Projection, Rgb888};
 
-use crate::{ContiguousPixels, TouchInputEvent, tiling::TileGrid};
+use crate::{ContiguousPixels, DrawItem2d, TouchInputEvent, tiling::TileGrid};
 
 pub trait RegionPixels {
     fn width(&self) -> usize;
@@ -169,9 +169,8 @@ pub trait Cyd {
     where
         I: IntoIterator<Item = DrawItem3d>,
     {
-        let primitive_pixels = self.prepare_draw_items_3d::<PRIMITIVE_COUNT, _>(
-            bounds, background, items, projection,
-        );
+        let primitive_pixels =
+            self.prepare_draw_items_3d::<PRIMITIVE_COUNT, _>(bounds, background, items, projection);
         self.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
     }
 
