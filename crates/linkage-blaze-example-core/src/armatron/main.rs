@@ -10,6 +10,7 @@
 //! back into your platform for frame flushing.
 
 pub mod calibration;
+pub mod reverse_kinematics;
 
 use core::convert::Infallible;
 
@@ -63,6 +64,10 @@ const SLIDER_STEP: i32 = 32;
 const VIEW_SLIDER_LEFT: i32 = 40;
 const VIEW_SLIDER_RIGHT: i32 = 252;
 const VIEW_SLIDER_Y: i32 = 226;
+const CALIBRATE_BUTTON_LEFT: i32 = 288;
+const CALIBRATE_BUTTON_TOP: i32 = 212;
+const CALIBRATE_BUTTON_WIDTH: u32 = 30;
+const CALIBRATE_BUTTON_HEIGHT: u32 = 14;
 const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
@@ -93,16 +98,6 @@ const ARM_PARAM_START: usize = 3;
 const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 9;
 
-// ---- RK constants ----
-const RK_INITIAL_STEP: f32 = 0.125;
-const RK_MIN_STEP: f32 = 0.001;
-const RK_VISIBLE_PARAM_POINTS_PER_SECOND: f32 = 0.6;
-const RK_MAX_TICK_SECONDS: f32 = 0.1;
-const RK_SINGLE_STEP_VISIBLE_PARAM_STEP: f32 = 0.01;
-const RK_SEARCH_CANDIDATES_PER_TICK: usize = 4;
-const RK_PAIRED_CANDIDATES: [(f32, f32); 4] = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)];
-const RK_CANDIDATE_COUNT: usize = ARM_PARAM_COUNT + RK_PAIRED_CANDIDATES.len();
-
 // ---- colors ----
 const SIM_BLACK: Rgb888 = Rgb888::CSS_BLACK;
 const SIM_WHITE: Rgb888 = Rgb888::CSS_WHITE;
@@ -131,16 +126,13 @@ const LINKAGE: LinkageFixed<15, 4, 159> = LINKAGE0
     .combine(ARMATRON1) // Add ghost arm to hold target.
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
-
-// Arm-only linkage used for RK distance computation (same base + arm, no floor/target).
-const REVERSE_KINEMATICS_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
+const ARM_TIP_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 
 pub const DOF: usize = LINKAGE.dof();
 
 const BASE_YAW_PARAM: usize = 0;
 const BASE_PITCH_PARAM: usize = 1;
 const DOLLY_PARAM: usize = 2;
-const BEND_ELBOW_PARAM: usize = 4;
 const LOWER_ARM_PARAM: usize = 6;
 const SPIN_WHOLE_ARM_PARAM: usize = 7;
 
@@ -180,7 +172,6 @@ pub trait ArmatronPlatform {
         cyd: &mut Self::CydDevice,
         params: &[f32; DOF],
         target_seed: u8,
-        reverse_kinematics_playing: bool,
         show_fps: bool,
         fps: Option<u32>,
         touch_cursor: Option<(f32, f32)>,
@@ -194,7 +185,7 @@ pub trait ArmatronPlatform {
 ///
 /// Each iteration:
 /// 1. Reads the next touch event from [`Cyd::read_touch_input`].
-/// 2. Updates local armatron params, touch, fps, and reverse-kinematics state.
+/// 2. Updates local armatron params, touch, and fps state.
 /// 3. If the frame changed, calls [`ArmatronPlatform::draw_and_flush`] to render and present.
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
@@ -212,12 +203,9 @@ where
 
     let mut target_seed = 0;
     let mut active_control = None;
-    let mut reverse_kinematics_run = None;
-    let mut reverse_kinematics_playing = false;
     let mut previous_tick = None;
     let show_fps = false;
     let mut fps = None;
-    let mut rk_step_hold_active = false;
     let mut touch_cursor = None;
     let controlled_knobs = [
         ControlledKnob::Param(LOWER_ARM_PARAM),
@@ -229,14 +217,7 @@ where
         let now = Instant::now();
         let previous_tick_before_frame = previous_tick;
         let first_tick = previous_tick_before_frame.is_none();
-        let reverse_kinematics_changed = tick_reverse_kinematics_at(
-            &mut params,
-            &mut reverse_kinematics_run,
-            &mut reverse_kinematics_playing,
-            rk_step_hold_active,
-            &mut previous_tick,
-            now,
-        );
+        previous_tick = Some(now);
         let fps_draw_requested = update_fps(show_fps, previous_tick_before_frame, now, &mut fps);
         let touch_input_outcome = touch.map_or(TouchInputOutcome::Unchanged, |touch_input_event| {
             handle_touch_input_event(
@@ -244,24 +225,18 @@ where
                 &mut params,
                 &mut target_seed,
                 &mut active_control,
-                &mut reverse_kinematics_run,
-                &mut reverse_kinematics_playing,
-                &mut previous_tick,
-                &mut rk_step_hold_active,
                 &mut touch_cursor,
             )
         });
 
         let draw_requested = matches!(touch_input_outcome, TouchInputOutcome::Changed)
             || first_tick
-            || reverse_kinematics_changed
             || fps_draw_requested;
         if draw_requested {
             platform.draw_and_flush(
                 cyd,
                 &params,
                 target_seed,
-                reverse_kinematics_playing,
                 show_fps,
                 fps,
                 touch_cursor,
@@ -365,7 +340,6 @@ pub fn draw_armatron<D: DrawTarget<Color = Rgb565>>(
     target: &mut D,
     params: &[f32; DOF],
     target_seed: u8,
-    reverse_kinematics_playing: bool,
     show_fps: bool,
     fps: Option<u32>,
     touch_cursor: Option<(f32, f32)>,
@@ -373,13 +347,7 @@ pub fn draw_armatron<D: DrawTarget<Color = Rgb565>>(
 ) -> Result<(), D::Error> {
     target.clear(rgb565_from_rgb888(SIM_BLACK))?;
     draw_linkage(LINKAGE.view(), target, params)?;
-    draw_sliders(
-        target,
-        params,
-        target_seed,
-        reverse_kinematics_playing,
-        controlled_knobs,
-    )?;
+    draw_sliders(target, params, target_seed, controlled_knobs)?;
     draw_report(target, params)?;
     draw_version(target)?;
     draw_fps(target, show_fps, fps)?;
@@ -404,7 +372,6 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
     buffer: &mut D,
     params: &[f32; DOF],
     target_seed: u8,
-    reverse_kinematics_playing: bool,
     controlled_knobs: &[ControlledKnob; 2],
 ) -> Result<(), D::Error> {
     let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
@@ -439,8 +406,9 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
         .into_styled(fill_style(SIM_YELLOW))
         .draw(buffer)?;
 
-    draw_reverse_kinematics_run_button(buffer, reverse_kinematics_playing)?;
+    draw_reverse_kinematics_run_button(buffer)?;
     draw_reverse_kinematics_step_button(buffer)?;
+    draw_calibrate_button(buffer)?;
 
     Rectangle::new(
         Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
@@ -538,27 +506,17 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
 
 fn draw_reverse_kinematics_run_button<D: DrawTarget<Color = Rgb565>>(
     buffer: &mut D,
-    reverse_kinematics_playing: bool,
 ) -> Result<(), D::Error> {
-    if reverse_kinematics_playing {
-        Rectangle::new(
-            Point::new(RK_RUN_LEFT + 4, RK_CONTROL_TOP + 4),
-            Size::new((RK_BUTTON_SIZE - 8) as u32, (RK_BUTTON_SIZE - 8) as u32),
-        )
-        .into_styled(fill_style(SIM_WHITE))
-        .draw(buffer)?;
-    } else {
-        Triangle::new(
-            Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
-            Point::new(RK_RUN_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
-            Point::new(
-                RK_RUN_LEFT + RK_BUTTON_SIZE,
-                RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
-            ),
-        )
-        .into_styled(fill_style(GREEN))
-        .draw(buffer)?;
-    }
+    Triangle::new(
+        Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
+        Point::new(RK_RUN_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
+        Point::new(
+            RK_RUN_LEFT + RK_BUTTON_SIZE,
+            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+        ),
+    )
+    .into_styled(fill_style(GREEN))
+    .draw(buffer)?;
     Ok(())
 }
 
@@ -589,6 +547,24 @@ fn draw_reverse_kinematics_step_button<D: DrawTarget<Color = Rgb565>>(
         ),
     )
     .into_styled(fill_style(GREEN))
+    .draw(buffer)?;
+    Ok(())
+}
+
+fn draw_calibrate_button<D: DrawTarget<Color = Rgb565>>(buffer: &mut D) -> Result<(), D::Error> {
+    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
+    Rectangle::new(
+        Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
+        Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
+    )
+    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+    .draw(buffer)?;
+    Text::with_baseline(
+        "cal",
+        Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
+        text_style,
+        Baseline::Top,
+    )
     .draw(buffer)?;
     Ok(())
 }
@@ -750,189 +726,6 @@ enum ActiveControl {
     XyView,
     PreviousTarget,
     NextTarget,
-    ToggleReverseKinematics,
-    StepReverseKinematics,
-}
-
-#[derive(Clone, Copy)]
-struct ReverseKinematicsRun {
-    search_params: [f32; DOF],
-    best_params: [f32; DOF],
-    best_distance: f32,
-    step: f32,
-    candidate_index: usize,
-    sweep_improved: bool,
-    phase: ReverseKinematicsPhase,
-}
-
-#[derive(Clone, Copy)]
-enum ReverseKinematicsPhase {
-    BeginCandidate,
-    EvaluateSingleHigh {
-        index: usize,
-        original: f32,
-    },
-    EvaluateSingleLow {
-        index: usize,
-        original: f32,
-    },
-    EvaluatePair {
-        bend_original: f32,
-        spin_original: f32,
-    },
-}
-
-impl ReverseKinematicsRun {
-    fn new(params: &[f32; DOF]) -> Self {
-        Self {
-            search_params: *params,
-            best_params: *params,
-            best_distance: compute_target_distance(
-                REVERSE_KINEMATICS_LINKAGE.view(),
-                LINKAGE.view(),
-                params,
-            ),
-            step: RK_INITIAL_STEP,
-            candidate_index: 0,
-            sweep_improved: false,
-            phase: ReverseKinematicsPhase::BeginCandidate,
-        }
-    }
-
-    fn tick_search_candidate(&mut self) -> bool {
-        let candidate_index = self.candidate_index;
-        let mut searched = false;
-
-        loop {
-            if !self.tick_search() {
-                return searched;
-            }
-
-            searched = true;
-            if matches!(self.phase, ReverseKinematicsPhase::BeginCandidate)
-                && self.candidate_index != candidate_index
-            {
-                return true;
-            }
-        }
-    }
-
-    fn tick_search(&mut self) -> bool {
-        loop {
-            match self.phase {
-                ReverseKinematicsPhase::BeginCandidate => {
-                    if !self.prepare_next_candidate() {
-                        return false;
-                    }
-
-                    if self.candidate_index >= ARM_PARAM_COUNT {
-                        let bend_original = self.search_params[BEND_ELBOW_PARAM];
-                        let spin_original = self.search_params[SPIN_WHOLE_ARM_PARAM];
-                        let pair_index = self.candidate_index - ARM_PARAM_COUNT;
-                        if apply_paired_candidate(&mut self.search_params, pair_index, self.step) {
-                            self.phase = ReverseKinematicsPhase::EvaluatePair {
-                                bend_original,
-                                spin_original,
-                            };
-                            return true;
-                        }
-
-                        self.finish_candidate();
-                        continue;
-                    }
-
-                    let param_index = ARM_PARAM_START + self.candidate_index;
-                    let original = self.search_params[param_index];
-                    let high = (original + self.step).min(1.0);
-                    if high != original {
-                        self.search_params[param_index] = high;
-                        self.phase = ReverseKinematicsPhase::EvaluateSingleHigh {
-                            index: param_index,
-                            original,
-                        };
-                        return true;
-                    }
-
-                    self.phase = ReverseKinematicsPhase::EvaluateSingleHigh {
-                        index: param_index,
-                        original,
-                    };
-                }
-                ReverseKinematicsPhase::EvaluateSingleHigh { index, original } => {
-                    if self.keep_if_improved() {
-                        self.finish_candidate();
-                        return true;
-                    }
-
-                    self.search_params[index] = original;
-                    let low = (original - self.step).max(0.0);
-                    if low != original {
-                        self.search_params[index] = low;
-                        self.phase = ReverseKinematicsPhase::EvaluateSingleLow { index, original };
-                        return true;
-                    }
-
-                    self.finish_candidate();
-                    return true;
-                }
-                ReverseKinematicsPhase::EvaluateSingleLow { index, original } => {
-                    if !self.keep_if_improved() {
-                        self.search_params[index] = original;
-                    }
-                    self.finish_candidate();
-                    return true;
-                }
-                ReverseKinematicsPhase::EvaluatePair {
-                    bend_original,
-                    spin_original,
-                } => {
-                    if !self.keep_if_improved() {
-                        self.search_params[BEND_ELBOW_PARAM] = bend_original;
-                        self.search_params[SPIN_WHOLE_ARM_PARAM] = spin_original;
-                    }
-                    self.finish_candidate();
-                    return true;
-                }
-            }
-        }
-    }
-
-    fn prepare_next_candidate(&mut self) -> bool {
-        while self.candidate_index >= RK_CANDIDATE_COUNT {
-            if self.sweep_improved {
-                self.sweep_improved = false;
-            } else {
-                self.step *= 0.5;
-                if self.step < RK_MIN_STEP {
-                    return false;
-                }
-            }
-            self.candidate_index = 0;
-        }
-
-        true
-    }
-
-    fn keep_if_improved(&mut self) -> bool {
-        let distance = compute_target_distance(
-            REVERSE_KINEMATICS_LINKAGE.view(),
-            LINKAGE.view(),
-            &self.search_params,
-        );
-        if distance < self.best_distance {
-            self.best_distance = distance;
-            self.best_params = self.search_params;
-            self.sweep_improved = true;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn finish_candidate(&mut self) {
-        self.candidate_index += 1;
-        self.phase = ReverseKinematicsPhase::BeginCandidate;
-    }
 }
 
 // ── Private helper functions ───────────────────────────────────────────────────
@@ -942,44 +735,22 @@ fn handle_touch_input_event(
     params: &mut [f32; DOF],
     target_seed: &mut u8,
     active_control: &mut Option<ActiveControl>,
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-    previous_tick: &mut Option<Instant>,
-    rk_step_hold_active: &mut bool,
     touch_cursor: &mut Option<(f32, f32)>,
 ) -> TouchInputOutcome {
     match touch_input_event {
         TouchInputEvent::Down { x, y } => {
             *touch_cursor = Some((x, y));
-            touch_down(
-                x,
-                y,
-                params,
-                target_seed,
-                active_control,
-                reverse_kinematics_run,
-                reverse_kinematics_playing,
-                previous_tick,
-                rk_step_hold_active,
-            );
+            touch_down(x, y, params, target_seed, active_control);
             TouchInputOutcome::Changed
         }
         TouchInputEvent::Move { x, y } => {
             *touch_cursor = Some((x, y));
-            update_touch(
-                x,
-                y,
-                params,
-                active_control,
-                reverse_kinematics_run,
-                reverse_kinematics_playing,
-                previous_tick,
-            );
+            update_touch(x, y, params, active_control);
             TouchInputOutcome::Changed
         }
         TouchInputEvent::Up => {
             *touch_cursor = None;
-            touch_up(active_control, rk_step_hold_active);
+            touch_up(active_control);
             TouchInputOutcome::Changed
         }
     }
@@ -991,85 +762,36 @@ fn touch_down(
     params: &mut [f32; DOF],
     target_seed: &mut u8,
     active_control: &mut Option<ActiveControl>,
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-    previous_tick: &mut Option<Instant>,
-    rk_step_hold_active: &mut bool,
 ) {
     *active_control = control_at(x, y);
     match *active_control {
         Some(ActiveControl::PreviousTarget) => {
-            clear_reverse_kinematics(
-                reverse_kinematics_run,
-                reverse_kinematics_playing,
-                previous_tick,
-            );
             *target_seed = target_seed.wrapping_sub(1);
             randomize_target_params(params, *target_seed);
             *active_control = None;
         }
         Some(ActiveControl::NextTarget) => {
-            clear_reverse_kinematics(
-                reverse_kinematics_run,
-                reverse_kinematics_playing,
-                previous_tick,
-            );
             *target_seed = target_seed.wrapping_add(1);
             randomize_target_params(params, *target_seed);
             *active_control = None;
         }
-        Some(ActiveControl::ToggleReverseKinematics) => {
-            toggle_reverse_kinematics(
-                params,
-                reverse_kinematics_run,
-                reverse_kinematics_playing,
-                previous_tick,
-            );
-            *active_control = None;
-        }
-        Some(ActiveControl::StepReverseKinematics) => {
-            *rk_step_hold_active = true;
-            step_reverse_kinematics(params, reverse_kinematics_run, reverse_kinematics_playing);
-        }
         _ => {
-            update_touch(
-                x,
-                y,
-                params,
-                active_control,
-                reverse_kinematics_run,
-                reverse_kinematics_playing,
-                previous_tick,
-            );
+            update_touch(x, y, params, active_control);
         }
     }
 }
 
-fn touch_up(active_control: &mut Option<ActiveControl>, rk_step_hold_active: &mut bool) {
+fn touch_up(active_control: &mut Option<ActiveControl>) {
     *active_control = None;
-    *rk_step_hold_active = false;
 }
 
-fn update_touch(
-    x: f32,
-    y: f32,
-    params: &mut [f32; DOF],
-    active_control: &Option<ActiveControl>,
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-    previous_tick: &mut Option<Instant>,
-) {
+fn update_touch(x: f32, y: f32, params: &mut [f32; DOF], active_control: &Option<ActiveControl>) {
     let Some(active_control) = *active_control else {
         return;
     };
 
     match active_control {
         ActiveControl::RightSlider(param_index) => {
-            clear_reverse_kinematics(
-                reverse_kinematics_run,
-                reverse_kinematics_playing,
-                previous_tick,
-            );
             let value = ((x - SLIDER_TRACK_LEFT as f32)
                 / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
                 .clamp(0.0, 1.0);
@@ -1088,126 +810,8 @@ fn update_touch(
                 / (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32)
                 .clamp(0.0, 1.0);
         }
-        ActiveControl::PreviousTarget
-        | ActiveControl::NextTarget
-        | ActiveControl::ToggleReverseKinematics
-        | ActiveControl::StepReverseKinematics => {}
+        ActiveControl::PreviousTarget | ActiveControl::NextTarget => {}
     }
-}
-
-fn toggle_reverse_kinematics(
-    params: &[f32; DOF],
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-    previous_tick: &mut Option<Instant>,
-) {
-    if *reverse_kinematics_playing {
-        *reverse_kinematics_playing = false;
-        *previous_tick = None;
-    } else {
-        ensure_reverse_kinematics_run(params, reverse_kinematics_run);
-        *reverse_kinematics_playing = true;
-        *previous_tick = None;
-    }
-}
-
-fn clear_reverse_kinematics(
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-    previous_tick: &mut Option<Instant>,
-) {
-    *reverse_kinematics_run = None;
-    *reverse_kinematics_playing = false;
-    *previous_tick = None;
-}
-
-fn ensure_reverse_kinematics_run(
-    params: &[f32; DOF],
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-) {
-    if reverse_kinematics_run.is_none() {
-        *reverse_kinematics_run = Some(ReverseKinematicsRun::new(params));
-    }
-}
-
-fn tick_reverse_kinematics_at(
-    params: &mut [f32; DOF],
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-    rk_step_hold_active: bool,
-    previous_tick: &mut Option<Instant>,
-    now: Instant,
-) -> bool {
-    let dt_seconds = previous_tick.map_or(0.0, |previous_tick| {
-        now.saturating_duration_since(previous_tick).as_micros() as f32 / 1_000_000.0
-    });
-    *previous_tick = Some(now);
-    tick_reverse_kinematics(
-        params,
-        reverse_kinematics_run,
-        reverse_kinematics_playing,
-        rk_step_hold_active,
-        dt_seconds,
-    )
-}
-
-fn tick_reverse_kinematics(
-    params: &mut [f32; DOF],
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-    rk_step_hold_active: bool,
-    dt_seconds: f32,
-) -> bool {
-    if !*reverse_kinematics_playing && !rk_step_hold_active {
-        return false;
-    }
-
-    let Some(mut run) = reverse_kinematics_run.take() else {
-        *reverse_kinematics_playing = false;
-        return false;
-    };
-
-    let mut search_running = false;
-    for _ in 0..RK_SEARCH_CANDIDATES_PER_TICK {
-        if !run.tick_search_candidate() {
-            break;
-        }
-        search_running = true;
-    }
-    let visible_moving = move_params_toward(
-        params,
-        &run.best_params,
-        reverse_kinematics_visible_param_step(dt_seconds),
-    );
-    let running = search_running || visible_moving;
-    if running {
-        *reverse_kinematics_run = Some(run);
-    } else {
-        *reverse_kinematics_playing = false;
-    }
-    running
-}
-
-fn step_reverse_kinematics(
-    params: &mut [f32; DOF],
-    reverse_kinematics_run: &mut Option<ReverseKinematicsRun>,
-    reverse_kinematics_playing: &mut bool,
-) -> bool {
-    ensure_reverse_kinematics_run(params, reverse_kinematics_run);
-    *reverse_kinematics_playing = false;
-
-    let Some(mut run) = reverse_kinematics_run.take() else {
-        return false;
-    };
-
-    let search_running = run.tick_search_candidate();
-    let visible_moving =
-        move_params_toward(params, &run.best_params, RK_SINGLE_STEP_VISIBLE_PARAM_STEP);
-    let running = search_running || visible_moving;
-    if running {
-        *reverse_kinematics_run = Some(run);
-    }
-    running
 }
 
 fn update_fps(
@@ -1232,42 +836,6 @@ fn update_fps(
     true
 }
 
-fn move_params_toward(
-    params: &mut [f32; DOF],
-    target_params: &[f32; DOF],
-    max_change: f32,
-) -> bool {
-    let mut moved = false;
-
-    for param_index in ARM_PARAM_START..(ARM_PARAM_START + ARM_PARAM_COUNT) {
-        let delta = target_params[param_index] - params[param_index];
-        if delta == 0.0 {
-            continue;
-        }
-
-        let change = delta.clamp(-max_change, max_change);
-        params[param_index] = (params[param_index] + change).clamp(0.0, 1.0);
-        moved = true;
-    }
-
-    moved
-}
-
-fn reverse_kinematics_visible_param_step(dt_seconds: f32) -> f32 {
-    dt_seconds.clamp(0.0, RK_MAX_TICK_SECONDS) * RK_VISIBLE_PARAM_POINTS_PER_SECOND
-}
-
-fn apply_paired_candidate(params: &mut [f32; DOF], pair_index: usize, step: f32) -> bool {
-    let (bend_direction, spin_direction) = RK_PAIRED_CANDIDATES[pair_index];
-    let bend_original = params[BEND_ELBOW_PARAM];
-    let spin_original = params[SPIN_WHOLE_ARM_PARAM];
-
-    params[BEND_ELBOW_PARAM] = (bend_original + bend_direction * step).clamp(0.0, 1.0);
-    params[SPIN_WHOLE_ARM_PARAM] = (spin_original + spin_direction * step).clamp(0.0, 1.0);
-
-    params[BEND_ELBOW_PARAM] != bend_original || params[SPIN_WHOLE_ARM_PARAM] != spin_original
-}
-
 fn arm_tip(rk_linkage: LinkageView<'_, 9, 2>, params: &[f32; DOF]) -> Vec3 {
     let mut arm_params = [0.0f32; 9];
     arm_params.copy_from_slice(&params[..9]);
@@ -1287,7 +855,7 @@ fn compute_target_distance(
 }
 
 fn target_distance(params: &[f32; DOF]) -> f32 {
-    compute_target_distance(REVERSE_KINEMATICS_LINKAGE.view(), LINKAGE.view(), params)
+    compute_target_distance(ARM_TIP_LINKAGE.view(), LINKAGE.view(), params)
 }
 
 fn randomize_target_params(params: &mut [f32; DOF], seed: u8) {
@@ -1316,16 +884,6 @@ fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
     }
     if (x - DOLLY_X as f32).abs() <= 14.0 && (DOLLY_TOP as f32..=DOLLY_BOTTOM as f32).contains(&y) {
         return Some(ActiveControl::Dolly);
-    }
-    if (RK_RUN_LEFT as f32..=(RK_RUN_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
-        && (RK_CONTROL_TOP as f32..=(RK_CONTROL_TOP + RK_BUTTON_SIZE) as f32).contains(&y)
-    {
-        return Some(ActiveControl::ToggleReverseKinematics);
-    }
-    if (RK_STEP_LEFT as f32..=(RK_STEP_LEFT + RK_BUTTON_SIZE) as f32).contains(&x)
-        && (RK_CONTROL_TOP as f32..=(RK_CONTROL_TOP + RK_BUTTON_SIZE) as f32).contains(&y)
-    {
-        return Some(ActiveControl::StepReverseKinematics);
     }
     if (PREV_BUTTON_LEFT as f32..=(PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
         .contains(&x)
