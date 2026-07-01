@@ -83,7 +83,7 @@ where
         let time_text = text_12h(local_time)?;
         info!("tick {}", time_text.as_str());
 
-        // ── Write the time string in non-default font via embedded-graphics ───────────
+        // ── Render the digital time strip (using embedded graphics methods). ─────────
         let mut time_frame = cyd.frame_mut(TIME_RECTANGLE);
         time_frame.fill(background);
         Text::with_text_style(
@@ -93,7 +93,7 @@ where
             TIME_TEXT_STYLE,
         )
         .draw(&mut time_frame)
-        .unwrap_never();
+        .unwrap_infallible();
         time_frame.flush().await.map_err(Error::Flush)?;
         drop(time_frame);
 
@@ -106,9 +106,8 @@ where
             .draw_items_3d(&params)
             .map(|draw_item_3d| draw_item_3d.project(&PROJECTION));
 
-        // Stream the clock-region background first, then paint the spinning clock on top.
-        // `ContiguousPixels` yields row-major colors for `fill_contiguous`; it does not
-        // allocate a frame or tile buffer.
+        // `ContiguousPixels` yields row-major colors for `fill_contiguous` without
+        // allocating a frame or tile buffer. It includes a background bitmap.
         let contiguous_pixels =
             ContiguousPixels::<{ 1 + LINKAGE.draw_item_3d_count() }>::from_draw_items_2d(
                 CLOCK_BOUNDS,
