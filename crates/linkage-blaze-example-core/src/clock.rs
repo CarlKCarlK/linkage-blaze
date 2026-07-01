@@ -14,17 +14,17 @@ use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embassy_time::{Duration, Instant};
 use embedded_graphics::{
     Drawable,
-    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10, ascii::FONT_10X20},
-    pixelcolor::{IntoStorage, Rgb565},
+    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10},
+    pixelcolor::Rgb565,
     pixelcolor::{Rgb888, WebColors},
-    prelude::{DrawTarget, OriginDimensions, Point, Size},
+    prelude::{Point, Size},
     primitives::Rectangle,
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{ContiguousPixels, Cyd, CydFrame, Orientation};
 use log::info;
-use static_cell::StaticCell;
+use profont::PROFONT_18_POINT;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
@@ -35,17 +35,9 @@ pub const FOREGROUND: Rgb888 = Rgb888::CSS_NAVY;
 
 pub const ORIENTATION: Orientation = Orientation::Landscape;
 
-// todo0000 too complex
-const TIME_FONT: MonoFont<'static> = FONT_10X20;
-const TIME_TEXT_SCALE: usize = 2;
-const TIME_TEXT_MAX_CHARS: usize = 8; // "12:59 PM"
+const TIME_FONT: MonoFont<'static> = PROFONT_18_POINT;
 const TIME_TEXT_CAPACITY: usize = 16;
-const TIME_TEXT_UNSCALED_WIDTH: usize = TIME_TEXT_MAX_CHARS * 10;
-const TIME_TEXT_UNSCALED_HEIGHT: usize = 20;
-const TIME_TEXT_SCALED_WIDTH: usize = TIME_TEXT_UNSCALED_WIDTH * TIME_TEXT_SCALE;
-const TIME_TEXT_SCALED_HEIGHT: usize = TIME_TEXT_UNSCALED_HEIGHT * TIME_TEXT_SCALE;
-const TIME_TEXT_UNSCALED_PIXELS: usize = TIME_TEXT_UNSCALED_WIDTH * TIME_TEXT_UNSCALED_HEIGHT;
-const TIME_TEXT_SCALED_PIXELS: usize = TIME_TEXT_SCALED_WIDTH * TIME_TEXT_SCALED_HEIGHT;
+const TIME_TEXT_TOP_PADDING: i32 = 9;
 
 pub const WIFI_STATUS_FONT: MonoFont<'static> = FONT_6X10;
 
@@ -73,12 +65,6 @@ where
     CydDevice: Cyd,
     ClockSyncDevice: ClockSync,
 {
-    static TIME_TEXT_UNSCALED_BUFFER: StaticCell<[u16; TIME_TEXT_UNSCALED_PIXELS]> =
-        StaticCell::new();
-    static TIME_TEXT_SCALED_BUFFER: StaticCell<[u16; TIME_TEXT_SCALED_PIXELS]> = StaticCell::new();
-    let time_text_unscaled_buffer =
-        &mut *TIME_TEXT_UNSCALED_BUFFER.init([0; TIME_TEXT_UNSCALED_PIXELS]);
-    let time_text_scaled_buffer = &mut *TIME_TEXT_SCALED_BUFFER.init([0; TIME_TEXT_SCALED_PIXELS]);
     let background = Rgb565::from(BACKGROUND);
     let foreground = Rgb565::from(FOREGROUND);
 
@@ -94,24 +80,16 @@ where
         let time_text = text_12h(hour_12, minute, hour_24);
         info!("tick {}", time_text.as_str());
 
-        let draw_scaled_time_started = Instant::now();
+        let draw_time_started = Instant::now();
 
         // Draw the time explicitly so the surface default font/color can stay
-        // dedicated to the small WiFi status text, while preserving the old
-        // 2x enlarged clock text look.
+        // dedicated to the small WiFi status text.
         {
             let mut time_frame = cyd.frame_mut(TIME_REGION);
-            draw_scaled_time(
-                &mut time_frame,
-                time_text.as_str(),
-                background,
-                foreground,
-                time_text_unscaled_buffer,
-                time_text_scaled_buffer,
-            );
+            draw_time(&mut time_frame, time_text.as_str(), background, foreground);
             time_frame.flush().await.map_err(Error::Flush)?;
         }
-        let draw_scaled_time_done = Instant::now();
+        let draw_time_done = Instant::now();
 
         let linkage_params_started = Instant::now();
         let params = linkage_params(hour_24, minute, second);
@@ -132,9 +110,9 @@ where
         let fill_contiguous_done = Instant::now();
 
         info!(
-            "clock timing: wait_for_tick={}us draw_scaled_time={}us linkage_params={}us from_draw_items_2d={}us fill_contiguous={}us active={}us total={}us",
+            "clock timing: wait_for_tick={}us draw_time={}us linkage_params={}us from_draw_items_2d={}us fill_contiguous={}us active={}us total={}us",
             micros(tick_ready - loop_started),
-            micros(draw_scaled_time_done - draw_scaled_time_started),
+            micros(draw_time_done - draw_time_started),
             micros(linkage_params_done - linkage_params_started),
             micros(fill_contiguous_started - linkage_params_done),
             micros(fill_contiguous_done - fill_contiguous_started),
@@ -148,92 +126,21 @@ fn micros(duration: Duration) -> u64 {
     duration.as_micros()
 }
 
-struct BufferTarget<'a> {
-    pixels: &'a mut [u16],
-    size: Size,
-}
-
-impl DrawTarget for BufferTarget<'_> {
-    type Color = Rgb565;
-    type Error = Infallible;
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = embedded_graphics::Pixel<Self::Color>>,
-    {
-        let width = self.size.width as usize;
-        let height = self.size.height as usize;
-        for embedded_graphics::Pixel(point, color) in pixels {
-            let Ok(x) = usize::try_from(point.x) else {
-                continue;
-            };
-            let Ok(y) = usize::try_from(point.y) else {
-                continue;
-            };
-            if x < width && y < height {
-                self.pixels[y * width + x] = color.into_storage();
-            }
-        }
-        Ok(())
-    }
-
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.pixels.fill(color.into_storage());
-        Ok(())
-    }
-}
-
-impl OriginDimensions for BufferTarget<'_> {
-    fn size(&self) -> Size {
-        self.size
-    }
-}
-
-fn draw_scaled_time<FrameError>(
+fn draw_time<FrameError>(
     time_frame: &mut impl CydFrame<Error = FrameError>,
     text: &str,
     background: Rgb565,
     foreground: Rgb565,
-    time_text_unscaled_buffer: &mut [u16; TIME_TEXT_UNSCALED_PIXELS],
-    time_text_scaled_buffer: &mut [u16; TIME_TEXT_SCALED_PIXELS],
 ) {
-    let mut unscaled_target = BufferTarget {
-        pixels: time_text_unscaled_buffer,
-        size: Size::new(
-            TIME_TEXT_UNSCALED_WIDTH as u32,
-            TIME_TEXT_UNSCALED_HEIGHT as u32,
-        ),
-    };
-    unscaled_target
-        .clear(background)
-        .expect("clearing the fixed time buffer cannot fail");
+    time_frame.fill(background);
     Text::with_baseline(
         text,
-        Point::zero(),
+        Point::new(0, TIME_TEXT_TOP_PADDING),
         MonoTextStyle::new(&TIME_FONT, foreground),
         Baseline::Top,
     )
-    .draw(&mut unscaled_target)
-    .expect("drawing text to the fixed time buffer cannot fail");
-
-    for source_y in 0..TIME_TEXT_UNSCALED_HEIGHT {
-        for source_x in 0..TIME_TEXT_UNSCALED_WIDTH {
-            let color = time_text_unscaled_buffer[source_y * TIME_TEXT_UNSCALED_WIDTH + source_x];
-            let scaled_x = source_x * TIME_TEXT_SCALE;
-            let scaled_y = source_y * TIME_TEXT_SCALE;
-            for offset_y in 0..TIME_TEXT_SCALE {
-                for offset_x in 0..TIME_TEXT_SCALE {
-                    time_text_scaled_buffer
-                        [(scaled_y + offset_y) * TIME_TEXT_SCALED_WIDTH + scaled_x + offset_x] =
-                        color;
-                }
-            }
-        }
-    }
-
-    time_frame
-        .copy_from_565(time_text_scaled_buffer)
-        .expect("scaled time buffer must match TIME_REGION exactly");
+    .draw(time_frame)
+    .expect("drawing text into the time frame cannot fail");
 }
 
 // ── Clock time ──────────────────────────────────────────────────────────────────
