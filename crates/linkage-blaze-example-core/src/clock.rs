@@ -19,7 +19,7 @@ use embedded_graphics::{
     pixelcolor::{Rgb888, WebColors},
     prelude::{Point, Size},
     primitives::Rectangle,
-    text::{Baseline, Text},
+    text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{ContiguousPixels, Cyd, CydFrame, Orientation};
@@ -37,17 +37,17 @@ pub const ORIENTATION: Orientation = Orientation::Landscape;
 
 const TIME_FONT: MonoFont<'static> = PROFONT_18_POINT;
 const TIME_TEXT_CAPACITY: usize = 16;
-const TIME_TEXT_TOP_PADDING: i32 = 9;
+const TIME_TEXT_TOP_PADDING: i32 = -1;
 
 pub const WIFI_STATUS_FONT: MonoFont<'static> = FONT_6X10;
 
-pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(240, 8), Size::new(70, 10));
-pub const TIME_REGION: Rectangle = Rectangle::new(Point::new(80, 34), Size::new(160, 40));
+pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(270, 6), Size::new(50, 10));
+pub const TIME_REGION: Rectangle = Rectangle::new(Point::new(50, 0), Size::new(220, 20));
 
-const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(80, 80), Size::new(160, 160));
+const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(50, 20), Size::new(220, 220));
 const PROJECTION: Projection = Projection::top_orthographic(
-    /* target origin */ Point::new(160, 160),
-    /* scale */ 1.0,
+    /* target origin */ Point::new(160, 130),
+    /* scale */ 1.375,
 );
 // todo000 reorder the consts.
 const LINKAGE0: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
@@ -132,12 +132,16 @@ fn draw_time<FrameError>(
     background: Rgb565,
     foreground: Rgb565,
 ) {
+    let time_style = TextStyleBuilder::new()
+        .alignment(Alignment::Center)
+        .baseline(Baseline::Top)
+        .build();
     time_frame.fill(background);
-    Text::with_baseline(
+    Text::with_text_style(
         text,
-        Point::new(0, TIME_TEXT_TOP_PADDING),
+        Point::new(time_frame.region().size.width as i32 / 2, TIME_TEXT_TOP_PADDING),
         MonoTextStyle::new(&TIME_FONT, foreground),
-        Baseline::Top,
+        time_style,
     )
     .draw(time_frame)
     .expect("drawing text into the time frame cannot fail");
