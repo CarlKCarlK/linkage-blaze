@@ -16,13 +16,16 @@ use embedded_graphics::{
     Drawable,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::Rgb565,
-    pixelcolor::{Rgb888, WebColors},
+    pixelcolor::{Rgb888, WebColors, raw::RawU16},
     prelude::{Point, Size},
     primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
-use linkage_blaze_cyd_core::{ContiguousPixels, Cyd, CydFrame, DrawItem3dExt, Orientation};
+use linkage_blaze_cyd_core::{
+    BitmapItem565, ContiguousPixels, Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565,
+    Orientation, tga565,
+};
 use log::info;
 use profont::PROFONT_18_POINT;
 
@@ -45,6 +48,11 @@ pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(270, 6), Siz
 pub const TIME_REGION: Rectangle = Rectangle::new(Point::new(50, 0), Size::new(220, 20));
 
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(50, 20), Size::new(220, 220));
+const BACKGROUND_BITMAP_TOP_LEFT: Point = Point::zero();
+const BACKGROUND_BITMAP_RECTANGLE: Rectangle =
+    Rectangle::new(BACKGROUND_BITMAP_TOP_LEFT, Size::new(320, 240));
+const BACKGROUND_BITMAP: Image565<320, 240, { 320 * 240 }> =
+    tga565!("../assets/astronomy_window_background.tga", 320, 240);
 const PROJECTION: Projection = Projection::top_orthographic(
     /* target origin */ Point::new(160, 130),
     /* scale */ 1.375,
@@ -54,6 +62,24 @@ const LINKAGE0: LinkageFixed<2, 2, 48> = linkage_fixed!("clock.lb.rs");
 const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 
 // ── Main function ────────────────────────────────────────────────────────
+
+/// Draw the static full-screen clock background.
+pub async fn clock_splash<CydDevice>(cyd: &mut CydDevice) -> Result<(), Error<CydDevice::Error>>
+where
+    CydDevice: Cyd,
+{
+    cyd.fill(Rgb565::from(BACKGROUND)).map_err(Error::Flush)?;
+    cyd.fill_contiguous(
+        BACKGROUND_BITMAP_RECTANGLE,
+        BACKGROUND_BITMAP
+            .pixels
+            .iter()
+            .copied()
+            .map(|pixel| Rgb565::from(RawU16::new(pixel))),
+    )
+    .map_err(Error::Flush)?;
+    Ok(())
+}
 
 /// Run the clock render loop forever, driven by `clock_sync` ticks and drawn
 /// onto `cyd`.
@@ -95,13 +121,21 @@ where
         let params = linkage_params(hour_24, minute, second);
         let linkage_params_done = Instant::now();
 
+        let clock_background = DrawItem2d::Bitmap(BitmapItem565::new(
+            BACKGROUND_BITMAP.as_static_bitmap(),
+            bitmap_source_for_screen_rectangle(CLOCK_BOUNDS),
+            CLOCK_BOUNDS.top_left,
+        ));
+        let draw_items_2d = core::iter::once(clock_background).chain(
+            LINKAGE
+                .draw_items_3d(&params)
+                .map(|draw_item_3d| draw_item_3d.project(&PROJECTION)),
+        );
         let contiguous_pixels =
-            ContiguousPixels::<{ LINKAGE.draw_item_3d_count() }>::from_draw_items_2d(
+            ContiguousPixels::<{ LINKAGE.draw_item_3d_count() + 1 }>::from_draw_items_2d(
                 CLOCK_BOUNDS,
                 background,
-                LINKAGE
-                    .draw_items_3d(&params)
-                    .map(|draw_item_3d| draw_item_3d.project(&PROJECTION)),
+                draw_items_2d,
             );
 
         let fill_contiguous_started = Instant::now();
@@ -124,6 +158,13 @@ where
 
 fn micros(duration: Duration) -> u64 {
     duration.as_micros()
+}
+
+fn bitmap_source_for_screen_rectangle(screen_rectangle: Rectangle) -> Rectangle {
+    Rectangle::new(
+        screen_rectangle.top_left - BACKGROUND_BITMAP_TOP_LEFT,
+        screen_rectangle.size,
+    )
 }
 
 fn draw_time<FrameError>(

@@ -23,7 +23,7 @@
 use embedded_graphics::{
     Drawable, Pixel,
     pixelcolor::{Rgb565, raw::RawU16},
-    prelude::{DrawTarget, Point},
+    prelude::{DrawTarget, Point, Size},
 };
 
 /// An opaque RGB565 image decoded from a TGA at compile time.
@@ -200,6 +200,12 @@ impl<const W: usize, const H: usize, const N: usize> Image565<W, H, N> {
             image: self,
             top_left,
         }
+    }
+
+    /// Describe this image as a static RGB565 bitmap for [`DrawItem2d`](crate::DrawItem2d).
+    #[must_use]
+    pub fn as_static_bitmap(&'static self) -> crate::StaticBitmap565 {
+        crate::StaticBitmap565::new(&self.pixels, Size::new(W as u32, H as u32))
     }
 }
 
