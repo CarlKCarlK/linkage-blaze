@@ -557,11 +557,7 @@ mod tests {
     #[test]
     fn bitmap_item_samples_as_background_under_later_items() {
         let bitmap = Image565View::new(&BITMAP_PIXELS, Size::new(2, 2));
-        let bitmap_item = DrawItem2d::Bitmap(BitmapItem565::new(
-            bitmap,
-            Rectangle::new(Point::zero(), Size::new(2, 2)),
-            Point::zero(),
-        ));
+        let bitmap_item = DrawItem2d::Bitmap(BitmapItem565::new(bitmap, Point::zero()));
         let circle = DrawItem2d::Circle {
             center: (0.0, 0.0),
             pixel_radius: 0.1,

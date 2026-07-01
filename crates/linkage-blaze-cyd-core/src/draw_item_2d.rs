@@ -10,99 +10,93 @@ use linkage_blaze_core::{
     pixel_put, pixel_put_565,
 };
 
-/// A statically-stored RGB565 bitmap in row-major order.
+/// A view into a statically-stored RGB565 bitmap, optionally cropped to a
+/// sub-rectangle.
+///
+/// For a full-image view use [`Image565Fixed::view`]; for a cropped view use
+/// [`Image565Fixed::view_rect`]. `stride` is the full image width (row step in
+/// pixels); `source` is the crop rectangle in image coordinates.
 #[derive(Clone, Copy, Debug)]
 pub struct Image565View {
     pixels: &'static [u16],
-    size: Size,
+    stride: u32,
+    source: Rectangle,
 }
 
 impl Image565View {
-    /// Create a bitmap descriptor from row-major RGB565 pixels.
+    /// Full-image view from a raw pixel slice.
     ///
     /// Panics if `pixels.len() != size.width * size.height`.
     #[must_use]
-    pub fn new(pixels: &'static [u16], size: Size) -> Self {
-        let pixel_count = size.width as usize * size.height as usize;
+    pub const fn new(pixels: &'static [u16], size: Size) -> Self {
         assert!(
-            pixels.len() == pixel_count,
+            pixels.len() == size.width as usize * size.height as usize,
             "Image565View pixels must match width * height"
         );
-        Self { pixels, size }
+        Self {
+            pixels,
+            stride: size.width,
+            source: Rectangle::new(Point::zero(), size),
+        }
+    }
+
+    /// Cropped view — `source` is in image coordinates, `stride` is the full
+    /// image row width. Prefer [`Image565Fixed::view_rect`] at call sites.
+    #[must_use]
+    pub(crate) const fn new_cropped(
+        pixels: &'static [u16],
+        stride: u32,
+        source: Rectangle,
+    ) -> Self {
+        Self { pixels, stride, source }
     }
 
     #[must_use]
     pub const fn size(&self) -> Size {
-        self.size
+        self.source.size
     }
 
+    /// Returns the pixel at `point`, where `point` is in view-local coordinates
+    /// (i.e. `(0, 0)` is the top-left of this view, not of the underlying image).
     #[must_use]
     pub fn pixel_at(&self, point: Point) -> Rgb565 {
         assert!(
             point.x >= 0 && point.y >= 0,
             "Image565View pixel coordinate must be non-negative"
         );
-        let position_x = point.x as usize;
-        let position_y = point.y as usize;
+        let vx = point.x as usize;
+        let vy = point.y as usize;
         assert!(
-            position_x < self.size.width as usize && position_y < self.size.height as usize,
-            "Image565View pixel coordinate must be inside the bitmap"
+            vx < self.source.size.width as usize && vy < self.source.size.height as usize,
+            "Image565View pixel coordinate must be inside the view"
         );
-        let index = position_y * self.size.width as usize + position_x;
+        let source_x = self.source.top_left.x as usize + vx;
+        let source_y = self.source.top_left.y as usize + vy;
+        let index = source_y * self.stride as usize + source_x;
         Rgb565::from(RawU16::new(self.pixels[index]))
-    }
-
-    #[must_use]
-    pub fn contains(&self, rectangle: Rectangle) -> bool {
-        let left = rectangle.top_left.x;
-        let top = rectangle.top_left.y;
-        let right = left
-            .checked_add(rectangle.size.width as i32)
-            .expect("bitmap source right edge must fit in i32");
-        let bottom = top
-            .checked_add(rectangle.size.height as i32)
-            .expect("bitmap source bottom edge must fit in i32");
-        left >= 0
-            && top >= 0
-            && right <= self.size.width as i32
-            && bottom <= self.size.height as i32
     }
 }
 
-/// A rectangular piece of a statically-stored RGB565 bitmap.
+/// A view of a static RGB565 bitmap placed at a specific screen position.
+///
+/// The source crop is baked into the [`Image565View`]; `top_left` is the
+/// output position on screen.
 #[derive(Clone, Copy, Debug)]
 pub struct BitmapItem565 {
-    bitmap: Image565View,
-    source: Rectangle,
+    view: Image565View,
     top_left: Point,
 }
 
 impl BitmapItem565 {
-    /// Create a bitmap draw item.
-    ///
-    /// `source` is in bitmap coordinates. `top_left` is the output location of
-    /// the source rectangle's top-left corner.
+    /// Place `view` at `top_left` on screen.
     #[must_use]
-    pub fn new(bitmap: Image565View, source: Rectangle, top_left: Point) -> Self {
-        assert!(
-            bitmap.contains(source),
-            "BitmapItem565 source rectangle must be inside the bitmap"
-        );
-        Self {
-            bitmap,
-            source,
-            top_left,
-        }
+    pub const fn new(view: Image565View, top_left: Point) -> Self {
+        Self { view, top_left }
     }
 
     #[must_use]
-    pub const fn bitmap(&self) -> Image565View {
-        self.bitmap
-    }
-
-    #[must_use]
-    pub const fn source(&self) -> Rectangle {
-        self.source
+    pub const fn view(&self) -> Image565View {
+        self.view
     }
 
     #[must_use]
@@ -111,14 +105,14 @@ impl BitmapItem565 {
     }
 
     #[must_use]
-    pub fn bounds(&self) -> Rectangle {
-        Rectangle::new(self.top_left, self.source.size)
+    pub const fn bounds(&self) -> Rectangle {
+        Rectangle::new(self.top_left, self.view.source.size)
     }
 
+    /// Returns the pixel at screen-space `point`.
     #[must_use]
     pub fn pixel_at(&self, point: Point) -> Rgb565 {
-        let source_point = self.source.top_left + (point - self.top_left);
-        self.bitmap.pixel_at(source_point)
+        self.view.pixel_at(point - self.top_left)
     }
 }
 
@@ -204,17 +198,17 @@ impl DrawItem2d {
                 .expect("drawing onto a PixelTargetAdapter is Infallible");
             }
             DrawItem2d::Bitmap(bitmap_item) => {
-                let source = bitmap_item.source();
+                let size = bitmap_item.view().size();
                 let top_left = bitmap_item.top_left();
-                for source_y in 0..source.size.height as i32 {
-                    for source_x in 0..source.size.width as i32 {
-                        let source_point = source.top_left + Point::new(source_x, source_y);
-                        let target_point = top_left + Point::new(source_x, source_y);
+                for dy in 0..size.height as i32 {
+                    for dx in 0..size.width as i32 {
+                        let view_point = Point::new(dx, dy);
+                        let target_point = top_left + view_point;
                         pixel_put_565(
                             target,
                             target_point.x,
                             target_point.y,
-                            bitmap_item.bitmap().pixel_at(source_point).into_storage(),
+                            bitmap_item.view().pixel_at(view_point).into_storage(),
                         );
                     }
                 }
