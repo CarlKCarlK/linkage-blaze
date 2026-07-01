@@ -25,7 +25,7 @@ required-features = ["esp32", "ballet"]
 
 [[example]]
 name = "clock"
-path = "examples/clock/main.rs"
+path = "examples/clock.rs"
 required-features = ["esp32", "clock"]
 
 [features]
