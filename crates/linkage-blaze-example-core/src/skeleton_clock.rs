@@ -179,7 +179,10 @@ where
             }
 
             // Draw the hour sign and number
-            HOURS_SIGN.at(hours_top_left).draw(&mut tile).unwrap_infallible();
+            HOURS_SIGN
+                .at(hours_top_left)
+                .draw(&mut tile)
+                .unwrap_infallible();
             draw_centered_sign_value(
                 &mut tile,
                 hours_top_left,

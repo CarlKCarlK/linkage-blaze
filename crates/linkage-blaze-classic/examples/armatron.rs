@@ -12,8 +12,6 @@ use device_envoy_esp::{
     init_and_start,
 };
 use embassy_executor::Spawner;
-use embedded_graphics::Drawable;
-use embedded_graphics::pixelcolor::Rgb565;
 use esp_backtrace as _;
 use esp_hal::delay::Delay;
 
@@ -22,7 +20,8 @@ use linkage_blaze_cyd::{
     RawPoint, RawTouchEvent, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use linkage_blaze_example_core::armatron::{
-    ArmatronPlatform, BLACK, WHITE, armatron, calibration_corner_for_index, draw_calibration_cross,
+    ArmatronPlatform, BLACK, ControlledKnob, DOF, WHITE, armatron, calibration_corner_for_index,
+    draw_armatron, draw_calibration_cross,
 };
 use log::info;
 
@@ -134,12 +133,28 @@ impl ArmatronPlatform for EspPlatform {
         cyd.remove_calibration();
     }
 
-    fn draw_and_flush<D>(&mut self, cyd: &mut CydEsp, drawable: &D) -> Result<(), MainError>
-    where
-        D: Drawable<Color = Rgb565, Output = ()>,
-    {
+    fn draw_and_flush(
+        &mut self,
+        cyd: &mut CydEsp,
+        params: &[f32; DOF],
+        target_seed: u8,
+        reverse_kinematics_playing: bool,
+        show_fps: bool,
+        fps: Option<u32>,
+        touch_cursor: Option<(f32, f32)>,
+        controlled_knobs: &[ControlledKnob; 2],
+    ) -> Result<(), MainError> {
         let mut frame = cyd.full_frame_mut();
-        match drawable.draw(&mut frame) {
+        match draw_armatron(
+            &mut frame,
+            params,
+            target_seed,
+            reverse_kinematics_playing,
+            show_fps,
+            fps,
+            touch_cursor,
+            controlled_knobs,
+        ) {
             Ok(()) => {}
             Err(infallible) => match infallible {},
         }
