@@ -77,44 +77,6 @@ impl Image565View {
     }
 }
 
-/// A view of a static RGB565 bitmap placed at a specific screen position.
-///
-/// The source crop is baked into the [`Image565View`]; `top_left` is the
-/// output position on screen.
-#[derive(Clone, Copy, Debug)]
-pub struct BitmapItem565 {
-    view: Image565View,
-    top_left: Point,
-}
-
-impl BitmapItem565 {
-    /// Place `view` at `top_left` on screen.
-    #[must_use]
-    pub const fn new(view: Image565View, top_left: Point) -> Self {
-        Self { view, top_left }
-    }
-
-    #[must_use]
-    pub const fn view(&self) -> Image565View {
-        self.view
-    }
-
-    #[must_use]
-    pub const fn top_left(&self) -> Point {
-        self.top_left
-    }
-
-    #[must_use]
-    pub const fn bounds(&self) -> Rectangle {
-        Rectangle::new(self.top_left, self.view.source.size)
-    }
-
-    /// Returns the pixel at screen-space `point`.
-    #[must_use]
-    pub fn pixel_at(&self, point: Point) -> Rgb565 {
-        self.view.pixel_at(point - self.top_left)
-    }
-}
 
 /// A pixel-space 2D draw item, ready to draw onto a [`PixelTarget`].
 ///
@@ -146,8 +108,8 @@ pub enum DrawItem2d {
         pixel_radius: f32,
         color: Rgb888,
     },
-    /// A rectangular piece of a statically-stored RGB565 bitmap.
-    Bitmap(BitmapItem565),
+    /// A statically-stored RGB565 bitmap view placed at a screen position.
+    Bitmap { view: Image565View, top_left: Point },
 }
 
 impl DrawItem2d {
@@ -197,9 +159,8 @@ impl DrawItem2d {
                 .draw(&mut PixelTargetAdapter(target))
                 .expect("drawing onto a PixelTargetAdapter is Infallible");
             }
-            DrawItem2d::Bitmap(bitmap_item) => {
-                let size = bitmap_item.view().size();
-                let top_left = bitmap_item.top_left();
+            DrawItem2d::Bitmap { view, top_left } => {
+                let size = view.size();
                 for dy in 0..size.height as i32 {
                     for dx in 0..size.width as i32 {
                         let view_point = Point::new(dx, dy);
@@ -208,7 +169,7 @@ impl DrawItem2d {
                             target,
                             target_point.x,
                             target_point.y,
-                            bitmap_item.view().pixel_at(view_point).into_storage(),
+                            view.pixel_at(view_point).into_storage(),
                         );
                     }
                 }

@@ -1,7 +1,7 @@
 use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
 use linkage_blaze_core::{DrawItem3d, Projection};
 
-use crate::{BitmapItem565, DrawItem2d, DrawItem3dExt};
+use crate::{DrawItem2d, DrawItem3dExt, Image565View};
 
 #[derive(Clone, Copy, Debug)]
 struct PreparedBounds {
@@ -34,7 +34,7 @@ struct PreparedPixelSource {
 #[derive(Clone, Copy, Debug)]
 enum PreparedPixelSourceKind {
     Primitive(PreparedPrimitive),
-    Bitmap(BitmapItem565),
+    Bitmap { view: Image565View, top_left: Point },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -154,14 +154,14 @@ impl PreparedPrimitive {
                 pixel_radius,
                 Rgb565::from(color),
             ),
-            DrawItem2d::Bitmap(bitmap_item) => {
-                let bounds = bitmap_item.bounds();
+            DrawItem2d::Bitmap { view, top_left } => {
+                let bounds = Rectangle::new(top_left, view.size());
                 if bounds.size.width == 0 || bounds.size.height == 0 {
                     return None;
                 }
                 Some(PreparedPixelSource {
                     bounds: bounds_from_rectangle(bounds),
-                    kind: PreparedPixelSourceKind::Bitmap(bitmap_item),
+                    kind: PreparedPixelSourceKind::Bitmap { view, top_left },
                 })
             }
         }
@@ -331,8 +331,8 @@ impl PreparedPixelSource {
             PreparedPixelSourceKind::Primitive(primitive) => primitive
                 .covers_inside_bounds(point_x, point_y)
                 .then_some(primitive.color),
-            PreparedPixelSourceKind::Bitmap(bitmap_item) => {
-                Some(bitmap_item.pixel_at(Point::new(point_x, point_y)))
+            PreparedPixelSourceKind::Bitmap { view, top_left } => {
+                Some(view.pixel_at(Point::new(point_x, point_y) - top_left))
             }
         }
     }
@@ -557,7 +557,7 @@ mod tests {
     #[test]
     fn bitmap_item_samples_as_background_under_later_items() {
         let bitmap = Image565View::new(&BITMAP_PIXELS, Size::new(2, 2));
-        let bitmap_item = DrawItem2d::Bitmap(BitmapItem565::new(bitmap, Point::zero()));
+        let bitmap_item = DrawItem2d::Bitmap { view: bitmap, top_left: Point::zero() };
         let circle = DrawItem2d::Circle {
             center: (0.0, 0.0),
             pixel_radius: 0.1,

@@ -16,7 +16,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{
-    BitmapItem565, ContiguousPixels, Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed,
+    ContiguousPixels, Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565View,
     Orientation, tga565, tiling::max_rectangle_pixel_count,
 };
 use log::info;
@@ -48,14 +48,18 @@ const TIME_TEXT_CAPACITY: usize = 16;
 const TIME_TEXT_TOP_PADDING: i32 = -1;
 
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(50, 20), Size::new(220, 220));
-const BACKGROUND_BITMAP_RECTANGLE: Rectangle =
-    Rectangle::new(Point::zero(), Size::new(320, 240));
+const BACKGROUND_BITMAP_RECTANGLE: Rectangle = Rectangle::new(Point::zero(), Size::new(320, 240));
 const BACKGROUND_BITMAP: Image565Fixed<320, 240, { 320 * 240 }> =
     tga565!("../assets/astronomy_window_background.tga", 320, 240);
 const PROJECTION: Projection = Projection::top_orthographic(
     /* target origin */ Point::new(160, 130),
     /* scale */ 1.375,
 );
+const CLOCK_BACKGROUND_VIEW: Image565View = BACKGROUND_BITMAP.view_rect(CLOCK_BOUNDS);
+const CLOCK_BACKGROUND_BITMAP: DrawItem2d = DrawItem2d::Bitmap {
+    view: CLOCK_BACKGROUND_VIEW,
+    top_left: CLOCK_BOUNDS.top_left,
+};
 const LINKAGE0: LinkageFixed<2, 2, 50> = linkage_fixed!("clock.lb.rs");
 const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 
@@ -73,13 +77,13 @@ where
     let time_color = Rgb565::from(TIME_COLOR);
 
     loop {
-        // Wait for a tick and get the time.
+        // ── Wait for a tick and get the time. ────────────────────────────────────────
         let tick = clock_sync.wait_for_tick().await;
         let local_time = &tick.local_time;
         let time_text = text_12h(local_time)?;
         info!("tick {}", time_text.as_str());
 
-        // Write the time string in non-default font via embedded-graphics
+        // ── Write the time string in non-default font via embedded-graphics ───────────
         let mut time_frame = cyd.frame_mut(TIME_RECTANGLE);
         time_frame.fill(background);
         Text::with_text_style(
@@ -93,22 +97,23 @@ where
         time_frame.flush().await.map_err(Error::Flush)?;
         drop(time_frame);
 
-        let params = linkage_params(local_time);
+        // ── Stream the pixels of the updated clock ────────────────────────────────────────
 
-        let clock_background = DrawItem2d::Bitmap(BitmapItem565::new(
-            BACKGROUND_BITMAP.view_rect(CLOCK_BOUNDS),
-            CLOCK_BOUNDS.top_left,
-        ));
-        let draw_items_2d = iter::once(clock_background).chain(
-            LINKAGE
-                .draw_items_3d(&params)
-                .map(|draw_item_3d| draw_item_3d.project(&PROJECTION)),
-        );
+        // Compute the time-dependent linkage parameters, then project the clock's
+        // 3D draw items into pixel-space 2D draw items.
+        let params = linkage_params(local_time);
+        let draw_items_2d = LINKAGE
+            .draw_items_3d(&params)
+            .map(|draw_item_3d| draw_item_3d.project(&PROJECTION));
+
+        // Stream the clock-region background first, then paint the spinning clock on top.
+        // `ContiguousPixels` yields row-major colors for `fill_contiguous`; it does not
+        // allocate a frame or tile buffer.
         let contiguous_pixels =
-            ContiguousPixels::<{ LINKAGE.draw_item_3d_count() + 1 }>::from_draw_items_2d(
+            ContiguousPixels::<{ 1 + LINKAGE.draw_item_3d_count() }>::from_draw_items_2d(
                 CLOCK_BOUNDS,
-                background,
-                draw_items_2d,
+                background, // color, but will be overridden by the bitmap background
+                iter::once(CLOCK_BACKGROUND_BITMAP).chain(draw_items_2d),
             );
 
         cyd.fill_contiguous(contiguous_pixels.bounds(), contiguous_pixels.iter())
