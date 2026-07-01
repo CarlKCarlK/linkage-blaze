@@ -20,9 +20,8 @@ use linkage_blaze_cyd::{
     RawPoint, RawTouchEvent, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use linkage_blaze_example_core::armatron::{
-    ArmatronPlatform, BLACK, ControlledKnob, DOF, WHITE, armatron,
+    BLACK, WHITE, armatron,
     calibration::{calibration_corner_for_index, draw_calibration_cross},
-    draw_armatron,
 };
 use log::info;
 
@@ -117,41 +116,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display and touch initialized");
 
     ensure_calibration(&mut cyd)?;
-    let mut platform = EspPlatform;
-    armatron(&mut cyd, &mut platform)
-}
-
-struct EspPlatform;
-
-impl ArmatronPlatform for EspPlatform {
-    type CydDevice = CydEsp;
-    type Error = MainError;
-
-    fn draw_and_flush(
-        &mut self,
-        cyd: &mut CydEsp,
-        params: &[f32; DOF],
-        target_seed: u8,
-        show_fps: bool,
-        fps: Option<u32>,
-        touch_cursor: Option<(f32, f32)>,
-        controlled_knobs: &[ControlledKnob; 2],
-    ) -> Result<(), MainError> {
-        let mut frame = cyd.full_frame_mut();
-        match draw_armatron(
-            &mut frame,
-            params,
-            target_seed,
-            show_fps,
-            fps,
-            touch_cursor,
-            controlled_knobs,
-        ) {
-            Ok(()) => {}
-            Err(infallible) => match infallible {},
-        }
-        Ok(frame.flush()?)
-    }
+    Ok(armatron(&mut cyd).await?)
 }
 
 fn ensure_calibration(cyd: &mut CydEsp) -> Result<(), MainError> {

@@ -2,12 +2,9 @@
 //!
 //! The device-agnostic game loop lives here.
 //!
-//! # Platform integration
-//!
-//! Implement [`ArmatronPlatform`] for your target device and hand it to
-//! [`armatron`] alongside a [`Cyd`](linkage_blaze_cyd_core::Cyd) display.
-//! The generic loop updates the armatron state, dispatches touch input, and calls
-//! back into your platform for frame flushing.
+//! The generic loop updates the armatron state, dispatches touch input, renders
+//! changed frames, and flushes them through the [`Cyd`](linkage_blaze_cyd_core::Cyd)
+//! frame boundary.
 
 pub mod calibration;
 pub mod reverse_kinematics;
@@ -28,7 +25,7 @@ use linkage_blaze_core::{
     DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
     render_draw_items_3d,
 };
-use linkage_blaze_cyd_core::{Cyd, TouchInputEvent};
+use linkage_blaze_cyd_core::{Cyd, CydFrame, TouchInputEvent};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
@@ -147,38 +144,6 @@ pub enum TouchInputOutcome {
     Changed,
 }
 
-// ── ArmatronPlatform trait ────────────────────────────────────────────────────
-
-/// Platform-specific hooks for the armatron game loop.
-///
-/// Implement this for your target device and pass it to [`armatron`].
-/// The method gives the generic loop a consistent interface for frame rendering:
-///
-/// - [`draw_and_flush`](ArmatronPlatform::draw_and_flush): render the armatron frame into the platform
-///   frame buffer and flush it to the display.
-pub trait ArmatronPlatform {
-    /// The [`Cyd`]-compatible display device this platform drives.
-    type CydDevice: Cyd;
-
-    /// Error type returned by platform operations.
-    ///
-    /// Must be convertible from the device's flush/touch error so that
-    /// `cyd.read_touch_input()` errors propagate via `?` in the generic loop.
-    type Error: From<<Self::CydDevice as Cyd>::Error>;
-
-    /// Render the armatron frame into the platform frame buffer and flush to the display.
-    fn draw_and_flush(
-        &mut self,
-        cyd: &mut Self::CydDevice,
-        params: &[f32; DOF],
-        target_seed: u8,
-        show_fps: bool,
-        fps: Option<u32>,
-        touch_cursor: Option<(f32, f32)>,
-        controlled_knobs: &[ControlledKnob; 2],
-    ) -> Result<(), Self::Error>;
-}
-
 // ── Generic armatron loop ─────────────────────────────────────────────────────
 
 /// Run the armatron example forever.
@@ -186,17 +151,16 @@ pub trait ArmatronPlatform {
 /// Each iteration:
 /// 1. Reads the next touch event from [`Cyd::read_touch_input`].
 /// 2. Updates local armatron params, touch, and fps state.
-/// 3. If the frame changed, calls [`ArmatronPlatform::draw_and_flush`] to render and present.
+/// 3. If the frame changed, renders and presents a full-screen CYD frame.
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
 /// provide calibrated touch before calling [`armatron`]. The temporary
 /// [`calibration`] module exists only so current platform examples can share
 /// calibration UI helpers until that responsibility moves into the CYD device
 /// layer.
-pub fn armatron<C, P>(cyd: &mut C, platform: &mut P) -> Result<Infallible, P::Error>
+pub async fn armatron<C>(cyd: &mut C) -> Result<Infallible, C::Error>
 where
     C: Cyd,
-    P: ArmatronPlatform<CydDevice = C>,
 {
     let mut params = default_params(LINKAGE.view());
     randomize_target_params(&mut params, 0);
@@ -213,7 +177,7 @@ where
     ];
 
     loop {
-        let touch = cyd.read_touch_input().map_err(Into::into)?;
+        let touch = cyd.read_touch_input()?;
         let now = Instant::now();
         let previous_tick_before_frame = previous_tick;
         let first_tick = previous_tick_before_frame.is_none();
@@ -233,15 +197,20 @@ where
             || first_tick
             || fps_draw_requested;
         if draw_requested {
-            platform.draw_and_flush(
-                cyd,
+            let mut frame = cyd.full_frame_mut();
+            match draw_armatron(
+                &mut frame,
                 &params,
                 target_seed,
                 show_fps,
                 fps,
                 touch_cursor,
                 &controlled_knobs,
-            )?;
+            ) {
+                Ok(()) => {}
+                Err(infallible) => match infallible {},
+            }
+            frame.flush().await?;
         }
     }
 }
