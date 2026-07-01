@@ -24,6 +24,7 @@ use embedded_graphics::{
     Drawable, Pixel,
     pixelcolor::{Rgb565, raw::RawU16},
     prelude::{DrawTarget, Point, Size},
+    primitives::Rectangle,
 };
 
 /// An opaque RGB565 image decoded from a TGA at compile time.
@@ -202,10 +203,31 @@ impl<const W: usize, const H: usize, const N: usize> Image565Fixed<W, H, N> {
         }
     }
 
-    /// Describe this image as a static RGB565 bitmap for [`DrawItem2d`](crate::DrawItem2d).
+    /// Full-image view of this bitmap.
     #[must_use]
-    pub fn view(&'static self) -> crate::Image565View {
-        crate::Image565View::new(&self.pixels, Size::new(W as u32, H as u32))
+    pub const fn view(&'static self) -> crate::Image565View {
+        crate::Image565View::new_cropped(
+            &self.pixels,
+            W as u32,
+            Rectangle::new(Point::zero(), Size::new(W as u32, H as u32)),
+        )
+    }
+
+    /// Cropped view of this bitmap. `source` is in image coordinates.
+    ///
+    /// Panics if `source` extends outside the image bounds.
+    #[must_use]
+    pub const fn view_rect(&'static self, source: Rectangle) -> crate::Image565View {
+        assert!(
+            source.top_left.x >= 0 && source.top_left.y >= 0,
+            "view_rect: source top-left must be non-negative"
+        );
+        assert!(
+            source.top_left.x as usize + source.size.width as usize <= W
+                && source.top_left.y as usize + source.size.height as usize <= H,
+            "view_rect: source rectangle must be inside the image"
+        );
+        crate::Image565View::new_cropped(&self.pixels, W as u32, source)
     }
 
     /// Iterate the pixels as [`Rgb565`] values, row-major, top-left first.

@@ -48,9 +48,8 @@ const TIME_TEXT_CAPACITY: usize = 16;
 const TIME_TEXT_TOP_PADDING: i32 = -1;
 
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(50, 20), Size::new(220, 220));
-const BACKGROUND_BITMAP_TOP_LEFT: Point = Point::zero();
 const BACKGROUND_BITMAP_RECTANGLE: Rectangle =
-    Rectangle::new(BACKGROUND_BITMAP_TOP_LEFT, Size::new(320, 240));
+    Rectangle::new(Point::zero(), Size::new(320, 240));
 const BACKGROUND_BITMAP: Image565Fixed<320, 240, { 320 * 240 }> =
     tga565!("../assets/astronomy_window_background.tga", 320, 240);
 const PROJECTION: Projection = Projection::top_orthographic(
@@ -97,8 +96,7 @@ where
         let params = linkage_params(local_time);
 
         let clock_background = DrawItem2d::Bitmap(BitmapItem565::new(
-            BACKGROUND_BITMAP.view(),
-            bitmap_source_for_screen_rectangle(CLOCK_BOUNDS),
+            BACKGROUND_BITMAP.view_rect(CLOCK_BOUNDS),
             CLOCK_BOUNDS.top_left,
         ));
         let draw_items_2d = iter::once(clock_background).chain(
@@ -143,13 +141,6 @@ pub enum Error<F> {
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
-
-fn bitmap_source_for_screen_rectangle(screen_rectangle: Rectangle) -> Rectangle {
-    Rectangle::new(
-        screen_rectangle.top_left - BACKGROUND_BITMAP_TOP_LEFT,
-        screen_rectangle.size,
-    )
-}
 
 // ── Clock time ──────────────────────────────────────────────────────────────────
 
