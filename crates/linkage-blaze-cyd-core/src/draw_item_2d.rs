@@ -48,7 +48,11 @@ impl Image565View {
         stride: u32,
         source: Rectangle,
     ) -> Self {
-        Self { pixels, stride, source }
+        Self {
+            pixels,
+            stride,
+            source,
+        }
     }
 
     #[must_use]
@@ -76,7 +80,6 @@ impl Image565View {
         Rgb565::from(RawU16::new(self.pixels[index]))
     }
 }
-
 
 /// A pixel-space 2D draw item, ready to draw onto a [`PixelTarget`].
 ///

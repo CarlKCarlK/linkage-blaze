@@ -515,7 +515,9 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize> Iterat
 #[macro_export]
 macro_rules! tga565 {
     ($path:expr, $width:expr, $height:expr) => {
-        $crate::Image565Fixed::<$width, $height, { $width * $height }>::from_tga(include_bytes!($path))
+        $crate::Image565Fixed::<$width, $height, { $width * $height }>::from_tga(include_bytes!(
+            $path
+        ))
     };
 }
 
