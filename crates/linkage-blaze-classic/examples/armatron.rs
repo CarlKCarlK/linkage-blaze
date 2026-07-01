@@ -10,20 +10,19 @@ use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
     flash_block::FlashBlockEsp,
 };
-use embassy_time::Instant;
-use embedded_graphics::prelude::{DrawTarget, Point};
+use embedded_graphics::{Drawable, prelude::{DrawTarget, Point}};
+use embedded_graphics::pixelcolor::Rgb565;
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
 use static_cell::StaticCell;
 
-use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCydEsp, CalibrationConfig, CydDevice as _, CydError, CydEsp, CydStaticEsp,
+    CalibrationConfig, CydDevice as _, CydError, CydEsp, CydStaticEsp,
     DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, RegionBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
-    TouchInputEvent as CydTouchInputEvent,
 };
 use linkage_blaze_example_core::armatron::{
-    BLACK, WHITE, calibration_corner_for_index, draw_calibration_cross,
+    BLACK, CydSim, WHITE, ArmatronPlatform, armatron, calibration_corner_for_index,
+    draw_calibration_cross,
 };
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -42,8 +41,6 @@ enum MainError {
     InitDisplay,
     DrawCalibrationCross,
     FlushFrameBuffer,
-    TouchUnavailable,
-    CalibrationUnavailable,
 }
 
 impl From<device_envoy_esp::Error> for MainError {
@@ -74,8 +71,10 @@ impl From<CydError> for MainError {
                 }
             },
             CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
-            CydError::TouchUnavailable => MainError::TouchUnavailable,
-            CydError::CalibrationUnavailable => MainError::CalibrationUnavailable,
+            CydError::TouchUnavailable => unreachable!("touch always available when calibrated"),
+            CydError::CalibrationUnavailable => {
+                unreachable!("calibration always present after ensure_calibrated")
+            }
         }
     }
 }
@@ -125,37 +124,46 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_button,      // calibration button
     )?;
 
-    let mut cyd_sim = CydSim::new(); // or CydSim::new_with_fps() for benchmarking
-    loop {
-        // Keep runtime gated on an active calibration; this may trigger the calibration flow.
-        let mut cyd = ensure_calibration(&mut cyd, screen_buffer)?;
-
-        match cyd_sim.tick(Instant::now(), read_touch_input(&mut cyd)?) {
-            // 1_886_000 fps if only command
-            TickOut::Calibrate => cyd.remove_calibration(),
-            TickOut::Draw => {
-                // todo0000 make nicer
-                draw(screen_buffer, &cyd_sim); // 32.3 fps if only command
-                cyd.flush_at(screen_buffer, Point::new(0, 0))?; // 13.2 fps if only command
-            }
-            TickOut::Nada => {}
-        }
-    }
+    let mut platform = EspPlatform { screen_buffer };
+    armatron(&mut cyd, &mut platform)
 }
 
-fn ensure_calibration<'a>(
-    cyd: &'a mut CydEsp,
-    screen_buffer: &mut ScreenBuffer,
-) -> Result<CalibratedCydEsp<'a>, MainError> {
-    if cyd.recalibration_requested() {
+struct EspPlatform {
+    screen_buffer: &'static mut ScreenBuffer,
+}
+
+impl ArmatronPlatform for EspPlatform {
+    type CydDevice = CydEsp;
+    type Error = MainError;
+
+    fn ensure_calibrated(&mut self, cyd: &mut CydEsp) -> Result<(), MainError> {
+        ensure_calibration(cyd, self.screen_buffer)
+    }
+
+    fn remove_calibration(&mut self, cyd: &mut CydEsp) {
         cyd.remove_calibration();
     }
 
+    fn draw_and_flush<D>(&mut self, cyd: &mut CydEsp, drawable: &D) -> Result<(), MainError>
+    where
+        D: Drawable<Color = Rgb565, Output = ()>,
+    {
+        match drawable.draw(self.screen_buffer) {
+            Ok(()) => {}
+            Err(infallible) => match infallible {},
+        }
+        Ok(cyd.flush_at(self.screen_buffer, Point::new(0, 0))?)
+    }
+}
+
+fn ensure_calibration(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), MainError> {
+    if cyd.recalibration_requested() {
+        cyd.remove_calibration();
+    }
     if cyd.calibration_config().is_none() {
         calibrate(cyd, screen_buffer)?;
     }
-
-    Ok(cyd.ensure_calibration()?)
+    Ok(())
 }
 
 fn calibrate(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), MainError> {
@@ -220,24 +228,4 @@ fn draw_calibration_screen(
         .map_err(|_| MainError::DrawCalibrationCross)?;
     }
     Ok(cyd.flush_at(screen_buffer, Point::new(0, 0))?)
-}
-
-fn read_touch_input(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchInputEvent>, MainError> {
-    Ok(cyd
-        .read_touch_input()?
-        .map(|touch_input_event| match touch_input_event {
-            CydTouchInputEvent::Down { x, y } => TouchInputEvent::Down { x, y },
-            CydTouchInputEvent::Move { x, y } => TouchInputEvent::Move { x, y },
-            CydTouchInputEvent::Up => TouchInputEvent::Up,
-        }))
-}
-
-fn draw(
-    screen_buffer: &mut ScreenBuffer,
-    drawable: &impl embedded_graphics::Drawable<Color = embedded_graphics::pixelcolor::Rgb565, Output = ()>,
-) {
-    match drawable.draw(screen_buffer) {
-        Ok(()) => {}
-        Err(infallible) => match infallible {},
-    }
 }
