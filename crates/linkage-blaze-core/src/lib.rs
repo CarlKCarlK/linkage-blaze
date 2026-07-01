@@ -220,7 +220,7 @@ impl VariableArg {
 pub trait Linkage<const DOF: usize, const MARKS: usize> {
     /// Create a borrowed view for evaluation and rendering.
     ///
-    /// All evaluation methods (final_pose, poses, draw_items, etc.) are available on the returned
+    /// All evaluation methods (final_pose, poses, draw_items_3d, etc.) are available on the returned
     /// [`LinkageView`]. This keeps the conceptual model clean: storage types (LinkageFixed, LinkageBuf)
     /// define expressions; views evaluate them.
     fn view(&self) -> LinkageView<'_, DOF, MARKS>;
@@ -612,12 +612,15 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .forward(2.0);
     ///
     /// let view = LINKAGE.view();
-    /// let has_stroke = view.draw_items(&[])
+    /// let has_stroke = view.draw_items_3d(&[])
     ///     .any(|item| matches!(item, DrawItem3d::Stroke(_)));
     /// assert!(has_stroke);
     /// ```
-    pub fn draw_items<'b>(&'b self, params: &'b [f32; DOF]) -> DrawItemIter<'b, DOF, MARKS> {
-        DrawItemIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
+    pub fn draw_items_3d<'b>(
+        &'b self,
+        params: &'b [f32; DOF],
+    ) -> DrawItem3dIter<'b, DOF, MARKS> {
+        DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
     }
 
     /// The number of [`DrawItem3d`]s this linkage yields, evaluated at compile time.
@@ -634,11 +637,11 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
-    /// const COUNT: usize = LINKAGE.view().draw_item_count();
+    /// const COUNT: usize = LINKAGE.view().draw_item_3d_count();
     /// assert_eq!(COUNT, 2);
     /// ```
     #[must_use]
-    pub const fn draw_item_count(&self) -> usize {
+    pub const fn draw_item_3d_count(&self) -> usize {
         let mut count = 0;
         let mut pen_down = true;
         let mut marked = [true; MARKS];
@@ -1448,7 +1451,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// Create a borrowed view for evaluation and rendering.
     ///
     /// The view erases the step capacity `N` while preserving the degree-of-freedom `DOF`.
-    /// All evaluation methods (poses, draw_items, etc.) operate on the view.
+    /// All evaluation methods (poses, draw_items_3d, etc.) operate on the view.
     #[must_use]
     #[inline]
     pub const fn view(&self) -> LinkageView<'_, DOF, MARKS> {
@@ -2294,7 +2297,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// Create a borrowed view for evaluation and rendering.
     ///
     /// The view erases the step capacity while preserving the degree-of-freedom `DOF`.
-    /// All evaluation methods (poses, draw_items, etc.) operate on the view.
+    /// All evaluation methods (poses, draw_items_3d, etc.) operate on the view.
     #[must_use]
     #[inline]
     pub fn view(&self) -> LinkageView<'_, DOF, MARKS> {
@@ -3578,13 +3581,13 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
     }
 }
 
-/// Iterator over draw items from a LinkageView (does not require const N).
+/// Iterator over 3D draw items from a LinkageView (does not require const N).
 /// Iterator over [`DrawItem3d`]s produced by evaluating a linkage.
 ///
-/// Obtain via [`LinkageView::draw_items`]. After exhausting the iterator the
-/// [`pose_by_mark_name`](DrawItemIter::pose_by_mark_name) method lets you query the final
+/// Obtain via [`LinkageView::draw_items_3d`]. After exhausting the iterator the
+/// [`pose_by_mark_name`](DrawItem3dIter::pose_by_mark_name) method lets you query the final
 /// pose at any named mark.
-pub struct DrawItemIter<'a, const DOF: usize, const MARKS: usize> {
+pub struct DrawItem3dIter<'a, const DOF: usize, const MARKS: usize> {
     steps: &'a [Step],
     mark_names: &'a [&'static str; MARKS],
     params: &'a [f32; DOF],
@@ -3594,7 +3597,7 @@ pub struct DrawItemIter<'a, const DOF: usize, const MARKS: usize> {
     marked: [MarkedState; MARKS],
 }
 
-impl<'a, const DOF: usize, const MARKS: usize> DrawItemIter<'a, DOF, MARKS> {
+impl<'a, const DOF: usize, const MARKS: usize> DrawItem3dIter<'a, DOF, MARKS> {
     fn new(
         steps: &'a [Step],
         mark_names: &'a [&'static str; MARKS],
@@ -3639,7 +3642,7 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItemIter<'a, DOF, MARKS> {
     }
 }
 
-/// Error returned by [`DrawItemIter::pose_by_mark_name`] when a mark name does
+/// Error returned by [`DrawItem3dIter::pose_by_mark_name`] when a mark name does
 /// not uniquely identify a mark.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MarkError {
@@ -3647,7 +3650,7 @@ pub enum MarkError {
     Ambiguous,
 }
 
-impl<const DOF: usize, const MARKS: usize> Iterator for DrawItemIter<'_, DOF, MARKS> {
+impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, MARKS> {
     type Item = DrawItem3d;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -3779,8 +3782,8 @@ pub enum DrawItem3d {
 }
 
 impl DrawItem3d {
-    /// Project this 3D/linkage-space item through `projection` into pixel-space
-    /// [`DrawItem2d`] ready to [`draw`](DrawItem2d::draw).
+    /// Project this 3D/linkage-space item through `projection` into
+    /// pixel-space [`DrawItem2d`] ready to [`draw`](DrawItem2d::draw).
     #[must_use]
     pub fn project(self, projection: &Projection) -> DrawItem2d {
         match self {
@@ -3919,7 +3922,7 @@ pub trait DrawSurface {
 
 /// Render draw items through a projection and surface. Handles the Disk→ellipse
 /// conversion so every renderer automatically gets correct foreshortening.
-pub fn render_draw_items<S>(
+pub fn render_draw_items_3d<S>(
     proj: &Projection,
     surface: &mut S,
     items: impl Iterator<Item = DrawItem3d>,
@@ -4544,13 +4547,13 @@ mod tests {
         const LINKAGE: LinkageFixed<0, 0, 4> = LinkageFixed::start().pen_width(0.0).forward(1.0);
 
         let params = [];
-        let draw_item = LINKAGE
+        let draw_item_3d = LINKAGE
             .view()
-            .draw_items(&params)
+            .draw_items_3d(&params)
             .next()
             .expect("zero-width pen should still produce a stroke");
 
-        match draw_item {
+        match draw_item_3d {
             DrawItem3d::Stroke(stroke_segment) => {
                 assert_eq!(stroke_segment.width(), 0.0);
             }
@@ -5390,21 +5393,21 @@ mod tests {
             specialized.view().final_pose(specialized_params),
             1e-4,
         );
-        assert_draw_items_close(
-            original.view().draw_items(original_params),
-            specialized.view().draw_items(specialized_params),
+        assert_draw_items_3d_close(
+            original.view().draw_items_3d(original_params),
+            specialized.view().draw_items_3d(specialized_params),
             1e-4,
         );
     }
 
-    fn assert_draw_items_close(
+    fn assert_draw_items_3d_close(
         mut left: impl Iterator<Item = DrawItem3d>,
         mut right: impl Iterator<Item = DrawItem3d>,
         tolerance: f32,
     ) {
         loop {
             match (left.next(), right.next()) {
-                (Some(left), Some(right)) => assert_draw_item_close(left, right, tolerance),
+                (Some(left), Some(right)) => assert_draw_item_3d_close(left, right, tolerance),
                 (None, None) => break,
                 (Some(_), None) => panic!("specialized linkage emitted fewer draw items"),
                 (None, Some(_)) => panic!("specialized linkage emitted more draw items"),
@@ -5412,7 +5415,7 @@ mod tests {
         }
     }
 
-    fn assert_draw_item_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
+    fn assert_draw_item_3d_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
         match (left, right) {
             (DrawItem3d::Stroke(left), DrawItem3d::Stroke(right)) => {
                 assert_pose_close(left.start(), right.start(), tolerance);

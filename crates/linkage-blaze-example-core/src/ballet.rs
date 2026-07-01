@@ -71,8 +71,8 @@ where
             BACKGROUND_BITMAP.copy_to(&mut cyd_frame)?;
 
             // Apply the mocap params to the linkage and draw everything to the frame.
-            for draw_item in LINKAGE.draw_items(&params) {
-                draw_item.project(&PROJECTION).draw(&mut cyd_frame);
+            for draw_item_3d in LINKAGE.draw_items_3d(&params) {
+                draw_item_3d.project(&PROJECTION).draw(&mut cyd_frame);
             }
 
             // Create a status line and write it to the frame.

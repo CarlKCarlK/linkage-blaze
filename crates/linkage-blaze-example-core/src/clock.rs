@@ -118,12 +118,12 @@ where
         let params_done = Instant::now();
 
         let contiguous_pixels =
-            ContiguousPixels::<{ LINKAGE.draw_item_count() }>::from_draw_items_2d(
+            ContiguousPixels::<{ LINKAGE.draw_item_3d_count() }>::from_draw_items_2d(
                 CLOCK_BOUNDS,
                 background,
                 LINKAGE
-                    .draw_items(&params)
-                    .map(|draw_item| draw_item.project(&PROJECTION)),
+                    .draw_items_3d(&params)
+                    .map(|draw_item_3d| draw_item_3d.project(&PROJECTION)),
             );
 
         let primitives_started = Instant::now();

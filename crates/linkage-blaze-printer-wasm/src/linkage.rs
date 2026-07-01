@@ -23,11 +23,11 @@ const PRINTER: LinkageFixed<3, 5, 180> = linkage_fixed!("linkages/printer.lb.rs"
 /// - r,g,b: color (0–255)
 /// - size1: stroke width or sphere/disk radius
 /// - size2: unused (0)
-pub fn draw_items_from(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
+pub fn draw_items_3d_from(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
     let params = [x_mm / BUILD_X_MM, y_mm / BUILD_Y_MM, z_mm / BUILD_Z_MM];
     PRINTER
         .view()
-        .draw_items(&params)
+        .draw_items_3d(&params)
         .flat_map(|item| {
             let mut record = [0f32; 12];
             match item {
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn mini_boat_extents_are_inside_printer_model_range() {
-        let items = draw_items_from(158.0, 215.28, 65.0);
+        let items = draw_items_3d_from(158.0, 215.28, 65.0);
         assert!(!items.is_empty());
     }
 }

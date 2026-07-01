@@ -15,7 +15,8 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    DrawItem2d, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
+    DrawItem2d, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage,
+    linkage_fixed,
 };
 use log::info;
 use time::OffsetDateTime;
@@ -137,22 +138,22 @@ where
         let params = linkage_params(local_time);
 
         // Create an iterator that will list every 3D item and its pose.
-        let mut draw_items = LINKAGE.draw_items(&params);
+        let mut draw_items_3d = LINKAGE.draw_items_3d(&params);
 
         // // Iterate 3d items, project to 2D, and collect 2D items and poses.
-        let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_count() }>::new();
-        for draw_item in draw_items.by_ref() {
+        let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_3d_count() }>::new();
+        for draw_item_3d in draw_items_3d.by_ref() {
             projected_items
-                .push(draw_item.project(&PROJECTION))
+                .push(draw_item_3d.project(&PROJECTION))
                 .map_err(Error::VecOverflow)?;
         }
 
         // Using the exhausted iterator, find the position of the middle of the left hand.
         let (hours_anchor_x, hours_anchor_y) =
-            mark_lookup(draw_items.pose_by_mark_name("lMid2"))?.project(&PROJECTION);
+            mark_lookup(draw_items_3d.pose_by_mark_name("lMid2"))?.project(&PROJECTION);
         // Find the position of the middle of the right hand.
         let (minute_anchor_x, minute_anchor_y) =
-            mark_lookup(draw_items.pose_by_mark_name("rMid2"))?.project(&PROJECTION);
+            mark_lookup(draw_items_3d.pose_by_mark_name("rMid2"))?.project(&PROJECTION);
 
         // Figure out where to draw the hour and minute placards.
         let hours_top_left = Point::new(

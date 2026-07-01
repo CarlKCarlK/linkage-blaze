@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import init, { PrinterSimWasm, printerDrawItems } from "../pkg/linkage_blaze_printer_wasm.js";
+import init, { PrinterSimWasm, printerDrawItems3d } from "../pkg/linkage_blaze_printer_wasm.js";
 
 // ── Printer build volume (mm) ─────────────────────────────────────────────────
 const BUILD_X = 220;
@@ -44,7 +44,7 @@ window.__linkageBlazePrinterDebug = {
   },
   printGeometryCounts: () => ({
     extrusionVertices: extrusionVertCount / 3,
-    printDrawItems: sim.printDrawItemCount(),
+    printDrawItems3d: sim.printDrawItem3dCount(),
     printLinkageSteps: sim.printLinkageStepCount(),
     travelVertices: travelVertCount / 3,
   }),
@@ -254,7 +254,7 @@ fitDefault();
 })();
 
 // ── Draw-items printer update ─────────────────────────────────────────────────
-// Calls printerDrawItems() from WASM and rebuilds dynamicGroup each frame.
+// Calls printerDrawItems3d() from WASM and rebuilds dynamicGroup each frame.
 // Each draw item is 12 floats: [type, x0,y0,z0, x1,y1,z1, r,g,b, size1, size2]
 //   type 0 = Stroke   (x0..z0 = start, x1..z1 = end, size1 = width in mm)
 //   type 1 = Sphere   (x0..z0 = center, size1 = radius)
@@ -268,7 +268,7 @@ function updatePrinterFromDrawItems(toolX, toolY, toolZ) {
     dynamicGroup.remove(obj);
   }
 
-  const items = printerDrawItems(toolX, toolY, toolZ);
+  const items = printerDrawItems3d(toolX, toolY, toolZ);
 
   for (let i = 0; i + STRIDE <= items.length; i += STRIDE) {
     const type  = items[i];
@@ -376,10 +376,10 @@ function initGCodeGeometry() {
 
 function rebuildGCodeGeometry() {
   if (!extrusionLines) return;
-  const currentPrintItemIndex = sim.printDrawItemCount();
+  const currentPrintItemIndex = sim.printDrawItem3dCount();
   if (currentPrintItemIndex === lastPrintItemIndex) return;
 
-  const items = sim.printDrawItemsSince(lastPrintItemIndex);
+  const items = sim.printDrawItems3dSince(lastPrintItemIndex);
   lastPrintItemIndex = currentPrintItemIndex;
 
   for (let itemIndex = 0; itemIndex + STRIDE <= items.length; itemIndex += STRIDE) {

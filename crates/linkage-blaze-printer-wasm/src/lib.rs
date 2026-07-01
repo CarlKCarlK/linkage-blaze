@@ -7,7 +7,7 @@ mod geometry;
 mod linkage;
 mod printer;
 
-use linkage::{draw_items_from, printer_points_from};
+use linkage::{draw_items_3d_from, printer_points_from};
 use printer::PrinterSim;
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -74,9 +74,9 @@ impl PrinterSimWasm {
     }
 
     /// Current number of draw items produced by the Rust-owned print linkage.
-    #[wasm_bindgen(js_name = printDrawItemCount)]
-    pub fn print_draw_item_count(&self) -> usize {
-        self.sim.print_draw_item_count()
+    #[wasm_bindgen(js_name = printDrawItem3dCount)]
+    pub fn print_draw_item_3d_count(&self) -> usize {
+        self.sim.print_draw_item_3d_count()
     }
 
     /// Current number of steps in the Rust-owned print linkage.
@@ -86,9 +86,9 @@ impl PrinterSimWasm {
     }
 
     /// Flat draw-item records produced by the print linkage since `from_item`.
-    #[wasm_bindgen(js_name = printDrawItemsSince)]
-    pub fn print_draw_items_since(&self, from_item: usize) -> Vec<f32> {
-        self.sim.print_draw_items_flat_since(from_item)
+    #[wasm_bindgen(js_name = printDrawItems3dSince)]
+    pub fn print_draw_items_3d_since(&self, from_item: usize) -> Vec<f32> {
+        self.sim.print_draw_items_3d_flat_since(from_item)
     }
 
     /// Flat `[x0,y0,z0, x1,y1,z1, ...]` for ALL extrusion segments played so far.
@@ -136,9 +136,9 @@ impl Default for PrinterSimWasm {
 /// - type 0 = Stroke (x0..z0 = start, x1..z1 = end, size1 = width)
 /// - type 1 = Sphere (x0..z0 = center, size1 = radius)
 /// - type 2 = Disk   (x0..z0 = center, size1 = radius)
-#[wasm_bindgen(js_name = printerDrawItems)]
-pub fn printer_draw_items(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
-    draw_items_from(x_mm, y_mm, z_mm)
+#[wasm_bindgen(js_name = printerDrawItems3d)]
+pub fn printer_draw_items_3d(x_mm: f32, y_mm: f32, z_mm: f32) -> Vec<f32> {
+    draw_items_3d_from(x_mm, y_mm, z_mm)
 }
 
 /// Kinematic poses for the bed-slinger printer as a flat `[x,y,z, ...]` array.
