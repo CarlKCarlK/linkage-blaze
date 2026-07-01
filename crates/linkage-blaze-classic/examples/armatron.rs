@@ -9,27 +9,24 @@ use core::convert::Infallible;
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
     flash_block::FlashBlockEsp,
+    init_and_start,
 };
-use embedded_graphics::{Drawable, prelude::{DrawTarget, Point}};
+use embassy_executor::Spawner;
+use embedded_graphics::Drawable;
 use embedded_graphics::pixelcolor::Rgb565;
 use esp_backtrace as _;
-use esp_hal::{Config, delay::Delay};
-use static_cell::StaticCell;
+use esp_hal::delay::Delay;
 
 use linkage_blaze_cyd::{
-    CalibrationConfig, CydDevice as _, CydError, CydEsp, CydStaticEsp,
-    DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, RegionBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
+    CalibrationConfig, CydDevice as _, CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation,
+    RawPoint, RawTouchEvent, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use linkage_blaze_example_core::armatron::{
-    BLACK, CydSim, WHITE, ArmatronPlatform, armatron, calibration_corner_for_index,
-    draw_calibration_cross,
+    ArmatronPlatform, BLACK, WHITE, armatron, calibration_corner_for_index, draw_calibration_cross,
 };
+use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
-
-const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
-
-type ScreenBuffer = RegionBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
 
 #[derive(Debug)]
 enum MainError {
@@ -79,27 +76,21 @@ impl From<CydError> for MainError {
     }
 }
 
-#[esp_hal::main]
-fn main() -> ! {
-    let err = inner_main().unwrap_err();
+#[esp_rtos::main]
+async fn main(spawner: Spawner) -> ! {
+    let err = inner_main(spawner).await.unwrap_err();
     panic!("{err:?}");
 }
 
-fn inner_main() -> Result<Infallible, MainError> {
-    let p = esp_hal::init(Config::default());
+async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
+    init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
+    info!("Starting CYD armatron loop");
 
     let [calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
-    // todo0000 make nicer
-    static SCREEN_BUFFER: StaticCell<ScreenBuffer> = StaticCell::new();
-    let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);
-
-    // todo00 unify: this app draws into its own full-screen ScreenBuffer, so the
-    // CydEsp-owned buffer is zero-sized. Look at rendering into the single CydEsp-owned
-    // buffer via cyd.frame_mut instead.
-    static CYD_STATIC: CydStaticEsp<0> = CydEsp::new_static();
+    static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     let mut cyd = CydEsp::new(
         &CYD_STATIC,
         p.SPI2,   // display SPI
@@ -123,21 +114,20 @@ fn inner_main() -> Result<Infallible, MainError> {
         calibration_flash_block, // calibration flash block
         calibration_button,      // calibration button
     )?;
+    info!("CYD display and touch initialized");
 
-    let mut platform = EspPlatform { screen_buffer };
+    let mut platform = EspPlatform;
     armatron(&mut cyd, &mut platform)
 }
 
-struct EspPlatform {
-    screen_buffer: &'static mut ScreenBuffer,
-}
+struct EspPlatform;
 
 impl ArmatronPlatform for EspPlatform {
     type CydDevice = CydEsp;
     type Error = MainError;
 
     fn ensure_calibrated(&mut self, cyd: &mut CydEsp) -> Result<(), MainError> {
-        ensure_calibration(cyd, self.screen_buffer)
+        ensure_calibration(cyd)
     }
 
     fn remove_calibration(&mut self, cyd: &mut CydEsp) {
@@ -148,31 +138,32 @@ impl ArmatronPlatform for EspPlatform {
     where
         D: Drawable<Color = Rgb565, Output = ()>,
     {
-        match drawable.draw(self.screen_buffer) {
+        let mut frame = cyd.full_frame_mut();
+        match drawable.draw(&mut frame) {
             Ok(()) => {}
             Err(infallible) => match infallible {},
         }
-        Ok(cyd.flush_at(self.screen_buffer, Point::new(0, 0))?)
+        Ok(frame.flush()?)
     }
 }
 
-fn ensure_calibration(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), MainError> {
+fn ensure_calibration(cyd: &mut CydEsp) -> Result<(), MainError> {
     if cyd.recalibration_requested() {
         cyd.remove_calibration();
     }
     if cyd.calibration_config().is_none() {
-        calibrate(cyd, screen_buffer)?;
+        calibrate(cyd)?;
     }
     Ok(())
 }
 
-fn calibrate(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), MainError> {
+fn calibrate(cyd: &mut CydEsp) -> Result<(), MainError> {
     let mut calibration_index = 0;
     let mut calibration_points = [RawPoint { x: 0, y: 0 }; 4];
 
     esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
     esp_println::println!("cal: next tap UL");
-    draw_calibration_screen(cyd, screen_buffer, calibration_index)?;
+    draw_calibration_screen(cyd, calibration_index)?;
 
     loop {
         if cyd.recalibration_requested() {
@@ -180,7 +171,7 @@ fn calibrate(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), M
             calibration_points = [RawPoint { x: 0, y: 0 }; 4];
             esp_println::println!("cal: calibration button pressed, restarting calibration");
             esp_println::println!("cal: next tap UL");
-            draw_calibration_screen(cyd, screen_buffer, calibration_index)?;
+            draw_calibration_screen(cyd, calibration_index)?;
             continue;
         }
 
@@ -197,7 +188,7 @@ fn calibrate(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), M
                 if calibration_index < 4 {
                     let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
                     esp_println::println!("cal: next tap {}", corner_label);
-                    draw_calibration_screen(cyd, screen_buffer, calibration_index)?;
+                    draw_calibration_screen(cyd, calibration_index)?;
                     continue;
                 }
 
@@ -212,20 +203,17 @@ fn calibrate(cyd: &mut CydEsp, screen_buffer: &mut ScreenBuffer) -> Result<(), M
     }
 }
 
-fn draw_calibration_screen(
-    cyd: &mut CydEsp,
-    screen_buffer: &mut ScreenBuffer,
-    calibration_index: usize,
-) -> Result<(), MainError> {
-    screen_buffer.clear(CydEsp::rgb565(BLACK));
+fn draw_calibration_screen(cyd: &mut CydEsp, calibration_index: usize) -> Result<(), MainError> {
+    let mut frame = cyd.full_frame_mut();
+    frame.fill(CydEsp::rgb565(BLACK));
     if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
         draw_calibration_cross(
-            screen_buffer,
+            &mut frame,
             calibration_corner,
-            CydSim::WIDTH_U16,
-            CydSim::HEIGHT_U16,
+            SCREEN_WIDTH as u16,
+            SCREEN_HEIGHT as u16,
         )
         .map_err(|_| MainError::DrawCalibrationCross)?;
     }
-    Ok(cyd.flush_at(screen_buffer, Point::new(0, 0))?)
+    Ok(frame.flush()?)
 }
