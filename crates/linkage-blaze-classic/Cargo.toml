@@ -53,7 +53,6 @@ log = { version = "0.4", default-features = false }
 linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
-linkage-blaze-armatron-core = { path = "../linkage-blaze-armatron-core" }
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
 embassy-time = "0.5.1"

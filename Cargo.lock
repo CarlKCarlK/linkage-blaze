@@ -1582,7 +1582,6 @@ dependencies = [
  "esp-println",
  "esp-rtos",
  "heapless 0.9.3",
- "linkage-blaze-armatron-core",
  "linkage-blaze-core",
  "linkage-blaze-cyd",
  "linkage-blaze-example-core",
