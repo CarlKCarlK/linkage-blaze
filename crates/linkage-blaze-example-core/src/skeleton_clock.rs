@@ -171,7 +171,7 @@ where
         // iterator" patten.)
         let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
         while let Some(mut tile) = tiles.next() {
-            BACKGROUND_BITMAP.draw(&mut tile).unwrap_never();
+            BACKGROUND_BITMAP.draw(&mut tile).unwrap_infallible();
 
             // Draw the projected items from the linkage.
             for projected_item in &projected_items {
@@ -179,7 +179,7 @@ where
             }
 
             // Draw the hour sign and number
-            HOURS_SIGN.at(hours_top_left).draw(&mut tile).unwrap_never();
+            HOURS_SIGN.at(hours_top_left).draw(&mut tile).unwrap_infallible();
             draw_centered_sign_value(
                 &mut tile,
                 hours_top_left,
@@ -191,7 +191,7 @@ where
             MINUTE_SIGN
                 .at(minute_top_left)
                 .draw(&mut tile)
-                .unwrap_never();
+                .unwrap_infallible();
             draw_centered_sign_value(
                 &mut tile,
                 minute_top_left,
@@ -230,7 +230,7 @@ where
 
     let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
     while let Some(mut frame) = tiles.next() {
-        BACKGROUND_BITMAP.draw(&mut frame).unwrap_never();
+        BACKGROUND_BITMAP.draw(&mut frame).unwrap_infallible();
         frame.flush().await.map_err(Error::Flush)?;
     }
 
@@ -384,7 +384,7 @@ fn draw_centered_text<D>(
         .build();
     Text::with_text_style(text, center, MonoTextStyle::new(font, color), text_style)
         .draw(target)
-        .unwrap_never();
+        .unwrap_infallible();
 }
 
 /// Overlay a two-digit value onto a blitted sign bitmap, centered in the open
