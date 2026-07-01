@@ -11,7 +11,7 @@ use linkage_blaze_core::{
 };
 
 use linkage_blaze_cyd_core::{
-    CopySizeError, Cyd, CydFrame, DrawItem3dExt, Image565, Orientation, tga565,
+    CopySizeError, Cyd, CydFrame, DrawItem3dExt, Image565Fixed, Orientation, tga565,
 };
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ const MOTION: BvhMotion<132, 592> = bvh_motion!("../../linkage-blaze-mocap/sampl
 const MOTION_FPS: f32 = 120.0; // the mocap was captured at 120fps, so we can run it at that speed.
 
 // A background bitmap read at compile time and stored in the binary.
-const BACKGROUND_BITMAP: Image565<240, 320, { 240 * 320 }> =
+const BACKGROUND_BITMAP: Image565Fixed<240, 320, { 240 * 320 }> =
     tga565!("../assets/ballet_background.tga", 240, 320);
 
 // How we convert 3D points in the linkage to 2D points in a frame.

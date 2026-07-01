@@ -9,21 +9,33 @@
 //! and the number of tile columns and rows; it derives the per-tile size with
 //! ceiling division and clips the final column/row to the region edges.
 //! [`Rectangle`] describes a single rectangle (for example a full-width text
-//! band), and [`max_usize`] combines pixel counts so a shared buffer can be sized
-//! as the max of every frame an app flushes.
+//! band), and [`max_rectangle_pixel_count`] sizes a shared buffer as the max of
+//! two rectangles an app flushes.
 
 use embedded_graphics::{
     prelude::{Point, Size},
     primitives::Rectangle,
 };
 
-/// `const fn` maximum of two `usize` values.
+/// Pixel count for a rectangle.
+#[must_use]
+pub const fn rectangle_pixel_count(rectangle: Rectangle) -> usize {
+    (rectangle.size.width * rectangle.size.height) as usize
+}
+
+/// Maximum pixel count of two rectangles.
+#[must_use]
+pub const fn max_rectangle_pixel_count(first: Rectangle, second: Rectangle) -> usize {
+    max_pixel_count(rectangle_pixel_count(first), rectangle_pixel_count(second))
+}
+
+/// `const fn` maximum of two pixel counts.
 ///
 /// Useful for sizing a shared `PixelBuffer<N>` as the largest of several frame
 /// pixel counts, e.g.
-/// `max_usize((text_band.size.width * text_band.size.height) as usize, grid.max_tile_pixel_count())`.
+/// `max_pixel_count(rectangle_pixel_count(text_band), grid.max_tile_pixel_count())`.
 #[must_use]
-pub const fn max_usize(first: usize, second: usize) -> usize {
+pub const fn max_pixel_count(first: usize, second: usize) -> usize {
     if first > second { first } else { second }
 }
 

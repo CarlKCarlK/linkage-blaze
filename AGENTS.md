@@ -7,8 +7,8 @@ This file contains shared workspace rules for this repository.
 - Avoid introducing `unsafe` blocks. If a change truly requires `unsafe`, call it out explicitly and explain the justification so the user can review it carefully.
 - Do not "fix" warnings or errors by suppressing lints (for example `#[allow(...)]`, crate-level allow attributes, or similar) unless the human explicitly requests that suppression.
 - If warnings are caused by obsolete code, delete or refactor the obsolete code instead of hiding the warning.
-- Never use `let _ = …` to suppress a `Result`. Use `.expect("…")` with a message stating the invariant (or handle the error properly). This applies even when the error type is `Infallible`: write `.expect(...)` rather than silently dropping the value. For a non-`Result` value that is intentionally unused, call the function as a plain statement instead of binding it to `_`.
-- Never use `.ok()` to discard a `Result`. When the enclosing function can propagate the error, use `?`. Otherwise use `.expect("…")`. When the operation truly cannot fail (for example a draw whose error type is `Infallible`), `.expect(...)` compiles away to nothing; when it can fail, `.expect(...)` turns a silently-ignored error into a loud panic that surfaces the bug instead of hiding it.
+- Never use `let _ = …` to suppress a `Result`. Handle the error properly. For a non-`Result` value that is intentionally unused, call the function as a plain statement instead of binding it to `_`.
+- Never use `.ok()` to discard a `Result`. When the enclosing function can propagate the error, use `?` so it eventually reaches `inner_main`/`main`. In MCU app paths, do not use `.expect(...)` or `.unwrap()` for fallible operations; return the error instead. When the operation truly cannot fail because the error type is `Infallible`, use `.unwrap_never()` (from the local infallible-result extension) rather than `.expect(...)`.
 - Prefer a plain `?` over an explicit `.map_err(Variant)?`. Give an error enum a derived `From` (e.g. `derive_more::From`, or `#[from]` on the variant) for each source error so propagation is just `?`. When a generic blanket conversion (such as `impl<F: SomeBound> From<F> for Error<F>` for a device/flush error) would collide under coherence with those concrete `From`s, reserve the clean `?` path for *our own* error types and make the single generic/foreign error the explicit `.map_err(Error::Flush)?` exception — not the other way around. Document the collision at the enum so the asymmetry is not mistaken for an oversight. See `ballet::Error` in `linkage-blaze-example-core` for the canonical example.
 - Keep the core crate `no_std` and no-allocation unless the user explicitly changes that goal.
 - Avoid silent clamping; prefer asserts or typed ranges so out-of-range inputs fail fast.
@@ -135,6 +135,18 @@ Guidelines:
 - Prefer shadowing at the smallest reasonable scope so the new meaning does not leak too far.
 - Use assertions or checked conversions before shadowing when truncation or overflow is possible.
 - Do not shadow across long spans if it could confuse readers.
+
+## Fixed / View Type Pairs
+
+When a type has both a const-generic "storage" form and a type-erased "view" form, name them with the suffixes `Fixed` and `View` respectively, connected by a `.view()` method. This mirrors the `LinkageFixed` / `LinkageView` pair already in the codebase.
+
+- `FooFixed<const W: usize, …>` — owns the data with compile-time dimensions (lives in flash as a `const`).
+- `FooView` — type-erased slice-based view (`&'static [u16]` + runtime size), usable without const generics.
+- `.view()` — the conversion method from `FooFixed` to `FooView`.
+
+Example: `Image565Fixed<W, H, N>` → `image.view()` → `Image565View`.
+
+Do not use the `Buf` / plain-name pattern (e.g. `PathBuf` / `Path`) for this; prefer `Fixed` / `View` to stay consistent with the existing codebase convention.
 
 ## API Design Patterns
 

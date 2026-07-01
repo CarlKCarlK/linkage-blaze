@@ -12,12 +12,12 @@ use linkage_blaze_core::{
 
 /// A statically-stored RGB565 bitmap in row-major order.
 #[derive(Clone, Copy, Debug)]
-pub struct StaticBitmap565 {
+pub struct Image565View {
     pixels: &'static [u16],
     size: Size,
 }
 
-impl StaticBitmap565 {
+impl Image565View {
     /// Create a bitmap descriptor from row-major RGB565 pixels.
     ///
     /// Panics if `pixels.len() != size.width * size.height`.
@@ -26,7 +26,7 @@ impl StaticBitmap565 {
         let pixel_count = size.width as usize * size.height as usize;
         assert!(
             pixels.len() == pixel_count,
-            "StaticBitmap565 pixels must match width * height"
+            "Image565View pixels must match width * height"
         );
         Self { pixels, size }
     }
@@ -40,13 +40,13 @@ impl StaticBitmap565 {
     pub fn pixel_at(&self, point: Point) -> Rgb565 {
         assert!(
             point.x >= 0 && point.y >= 0,
-            "StaticBitmap565 pixel coordinate must be non-negative"
+            "Image565View pixel coordinate must be non-negative"
         );
         let position_x = point.x as usize;
         let position_y = point.y as usize;
         assert!(
             position_x < self.size.width as usize && position_y < self.size.height as usize,
-            "StaticBitmap565 pixel coordinate must be inside the bitmap"
+            "Image565View pixel coordinate must be inside the bitmap"
         );
         let index = position_y * self.size.width as usize + position_x;
         Rgb565::from(RawU16::new(self.pixels[index]))
@@ -72,7 +72,7 @@ impl StaticBitmap565 {
 /// A rectangular piece of a statically-stored RGB565 bitmap.
 #[derive(Clone, Copy, Debug)]
 pub struct BitmapItem565 {
-    bitmap: StaticBitmap565,
+    bitmap: Image565View,
     source: Rectangle,
     top_left: Point,
 }
@@ -83,7 +83,7 @@ impl BitmapItem565 {
     /// `source` is in bitmap coordinates. `top_left` is the output location of
     /// the source rectangle's top-left corner.
     #[must_use]
-    pub fn new(bitmap: StaticBitmap565, source: Rectangle, top_left: Point) -> Self {
+    pub fn new(bitmap: Image565View, source: Rectangle, top_left: Point) -> Self {
         assert!(
             bitmap.contains(source),
             "BitmapItem565 source rectangle must be inside the bitmap"
@@ -96,7 +96,7 @@ impl BitmapItem565 {
     }
 
     #[must_use]
-    pub const fn bitmap(&self) -> StaticBitmap565 {
+    pub const fn bitmap(&self) -> Image565View {
         self.bitmap
     }
 

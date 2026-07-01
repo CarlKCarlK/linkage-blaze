@@ -550,13 +550,13 @@ mod tests {
     use linkage_blaze_core::{RgbColor, WebColors};
 
     use super::*;
-    use crate::StaticBitmap565;
+    use crate::Image565View;
 
     static BITMAP_PIXELS: [u16; 4] = [0x0000, 0xffff, 0xf800, 0x07e0];
 
     #[test]
     fn bitmap_item_samples_as_background_under_later_items() {
-        let bitmap = StaticBitmap565::new(&BITMAP_PIXELS, Size::new(2, 2));
+        let bitmap = Image565View::new(&BITMAP_PIXELS, Size::new(2, 2));
         let bitmap_item = DrawItem2d::Bitmap(BitmapItem565::new(
             bitmap,
             Rectangle::new(Point::zero(), Size::new(2, 2)),
