@@ -1,6 +1,6 @@
 //! Compile-time TGA decoding into RGB565 images.
 //!
-//! [`Image565`] (opaque) and [`Image565Mask`] (with a binary transparency mask)
+//! [`Image565Fixed`] (opaque) and [`Image565Mask`] (with a binary transparency mask)
 //! are decoded from an embedded `.tga` byte slice entirely in `const fn`, so the
 //! pixels live in read-only flash with no runtime allocation or parsing. Use the
 //! [`tga565!`](crate::tga565) and [`tga565_mask!`](crate::tga565_mask) macros to
@@ -31,14 +31,14 @@ use embedded_graphics::{
 /// `N` must equal `W * H`; the [`tga565!`](crate::tga565) macro computes it for
 /// you. 32-bit (BGRA) sources are accepted but their alpha is ignored — use
 /// [`Image565Mask`] when transparency matters.
-pub struct Image565<const W: usize, const H: usize, const N: usize> {
+pub struct Image565Fixed<const W: usize, const H: usize, const N: usize> {
     /// Row-major top-left-origin pixels, one RGB565 value each.
     pub pixels: [u16; N],
 }
 
-/// An [`Image565`] placed at a concrete target position.
+/// An [`Image565Fixed`] placed at a concrete target position.
 pub struct PlacedImage565<'a, const W: usize, const H: usize, const N: usize> {
-    image: &'a Image565<W, H, N>,
+    image: &'a Image565Fixed<W, H, N>,
     top_left: Point,
 }
 
@@ -158,7 +158,7 @@ const fn source_offset(
     pixel_start + (source_y * width + x) * bytes_per_pixel
 }
 
-impl<const W: usize, const H: usize, const N: usize> Image565<W, H, N> {
+impl<const W: usize, const H: usize, const N: usize> Image565Fixed<W, H, N> {
     /// Decodes `bytes` (an embedded `.tga`) into an opaque RGB565 image.
     ///
     /// Panics at compile time if `N != W * H` or if the file falls outside the
@@ -204,8 +204,16 @@ impl<const W: usize, const H: usize, const N: usize> Image565<W, H, N> {
 
     /// Describe this image as a static RGB565 bitmap for [`DrawItem2d`](crate::DrawItem2d).
     #[must_use]
-    pub fn as_static_bitmap(&'static self) -> crate::StaticBitmap565 {
-        crate::StaticBitmap565::new(&self.pixels, Size::new(W as u32, H as u32))
+    pub fn view(&'static self) -> crate::Image565View {
+        crate::Image565View::new(&self.pixels, Size::new(W as u32, H as u32))
+    }
+
+    /// Iterate the pixels as [`Rgb565`] values, row-major, top-left first.
+    pub fn rgb565_iter(&self) -> impl Iterator<Item = Rgb565> + '_ {
+        self.pixels
+            .iter()
+            .copied()
+            .map(|p| Rgb565::from(RawU16::new(p)))
     }
 }
 
@@ -225,7 +233,7 @@ impl<const W: usize, const H: usize, const N: usize> Drawable for PlacedImage565
     }
 }
 
-impl<const W: usize, const H: usize, const N: usize> Drawable for Image565<W, H, N> {
+impl<const W: usize, const H: usize, const N: usize> Drawable for Image565Fixed<W, H, N> {
     type Color = Rgb565;
     type Output = ();
 
@@ -238,7 +246,7 @@ impl<const W: usize, const H: usize, const N: usize> Drawable for Image565<W, H,
 }
 
 struct Image565Pixels<'a, const W: usize, const H: usize, const N: usize> {
-    image: &'a Image565<W, H, N>,
+    image: &'a Image565Fixed<W, H, N>,
     top_left: Point,
     index: usize,
 }
@@ -472,20 +480,20 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize> Iterat
     }
 }
 
-/// Decodes an embedded `.tga` into an [`Image565`], computing the `N = W * H`
+/// Decodes an embedded `.tga` into an [`Image565Fixed`], computing the `N = W * H`
 /// const argument for you.
 ///
 /// ```rust,ignore
 /// // `ignore`: `include_bytes!` resolves at compile time even under `no_run`,
 /// // so this needs a real `dial.tga` on disk to build.
-/// # use linkage_blaze_cyd_core::{tga565, Image565};
-/// const DIAL: Image565<240, 276, { 240 * 276 }> =
+/// # use linkage_blaze_cyd_core::{tga565, Image565Fixed};
+/// const DIAL: Image565Fixed<240, 276, { 240 * 276 }> =
 ///     tga565!("../assets/dial.tga", 240, 276);
 /// ```
 #[macro_export]
 macro_rules! tga565 {
     ($path:expr, $width:expr, $height:expr) => {
-        $crate::Image565::<$width, $height, { $width * $height }>::from_tga(include_bytes!($path))
+        $crate::Image565Fixed::<$width, $height, { $width * $height }>::from_tga(include_bytes!($path))
     };
 }
 
@@ -580,7 +588,7 @@ mod tests {
         let mut bytes = header(2, 1, 24, true).to_vec();
         bytes.extend_from_slice(&[0x00, 0x00, 0xff]); // red
         bytes.extend_from_slice(&[0xff, 0x00, 0x00]); // blue
-        let image = Image565::<2, 1, 2>::from_tga(&bytes);
+        let image = Image565Fixed::<2, 1, 2>::from_tga(&bytes);
         assert_eq!(image.pixels, [to_rgb565(0xff, 0, 0), to_rgb565(0, 0, 0xff)]);
     }
 
@@ -590,7 +598,7 @@ mod tests {
         let mut bytes = header(1, 2, 24, false).to_vec();
         bytes.extend_from_slice(&[0x00, 0x00, 0xff]); // file row 0 -> output row 1
         bytes.extend_from_slice(&[0xff, 0x00, 0x00]); // file row 1 -> output row 0
-        let image = Image565::<1, 2, 2>::from_tga(&bytes);
+        let image = Image565Fixed::<1, 2, 2>::from_tga(&bytes);
         assert_eq!(image.pixels, [to_rgb565(0, 0, 0xff), to_rgb565(0xff, 0, 0)]);
     }
 
@@ -618,7 +626,7 @@ mod tests {
     fn rejects_wrong_width() {
         let mut bytes = header(3, 1, 24, true).to_vec();
         bytes.extend_from_slice(&[0u8; 9]);
-        let _ = Image565::<2, 1, 2>::from_tga(&bytes);
+        let _ = Image565Fixed::<2, 1, 2>::from_tga(&bytes);
     }
 
     #[test]
@@ -627,6 +635,6 @@ mod tests {
         let mut bytes = header(1, 1, 24, true).to_vec();
         bytes[17] |= 0x10;
         bytes.extend_from_slice(&[0u8; 3]);
-        let _ = Image565::<1, 1, 1>::from_tga(&bytes);
+        let _ = Image565Fixed::<1, 1, 1>::from_tga(&bytes);
     }
 }

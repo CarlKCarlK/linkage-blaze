@@ -21,7 +21,7 @@ use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565, Image565Mask, Orientation, tga565,
+    Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565Mask, Orientation, tga565,
     tga565_magenta_mask,
     tiling::{TileGrid, max_u32},
 };
@@ -67,7 +67,7 @@ const PROJECTION: Projection = Projection::front_orthographic(
 /// Clock-face background bitmap, loaded at compile time.
 //todo0000 we need all these numbers?
 //todo0000 is tga565! good?
-const BACKGROUND_BITMAP: Image565<239, 319, { 239 * 319 }> =
+const BACKGROUND_BITMAP: Image565Fixed<239, 319, { 239 * 319 }> =
     tga565!("../assets/clock_back.small.tga", 239, 319);
 
 const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
@@ -84,22 +84,22 @@ const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
 pub const ORIENTATION: Orientation = Orientation::Portrait;
 pub const TOP_FONT: MonoFont<'static> = FONT_7X13;
-pub const WIFI_STATUS_REGION: Rectangle = Rectangle::new(Point::new(6, 6), Size::new(155, 14));
-const TIME_REGION: Rectangle = Rectangle::new(
+pub const WIFI_STATUS_RECTANGLE: Rectangle = Rectangle::new(Point::new(6, 6), Size::new(155, 14));
+const TIME_RECTANGLE: Rectangle = Rectangle::new(
     Point::new(
-        WIFI_STATUS_REGION.top_left.x + WIFI_STATUS_REGION.size.width as i32,
-        WIFI_STATUS_REGION.top_left.y,
+        WIFI_STATUS_RECTANGLE.top_left.x + WIFI_STATUS_RECTANGLE.size.width as i32,
+        WIFI_STATUS_RECTANGLE.top_left.y,
     ),
     Size::new(
-        ORIENTATION.width() - WIFI_STATUS_REGION.size.width,
-        WIFI_STATUS_REGION.size.height,
+        ORIENTATION.width() - WIFI_STATUS_RECTANGLE.size.width,
+        WIFI_STATUS_RECTANGLE.size.height,
     ),
 );
 
 // The figure starts below the top-level display. We will tile to save memory.
 const FIGURE_Y: u32 = max_u32(
-    WIFI_STATUS_REGION.top_left.y as u32 + WIFI_STATUS_REGION.size.height,
-    TIME_REGION.top_left.y as u32 + TIME_REGION.size.height,
+    WIFI_STATUS_RECTANGLE.top_left.y as u32 + WIFI_STATUS_RECTANGLE.size.height,
+    TIME_RECTANGLE.top_left.y as u32 + TIME_RECTANGLE.size.height,
 );
 pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
     Point::new(0, FIGURE_Y as i32),
@@ -127,7 +127,7 @@ where
         info!("tick {}", text_24h(local_time));
 
         // Write the digital time.
-        cyd.frame_mut(TIME_REGION)
+        cyd.frame_mut(TIME_RECTANGLE)
             .write_text(&text_12h(local_time))
             .flush()
             .await
@@ -216,13 +216,13 @@ pub async fn skeleton_clock_splash<CydDevice>(
 where
     CydDevice: Cyd,
 {
-    cyd.frame_mut(WIFI_STATUS_REGION)
+    cyd.frame_mut(WIFI_STATUS_RECTANGLE)
         .write_text("WiFi: --")
         .flush()
         .await
         .map_err(Error::Flush)?;
 
-    cyd.frame_mut(TIME_REGION)
+    cyd.frame_mut(TIME_RECTANGLE)
         .write_text("--:--:-- --")
         .flush()
         .await
@@ -364,8 +364,8 @@ const fn str_eq(left: &str, right: &str) -> bool {
 // ── Skeleton-clock-specific overlay drawing ──────────────────────────────────
 
 // All overlay drawing happens against a `DrawTarget` whose coordinates are in
-// figure-region space; tiled frames from `Cyd::tiles` subtract the shared
-// figure-region tile top-left so these functions never need to know they are
+// figure-rectangle space; tiled frames from `Cyd::tiles` subtract the shared
+// figure-rectangle tile top-left so these functions never need to know they are
 // rendering into a tile.
 
 /// Draw a short string centered (both axes) on `center`.

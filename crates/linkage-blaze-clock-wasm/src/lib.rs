@@ -12,7 +12,8 @@ use clock::WasmClockSync;
 use linkage_blaze_cyd_core::{Cyd, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::clock::{
-    BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_REGION, clock, clock_splash,
+    BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
+    clock_splash,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -67,7 +68,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         clock_splash(&mut cyd)
             .await
             .expect("flushing the Infallible wasm background cannot fail");
-        cyd.frame_mut(WIFI_STATUS_REGION)
+        cyd.frame_mut(WIFI_STATUS_RECTANGLE)
             .clear()
             .write_text("WiFi: OK")
             .flush()

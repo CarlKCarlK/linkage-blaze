@@ -17,7 +17,7 @@ use clock::WasmClockSync;
 use linkage_blaze_cyd_core::{Cyd, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::skeleton_clock::{
-    BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_REGION, skeleton_clock,
+    BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE, skeleton_clock,
     skeleton_clock_splash,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
@@ -71,7 +71,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             .expect("flushing the Infallible wasm frame cannot fail");
         // The browser uses the OS clock (no WiFi/NTP), so replace the `WiFi: --`
         // placeholder with `WiFi: OK`; the per-tick loop repaints time and figure.
-        cyd.frame_mut(WIFI_STATUS_REGION)
+        cyd.frame_mut(WIFI_STATUS_RECTANGLE)
             .write_text("WiFi: OK")
             .flush()
             .await

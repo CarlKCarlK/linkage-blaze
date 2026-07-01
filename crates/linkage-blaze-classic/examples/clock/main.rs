@@ -23,8 +23,8 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{CydDevice, CydError, CydEsp, CydStaticEsp};
 use linkage_blaze_example_core::clock::{
-    self, BACKGROUND, FOREGROUND, ORIENTATION, TIME_REGION, WIFI_STATUS_FONT, WIFI_STATUS_REGION,
-    clock, clock_splash,
+    self, BACKGROUND, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
+    WIFI_STATUS_RECTANGLE, clock, clock_splash,
 };
 use log::info;
 
@@ -54,13 +54,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD clock with WiFi");
 
-    // The shared pixel buffer must hold the largest frame we draw: the digital
-    // time read-out or the wi-fi status line.
-    const BUFFER_PIXEL_COUNT: usize = linkage_blaze_cyd::tiling::max_usize(
-        (WIFI_STATUS_REGION.size.width * WIFI_STATUS_REGION.size.height) as usize,
-        (TIME_REGION.size.width * TIME_REGION.size.height) as usize,
-    );
-    static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
+    static CYD_STATIC: CydStaticEsp<MAX_FRAME_PIXEL_COUNT> = CydEsp::new_static();
     let mut cyd = CydEsp::new_display_only(
         &CYD_STATIC,
         p.SPI2,
@@ -96,7 +90,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
     // reference and mutate it through interior mutability on each event.
-    let wifi_status_frame = core::cell::RefCell::new(cyd.frame_mut(WIFI_STATUS_REGION));
+    let wifi_status_frame = core::cell::RefCell::new(cyd.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,
