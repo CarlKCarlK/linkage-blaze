@@ -30,8 +30,8 @@ use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydFlushError, CydFrame};
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
 pub use linkage_blaze_cyd_core::{
-    Cyd as CydDevice, CydFrame as CydFrameTrait, LineSegment, Orientation, RegionPixels,
-    SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH, TouchInputEvent, tiling,
+    Cyd as CydDevice, CydFrame as CydFrameTrait, Orientation, RegionPixels, SCREEN_HEIGHT,
+    SCREEN_PIXELS, SCREEN_WIDTH, TouchInputEvent, tiling,
 };
 pub use text::DEFAULT_FONT;
 pub use touch::{CydTouchEspInitError, RawTouchEvent, TOUCH_SPI_HZ};

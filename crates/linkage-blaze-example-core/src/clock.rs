@@ -94,7 +94,7 @@ where
         let time_text = text_12h(hour_12, minute, hour_24);
         info!("tick {}", time_text.as_str());
 
-        let text_started = Instant::now();
+        let draw_scaled_time_started = Instant::now();
 
         // Draw the time explicitly so the surface default font/color can stay
         // dedicated to the small WiFi status text, while preserving the old
@@ -111,11 +111,11 @@ where
             );
             time_frame.flush().await.map_err(Error::Flush)?;
         }
-        let text_done = Instant::now();
+        let draw_scaled_time_done = Instant::now();
 
-        let params_started = Instant::now();
+        let linkage_params_started = Instant::now();
         let params = linkage_params(hour_24, minute, second);
-        let params_done = Instant::now();
+        let linkage_params_done = Instant::now();
 
         let contiguous_pixels =
             ContiguousPixels::<{ LINKAGE.draw_item_3d_count() }>::from_draw_items_2d(
@@ -126,20 +126,21 @@ where
                     .map(|draw_item_3d| draw_item_3d.project(&PROJECTION)),
             );
 
-        let primitives_started = Instant::now();
+        let fill_contiguous_started = Instant::now();
         cyd.fill_contiguous(contiguous_pixels.bounds(), contiguous_pixels.iter())
             .map_err(Error::Flush)?;
-        let primitives_done = Instant::now();
+        let fill_contiguous_done = Instant::now();
 
-        // info!(
-        //     "clock timing: wait={}us text={}us params={}us prepare={}us primitives={}us active={}us total={}us",
-        //     micros(tick_ready - loop_started),
-        //     micros(text_done - text_started),
-        //     micros(params_done - params_started),
-        //     micros(primitives_done - primitives_started),
-        //     micros(primitives_done - tick_ready),
-        //     micros(primitives_done - loop_started),
-        // );
+        info!(
+            "clock timing: wait_for_tick={}us draw_scaled_time={}us linkage_params={}us from_draw_items_2d={}us fill_contiguous={}us active={}us total={}us",
+            micros(tick_ready - loop_started),
+            micros(draw_scaled_time_done - draw_scaled_time_started),
+            micros(linkage_params_done - linkage_params_started),
+            micros(fill_contiguous_started - linkage_params_done),
+            micros(fill_contiguous_done - fill_contiguous_started),
+            micros(fill_contiguous_done - tick_ready),
+            micros(fill_contiguous_done - loop_started),
+        );
     }
 }
 

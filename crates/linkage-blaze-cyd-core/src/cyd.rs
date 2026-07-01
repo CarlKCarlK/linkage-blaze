@@ -20,9 +20,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{DrawItem2d, DrawItem3d, PixelTarget, Projection, Rgb888};
 
-use crate::{
-    ContiguousPixels, LineSegment, TouchInputEvent, draw::LineSegmentPixels, tiling::TileGrid,
-};
+use crate::{ContiguousPixels, TouchInputEvent, tiling::TileGrid};
 
 pub trait RegionPixels {
     fn width(&self) -> usize;
@@ -135,20 +133,6 @@ pub trait Cyd {
                 .copied()
                 .map(|pixel| Rgb565::from(RawU16::new(pixel))),
         )
-    }
-
-    /// Draw line segments immediately inside `bounds`.
-    fn draw_line_segments(
-        &mut self,
-        bounds: Rectangle,
-        background: Rgb565,
-        segments: &[LineSegment],
-    ) -> Result<(), Self::Error> {
-        let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
-        if bounds.size.width == 0 || bounds.size.height == 0 {
-            return Ok(());
-        }
-        self.fill_contiguous(bounds, LineSegmentPixels::new(bounds, background, segments))
     }
 
     /// Draw projected draw items immediately inside `bounds`.
