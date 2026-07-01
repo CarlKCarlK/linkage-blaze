@@ -20,8 +20,9 @@ use linkage_blaze_cyd::{
     RawPoint, RawTouchEvent, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use linkage_blaze_example_core::armatron::{
-    ArmatronPlatform, BLACK, ControlledKnob, DOF, WHITE, armatron, calibration_corner_for_index,
-    draw_armatron, draw_calibration_cross,
+    ArmatronPlatform, BLACK, ControlledKnob, DOF, WHITE, armatron,
+    calibration::{calibration_corner_for_index, draw_calibration_cross},
+    draw_armatron,
 };
 use log::info;
 
@@ -69,7 +70,7 @@ impl From<CydError> for MainError {
             CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
             CydError::TouchUnavailable => unreachable!("touch always available when calibrated"),
             CydError::CalibrationUnavailable => {
-                unreachable!("calibration always present after ensure_calibrated")
+                unreachable!("calibration is completed before entering the armatron loop")
             }
         }
     }
@@ -115,6 +116,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display and touch initialized");
 
+    ensure_calibration(&mut cyd)?;
     let mut platform = EspPlatform;
     armatron(&mut cyd, &mut platform)
 }
@@ -124,14 +126,6 @@ struct EspPlatform;
 impl ArmatronPlatform for EspPlatform {
     type CydDevice = CydEsp;
     type Error = MainError;
-
-    fn ensure_calibrated(&mut self, cyd: &mut CydEsp) -> Result<(), MainError> {
-        ensure_calibration(cyd)
-    }
-
-    fn remove_calibration(&mut self, cyd: &mut CydEsp) {
-        cyd.remove_calibration();
-    }
 
     fn draw_and_flush(
         &mut self,
