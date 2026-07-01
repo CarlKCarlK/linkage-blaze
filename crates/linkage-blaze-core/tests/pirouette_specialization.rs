@@ -187,13 +187,7 @@ fn pirouette_fixed_and_buf_freeze_retain_produce_same_result() {
 }
 
 fn full_pirouette_defaults() -> [f32; 132] {
-    let view = PIROUETTE.view();
-    let params = view.params();
-    let mut values = [0.0; 132];
-    for (param_index, param) in params.iter().enumerate() {
-        values[param_index] = param.default();
-    }
-    values
+    PIROUETTE.view().param_defaults()
 }
 
 fn assert_draw_item_3d_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {

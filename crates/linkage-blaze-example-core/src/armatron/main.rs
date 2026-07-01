@@ -118,12 +118,14 @@ const ARMATRON1: LinkageFixed<6, 1, 25> =
     linkage_fixed!("../../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
 const LINKAGE0: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
-const LINKAGE: LinkageFixed<15, 4, 159> = LINKAGE0
+const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = LINKAGE0
     .restore("scene origin")
     .combine(ARMATRON1) // Add ghost arm to hold target.
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
-const ARM_TIP_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
+const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
+const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
+const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
 
 pub const DOF: usize = LINKAGE.dof();
 
@@ -162,10 +164,14 @@ pub async fn armatron<C>(cyd: &mut C) -> Result<Infallible, C::Error>
 where
     C: Cyd,
 {
-    let mut params = default_params(LINKAGE.view());
-    randomize_target_params(&mut params, 0);
-
+    // Set the initial params including a random target.
+    let mut params = LINKAGE.param_defaults();
     let mut target_seed = 0;
+    let mut rng = WyRand::new_seed(u64::from(target_seed));
+    for param in params[TARGET_PARAM_START..].iter_mut() {
+        *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
+    }
+
     let mut active_control = None;
     let mut previous_tick = None;
     let show_fps = false;
@@ -315,7 +321,7 @@ pub fn draw_armatron<D: DrawTarget<Color = Rgb565>>(
     controlled_knobs: &[ControlledKnob; 2],
 ) -> Result<(), D::Error> {
     target.clear(rgb565_from_rgb888(SIM_BLACK))?;
-    draw_linkage(LINKAGE.view(), target, params)?;
+    draw_linkage(LINKAGE, target, params)?;
     draw_sliders(target, params, target_seed, controlled_knobs)?;
     draw_report(target, params)?;
     draw_version(target)?;
@@ -425,7 +431,7 @@ fn draw_sliders<D: DrawTarget<Color = Rgb565>>(
         let value = params[param_index];
 
         Text::with_baseline(
-            LINKAGE.view().param(param_index).name(),
+            LINKAGE.param(param_index).name(),
             Point::new(SLIDER_LEFT, slider_y - 12),
             text_style,
             Baseline::Top,
@@ -736,12 +742,18 @@ fn touch_down(
     match *active_control {
         Some(ActiveControl::PreviousTarget) => {
             *target_seed = target_seed.wrapping_sub(1);
-            randomize_target_params(params, *target_seed);
+            let mut rng = WyRand::new_seed(u64::from(*target_seed));
+            for param in params[TARGET_PARAM_START..].iter_mut() {
+                *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
+            }
             *active_control = None;
         }
         Some(ActiveControl::NextTarget) => {
             *target_seed = target_seed.wrapping_add(1);
-            randomize_target_params(params, *target_seed);
+            let mut rng = WyRand::new_seed(u64::from(*target_seed));
+            for param in params[TARGET_PARAM_START..].iter_mut() {
+                *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
+            }
             *active_control = None;
         }
         _ => {
@@ -824,27 +836,7 @@ fn compute_target_distance(
 }
 
 fn target_distance(params: &[f32; DOF]) -> f32 {
-    compute_target_distance(ARM_TIP_LINKAGE.view(), LINKAGE.view(), params)
-}
-
-fn randomize_target_params(params: &mut [f32; DOF], seed: u8) {
-    let mut rng = WyRand::new_seed(u64::from(seed));
-    for param in params[TARGET_PARAM_START..].iter_mut() {
-        *param = random_fraction(&mut rng);
-    }
-}
-
-fn default_params<const DOF_IN: usize, const MARKS: usize>(
-    linkage_view: LinkageView<'_, DOF_IN, MARKS>,
-) -> [f32; DOF_IN] {
-    let params = linkage_view.params();
-    let mut values = [0.0; DOF_IN];
-    let mut param_index = 0;
-    while param_index < DOF_IN {
-        values[param_index] = params[param_index].default();
-        param_index += 1;
-    }
-    values
+    compute_target_distance(ARM_TIP_LINKAGE, LINKAGE, params)
 }
 
 fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
@@ -911,10 +903,6 @@ fn round_to_i32(value: f32) -> i32 {
 
 fn round_to_u32(value: f32) -> u32 {
     libm::roundf(value) as u32
-}
-
-fn random_fraction(rng: &mut WyRand) -> f32 {
-    rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0)
 }
 
 struct TargetLabel {
