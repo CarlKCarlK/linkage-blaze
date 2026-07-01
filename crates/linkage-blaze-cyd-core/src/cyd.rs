@@ -212,7 +212,7 @@ pub trait Cyd {
     /// presented with [`CydFrame::flush`]:
     ///
     /// ```rust,no_run
-    /// # use linkage_blaze_cyd_core::{Cyd, tiling::TileGrid};
+    /// # use linkage_blaze_cyd_core::{Cyd, CydFrame, tiling::TileGrid};
     /// # async fn draw<C: Cyd>(cyd: &mut C, grid: TileGrid) -> Result<(), C::Error> {
     /// let mut tiles = cyd.tiles(grid);
     /// while let Some(mut frame) = tiles.next() {
@@ -348,6 +348,7 @@ pub struct CopySizeError {
 mod tests {
     use super::*;
     use embedded_graphics::{Pixel, prelude::OriginDimensions};
+    use linkage_blaze_core::WebColors;
 
     struct TestCyd;
 

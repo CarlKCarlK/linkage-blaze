@@ -1,8 +1,7 @@
 use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
 use linkage_blaze_core::{DrawItem3d, Projection};
-use micromath::F32Ext;
 
-use crate::{DrawItem2d, DrawItem3dExt};
+use crate::{BitmapItem565, DrawItem2d, DrawItem3dExt};
 
 #[derive(Clone, Copy, Debug)]
 struct PreparedBounds {
@@ -27,8 +26,19 @@ impl PreparedBounds {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct PreparedPrimitive {
+struct PreparedPixelSource {
     bounds: PreparedBounds,
+    kind: PreparedPixelSourceKind,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PreparedPixelSourceKind {
+    Primitive(PreparedPrimitive),
+    Bitmap(BitmapItem565),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PreparedPrimitive {
     color: Rgb565,
     kind: PreparedKind,
 }
@@ -67,7 +77,7 @@ impl PreparedPrimitive {
     // conversions threaded through here and `DrawItem2d`. Some may be
     // happening later (per primitive, per frame) than strictly needed — see if
     // any can move once, earlier, or be dropped entirely.
-    fn from_projected(item: &DrawItem2d) -> Option<Self> {
+    fn from_projected(item: &DrawItem2d) -> Option<PreparedPixelSource> {
         match *item {
             DrawItem2d::Stroke {
                 start,
@@ -96,26 +106,28 @@ impl PreparedPrimitive {
                 let min_y = start_y.min(end_y) - radius as i32;
                 let max_y = start_y.max(end_y) + radius as i32;
 
-                Some(PreparedPrimitive {
+                Some(PreparedPixelSource {
                     bounds: PreparedBounds {
                         left: min_x,
                         top: min_y,
                         right_exclusive: max_x + 1,
                         bottom_exclusive: max_y + 1,
                     },
-                    color: Rgb565::from(color),
-                    kind: PreparedKind::Line(PreparedLine {
-                        start_x: i64::from(start_x),
-                        start_y: i64::from(start_y),
-                        end_x: i64::from(end_x),
-                        end_y: i64::from(end_y),
-                        segment_x,
-                        segment_y,
-                        segment_len_squared,
-                        radius_squared,
-                        radius_squared_times_len_squared: radius_squared
-                            .checked_mul(segment_len_squared)
-                            .expect("prepared line radius and length product must fit in i64"),
+                    kind: PreparedPixelSourceKind::Primitive(PreparedPrimitive {
+                        color: Rgb565::from(color),
+                        kind: PreparedKind::Line(PreparedLine {
+                            start_x: i64::from(start_x),
+                            start_y: i64::from(start_y),
+                            end_x: i64::from(end_x),
+                            end_y: i64::from(end_y),
+                            segment_x,
+                            segment_y,
+                            segment_len_squared,
+                            radius_squared,
+                            radius_squared_times_len_squared: radius_squared
+                                .checked_mul(segment_len_squared)
+                                .expect("prepared line radius and length product must fit in i64"),
+                        }),
                     }),
                 })
             }
@@ -142,6 +154,16 @@ impl PreparedPrimitive {
                 pixel_radius,
                 Rgb565::from(color),
             ),
+            DrawItem2d::Bitmap(bitmap_item) => {
+                let bounds = bitmap_item.bounds();
+                if bounds.size.width == 0 || bounds.size.height == 0 {
+                    return None;
+                }
+                Some(PreparedPixelSource {
+                    bounds: bounds_from_rectangle(bounds),
+                    kind: PreparedPixelSourceKind::Bitmap(bitmap_item),
+                })
+            }
         }
     }
 
@@ -151,7 +173,7 @@ impl PreparedPrimitive {
         axis_b: (f32, f32),
         radius: f32,
         color: Rgb565,
-    ) -> Option<Self> {
+    ) -> Option<PreparedPixelSource> {
         let det = axis_a.0 * axis_b.1 - axis_a.1 * axis_b.0;
         let det_squared = det * det;
 
@@ -165,27 +187,29 @@ impl PreparedPrimitive {
         let quadratic_xy = -2.0 * (by * bx + ay * ax);
         let quadratic_yy = bx * bx + ax * ax;
 
-        let radius = radius.ceil() as i32 + 1;
+        let radius = ceil_nonnegative_f32(radius) + 1;
         let left = center.x - radius;
         let top = center.y - radius;
         let right_exclusive = center.x + radius;
         let bottom_exclusive = center.y + radius;
 
-        Some(PreparedPrimitive {
+        Some(PreparedPixelSource {
             bounds: PreparedBounds {
                 left,
                 top,
                 right_exclusive,
                 bottom_exclusive,
             },
-            color,
-            kind: PreparedKind::Ellipse(PreparedEllipse {
-                center_x: center.x,
-                center_y: center.y,
-                quadratic_xx,
-                quadratic_xy,
-                quadratic_yy,
-                outer_limit: det_squared,
+            kind: PreparedPixelSourceKind::Primitive(PreparedPrimitive {
+                color,
+                kind: PreparedKind::Ellipse(PreparedEllipse {
+                    center_x: center.x,
+                    center_y: center.y,
+                    quadratic_xx,
+                    quadratic_xy,
+                    quadratic_yy,
+                    outer_limit: det_squared,
+                }),
             }),
         })
     }
@@ -198,7 +222,7 @@ pub struct ContiguousPixels<const PIXEL_SOURCE_COUNT: usize> {
     right_exclusive: i32,
     bottom_exclusive: i32,
     background: Rgb565,
-    primitives: heapless::Vec<PreparedPrimitive, PIXEL_SOURCE_COUNT>,
+    pixel_sources: heapless::Vec<PreparedPixelSource, PIXEL_SOURCE_COUNT>,
 }
 
 impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
@@ -213,17 +237,17 @@ impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
     where
         I: IntoIterator<Item = DrawItem3d>,
     {
-        let mut primitives = heapless::Vec::<PreparedPrimitive, PIXEL_SOURCE_COUNT>::new();
+        let mut pixel_sources = heapless::Vec::<PreparedPixelSource, PIXEL_SOURCE_COUNT>::new();
         for draw_item_3d in draw_items_3d {
             let draw_item_2d = draw_item_3d.project(projection);
-            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(&draw_item_2d) {
-                primitives
-                    .push(prepared_primitive)
-                    .expect("draw items fit the prepared primitive capacity");
+            if let Some(prepared_pixel_source) = PreparedPrimitive::from_projected(&draw_item_2d) {
+                pixel_sources
+                    .push(prepared_pixel_source)
+                    .expect("draw items fit the prepared pixel source capacity");
             }
         }
 
-        Self::new(bounds, background, primitives)
+        Self::new(bounds, background, pixel_sources)
     }
 
     /// Compile already-projected draw items for indexed pixel lookups.
@@ -233,22 +257,22 @@ impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
         background: Rgb565,
         draw_items_2d: impl IntoIterator<Item = DrawItem2d>,
     ) -> Self {
-        let mut primitives = heapless::Vec::<PreparedPrimitive, PIXEL_SOURCE_COUNT>::new();
+        let mut pixel_sources = heapless::Vec::<PreparedPixelSource, PIXEL_SOURCE_COUNT>::new();
         for draw_item_2d in draw_items_2d {
-            if let Some(prepared_primitive) = PreparedPrimitive::from_projected(&draw_item_2d) {
-                primitives
-                    .push(prepared_primitive)
-                    .expect("projected draw items fit the prepared primitive capacity");
+            if let Some(prepared_pixel_source) = PreparedPrimitive::from_projected(&draw_item_2d) {
+                pixel_sources
+                    .push(prepared_pixel_source)
+                    .expect("projected draw items fit the prepared pixel source capacity");
             }
         }
 
-        Self::new(bounds, background, primitives)
+        Self::new(bounds, background, pixel_sources)
     }
 
     fn new(
         bounds: Rectangle,
         background: Rgb565,
-        primitives: heapless::Vec<PreparedPrimitive, PIXEL_SOURCE_COUNT>,
+        pixel_sources: heapless::Vec<PreparedPixelSource, PIXEL_SOURCE_COUNT>,
     ) -> Self {
         let left = bounds.top_left.x;
         let top = bounds.top_left.y;
@@ -266,7 +290,7 @@ impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
             right_exclusive,
             bottom_exclusive,
             background,
-            primitives,
+            pixel_sources,
         }
     }
 
@@ -282,9 +306,9 @@ impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
 
     #[must_use]
     pub fn pixel_at(&self, point_x: i32, point_y: i32) -> Rgb565 {
-        for primitive in self.primitives.iter().rev() {
-            if primitive.covers(point_x, point_y) {
-                return primitive.color;
+        for pixel_source in self.pixel_sources.iter().rev() {
+            if let Some(color) = pixel_source.color_at(point_x, point_y) {
+                return color;
             }
         }
 
@@ -297,15 +321,24 @@ impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
     }
 }
 
-impl PreparedPrimitive {
-    fn covers(&self, point_x: i32, point_y: i32) -> bool {
+impl PreparedPixelSource {
+    fn color_at(&self, point_x: i32, point_y: i32) -> Option<Rgb565> {
         if !self.bounds.contains(point_x, point_y) {
-            return false;
+            return None;
         }
 
-        self.covers_inside_bounds(point_x, point_y)
+        match self.kind {
+            PreparedPixelSourceKind::Primitive(primitive) => primitive
+                .covers_inside_bounds(point_x, point_y)
+                .then_some(primitive.color),
+            PreparedPixelSourceKind::Bitmap(bitmap_item) => {
+                Some(bitmap_item.pixel_at(Point::new(point_x, point_y)))
+            }
+        }
     }
+}
 
+impl PreparedPrimitive {
     fn covers_inside_bounds(&self, point_x: i32, point_y: i32) -> bool {
         match self.kind {
             PreparedKind::Line(line) => line.covers(point_x, point_y),
@@ -351,7 +384,7 @@ pub struct ContiguousPixelsIter<'a, const PIXEL_SOURCE_COUNT: usize> {
     pixels: &'a ContiguousPixels<PIXEL_SOURCE_COUNT>,
     x: i32,
     y: i32,
-    active: heapless::Vec<&'a PreparedPrimitive, PIXEL_SOURCE_COUNT>,
+    active: heapless::Vec<&'a PreparedPixelSource, PIXEL_SOURCE_COUNT>,
 }
 
 impl<'a, const PIXEL_SOURCE_COUNT: usize> ContiguousPixelsIter<'a, PIXEL_SOURCE_COUNT> {
@@ -368,11 +401,11 @@ impl<'a, const PIXEL_SOURCE_COUNT: usize> ContiguousPixelsIter<'a, PIXEL_SOURCE_
 
     fn rebuild_active(&mut self) {
         self.active.clear();
-        for primitive in self.pixels.primitives.iter().rev() {
-            if primitive.bounds.contains_y(self.y) {
+        for pixel_source in self.pixels.pixel_sources.iter().rev() {
+            if pixel_source.bounds.contains_y(self.y) {
                 self.active
-                    .push(primitive)
-                    .expect("active primitive references fit active list capacity");
+                    .push(pixel_source)
+                    .expect("active pixel source references fit active list capacity");
             }
         }
     }
@@ -387,12 +420,12 @@ impl<const PIXEL_SOURCE_COUNT: usize> Iterator for ContiguousPixelsIter<'_, PIXE
         }
 
         let mut color = self.pixels.background;
-        for primitive in &self.active {
-            if !primitive.bounds.contains_x(self.x) {
+        for pixel_source in &self.active {
+            if !pixel_source.bounds.contains_x(self.x) {
                 continue;
             }
-            if primitive.covers_inside_bounds(self.x, self.y) {
-                color = primitive.color;
+            if let Some(source_color) = pixel_source.color_at(self.x, self.y) {
+                color = source_color;
                 break;
             }
         }
@@ -465,10 +498,93 @@ fn point_from_f32((x, y): (f32, f32)) -> Point {
     Point::new(x as i32, y as i32)
 }
 
+fn bounds_from_rectangle(rectangle: Rectangle) -> PreparedBounds {
+    let left = rectangle.top_left.x;
+    let top = rectangle.top_left.y;
+    let right_exclusive = left
+        .checked_add(rectangle.size.width as i32)
+        .expect("rectangle right edge must fit in i32");
+    let bottom_exclusive = top
+        .checked_add(rectangle.size.height as i32)
+        .expect("rectangle bottom edge must fit in i32");
+    PreparedBounds {
+        left,
+        top,
+        right_exclusive,
+        bottom_exclusive,
+    }
+}
+
 fn pixel_width_u16(width: f32) -> u16 {
     ((width + 0.5) as u16).max(1)
 }
 
 fn ellipse_bound_radius(axis_a: (f32, f32), axis_b: (f32, f32)) -> f32 {
-    (axis_a.0.abs() + axis_b.0.abs()).max(axis_a.1.abs() + axis_b.1.abs())
+    (abs_f32(axis_a.0) + abs_f32(axis_b.0)).max(abs_f32(axis_a.1) + abs_f32(axis_b.1))
+}
+
+fn abs_f32(value: f32) -> f32 {
+    if value < 0.0 { -value } else { value }
+}
+
+fn ceil_nonnegative_f32(value: f32) -> i32 {
+    assert!(
+        value >= 0.0,
+        "ceil_nonnegative_f32 input must be non-negative"
+    );
+    let truncated = value as i32;
+    if value > truncated as f32 {
+        truncated + 1
+    } else {
+        truncated
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use embedded_graphics::{
+        pixelcolor::{Rgb565, raw::RawU16},
+        prelude::{IntoStorage, Point, Size},
+        primitives::Rectangle,
+    };
+    use linkage_blaze_core::{RgbColor, WebColors};
+
+    use super::*;
+    use crate::StaticBitmap565;
+
+    static BITMAP_PIXELS: [u16; 4] = [0x0000, 0xffff, 0xf800, 0x07e0];
+
+    #[test]
+    fn bitmap_item_samples_as_background_under_later_items() {
+        let bitmap = StaticBitmap565::new(&BITMAP_PIXELS, Size::new(2, 2));
+        let bitmap_item = DrawItem2d::Bitmap(BitmapItem565::new(
+            bitmap,
+            Rectangle::new(Point::zero(), Size::new(2, 2)),
+            Point::zero(),
+        ));
+        let circle = DrawItem2d::Circle {
+            center: (0.0, 0.0),
+            pixel_radius: 0.1,
+            color: linkage_blaze_core::Rgb888::CSS_BLUE,
+        };
+
+        let contiguous_pixels = ContiguousPixels::<2>::from_draw_items_2d(
+            Rectangle::new(Point::zero(), Size::new(2, 2)),
+            Rgb565::BLACK,
+            [bitmap_item, circle],
+        );
+
+        assert_eq!(
+            contiguous_pixels.pixel_at(1, 0).into_storage(),
+            BITMAP_PIXELS[1]
+        );
+        assert_eq!(
+            contiguous_pixels.pixel_at(0, 0).into_storage(),
+            Rgb565::from(linkage_blaze_core::Rgb888::CSS_BLUE).into_storage()
+        );
+        assert_eq!(
+            contiguous_pixels.pixel_at(0, 1).into_storage(),
+            Rgb565::from(RawU16::new(BITMAP_PIXELS[2])).into_storage()
+        );
+    }
 }

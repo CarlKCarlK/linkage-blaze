@@ -12,7 +12,7 @@ use clock::WasmClockSync;
 use linkage_blaze_cyd_core::{Cyd, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::clock::{
-    BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_REGION, clock,
+    BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_REGION, clock, clock_splash,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
@@ -64,12 +64,9 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
     wasm_bindgen_futures::spawn_local(async move {
         let mut cyd = cyd;
         let clock_sync = WasmClockSync::new();
-        // Match the ESP startup invariant: the whole screen is background-colored
-        // before the clock loop begins updating only its smaller text regions.
-        cyd.full_frame_mut()
-            .flush()
+        clock_splash(&mut cyd)
             .await
-            .expect("flushing the Infallible wasm frame cannot fail");
+            .expect("flushing the Infallible wasm background cannot fail");
         cyd.frame_mut(WIFI_STATUS_REGION)
             .clear()
             .write_text("WiFi: OK")

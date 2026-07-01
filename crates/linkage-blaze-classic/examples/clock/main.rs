@@ -24,7 +24,7 @@ use esp_backtrace as _;
 use linkage_blaze_cyd::{CydDevice, CydError, CydEsp, CydStaticEsp};
 use linkage_blaze_example_core::clock::{
     self, BACKGROUND, FOREGROUND, ORIENTATION, TIME_REGION, WIFI_STATUS_FONT, WIFI_STATUS_REGION,
-    clock,
+    clock, clock_splash,
 };
 use log::info;
 
@@ -77,6 +77,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         &WIFI_STATUS_FONT,
     )?;
     info!("CYD display initialized");
+
+    clock_splash(&mut cyd).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 

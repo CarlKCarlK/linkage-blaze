@@ -1,10 +1,126 @@
 use embedded_graphics::{
     Drawable,
+    pixelcolor::{Rgb565, raw::RawU16},
+    prelude::{IntoStorage, Point, Size},
+    primitives::Rectangle,
     primitives::{Circle, Line, Primitive, PrimitiveStyle},
 };
 use linkage_blaze_core::{
-    DrawItem3d, PixelTarget, PixelTargetAdapter, Projection, Rgb888, fill_ellipse_pixels, pixel_put,
+    DrawItem3d, PixelTarget, PixelTargetAdapter, Projection, Rgb888, fill_ellipse_pixels,
+    pixel_put, pixel_put_565,
 };
+
+/// A statically-stored RGB565 bitmap in row-major order.
+#[derive(Clone, Copy, Debug)]
+pub struct StaticBitmap565 {
+    pixels: &'static [u16],
+    size: Size,
+}
+
+impl StaticBitmap565 {
+    /// Create a bitmap descriptor from row-major RGB565 pixels.
+    ///
+    /// Panics if `pixels.len() != size.width * size.height`.
+    #[must_use]
+    pub fn new(pixels: &'static [u16], size: Size) -> Self {
+        let pixel_count = size.width as usize * size.height as usize;
+        assert!(
+            pixels.len() == pixel_count,
+            "StaticBitmap565 pixels must match width * height"
+        );
+        Self { pixels, size }
+    }
+
+    #[must_use]
+    pub const fn size(&self) -> Size {
+        self.size
+    }
+
+    #[must_use]
+    pub fn pixel_at(&self, point: Point) -> Rgb565 {
+        assert!(
+            point.x >= 0 && point.y >= 0,
+            "StaticBitmap565 pixel coordinate must be non-negative"
+        );
+        let position_x = point.x as usize;
+        let position_y = point.y as usize;
+        assert!(
+            position_x < self.size.width as usize && position_y < self.size.height as usize,
+            "StaticBitmap565 pixel coordinate must be inside the bitmap"
+        );
+        let index = position_y * self.size.width as usize + position_x;
+        Rgb565::from(RawU16::new(self.pixels[index]))
+    }
+
+    #[must_use]
+    pub fn contains(&self, rectangle: Rectangle) -> bool {
+        let left = rectangle.top_left.x;
+        let top = rectangle.top_left.y;
+        let right = left
+            .checked_add(rectangle.size.width as i32)
+            .expect("bitmap source right edge must fit in i32");
+        let bottom = top
+            .checked_add(rectangle.size.height as i32)
+            .expect("bitmap source bottom edge must fit in i32");
+        left >= 0
+            && top >= 0
+            && right <= self.size.width as i32
+            && bottom <= self.size.height as i32
+    }
+}
+
+/// A rectangular piece of a statically-stored RGB565 bitmap.
+#[derive(Clone, Copy, Debug)]
+pub struct BitmapItem565 {
+    bitmap: StaticBitmap565,
+    source: Rectangle,
+    top_left: Point,
+}
+
+impl BitmapItem565 {
+    /// Create a bitmap draw item.
+    ///
+    /// `source` is in bitmap coordinates. `top_left` is the output location of
+    /// the source rectangle's top-left corner.
+    #[must_use]
+    pub fn new(bitmap: StaticBitmap565, source: Rectangle, top_left: Point) -> Self {
+        assert!(
+            bitmap.contains(source),
+            "BitmapItem565 source rectangle must be inside the bitmap"
+        );
+        Self {
+            bitmap,
+            source,
+            top_left,
+        }
+    }
+
+    #[must_use]
+    pub const fn bitmap(&self) -> StaticBitmap565 {
+        self.bitmap
+    }
+
+    #[must_use]
+    pub const fn source(&self) -> Rectangle {
+        self.source
+    }
+
+    #[must_use]
+    pub const fn top_left(&self) -> Point {
+        self.top_left
+    }
+
+    #[must_use]
+    pub fn bounds(&self) -> Rectangle {
+        Rectangle::new(self.top_left, self.source.size)
+    }
+
+    #[must_use]
+    pub fn pixel_at(&self, point: Point) -> Rgb565 {
+        let source_point = self.source.top_left + (point - self.top_left);
+        self.bitmap.pixel_at(source_point)
+    }
+}
 
 /// A pixel-space 2D draw item, ready to draw onto a [`PixelTarget`].
 ///
@@ -36,6 +152,8 @@ pub enum DrawItem2d {
         pixel_radius: f32,
         color: Rgb888,
     },
+    /// A rectangular piece of a statically-stored RGB565 bitmap.
+    Bitmap(BitmapItem565),
 }
 
 impl DrawItem2d {
@@ -84,6 +202,22 @@ impl DrawItem2d {
                 .into_styled(PrimitiveStyle::with_fill(color))
                 .draw(&mut PixelTargetAdapter(target))
                 .expect("drawing onto a PixelTargetAdapter is Infallible");
+            }
+            DrawItem2d::Bitmap(bitmap_item) => {
+                let source = bitmap_item.source();
+                let top_left = bitmap_item.top_left();
+                for source_y in 0..source.size.height as i32 {
+                    for source_x in 0..source.size.width as i32 {
+                        let source_point = source.top_left + Point::new(source_x, source_y);
+                        let target_point = top_left + Point::new(source_x, source_y);
+                        pixel_put_565(
+                            target,
+                            target_point.x,
+                            target_point.y,
+                            bitmap_item.bitmap().pixel_at(source_point).into_storage(),
+                        );
+                    }
+                }
             }
         }
     }
