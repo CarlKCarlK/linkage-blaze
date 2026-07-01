@@ -15,14 +15,14 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    DrawItem2d, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage,
-    linkage_fixed,
+    LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
 };
 use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, Image565, Image565Mask, Orientation, tga565, tga565_magenta_mask,
+    Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565, Image565Mask, Orientation, tga565,
+    tga565_magenta_mask,
     tiling::{TileGrid, max_u32},
 };
 

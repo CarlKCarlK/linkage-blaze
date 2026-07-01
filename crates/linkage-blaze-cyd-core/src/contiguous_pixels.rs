@@ -1,6 +1,8 @@
 use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
-use linkage_blaze_core::{DrawItem2d, DrawItem3d, Projection};
+use linkage_blaze_core::{DrawItem3d, Projection};
 use micromath::F32Ext;
+
+use crate::{DrawItem2d, DrawItem3dExt};
 
 #[derive(Clone, Copy, Debug)]
 struct PreparedBounds {
