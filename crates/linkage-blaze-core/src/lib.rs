@@ -246,6 +246,13 @@ pub trait Linkage<const DOF: usize, const MARKS: usize> {
         self.view().params()
     }
 
+    /// Return each parameter's normalized default value.
+    ///
+    /// Default implementation: delegates to the view.
+    fn param_defaults(&self) -> [f32; DOF] {
+        self.view().param_defaults()
+    }
+
     /// Return a reference to the step slice.
     ///
     /// Default implementation: delegates to the view.
@@ -358,6 +365,30 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     #[must_use]
     pub const fn params(&self) -> &'a [Param; DOF] {
         self.params
+    }
+
+    /// Return each parameter's normalized default value.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use linkage_blaze_core::LinkageFixed;
+    /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
+    ///     .define_param("x", 0.25)
+    ///     .define_param("y", 0.75);
+    ///
+    /// let defaults = LINKAGE.view().param_defaults();
+    /// assert_eq!(defaults, [0.25, 0.75]);
+    /// ```
+    #[must_use]
+    pub const fn param_defaults(&self) -> [f32; DOF] {
+        let mut defaults = [0.0; DOF];
+        let mut param_index = 0;
+        while param_index < DOF {
+            defaults[param_index] = self.params[param_index].default();
+            param_index += 1;
+        }
+        defaults
     }
 
     /// Return a reference to the step slice.

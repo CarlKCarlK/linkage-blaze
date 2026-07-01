@@ -12,13 +12,6 @@
     },
     "rust-analyzer.cargo.allTargets": false,
     "rust-analyzer.cargo.features": "all",
-    "rust-analyzer.cargo.target": "xtensa-esp32-none-elf",
-    "rust-analyzer.cargo.extraArgs": [
-        "-Zbuild-std=core,alloc"
-    ],
-    "rust-analyzer.cargo.extraEnv": {
-        "RUSTUP_TOOLCHAIN": "esp"
-    },
     "rust-analyzer.checkOnSave.enable": false,
     "rust-analyzer.check.enable": false,
     "rust-analyzer.diagnostics.enable": false,

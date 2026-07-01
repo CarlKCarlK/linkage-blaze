@@ -227,7 +227,7 @@ impl CydSim {
     }
 
     fn new_inner(show_fps: bool) -> Self {
-        let mut params = default_params(LINKAGE.view());
+        let mut params = LINKAGE.view().param_defaults();
         randomize_target_params(&mut params, 0);
 
         Self {
@@ -1311,19 +1311,6 @@ fn randomize_target_params(params: &mut [f32; DOF], seed: u8) {
     for param in params[TARGET_PARAM_START..].iter_mut() {
         *param = random_fraction(&mut rng);
     }
-}
-
-fn default_params<const DOF_IN: usize, const MARKS: usize>(
-    linkage_view: LinkageView<'_, DOF_IN, MARKS>,
-) -> [f32; DOF_IN] {
-    let params = linkage_view.params();
-    let mut values = [0.0; DOF_IN];
-    let mut param_index = 0;
-    while param_index < DOF_IN {
-        values[param_index] = params[param_index].default();
-        param_index += 1;
-    }
-    values
 }
 
 fn control_at(x: f32, y: f32) -> Option<ActiveControl> {

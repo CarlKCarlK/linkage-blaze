@@ -9,7 +9,7 @@
 	],
 	"settings": {
 		"rust-analyzer.cargo.allTargets": false,
-		"rust-analyzer.cargo.target": "xtensa-esp32-none-elf",
+		"rust-analyzer.cargo.features": "all",
 		"rust-analyzer.diagnostics.enable": false
 	}
 }
