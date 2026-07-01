@@ -12,7 +12,7 @@ linkage![
     .disk(65.0)
     // 12 o'clock tick
     .restore("face")
-    .pen_width(4.5)
+    .pen_width(3.25)
     .pen_color(Rgb888::new(230, 195, 115)) // muted pale gold (230, 195, 115)
     .pen_up()
     .mark("ticks")
@@ -40,13 +40,13 @@ linkage![
     // Hour hand
     .restore("face")
     .pen_color(Rgb888::new(245, 220, 165)) // warm brass ivory (245, 220, 165)
-    .pen_width(16.0)
+    .pen_width(10.5)
     .yaw_param("hour", 360.0, 0.0)
     .forward(40.0)
     // Minute hand
     .restore("face")
     .pen_color(Rgb888::new(96, 205, 220)) // softened blue-green (96, 205, 220)
-    .pen_width(7.5)
+    .pen_width(6.0)
     .yaw_param("hour", 4320.0, 0.0)
     .forward(52.0)
     // Second hand
@@ -58,5 +58,5 @@ linkage![
     // Hub
     .restore("face")
     .pen_color(Rgb888::new(235, 85, 62)) // muted red-orange (235, 85, 62)
-    .sphere(8.0)
+    .sphere(7.0)
 ]
