@@ -86,6 +86,7 @@ pub trait Cyd {
         tile_top_left: Point,
     ) -> Self::Frame<'_>;
 
+    //todo0000000000 region should be "rectangle" and these zero's and almost empty functions don't make sense to me.
     /// Borrow a frame covering `region`, cleared to the device background color.
     ///
     /// The frame remembers its `region`, so [`CydFrame::flush`] presents it at

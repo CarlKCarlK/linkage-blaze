@@ -140,6 +140,14 @@ pub enum TouchInputOutcome {
     Changed,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FpsDisplay {
+    Show,
+    Hide,
+}
+
+const FPS_DISPLAY: FpsDisplay = FpsDisplay::Show;
+
 // ── Generic armatron loop ─────────────────────────────────────────────────────
 
 /// Run the armatron example forever.
@@ -166,47 +174,63 @@ where
         *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
     }
 
+    let mut fps = None;
     let mut active_control = None;
     let mut previous_tick = None;
-    let show_fps = false;
-    let mut fps = None;
     let mut touch_cursor = None;
 
     loop {
-        let touch = cyd.read_touch_input()?;
         let now = Instant::now();
-        let previous_tick_before_frame = previous_tick;
-        let first_tick = previous_tick_before_frame.is_none();
-        previous_tick = Some(now);
-        let fps_draw_requested = update_fps(show_fps, previous_tick_before_frame, now, &mut fps);
-        let touch_input_outcome = touch.map_or(TouchInputOutcome::Unchanged, |touch_input_event| {
-            handle_touch_input_event(
-                touch_input_event,
-                &mut params,
-                &mut target_seed,
-                &mut active_control,
-                &mut touch_cursor,
-            )
-        });
+        let touch = cyd.read_touch_input()?;
+        let mut frame = cyd.full_frame_mut();
 
-        let draw_requested = matches!(touch_input_outcome, TouchInputOutcome::Changed)
-            || first_tick
-            || fps_draw_requested;
-        if draw_requested {
-            let mut frame = cyd.full_frame_mut();
-            match draw_armatron(
-                &mut frame,
-                &params,
-                target_seed,
-                show_fps,
-                fps,
-                touch_cursor,
-            ) {
-                Ok(()) => {}
-                Err(infallible) => match infallible {},
+        let draw_result: Result<(), Infallible> = (|| {
+            DrawTarget::clear(&mut frame, rgb565_from_rgb888(SIM_BLACK))?;
+
+            if FPS_DISPLAY == FpsDisplay::Show
+                && let Some(previous_tick_value) = previous_tick
+            {
+                let frame_micros = now
+                    .saturating_duration_since(previous_tick_value)
+                    .as_micros();
+                if frame_micros != 0 {
+                    fps = Some((1_000_000 / frame_micros).min(999) as u32);
+                }
+                let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
+                let mut report = FpsReport::new();
+                Text::with_baseline(
+                    report.as_str(fps),
+                    Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
+                    text_style,
+                    Baseline::Top,
+                )
+                .draw(&mut frame)?;
             }
-            frame.flush().await?;
+            previous_tick = Some(now);
+
+            if let Some(touch_input_event) = touch {
+                handle_touch_input_event(
+                    touch_input_event,
+                    &mut params,
+                    &mut target_seed,
+                    &mut active_control,
+                    &mut touch_cursor,
+                );
+            }
+
+            draw_linkage(LINKAGE, &mut frame, &params)?;
+            draw_sliders(&mut frame, &params, target_seed)?;
+            draw_report(&mut frame, &params)?;
+            draw_version(&mut frame)?;
+            draw_touch_cursor(&mut frame, touch_cursor)?;
+            Ok(())
+        })();
+        match draw_result {
+            Ok(()) => {}
+            Err(infallible) => match infallible {},
         }
+
+        frame.flush().await?;
     }
 }
 
@@ -287,24 +311,6 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
             .into_styled(PrimitiveStyle::with_fill(rgb565_from_rgb888(color)))
             .draw(self.buffer);
     }
-}
-
-pub fn draw_armatron<D: DrawTarget<Color = Rgb565>>(
-    target: &mut D,
-    params: &[f32; DOF],
-    target_seed: u8,
-    show_fps: bool,
-    fps: Option<u32>,
-    touch_cursor: Option<(f32, f32)>,
-) -> Result<(), D::Error> {
-    target.clear(rgb565_from_rgb888(SIM_BLACK))?;
-    draw_linkage(LINKAGE, target, params)?;
-    draw_sliders(target, params, target_seed)?;
-    draw_report(target, params)?;
-    draw_version(target)?;
-    draw_fps(target, show_fps, fps)?;
-    draw_touch_cursor(target, touch_cursor)?;
-    Ok(())
 }
 
 fn draw_linkage<D: DrawTarget<Color = Rgb565>>(
@@ -527,27 +533,6 @@ fn draw_report<D: DrawTarget<Color = Rgb565>>(
     Ok(())
 }
 
-fn draw_fps<D: DrawTarget<Color = Rgb565>>(
-    buffer: &mut D,
-    show_fps: bool,
-    fps: Option<u32>,
-) -> Result<(), D::Error> {
-    if !show_fps {
-        return Ok(());
-    }
-
-    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
-    let mut report = FpsReport::new();
-    Text::with_baseline(
-        report.as_str(fps),
-        Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
-        text_style,
-        Baseline::Top,
-    )
-    .draw(buffer)?;
-    Ok(())
-}
-
 fn draw_version<D: DrawTarget<Color = Rgb565>>(buffer: &mut D) -> Result<(), D::Error> {
     let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
     Text::with_baseline(
@@ -760,28 +745,6 @@ fn update_touch(x: f32, y: f32, params: &mut [f32; DOF], active_control: &Option
         }
         ActiveControl::PreviousTarget | ActiveControl::NextTarget => {}
     }
-}
-
-fn update_fps(
-    show_fps: bool,
-    previous_tick: Option<Instant>,
-    now: Instant,
-    fps: &mut Option<u32>,
-) -> bool {
-    if !show_fps {
-        return false;
-    }
-
-    let Some(previous_tick) = previous_tick else {
-        return false;
-    };
-    let frame_micros = now.saturating_duration_since(previous_tick).as_micros();
-    if frame_micros == 0 {
-        return false;
-    }
-
-    *fps = Some((1_000_000 / frame_micros).min(999) as u32);
-    true
 }
 
 fn arm_tip(rk_linkage: LinkageView<'_, 9, 2>, params: &[f32; DOF]) -> Vec3 {

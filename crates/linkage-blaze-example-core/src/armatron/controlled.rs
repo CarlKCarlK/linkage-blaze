@@ -10,8 +10,8 @@
 //! the same highlighting.
 //!
 //! To restore: reintroduce a `controlled_knobs: [ControlledKnob; 2]` value
-//! threaded through `armatron`, `draw_armatron`, and `draw_sliders`, and swap
-//! the plain `fill_style(SIM_YELLOW)` knob draws back to
+//! threaded through `armatron`'s loop and `draw_sliders`, and swap the plain
+//! `fill_style(SIM_YELLOW)` knob draws back to
 //! `knob_fill_style(&controlled_knobs, ControlledKnob::Param(...))`.
 
 #![allow(dead_code)]
