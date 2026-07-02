@@ -236,7 +236,7 @@ impl CydDisplay for CydDisplayWasmPart<'_> {
 impl CydTouch for CydTouchWasmPart {
     type Error = CydInfallibleError;
 
-    fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, CydInfallibleError> {
+    fn read(&mut self) -> Result<Option<TouchEvent>, CydInfallibleError> {
         Ok(self.touch_events.borrow_mut().pop_front())
     }
 }

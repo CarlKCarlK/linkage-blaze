@@ -24,14 +24,14 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{
-    DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
-    render_draw_items_3d, rgb565_from_rgb888_components,
+    DrawItem3d, DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage,
+    linkage_fixed, rgb565_from_rgb888_components,
 };
 use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use controls::ArmatronControls;
+use controls::{ArmatronControlValues, ArmatronControls, EXTRA_SLIDER_COUNT};
 
 use crate::infallible::InfallibleResultExt;
 
@@ -71,6 +71,17 @@ const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span 
 
 // ---- parameter indices ----
 const TARGET_PARAM_START: usize = 9;
+const XY_VIEW_PARAM_NAME: &str = "x/y view";
+const TILT_PARAM_NAME: &str = "z";
+const DOLLY_PARAM_NAME: &str = "zoom";
+const ARM_PARAM_NAMES: [&str; EXTRA_SLIDER_COUNT] = [
+    "raise hand",
+    "bend elbow",
+    "close hand",
+    "lower arm",
+    "spin whole arm",
+    "spin hand",
+];
 
 // ---- colors ----
 const SIM_WHITE: Rgb888 = Rgb888::CSS_WHITE;
@@ -112,7 +123,7 @@ const SHOW_FPS_TEXT: bool = true;
 /// Run the armatron example forever.
 ///
 /// Each iteration:
-/// 1. Reads the next touch event from [`CydTouch::read_touch_event`].
+/// 1. Reads the next touch event from [`CydTouch::read`].
 /// 2. Updates local armatron params, touch, and fps state.
 /// 3. If the frame changed, renders and presents a full-screen CYD frame.
 ///
@@ -126,10 +137,21 @@ where
     C: Cyd,
 {
     let (mut display, mut touch) = cyd.parts();
+    let xy_view_param_index = LINKAGE.param_index(XY_VIEW_PARAM_NAME, 0);
+    let tilt_param_index = LINKAGE.param_index(TILT_PARAM_NAME, 0);
+    let dolly_param_index = LINKAGE.param_index(DOLLY_PARAM_NAME, 0);
+    let arm_param_indexes = [
+        LINKAGE.param_index(ARM_PARAM_NAMES[0], 0),
+        LINKAGE.param_index(ARM_PARAM_NAMES[1], 0),
+        LINKAGE.param_index(ARM_PARAM_NAMES[2], 0),
+        LINKAGE.param_index(ARM_PARAM_NAMES[3], 0),
+        LINKAGE.param_index(ARM_PARAM_NAMES[4], 0),
+        LINKAGE.param_index(ARM_PARAM_NAMES[5], 0),
+    ];
 
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
-    let mut target_seed = 0;
+    let mut target_seed: u8 = 0;
     let mut rng = WyRand::new_seed(u64::from(target_seed));
     // todo00 how to we feel about "TARGET_PARAM_START"
     for param in params[TARGET_PARAM_START..].iter_mut() {
@@ -137,7 +159,15 @@ where
     }
 
     // Set up state.
-    let mut controls = ArmatronControls::new(&params);
+    let mut controls = ArmatronControls::new(
+        ArmatronControlValues {
+            xy_view: params[xy_view_param_index],
+            tilt: params[tilt_param_index],
+            dolly: params[dolly_param_index],
+            extra_sliders: arm_param_indexes.map(|param_index| params[param_index]),
+        },
+        ARM_PARAM_NAMES,
+    );
     let mut previous_tick = None;
 
     // Set up buffers
@@ -163,59 +193,95 @@ where
         }
         previous_tick = Some(current_tick);
 
+        // Update controls from the next touch event (if any).
         // todo It's weird this doesn't return an error of the right type already and needs to be converted
-        controls.handle_touch_event(touch.read_touch_event().map_err(Error::Cyd)?);
-        controls.write_params(&mut params);
+        controls.set_event(touch.read().map_err(Error::Cyd)?);
 
-        if controls.previous_target_clicked() {
+        // Update state from the controls.
+        params[xy_view_param_index] = controls.xy_view();
+        params[tilt_param_index] = controls.tilt();
+        params[dolly_param_index] = controls.dolly();
+        params[arm_param_indexes[0]] = controls.slider0();
+        params[arm_param_indexes[1]] = controls.slider1();
+        params[arm_param_indexes[2]] = controls.slider2();
+        params[arm_param_indexes[3]] = controls.slider3();
+        params[arm_param_indexes[4]] = controls.slider4();
+        params[arm_param_indexes[5]] = controls.slider5();
+
+        if controls.previous_target.was_clicked() {
             target_seed = target_seed.wrapping_sub(1);
             randomize_target_params(target_seed, &mut params);
         }
-        if controls.next_target_clicked() {
+        if controls.next_target.was_clicked() {
             target_seed = target_seed.wrapping_add(1);
             randomize_target_params(target_seed, &mut params);
         }
 
-        {
-            let mut surface = ArmatronSurface {
-                buffer: &mut frame,
-                result: Ok(()),
-            };
-            render_draw_items_3d(&projection(), &mut surface, LINKAGE.draw_items_3d(&params));
-            surface.result.unwrap_infallible();
+        let mut surface = ArmatronSurface {
+            buffer: &mut frame,
+            result: Ok(()),
+        };
+        let projection = projection();
+        for draw_item3d in LINKAGE.draw_items_3d(&params) {
+            match draw_item3d {
+                DrawItem3d::Stroke(stroke_segment) => surface.stroke(
+                    stroke_segment.start().project(&projection),
+                    stroke_segment.end().project(&projection),
+                    stroke_segment.color(),
+                    projection.project_width(stroke_segment.width()),
+                ),
+                DrawItem3d::Disk(disk_item) => {
+                    let orientation = disk_item.pose().orientation();
+                    surface.filled_ellipse(
+                        disk_item.pose().project(&projection),
+                        projection.project_dir(
+                            disk_item.pose(),
+                            orientation.forward(),
+                            disk_item.radius(),
+                        ),
+                        projection.project_dir(
+                            disk_item.pose(),
+                            orientation.left(),
+                            disk_item.radius(),
+                        ),
+                        disk_item.color(),
+                    );
+                }
+                DrawItem3d::Sphere(sphere_item) => surface.filled_circle(
+                    sphere_item.pose().project(&projection),
+                    projection.project_radius(sphere_item.pose(), sphere_item.radius()),
+                    sphere_item.color(),
+                ),
+            }
         }
+        surface.result.unwrap_infallible();
+        drop(surface);
 
-        {
-            let mut target_label = TargetLabel::new();
-            controls
-                .draw(&mut frame, target_label.as_str(target_seed))
-                .unwrap_infallible();
-        }
-
-        {
-            let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
-            let mut report = DistanceReport::new();
-            Text::with_baseline(
-                report.as_str(target_distance(&params)),
-                Point::new(DISTANCE_REPORT_LEFT, 5),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(&mut frame)
+        let mut target_label = TargetLabel::new();
+        controls
+            .draw(&mut frame, target_label.as_str(target_seed))
             .unwrap_infallible();
-        }
 
-        {
-            let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(LIGHT_SLATE_GRAY));
-            Text::with_baseline(
-                VERSION_TEXT,
-                Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(&mut frame)
-            .unwrap_infallible();
-        }
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
+        let mut report = DistanceReport::new();
+        Text::with_baseline(
+            report.as_str(target_distance(&params)),
+            Point::new(DISTANCE_REPORT_LEFT, 5),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(&mut frame)
+        .unwrap_infallible();
+
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(LIGHT_SLATE_GRAY));
+        Text::with_baseline(
+            VERSION_TEXT,
+            Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
+            text_style,
+            Baseline::Top,
+        )
+        .draw(&mut frame)
+        .unwrap_infallible();
 
         controls.draw_touch_cursor(&mut frame).unwrap_infallible();
 
@@ -226,9 +292,10 @@ where
 /// Error from the generic armatron loop, generic over the CYD device error `F`.
 ///
 /// Local errors such as [`core::fmt::Error`] get a derived `From`, so they
-/// propagate with a plain `?`. The CYD device error `F` is converted explicitly
-/// with `.map_err(Error::Cyd)` at the call site: a blanket `From<F>` would be
-/// greedy enough to collide with those concrete `From`s under coherence.
+/// propagate with a plain `?`. The CYD device error `F` is the one exception:
+/// it is converted explicitly with `.map_err(Error::Cyd)` at the call site,
+/// because a blanket `From<F>` would overlap with those concrete `From`s under
+/// coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Formatting the FPS report failed.

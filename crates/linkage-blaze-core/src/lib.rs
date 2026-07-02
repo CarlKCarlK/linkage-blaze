@@ -3826,41 +3826,6 @@ pub trait DrawSurface {
     fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888);
 }
 
-/// Render draw items through a projection and surface. Handles the Disk→ellipse
-/// conversion so every renderer automatically gets correct foreshortening.
-pub fn render_draw_items_3d<S>(
-    proj: &Projection,
-    surface: &mut S,
-    items: impl Iterator<Item = DrawItem3d>,
-) where
-    S: DrawSurface,
-{
-    for item in items {
-        match item {
-            DrawItem3d::Stroke(s) => surface.stroke(
-                s.start().project(proj),
-                s.end().project(proj),
-                s.color(),
-                proj.project_width(s.width()),
-            ),
-            DrawItem3d::Disk(d) => {
-                let orient = d.pose().orientation();
-                surface.filled_ellipse(
-                    d.pose().project(proj),
-                    proj.project_dir(d.pose(), orient.forward(), d.radius()),
-                    proj.project_dir(d.pose(), orient.left(), d.radius()),
-                    d.color(),
-                );
-            }
-            DrawItem3d::Sphere(s) => surface.filled_circle(
-                s.pose().project(proj),
-                proj.project_radius(s.pose(), s.radius()),
-                s.color(),
-            ),
-        }
-    }
-}
-
 /// Rasterize an ellipse pixel-by-pixel via a callback.
 ///
 /// The ellipse is the locus of `center + s·axis_a + t·axis_b` where `s²+t² ≤ 1`.

@@ -147,7 +147,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let mut cyd = ensure_calibration(&mut cyd, screen_buffer)?;
 
-        match cyd_sim.tick(Instant::now(), read_touch_event(&mut cyd)?) {
+        match cyd_sim.tick(Instant::now(), read_touch(&mut cyd)?) {
             // 1_886_000 fps if only command
             TickOut::Calibrate => cyd.remove_calibration(),
             TickOut::Draw => {
@@ -240,9 +240,9 @@ fn draw_calibration_screen(
     Ok(display.flush_at(screen_buffer, Point::new(0, 0))?)
 }
 
-fn read_touch_event(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchEvent>, MainError> {
+fn read_touch(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchEvent>, MainError> {
     Ok(cyd
-        .read_touch_event()?
+        .read()?
         .map(|touch_event| match touch_event {
             CydTouchEvent::Down { x, y } => TouchEvent::Down { x, y },
             CydTouchEvent::Move { x, y } => TouchEvent::Move { x, y },

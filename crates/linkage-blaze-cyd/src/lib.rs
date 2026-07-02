@@ -503,7 +503,7 @@ impl CalibratedCydEsp<'_> {
         self.cyd.remove_calibration();
     }
 
-    pub fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, CydError> {
+    pub fn read(&mut self) -> Result<Option<TouchEvent>, CydError> {
         let raw_touch_event = self
             .cyd
             .touch
@@ -661,7 +661,7 @@ impl Cyd for CalibratedCydEsp<'_> {
 impl CydTouch for CydTouchEspPart<'_> {
     type Error = CydError;
 
-    fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, CydError> {
+    fn read(&mut self) -> Result<Option<TouchEvent>, CydError> {
         let Some(calibration_config) = self.calibration_config else {
             return Ok(None);
         };

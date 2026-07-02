@@ -17,6 +17,7 @@ This file contains shared workspace rules for this repository.
 - Hide boilerplate in doctests using the `#` prefix when it is noise to the reader but required for compilation, such as `#![no_std]` or ordinary imports.
 - When adding docs for modules or public items, link readers to the primary type and keep a single compilable example on that type when practical.
 - Prefer `const` values defined in the local context when they are only used there.
+- Prefer explicit `drop(variable)` over anonymous code blocks when the only purpose of the block is to end a borrow or temporary lifetime early.
 - Do not add redundant command wrappers that only mirror an existing `cargo` command.
 - Do not maintain backwards-compatibility shims or type aliases. Refactor aggressively so the code looks as-if-designed knowing the final requirements.
 - Any time a color is defined with numeric components, add a nearby comment with its approximate color name.

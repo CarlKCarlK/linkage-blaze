@@ -259,7 +259,7 @@ pub trait CydTouch {
     ///
     /// Returns `Ok(None)` when there is no pending touch (including devices
     /// constructed without touch). Errors only on a hardware/read failure.
-    fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, Self::Error>;
+    fn read(&mut self) -> Result<Option<TouchEvent>, Self::Error>;
 }
 
 /// A lending/streaming iterator over a [`TileGrid`]'s tiles.

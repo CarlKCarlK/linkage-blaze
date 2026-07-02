@@ -16,8 +16,8 @@ use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
 use linkage_blaze_core::{
-    DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
-    render_draw_items_3d,
+    DrawItem3d, DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage,
+    linkage_fixed,
 };
 
 // todo00 I hate all these constants.
@@ -615,11 +615,39 @@ impl CydSim {
             buffer,
             result: Ok(()),
         };
-        render_draw_items_3d(
-            &self.projection(),
-            &mut surface,
-            linkage.draw_items_3d(&self.params),
-        );
+        let projection = self.projection();
+        for draw_item3d in linkage.draw_items_3d(&self.params) {
+            match draw_item3d {
+                DrawItem3d::Stroke(stroke_segment) => surface.stroke(
+                    stroke_segment.start().project(&projection),
+                    stroke_segment.end().project(&projection),
+                    stroke_segment.color(),
+                    projection.project_width(stroke_segment.width()),
+                ),
+                DrawItem3d::Disk(disk_item) => {
+                    let orientation = disk_item.pose().orientation();
+                    surface.filled_ellipse(
+                        disk_item.pose().project(&projection),
+                        projection.project_dir(
+                            disk_item.pose(),
+                            orientation.forward(),
+                            disk_item.radius(),
+                        ),
+                        projection.project_dir(
+                            disk_item.pose(),
+                            orientation.left(),
+                            disk_item.radius(),
+                        ),
+                        disk_item.color(),
+                    );
+                }
+                DrawItem3d::Sphere(sphere_item) => surface.filled_circle(
+                    sphere_item.pose().project(&projection),
+                    projection.project_radius(sphere_item.pose(), sphere_item.radius()),
+                    sphere_item.color(),
+                ),
+            }
+        }
         surface.result
     }
 

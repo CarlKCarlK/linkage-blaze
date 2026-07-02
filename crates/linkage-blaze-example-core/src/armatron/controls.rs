@@ -9,7 +9,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_cyd_core::TouchEvent;
 
-use super::{CYAN, DOF, GREEN, LIGHT_SLATE_GRAY, LINKAGE, SCREEN_WIDTH, SIM_WHITE, SIM_YELLOW};
+use super::{CYAN, GREEN, LIGHT_SLATE_GRAY, SCREEN_WIDTH, SIM_WHITE, SIM_YELLOW};
 
 const TILT_X: i32 = 16;
 const DOLLY_X: i32 = 42;
@@ -46,35 +46,41 @@ const PREV_BUTTON_LEFT: i32 = ((SCREEN_WIDTH as i32 - TARGET_CONTROL_WIDTH) / 2)
 const TARGET_LABEL_LEFT: i32 = PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32 + TARGET_CONTROL_GAP;
 const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP;
 
-const BASE_YAW_PARAM: usize = 0;
-const BASE_PITCH_PARAM: usize = 1;
-const DOLLY_PARAM: usize = 2;
-const ARM_PARAM_START: usize = 3;
-const ARM_PARAM_COUNT: usize = 6;
+pub(super) const EXTRA_SLIDER_COUNT: usize = 6;
+
+pub(super) struct ArmatronControlValues {
+    pub(super) xy_view: f32,
+    pub(super) tilt: f32,
+    pub(super) dolly: f32,
+    pub(super) extra_sliders: [f32; EXTRA_SLIDER_COUNT],
+}
 
 pub(super) struct ArmatronControls {
     tilt: SliderControl,
     dolly: SliderControl,
-    previous_target: TextButton,
-    next_target: TextButton,
+    pub(super) previous_target: TextButton,
+    pub(super) next_target: TextButton,
     reverse_kinematics_run: ShapeButton,
     reverse_kinematics_step: ShapeButton,
     calibrate: TextButton,
-    arm_sliders: [SliderControl; ARM_PARAM_COUNT],
+    extra_sliders: [SliderControl; EXTRA_SLIDER_COUNT],
     xy_view: SliderControl,
     active_control: Option<ActiveControl>,
     touch_cursor: Option<(f32, f32)>,
 }
 
 impl ArmatronControls {
-    pub(super) fn new(params: &[f32; DOF]) -> Self {
+    pub(super) fn new(
+        control_values: ArmatronControlValues,
+        extra_slider_labels: [&'static str; EXTRA_SLIDER_COUNT],
+    ) -> Self {
         Self {
             tilt: SliderControl::vertical(
                 "z",
                 Rectangle::new(Point::new(TILT_X - 14, TILT_TOP), Size::new(29, 201)),
                 Point::new(TILT_X, TILT_TOP),
                 Point::new(TILT_X, TILT_BOTTOM),
-                params[BASE_PITCH_PARAM],
+                control_values.tilt,
                 true,
             ),
             dolly: SliderControl::vertical(
@@ -82,7 +88,7 @@ impl ArmatronControls {
                 Rectangle::new(Point::new(DOLLY_X - 14, DOLLY_TOP), Size::new(29, 51)),
                 Point::new(DOLLY_X, DOLLY_TOP),
                 Point::new(DOLLY_X, DOLLY_BOTTOM),
-                params[DOLLY_PARAM],
+                control_values.dolly,
                 false,
             ),
             previous_target: TextButton::new(
@@ -117,13 +123,13 @@ impl ArmatronControls {
                 "cal",
                 Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
             ),
-            arm_sliders: [
-                Self::arm_slider(0, params[ARM_PARAM_START]),
-                Self::arm_slider(1, params[ARM_PARAM_START + 1]),
-                Self::arm_slider(2, params[ARM_PARAM_START + 2]),
-                Self::arm_slider(3, params[ARM_PARAM_START + 3]),
-                Self::arm_slider(4, params[ARM_PARAM_START + 4]),
-                Self::arm_slider(5, params[ARM_PARAM_START + 5]),
+            extra_sliders: [
+                Self::slider(0, extra_slider_labels[0], control_values.extra_sliders[0]),
+                Self::slider(1, extra_slider_labels[1], control_values.extra_sliders[1]),
+                Self::slider(2, extra_slider_labels[2], control_values.extra_sliders[2]),
+                Self::slider(3, extra_slider_labels[3], control_values.extra_sliders[3]),
+                Self::slider(4, extra_slider_labels[4], control_values.extra_sliders[4]),
+                Self::slider(5, extra_slider_labels[5], control_values.extra_sliders[5]),
             ],
             xy_view: SliderControl::horizontal(
                 "x/y view",
@@ -133,7 +139,7 @@ impl ArmatronControls {
                 ),
                 Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
                 Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
-                params[BASE_YAW_PARAM],
+                control_values.xy_view,
                 false,
             ),
             active_control: None,
@@ -141,7 +147,7 @@ impl ArmatronControls {
         }
     }
 
-    pub(super) fn handle_touch_event(&mut self, touch_event: Option<TouchEvent>) {
+    pub(super) fn set_event(&mut self, touch_event: Option<TouchEvent>) {
         self.begin_frame();
         match touch_event {
             Some(TouchEvent::Down { x, y }) => self.handle_touch_down(x, y),
@@ -151,21 +157,40 @@ impl ArmatronControls {
         }
     }
 
-    pub(super) fn write_params(&self, params: &mut [f32; DOF]) {
-        params[BASE_PITCH_PARAM] = self.tilt.value();
-        params[DOLLY_PARAM] = self.dolly.value();
-        params[BASE_YAW_PARAM] = self.xy_view.value();
-        for (slider_offset, slider) in self.arm_sliders.iter().enumerate() {
-            params[ARM_PARAM_START + slider_offset] = slider.value();
-        }
+    pub(super) fn tilt(&self) -> f32 {
+        self.tilt.value()
     }
 
-    pub(super) fn previous_target_clicked(&self) -> bool {
-        self.previous_target.was_clicked()
+    pub(super) fn dolly(&self) -> f32 {
+        self.dolly.value()
     }
 
-    pub(super) fn next_target_clicked(&self) -> bool {
-        self.next_target.was_clicked()
+    pub(super) fn xy_view(&self) -> f32 {
+        self.xy_view.value()
+    }
+
+    pub(super) fn slider0(&self) -> f32 {
+        self.extra_sliders[0].value()
+    }
+
+    pub(super) fn slider1(&self) -> f32 {
+        self.extra_sliders[1].value()
+    }
+
+    pub(super) fn slider2(&self) -> f32 {
+        self.extra_sliders[2].value()
+    }
+
+    pub(super) fn slider3(&self) -> f32 {
+        self.extra_sliders[3].value()
+    }
+
+    pub(super) fn slider4(&self) -> f32 {
+        self.extra_sliders[4].value()
+    }
+
+    pub(super) fn slider5(&self) -> f32 {
+        self.extra_sliders[5].value()
     }
 
     pub(super) fn draw<D: DrawTarget<Color = Rgb565>>(
@@ -188,7 +213,7 @@ impl ArmatronControls {
             Baseline::Top,
         )
         .draw(target)?;
-        for slider in &self.arm_sliders {
+        for slider in &self.extra_sliders {
             slider.draw(target)?;
         }
         self.xy_view.draw(target)?;
@@ -211,11 +236,10 @@ impl ArmatronControls {
         Ok(())
     }
 
-    fn arm_slider(slider_offset: usize, value: f32) -> SliderControl {
-        let param_index = ARM_PARAM_START + slider_offset;
+    fn slider(slider_offset: usize, label: &'static str, value: f32) -> SliderControl {
         let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
         SliderControl::horizontal(
-            LINKAGE.param(param_index).name(),
+            label,
             Rectangle::new(
                 Point::new(SLIDER_LEFT, slider_y - 13),
                 Size::new((SCREEN_WIDTH as i32 - SLIDER_LEFT) as u32, 27),
@@ -243,7 +267,7 @@ impl ArmatronControls {
             Some(ActiveControl::Tilt)
             | Some(ActiveControl::Dolly)
             | Some(ActiveControl::XyView)
-            | Some(ActiveControl::ArmSlider(_)) => self.update_active_slider(x, y),
+            | Some(ActiveControl::Slider(_)) => self.update_active_slider(x, y),
             None => {
                 let touch_point = Point::new(x as i32, y as i32);
                 self.previous_target.handle_touch_down(touch_point);
@@ -280,9 +304,9 @@ impl ArmatronControls {
         if self.xy_view.contains(touch_point) {
             return Some(ActiveControl::XyView);
         }
-        for (slider_offset, slider) in self.arm_sliders.iter().enumerate() {
+        for (slider_offset, slider) in self.extra_sliders.iter().enumerate() {
             if slider.contains(touch_point) {
-                return Some(ActiveControl::ArmSlider(slider_offset));
+                return Some(ActiveControl::Slider(slider_offset));
             }
         }
         None
@@ -293,8 +317,8 @@ impl ArmatronControls {
             Some(ActiveControl::Tilt) => self.tilt.set_value_from_touch(x, y),
             Some(ActiveControl::Dolly) => self.dolly.set_value_from_touch(x, y),
             Some(ActiveControl::XyView) => self.xy_view.set_value_from_touch(x, y),
-            Some(ActiveControl::ArmSlider(slider_offset)) => {
-                self.arm_sliders[slider_offset].set_value_from_touch(x, y);
+            Some(ActiveControl::Slider(slider_offset)) => {
+                self.extra_sliders[slider_offset].set_value_from_touch(x, y);
             }
             None => {}
         }
@@ -303,13 +327,13 @@ impl ArmatronControls {
 
 #[derive(Clone, Copy)]
 enum ActiveControl {
-    ArmSlider(usize),
+    Slider(usize),
     Tilt,
     Dolly,
     XyView,
 }
 
-struct TextButton {
+pub(super) struct TextButton {
     touch_rectangle: Rectangle,
     label: &'static str,
     label_position: Point,
@@ -343,7 +367,7 @@ impl TextButton {
         self.is_pressed = false;
     }
 
-    fn was_clicked(&self) -> bool {
+    pub(super) fn was_clicked(&self) -> bool {
         self.was_clicked
     }
 
