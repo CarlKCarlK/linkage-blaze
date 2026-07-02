@@ -206,7 +206,46 @@ where
             match touch_event {
                 TouchEvent::Down { x, y } => {
                     touch_cursor = Some((x, y));
-                    active_control = control_at(x, y);
+                    active_control = None;
+                    if (x - TILT_X as f32).abs() <= 14.0
+                        && (TILT_TOP as f32..=TILT_BOTTOM as f32).contains(&y)
+                    {
+                        active_control = Some(ActiveControl::Tilt);
+                    } else if (x - DOLLY_X as f32).abs() <= 14.0
+                        && (DOLLY_TOP as f32..=DOLLY_BOTTOM as f32).contains(&y)
+                    {
+                        active_control = Some(ActiveControl::Dolly);
+                    } else if (PREV_BUTTON_LEFT as f32
+                        ..=(PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
+                        .contains(&x)
+                        && (TARGET_CONTROL_TOP as f32
+                            ..=(TARGET_CONTROL_TOP + TARGET_BUTTON_HEIGHT as i32) as f32)
+                            .contains(&y)
+                    {
+                        active_control = Some(ActiveControl::PreviousTarget);
+                    } else if (NEXT_BUTTON_LEFT as f32
+                        ..=(NEXT_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
+                        .contains(&x)
+                        && (TARGET_CONTROL_TOP as f32
+                            ..=(TARGET_CONTROL_TOP + TARGET_BUTTON_HEIGHT as i32) as f32)
+                            .contains(&y)
+                    {
+                        active_control = Some(ActiveControl::NextTarget);
+                    } else if (VIEW_SLIDER_Y as f32 - y).abs() <= 14.0
+                        && (VIEW_SLIDER_LEFT as f32..=VIEW_SLIDER_RIGHT as f32).contains(&x)
+                    {
+                        active_control = Some(ActiveControl::XyView);
+                    } else {
+                        for slider_offset in 0..ARM_PARAM_COUNT {
+                            let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
+                            if x >= SLIDER_LEFT as f32 && (y - (slider_y + 8) as f32).abs() <= 13.0
+                            {
+                                active_control =
+                                    Some(ActiveControl::RightSlider(ARM_PARAM_START + slider_offset));
+                                break;
+                            }
+                        }
+                    }
                     match active_control {
                         Some(ActiveControl::PreviousTarget) => {
                             target_seed = target_seed.wrapping_sub(1);
@@ -294,7 +333,7 @@ where
         }
 
         {
-            let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
+            let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
             let mut target_label = TargetLabel::new();
 
             Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
@@ -438,7 +477,7 @@ where
         }
 
         {
-            let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
+            let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
             let mut report = DistanceReport::new();
             Text::with_baseline(
                 report.as_str(target_distance(&params)),
@@ -451,7 +490,7 @@ where
         }
 
         {
-            let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
+            let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(LIGHT_SLATE_GRAY));
             Text::with_baseline(
                 VERSION_TEXT,
                 Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
@@ -466,7 +505,7 @@ where
             let x = x as i32;
             let y = y as i32;
             let radius = 5;
-            let cursor_style = PrimitiveStyle::with_fill(rgb565_from_rgb888(CYAN));
+            let cursor_style = PrimitiveStyle::with_fill(Rgb565::from(CYAN));
             Circle::new(Point::new(x - radius, y - radius), (radius * 2 + 1) as u32)
                 .into_styled(cursor_style)
                 .draw(&mut frame)
@@ -507,7 +546,7 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
         let start = Point::new(start.0 as i32, start.1 as i32);
         let end = Point::new(end.0 as i32, end.1 as i32);
         let width = round_to_u32(pixel_width).max(1);
-        let color = rgb565_from_rgb888(color);
+        let color = Rgb565::from(color);
         self.result = Line::new(start, end)
             .into_styled(PrimitiveStyle::with_stroke(color, width))
             .draw(self.buffer);
@@ -538,7 +577,7 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
         let y0 = (cy - hh).max(0);
         let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
         let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
-        let color = rgb565_from_rgb888(color);
+        let color = Rgb565::from(color);
         self.result = self.buffer.draw_iter((y0..=y1).flat_map(move |y| {
             (x0..=x1).filter_map(move |x| {
                 let dx = x as f32 - cx as f32;
@@ -566,7 +605,7 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
             return;
         }
         self.result = Circle::with_center(Point::new(center.0 as i32, center.1 as i32), diameter)
-            .into_styled(PrimitiveStyle::with_fill(rgb565_from_rgb888(color)))
+            .into_styled(PrimitiveStyle::with_fill(Rgb565::from(color)))
             .draw(self.buffer);
     }
 }
@@ -619,7 +658,7 @@ fn draw_reverse_kinematics_step_button<D: DrawTarget<Color = Rgb565>>(
 }
 
 fn draw_calibrate_button<D: DrawTarget<Color = Rgb565>>(buffer: &mut D) -> Result<(), D::Error> {
-    let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(SIM_WHITE));
+    let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
     Rectangle::new(
         Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
         Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
@@ -767,52 +806,12 @@ fn target_distance(params: &[f32; DOF]) -> f32 {
     compute_target_distance(ARM_TIP_LINKAGE, LINKAGE, params)
 }
 
-fn control_at(x: f32, y: f32) -> Option<ActiveControl> {
-    if (x - TILT_X as f32).abs() <= 14.0 && (TILT_TOP as f32..=TILT_BOTTOM as f32).contains(&y) {
-        return Some(ActiveControl::Tilt);
-    }
-    if (x - DOLLY_X as f32).abs() <= 14.0 && (DOLLY_TOP as f32..=DOLLY_BOTTOM as f32).contains(&y) {
-        return Some(ActiveControl::Dolly);
-    }
-    if (PREV_BUTTON_LEFT as f32..=(PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
-        .contains(&x)
-        && (TARGET_CONTROL_TOP as f32..=(TARGET_CONTROL_TOP + TARGET_BUTTON_HEIGHT as i32) as f32)
-            .contains(&y)
-    {
-        return Some(ActiveControl::PreviousTarget);
-    }
-    if (NEXT_BUTTON_LEFT as f32..=(NEXT_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
-        .contains(&x)
-        && (TARGET_CONTROL_TOP as f32..=(TARGET_CONTROL_TOP + TARGET_BUTTON_HEIGHT as i32) as f32)
-            .contains(&y)
-    {
-        return Some(ActiveControl::NextTarget);
-    }
-    if (VIEW_SLIDER_Y as f32 - y).abs() <= 14.0
-        && (VIEW_SLIDER_LEFT as f32..=VIEW_SLIDER_RIGHT as f32).contains(&x)
-    {
-        return Some(ActiveControl::XyView);
-    }
-    for slider_offset in 0..ARM_PARAM_COUNT {
-        let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
-        if x >= SLIDER_LEFT as f32 && (y - (slider_y + 8) as f32).abs() <= 13.0 {
-            return Some(ActiveControl::RightSlider(ARM_PARAM_START + slider_offset));
-        }
-    }
-    None
-}
-
-// todo000 review rgb565_from_rgb888 later.
-fn rgb565_from_rgb888(color: Rgb888) -> Rgb565 {
-    Rgb565::from(color)
-}
-
 fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
-    PrimitiveStyle::with_fill(rgb565_from_rgb888(color))
+    PrimitiveStyle::with_fill(Rgb565::from(color))
 }
 
 fn stroke_style(color: Rgb888, stroke_width: u32) -> PrimitiveStyle<Rgb565> {
-    PrimitiveStyle::with_stroke(rgb565_from_rgb888(color), stroke_width)
+    PrimitiveStyle::with_stroke(Rgb565::from(color), stroke_width)
 }
 
 fn distance(left: Vec3, right: Vec3) -> f32 {
