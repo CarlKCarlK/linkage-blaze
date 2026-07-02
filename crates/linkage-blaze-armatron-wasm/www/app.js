@@ -12,7 +12,6 @@ if ("serviceWorker" in navigator) {
 
 const { canvas } = ensureFramedLayout();
 const context = canvas.getContext("2d");
-trackBrowserZoom();
 
 try {
   await init();
@@ -59,17 +58,4 @@ function ensureFramedLayout() {
   }
 
   return { canvas };
-}
-
-function trackBrowserZoom() {
-  const initialDevicePixelRatio = window.devicePixelRatio || 1;
-
-  const updateBrowserZoom = () => {
-    const browserZoom = (window.devicePixelRatio || 1) / initialDevicePixelRatio;
-    document.documentElement.style.setProperty("--browser-zoom", String(browserZoom));
-  };
-
-  updateBrowserZoom();
-  window.addEventListener("resize", updateBrowserZoom);
-  window.visualViewport?.addEventListener("resize", updateBrowserZoom);
 }

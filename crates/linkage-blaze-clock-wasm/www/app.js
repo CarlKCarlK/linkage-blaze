@@ -4,8 +4,6 @@ import init, {
   show_case_alignment_controls,
 } from "./pkg/linkage_blaze_clock_wasm.js";
 
-trackBrowserZoom();
-
 try {
   await init();
   // `start` sets the canvas pixel buffer to the real panel resolution and spawns
@@ -79,17 +77,4 @@ function buildTimeOfDaySlider(setTimeOfDay) {
 
   // Start live (following the real clock) rather than forcing noon on load.
   readout.textContent = "Live";
-}
-
-function trackBrowserZoom() {
-  const initialDevicePixelRatio = window.devicePixelRatio || 1;
-
-  const updateBrowserZoom = () => {
-    const browserZoom = (window.devicePixelRatio || 1) / initialDevicePixelRatio;
-    document.documentElement.style.setProperty("--browser-zoom", String(browserZoom));
-  };
-
-  updateBrowserZoom();
-  window.addEventListener("resize", updateBrowserZoom);
-  window.visualViewport?.addEventListener("resize", updateBrowserZoom);
 }

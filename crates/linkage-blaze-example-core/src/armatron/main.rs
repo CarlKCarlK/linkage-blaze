@@ -8,6 +8,7 @@
 
 pub mod calibration;
 mod controlled;
+mod controls;
 pub mod reverse_kinematics;
 
 use core::{convert::Infallible, fmt::Write};
@@ -19,16 +20,18 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::{IntoStorage, Rgb565, WebColors},
     prelude::*,
-    primitives::{Circle, Line, PrimitiveStyle, Rectangle, Triangle},
+    primitives::{Circle, Line, PrimitiveStyle},
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{
     DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
     render_draw_items_3d, rgb565_from_rgb888_components,
 };
-use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, TouchEvent};
+use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
+
+use controls::ArmatronControls;
 
 use crate::infallible::InfallibleResultExt;
 
@@ -47,29 +50,6 @@ pub const SCREEN_WIDTH: usize = 320;
 pub const SCREEN_HEIGHT: usize = 240;
 pub const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
-// ---- layout constants ----
-const TILT_X: i32 = 16;
-const DOLLY_X: i32 = 42;
-const TILT_TOP: i32 = 24;
-const TILT_BOTTOM: i32 = 224;
-const DOLLY_TOP: i32 = 24;
-const DOLLY_BOTTOM: i32 = 74;
-const RK_CONTROL_TOP: i32 = 86;
-const RK_RUN_LEFT: i32 = 27;
-const RK_STEP_LEFT: i32 = 55;
-const RK_BUTTON_SIZE: i32 = 18;
-const SLIDER_LEFT: i32 = 230;
-const SLIDER_RIGHT: i32 = 312;
-const SLIDER_TRACK_LEFT: i32 = 230;
-const SLIDER_TOP: i32 = 24;
-const SLIDER_STEP: i32 = 32;
-const VIEW_SLIDER_LEFT: i32 = 40;
-const VIEW_SLIDER_RIGHT: i32 = 252;
-const VIEW_SLIDER_Y: i32 = 226;
-const CALIBRATE_BUTTON_LEFT: i32 = 288;
-const CALIBRATE_BUTTON_TOP: i32 = 212;
-const CALIBRATE_BUTTON_WIDTH: u32 = 30;
-const CALIBRATE_BUTTON_HEIGHT: u32 = 14;
 const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
@@ -85,24 +65,11 @@ const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 const VERSION_REPORT_LEFT: i32 =
     FPS_REPORT_LEFT - (VERSION_TEXT.len() as i32 * TEXT_CHAR_WIDTH) - TEXT_CHAR_WIDTH;
 const VERSION_REPORT_TOP: i32 = FPS_REPORT_TOP;
-const TARGET_CONTROL_TOP: i32 = 17;
-const TARGET_BUTTON_WIDTH: u32 = 42;
-const TARGET_BUTTON_HEIGHT: u32 = 14;
-const TARGET_BUTTON_LABEL_WIDTH: i32 = 4 * TEXT_CHAR_WIDTH;
-const TARGET_LABEL_WIDTH: i32 = 11 * TEXT_CHAR_WIDTH;
-const TARGET_CONTROL_GAP: i32 = 4;
-const TARGET_CONTROL_WIDTH: i32 =
-    TARGET_BUTTON_WIDTH as i32 * 2 + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP * 2;
-const PREV_BUTTON_LEFT: i32 = ((SCREEN_WIDTH as i32 - TARGET_CONTROL_WIDTH) / 2) - 16;
-const TARGET_LABEL_LEFT: i32 = PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32 + TARGET_CONTROL_GAP;
-const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP;
 
 // ---- world / display constants ----
 const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span the screen width
 
 // ---- parameter indices ----
-const ARM_PARAM_START: usize = 3;
-const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 9;
 
 // ---- colors ----
@@ -138,10 +105,6 @@ const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
 
 pub const DOF: usize = LINKAGE.dof();
 
-const BASE_YAW_PARAM: usize = 0;
-const BASE_PITCH_PARAM: usize = 1;
-const DOLLY_PARAM: usize = 2;
-
 const SHOW_FPS_TEXT: bool = true;
 
 // ── Generic armatron loop ─────────────────────────────────────────────────────
@@ -174,9 +137,8 @@ where
     }
 
     // Set up state.
-    let mut active_control = None;
+    let mut controls = ArmatronControls::new(&params);
     let mut previous_tick = None;
-    let mut touch_cursor = None;
 
     // Set up buffers
     let mut frame = display.full_frame_mut();
@@ -202,125 +164,16 @@ where
         previous_tick = Some(current_tick);
 
         // todo It's weird this doesn't return an error of the right type already and needs to be converted
-        if let Some(touch_event) = touch.read_touch_event().map_err(Error::Cyd)? {
-            match touch_event {
-                TouchEvent::Down { x, y } => {
-                    touch_cursor = Some((x, y));
-                    active_control = None;
-                    if (x - TILT_X as f32).abs() <= 14.0
-                        && (TILT_TOP as f32..=TILT_BOTTOM as f32).contains(&y)
-                    {
-                        active_control = Some(ActiveControl::Tilt);
-                    } else if (x - DOLLY_X as f32).abs() <= 14.0
-                        && (DOLLY_TOP as f32..=DOLLY_BOTTOM as f32).contains(&y)
-                    {
-                        active_control = Some(ActiveControl::Dolly);
-                    } else if (PREV_BUTTON_LEFT as f32
-                        ..=(PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
-                        .contains(&x)
-                        && (TARGET_CONTROL_TOP as f32
-                            ..=(TARGET_CONTROL_TOP + TARGET_BUTTON_HEIGHT as i32) as f32)
-                            .contains(&y)
-                    {
-                        active_control = Some(ActiveControl::PreviousTarget);
-                    } else if (NEXT_BUTTON_LEFT as f32
-                        ..=(NEXT_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32) as f32)
-                        .contains(&x)
-                        && (TARGET_CONTROL_TOP as f32
-                            ..=(TARGET_CONTROL_TOP + TARGET_BUTTON_HEIGHT as i32) as f32)
-                            .contains(&y)
-                    {
-                        active_control = Some(ActiveControl::NextTarget);
-                    } else if (VIEW_SLIDER_Y as f32 - y).abs() <= 14.0
-                        && (VIEW_SLIDER_LEFT as f32..=VIEW_SLIDER_RIGHT as f32).contains(&x)
-                    {
-                        active_control = Some(ActiveControl::XyView);
-                    } else {
-                        for slider_offset in 0..ARM_PARAM_COUNT {
-                            let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
-                            if x >= SLIDER_LEFT as f32 && (y - (slider_y + 8) as f32).abs() <= 13.0
-                            {
-                                active_control =
-                                    Some(ActiveControl::RightSlider(ARM_PARAM_START + slider_offset));
-                                break;
-                            }
-                        }
-                    }
-                    match active_control {
-                        Some(ActiveControl::PreviousTarget) => {
-                            target_seed = target_seed.wrapping_sub(1);
-                            let mut rng = WyRand::new_seed(u64::from(target_seed));
-                            for param in params[TARGET_PARAM_START..].iter_mut() {
-                                *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
-                            }
-                            active_control = None;
-                        }
-                        Some(ActiveControl::NextTarget) => {
-                            target_seed = target_seed.wrapping_add(1);
-                            let mut rng = WyRand::new_seed(u64::from(target_seed));
-                            for param in params[TARGET_PARAM_START..].iter_mut() {
-                                *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
-                            }
-                            active_control = None;
-                        }
-                        Some(ActiveControl::RightSlider(param_index)) => {
-                            let value = ((x - SLIDER_TRACK_LEFT as f32)
-                                / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
-                                .clamp(0.0, 1.0);
-                            params[param_index] = value;
-                        }
-                        Some(ActiveControl::Tilt) => {
-                            params[BASE_PITCH_PARAM] = (1.0
-                                - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32)
-                                .clamp(0.0, 1.0);
-                        }
-                        Some(ActiveControl::Dolly) => {
-                            params[DOLLY_PARAM] = ((y - DOLLY_TOP as f32)
-                                / (DOLLY_BOTTOM - DOLLY_TOP) as f32)
-                                .clamp(0.0, 1.0);
-                        }
-                        Some(ActiveControl::XyView) => {
-                            params[BASE_YAW_PARAM] = ((x - VIEW_SLIDER_LEFT as f32)
-                                / (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32)
-                                .clamp(0.0, 1.0);
-                        }
-                        None => {}
-                    }
-                }
-                TouchEvent::Move { x, y } => {
-                    touch_cursor = Some((x, y));
-                    match active_control {
-                        Some(ActiveControl::RightSlider(param_index)) => {
-                            let value = ((x - SLIDER_TRACK_LEFT as f32)
-                                / (SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32)
-                                .clamp(0.0, 1.0);
-                            params[param_index] = value;
-                        }
-                        Some(ActiveControl::Tilt) => {
-                            params[BASE_PITCH_PARAM] = (1.0
-                                - (y - TILT_TOP as f32) / (TILT_BOTTOM - TILT_TOP) as f32)
-                                .clamp(0.0, 1.0);
-                        }
-                        Some(ActiveControl::Dolly) => {
-                            params[DOLLY_PARAM] = ((y - DOLLY_TOP as f32)
-                                / (DOLLY_BOTTOM - DOLLY_TOP) as f32)
-                                .clamp(0.0, 1.0);
-                        }
-                        Some(ActiveControl::XyView) => {
-                            params[BASE_YAW_PARAM] = ((x - VIEW_SLIDER_LEFT as f32)
-                                / (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32)
-                                .clamp(0.0, 1.0);
-                        }
-                        Some(ActiveControl::PreviousTarget)
-                        | Some(ActiveControl::NextTarget)
-                        | None => {}
-                    }
-                }
-                TouchEvent::Up => {
-                    touch_cursor = None;
-                    active_control = None;
-                }
-            }
+        controls.handle_touch_event(touch.read_touch_event().map_err(Error::Cyd)?);
+        controls.write_params(&mut params);
+
+        if controls.previous_target_clicked() {
+            target_seed = target_seed.wrapping_sub(1);
+            randomize_target_params(target_seed, &mut params);
+        }
+        if controls.next_target_clicked() {
+            target_seed = target_seed.wrapping_add(1);
+            randomize_target_params(target_seed, &mut params);
         }
 
         {
@@ -333,146 +186,9 @@ where
         }
 
         {
-            let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
             let mut target_label = TargetLabel::new();
-
-            Text::with_baseline("z", Point::new(11, 5), text_style, Baseline::Top)
-                .draw(&mut frame)
-                .unwrap_infallible();
-            Line::new(
-                Point::new(TILT_X, TILT_TOP),
-                Point::new(TILT_X, TILT_BOTTOM),
-            )
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-            .draw(&mut frame)
-            .unwrap_infallible();
-            let tilt_knob_y = TILT_TOP
-                + round_to_i32(
-                    (TILT_BOTTOM - TILT_TOP) as f32 * (1.0 - params[BASE_PITCH_PARAM]),
-                );
-            Circle::with_center(Point::new(TILT_X, tilt_knob_y), 9)
-                .into_styled(fill_style(SIM_YELLOW))
-                .draw(&mut frame)
-                .unwrap_infallible();
-
-            Text::with_baseline("zoom", Point::new(29, 5), text_style, Baseline::Top)
-                .draw(&mut frame)
-                .unwrap_infallible();
-            Line::new(
-                Point::new(DOLLY_X, DOLLY_TOP),
-                Point::new(DOLLY_X, DOLLY_BOTTOM),
-            )
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-            .draw(&mut frame)
-            .unwrap_infallible();
-            let dolly_knob_y =
-                DOLLY_TOP + round_to_i32((DOLLY_BOTTOM - DOLLY_TOP) as f32 * params[DOLLY_PARAM]);
-            Circle::with_center(Point::new(DOLLY_X, dolly_knob_y), 9)
-                .into_styled(fill_style(SIM_YELLOW))
-                .draw(&mut frame)
-                .unwrap_infallible();
-
-            draw_reverse_kinematics_run_button(&mut frame).unwrap_infallible();
-            draw_reverse_kinematics_step_button(&mut frame).unwrap_infallible();
-            draw_calibrate_button(&mut frame).unwrap_infallible();
-
-            Rectangle::new(
-                Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
-                Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
-            )
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-            .draw(&mut frame)
-            .unwrap_infallible();
-            Text::with_baseline(
-                "prev",
-                Point::new(
-                    PREV_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
-                    TARGET_CONTROL_TOP + 2,
-                ),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(&mut frame)
-            .unwrap_infallible();
-            Text::with_baseline(
-                target_label.as_str(target_seed),
-                Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(&mut frame)
-            .unwrap_infallible();
-            Rectangle::new(
-                Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
-                Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
-            )
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-            .draw(&mut frame)
-            .unwrap_infallible();
-            Text::with_baseline(
-                "next",
-                Point::new(
-                    NEXT_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
-                    TARGET_CONTROL_TOP + 2,
-                ),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(&mut frame)
-            .unwrap_infallible();
-
-            for slider_offset in 0..ARM_PARAM_COUNT {
-                let param_index = ARM_PARAM_START + slider_offset;
-                let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
-                let value = params[param_index];
-
-                Text::with_baseline(
-                    LINKAGE.param(param_index).name(),
-                    Point::new(SLIDER_LEFT, slider_y - 12),
-                    text_style,
-                    Baseline::Top,
-                )
-                .draw(&mut frame)
-                .unwrap_infallible();
-
-                Line::new(
-                    Point::new(SLIDER_TRACK_LEFT, slider_y + 8),
-                    Point::new(SLIDER_RIGHT, slider_y + 8),
-                )
-                .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-                .draw(&mut frame)
-                .unwrap_infallible();
-
-                let knob_x = SLIDER_TRACK_LEFT
-                    + round_to_i32((SLIDER_RIGHT - SLIDER_TRACK_LEFT) as f32 * value);
-                Circle::with_center(Point::new(knob_x, slider_y + 8), 9)
-                    .into_styled(fill_style(SIM_YELLOW))
-                    .draw(&mut frame)
-                    .unwrap_infallible();
-            }
-
-            Text::with_baseline(
-                "x/y view",
-                Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y - 15),
-                text_style,
-                Baseline::Top,
-            )
-            .draw(&mut frame)
-            .unwrap_infallible();
-            Line::new(
-                Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
-                Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
-            )
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
-            .draw(&mut frame)
-            .unwrap_infallible();
-            let view_knob_x = VIEW_SLIDER_LEFT
-                + round_to_i32(
-                    (VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT) as f32 * params[BASE_YAW_PARAM],
-                );
-            Circle::with_center(Point::new(view_knob_x, VIEW_SLIDER_Y), 9)
-                .into_styled(fill_style(SIM_YELLOW))
-                .draw(&mut frame)
+            controls
+                .draw(&mut frame, target_label.as_str(target_seed))
                 .unwrap_infallible();
         }
 
@@ -501,16 +217,7 @@ where
             .unwrap_infallible();
         }
 
-        if let Some((x, y)) = touch_cursor {
-            let x = x as i32;
-            let y = y as i32;
-            let radius = 5;
-            let cursor_style = PrimitiveStyle::with_fill(Rgb565::from(CYAN));
-            Circle::new(Point::new(x - radius, y - radius), (radius * 2 + 1) as u32)
-                .into_styled(cursor_style)
-                .draw(&mut frame)
-                .unwrap_infallible();
-        }
+        controls.draw_touch_cursor(&mut frame).unwrap_infallible();
 
         frame.flush().await.map_err(Error::Cyd)?;
     }
@@ -610,71 +317,6 @@ impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
     }
 }
 
-fn draw_reverse_kinematics_run_button<D: DrawTarget<Color = Rgb565>>(
-    buffer: &mut D,
-) -> Result<(), D::Error> {
-    Triangle::new(
-        Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
-        Point::new(RK_RUN_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
-        Point::new(
-            RK_RUN_LEFT + RK_BUTTON_SIZE,
-            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
-        ),
-    )
-    .into_styled(fill_style(GREEN))
-    .draw(buffer)?;
-    Ok(())
-}
-
-fn draw_reverse_kinematics_step_button<D: DrawTarget<Color = Rgb565>>(
-    buffer: &mut D,
-) -> Result<(), D::Error> {
-    Rectangle::new(
-        Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
-        Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
-    )
-    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-    .draw(buffer)?;
-    Rectangle::new(
-        Point::new(
-            RK_STEP_LEFT + RK_BUTTON_SIZE - 5,
-            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2 - 5,
-        ),
-        Size::new(2, 10),
-    )
-    .into_styled(fill_style(SIM_WHITE))
-    .draw(buffer)?;
-    Triangle::new(
-        Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + 4),
-        Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + RK_BUTTON_SIZE - 4),
-        Point::new(
-            RK_STEP_LEFT + RK_BUTTON_SIZE - 7,
-            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
-        ),
-    )
-    .into_styled(fill_style(GREEN))
-    .draw(buffer)?;
-    Ok(())
-}
-
-fn draw_calibrate_button<D: DrawTarget<Color = Rgb565>>(buffer: &mut D) -> Result<(), D::Error> {
-    let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
-    Rectangle::new(
-        Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
-        Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
-    )
-    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-    .draw(buffer)?;
-    Text::with_baseline(
-        "cal",
-        Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
-        text_style,
-        Baseline::Top,
-    )
-    .draw(buffer)?;
-    Ok(())
-}
-
 //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
 fn projection() -> Projection {
     Projection::front_perspective(
@@ -757,19 +399,14 @@ impl Default for FrameBuffer {
     }
 }
 
-// ── Private helper types ───────────────────────────────────────────────────────
-
-#[derive(Clone, Copy)]
-enum ActiveControl {
-    RightSlider(usize), // absolute param index
-    Tilt,
-    Dolly,
-    XyView,
-    PreviousTarget,
-    NextTarget,
-}
-
 // ── Private helper functions ───────────────────────────────────────────────────
+
+fn randomize_target_params(target_seed: u8, params: &mut [f32; DOF]) {
+    let mut rng = WyRand::new_seed(u64::from(target_seed));
+    for param in params[TARGET_PARAM_START..].iter_mut() {
+        *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
+    }
+}
 
 fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u32, u32)> {
     let elapsed_micros = current_tick
@@ -810,10 +447,6 @@ fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
     PrimitiveStyle::with_fill(Rgb565::from(color))
 }
 
-fn stroke_style(color: Rgb888, stroke_width: u32) -> PrimitiveStyle<Rgb565> {
-    PrimitiveStyle::with_stroke(Rgb565::from(color), stroke_width)
-}
-
 fn distance(left: Vec3, right: Vec3) -> f32 {
     let Vec3([left_x, left_y, left_z]) = left;
     let Vec3([right_x, right_y, right_z]) = right;
@@ -822,10 +455,6 @@ fn distance(left: Vec3, right: Vec3) -> f32 {
 
 fn square(value: f32) -> f32 {
     value * value
-}
-
-fn round_to_i32(value: f32) -> i32 {
-    libm::roundf(value) as i32
 }
 
 fn round_to_u32(value: f32) -> u32 {

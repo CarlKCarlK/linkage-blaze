@@ -18,13 +18,17 @@ body {
 }
 
 .stage {
+  /* The live display: crisp landscape 2x (320x240 panel -> 640x480).
+     Note: one CYD pixel is two browser pixels here. */
+  --screen-width: 640px;
+  --screen-height: 480px;
   --screen-center-x: calc(24.212% + 45.845% / 2);
   --screen-center-y: calc(27.691% + 44.158% / 2);
   position: relative;
   z-index: 0;
   flex: 0 0 auto;
-  width: calc(min(96vw, calc(96vh * 1396 / 1087)) * var(--browser-zoom, 1));
-  aspect-ratio: 1396 / 1087;
+  width: calc(var(--screen-width) / 0.45845);
+  height: calc(var(--screen-height) / 0.44158);
   transform: translate(
     calc(50% - var(--screen-center-x)),
     calc(50% - var(--screen-center-y))
