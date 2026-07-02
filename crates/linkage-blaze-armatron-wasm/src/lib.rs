@@ -9,7 +9,9 @@ use embedded_graphics::{
     prelude::{DrawTarget, Drawable, OriginDimensions, Size},
 };
 use linkage_blaze_armatron_core::{CydSim as CoreCydSim, FrameBuffer, TickOut};
-use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
+use linkage_blaze_core::{
+    LinkageFixed, Pose, Rgb888, RgbColor, Vec3, linkage, linkage_fixed, rgb888_from_rgb565,
+};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen]
@@ -162,9 +164,10 @@ impl WasmDisplay {
     fn rgba(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.frame_buffer.raw_pixels().len() * 4);
         for pixel in self.frame_buffer.raw_pixels() {
-            bytes.push(scale_rgb565_channel(((pixel >> 11) & 0x1f) as u8, 31));
-            bytes.push(scale_rgb565_channel(((pixel >> 5) & 0x3f) as u8, 63));
-            bytes.push(scale_rgb565_channel((pixel & 0x1f) as u8, 31));
+            let color = rgb888_from_rgb565(*pixel);
+            bytes.push(color.r());
+            bytes.push(color.g());
+            bytes.push(color.b());
             bytes.push(255);
         }
         bytes
@@ -198,10 +201,6 @@ impl Default for CydSim {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn scale_rgb565_channel(value: u8, max: u8) -> u8 {
-    ((u16::from(value) * 255) / u16::from(max)) as u8
 }
 
 // ---- Three.js viewer exports ----

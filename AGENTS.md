@@ -75,6 +75,8 @@ Type-based naming examples:
 
 Generic/contextual names are acceptable when the type is obvious and verbose naming would be redundant.
 
+Prefer shadowing over adding generic disambiguating suffixes like `_value`. For example, use `previous_tick` again when narrowing or reinterpreting a tick value instead of renaming it to `previous_tick_value` solely to avoid shadowing.
+
 Avoid single-character variables; use descriptive names:
 
 - Bad: `i`, `j`, `x`, `y`, `a`, `b`

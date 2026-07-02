@@ -10,7 +10,7 @@ pub mod calibration;
 mod controlled;
 pub mod reverse_kinematics;
 
-use core::convert::Infallible;
+use core::{convert::Infallible, fmt::Write};
 
 use embassy_time::Instant;
 use embedded_graphics::{
@@ -24,17 +24,21 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{
     DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
-    render_draw_items_3d,
+    render_draw_items_3d, rgb565_from_rgb888_components,
 };
 use linkage_blaze_cyd_core::{Cyd, CydFrame, TouchInputEvent};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
+use crate::infallible::InfallibleResultExt;
+
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-pub const BLACK: Rgb888 = Rgb888::new(0, 0, 0); // black
+pub const BACKGROUND: Rgb888 = Rgb888::new(0, 0, 0); // black
+pub const BLACK: Rgb888 = BACKGROUND;
 pub const WHITE: Rgb888 = Rgb888::new(255, 255, 255); // white
 pub const YELLOW: Rgb888 = Rgb888::new(255, 255, 0); // yellow
+const BACKGROUND_565: Rgb565 = rgb565_from_rgb888_components(0, 0, 0); // black
 
 // ── Armatron state constants ─────────────────────────────────────────────────
 
@@ -69,9 +73,14 @@ const CALIBRATE_BUTTON_HEIGHT: u32 = 14;
 const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
-const FPS_REPORT_WIDTH: i32 = 7 * TEXT_CHAR_WIDTH;
+const FPS_TEXT_BUFFER_LEN: usize = 8;
+const FPS_REPORT_WIDTH: i32 = FPS_TEXT_BUFFER_LEN as i32 * TEXT_CHAR_WIDTH;
 const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH;
 const FPS_REPORT_TOP: i32 = SCREEN_HEIGHT as i32 - 11;
+const FPS_TEXT_POINT: Point = Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP);
+const FPS_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
+    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
+const FPS_TEXT_MAX_TENTHS: u32 = 990;
 const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 const VERSION_REPORT_LEFT: i32 =
     FPS_REPORT_LEFT - (VERSION_TEXT.len() as i32 * TEXT_CHAR_WIDTH) - TEXT_CHAR_WIDTH;
@@ -97,7 +106,6 @@ const ARM_PARAM_COUNT: usize = 6;
 const TARGET_PARAM_START: usize = 9;
 
 // ---- colors ----
-const SIM_BLACK: Rgb888 = Rgb888::CSS_BLACK;
 const SIM_WHITE: Rgb888 = Rgb888::CSS_WHITE;
 const CYAN: Rgb888 = Rgb888::CSS_CYAN;
 const SIM_YELLOW: Rgb888 = Rgb888::CSS_YELLOW;
@@ -134,19 +142,7 @@ const BASE_YAW_PARAM: usize = 0;
 const BASE_PITCH_PARAM: usize = 1;
 const DOLLY_PARAM: usize = 2;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TouchInputOutcome {
-    Unchanged,
-    Changed,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum FpsDisplay {
-    Show,
-    Hide,
-}
-
-const FPS_DISPLAY: FpsDisplay = FpsDisplay::Show;
+const SHOW_FPS_TEXT: bool = true;
 
 // ── Generic armatron loop ─────────────────────────────────────────────────────
 
@@ -162,7 +158,7 @@ const FPS_DISPLAY: FpsDisplay = FpsDisplay::Show;
 /// [`calibration`] module exists only so current platform examples can share
 /// calibration UI helpers until that responsibility moves into the CYD device
 /// layer.
-pub async fn armatron<C>(cyd: &mut C) -> Result<Infallible, C::Error>
+pub async fn armatron<C>(cyd: &mut C) -> Result<Infallible, Error<C::Error>>
 where
     C: Cyd,
 {
@@ -170,68 +166,77 @@ where
     let mut params = LINKAGE.param_defaults();
     let mut target_seed = 0;
     let mut rng = WyRand::new_seed(u64::from(target_seed));
+    // todo00 how to we feel about "TARGET_PARAM_START"
     for param in params[TARGET_PARAM_START..].iter_mut() {
         *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
     }
 
-    let mut fps = None;
     let mut active_control = None;
     let mut previous_tick = None;
     let mut touch_cursor = None;
+    let mut fps_text_buffer = heapless::String::<FPS_TEXT_BUFFER_LEN>::new();
 
     loop {
         let now = Instant::now();
-        let touch = cyd.read_touch_input()?;
+        let touch = cyd.read_touch_input().map_err(Error::Cyd)?;
+        // todo000 move out the the loop somehow?
         let mut frame = cyd.full_frame_mut();
 
-        let draw_result: Result<(), Infallible> = (|| {
-            DrawTarget::clear(&mut frame, rgb565_from_rgb888(SIM_BLACK))?;
+        // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
+        // generic frame code use fill(...) instead, which makes the clear helper much less useful.
+        frame.fill(BACKGROUND_565);
 
-            if FPS_DISPLAY == FpsDisplay::Show
-                && let Some(previous_tick_value) = previous_tick
-            {
-                let frame_micros = now
-                    .saturating_duration_since(previous_tick_value)
-                    .as_micros();
-                if frame_micros != 0 {
-                    fps = Some((1_000_000 / frame_micros).min(999) as u32);
+        if SHOW_FPS_TEXT
+            && let Some(previous_tick) = previous_tick
+            && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, now)
+        {
+            fps_text_buffer.clear();
+            write!(&mut fps_text_buffer, "{fps_whole:>2}.{fps_fraction} fps")?;
+            Text::with_baseline(
+                &fps_text_buffer,
+                FPS_TEXT_POINT,
+                FPS_TEXT_STYLE,
+                Baseline::Top,
+            )
+            .draw(&mut frame)
+            .unwrap_infallible();
+        }
+        previous_tick = Some(now);
+
+        if let Some(touch) = touch {
+            match touch {
+                TouchInputEvent::Down { x, y } => {
+                    touch_cursor = Some((x, y));
+                    touch_down(x, y, &mut params, &mut target_seed, &mut active_control);
                 }
-                let text_style = MonoTextStyle::new(&FONT_6X10, rgb565_from_rgb888(LIGHT_SLATE_GRAY));
-                let mut report = FpsReport::new();
-                Text::with_baseline(
-                    report.as_str(fps),
-                    Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP),
-                    text_style,
-                    Baseline::Top,
-                )
-                .draw(&mut frame)?;
+                TouchInputEvent::Move { x, y } => {
+                    touch_cursor = Some((x, y));
+                    update_touch(x, y, &mut params, &mut active_control);
+                }
+                TouchInputEvent::Up => {
+                    touch_cursor = None;
+                    touch_up(&mut active_control);
+                }
             }
-            previous_tick = Some(now);
-
-            if let Some(touch_input_event) = touch {
-                handle_touch_input_event(
-                    touch_input_event,
-                    &mut params,
-                    &mut target_seed,
-                    &mut active_control,
-                    &mut touch_cursor,
-                );
-            }
-
-            draw_linkage(LINKAGE, &mut frame, &params)?;
-            draw_sliders(&mut frame, &params, target_seed)?;
-            draw_report(&mut frame, &params)?;
-            draw_version(&mut frame)?;
-            draw_touch_cursor(&mut frame, touch_cursor)?;
-            Ok(())
-        })();
-        match draw_result {
-            Ok(()) => {}
-            Err(infallible) => match infallible {},
         }
 
-        frame.flush().await?;
+        draw_linkage(LINKAGE, &mut frame, &params).unwrap_infallible();
+        draw_sliders(&mut frame, &params, target_seed).unwrap_infallible();
+        draw_report(&mut frame, &params).unwrap_infallible();
+        draw_version(&mut frame).unwrap_infallible();
+        draw_touch_cursor(&mut frame, touch_cursor).unwrap_infallible();
+
+        frame.flush().await.map_err(Error::Cyd)?;
     }
+}
+
+#[derive(Debug, derive_more::From)]
+pub enum Error<F> {
+    /// Formatting the FPS report failed.
+    FpsReport(core::fmt::Error),
+    /// Reading touch input or flushing a frame failed.
+    #[from(ignore)]
+    Cyd(F),
 }
 
 struct ArmatronSurface<'a, T: DrawTarget<Color = Rgb565>> {
@@ -657,32 +662,6 @@ enum ActiveControl {
 
 // ── Private helper functions ───────────────────────────────────────────────────
 
-fn handle_touch_input_event(
-    touch_input_event: TouchInputEvent,
-    params: &mut [f32; DOF],
-    target_seed: &mut u8,
-    active_control: &mut Option<ActiveControl>,
-    touch_cursor: &mut Option<(f32, f32)>,
-) -> TouchInputOutcome {
-    match touch_input_event {
-        TouchInputEvent::Down { x, y } => {
-            *touch_cursor = Some((x, y));
-            touch_down(x, y, params, target_seed, active_control);
-            TouchInputOutcome::Changed
-        }
-        TouchInputEvent::Move { x, y } => {
-            *touch_cursor = Some((x, y));
-            update_touch(x, y, params, active_control);
-            TouchInputOutcome::Changed
-        }
-        TouchInputEvent::Up => {
-            *touch_cursor = None;
-            touch_up(active_control);
-            TouchInputOutcome::Changed
-        }
-    }
-}
-
 fn touch_down(
     x: f32,
     y: f32,
@@ -716,6 +695,17 @@ fn touch_down(
 
 fn touch_up(active_control: &mut Option<ActiveControl>) {
     *active_control = None;
+}
+
+fn display_fps_since(previous_tick: Instant, now: Instant) -> Option<(u32, u32)> {
+    let elapsed_micros = now.saturating_duration_since(previous_tick).as_micros();
+
+    (elapsed_micros != 0).then(|| {
+        // Convert microseconds/frame to tenths of frames/second, rounded.
+        let fps_tenths = 10_000_000_u64.saturating_add(elapsed_micros / 2) / elapsed_micros;
+        let fps_tenths = fps_tenths.min(u64::from(FPS_TEXT_MAX_TENTHS)) as u32;
+        (fps_tenths / 10, fps_tenths % 10)
+    })
 }
 
 fn update_touch(x: f32, y: f32, params: &mut [f32; DOF], active_control: &Option<ActiveControl>) {
@@ -876,11 +866,6 @@ struct DistanceReport {
     len: usize,
 }
 
-struct FpsReport {
-    bytes: [u8; 7],
-    len: usize,
-}
-
 impl DistanceReport {
     fn new() -> Self {
         Self {
@@ -900,33 +885,5 @@ impl DistanceReport {
         self.bytes[13] = b'0' + (fraction % 10) as u8;
 
         core::str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
-    }
-}
-
-impl FpsReport {
-    fn new() -> Self {
-        Self {
-            bytes: *b"--- fps",
-            len: 7,
-        }
-    }
-
-    fn as_str(&mut self, fps: Option<u32>) -> &str {
-        if let Some(fps) = fps {
-            let fps = fps.min(999);
-            self.bytes[0] = if fps >= 100 {
-                b'0' + (fps / 100) as u8
-            } else {
-                b' '
-            };
-            self.bytes[1] = if fps >= 10 {
-                b'0' + ((fps / 10) % 10) as u8
-            } else {
-                b' '
-            };
-            self.bytes[2] = b'0' + (fps % 10) as u8;
-        }
-
-        core::str::from_utf8(&self.bytes[..self.len]).expect("fps report is ASCII")
     }
 }

@@ -18,7 +18,7 @@ use embedded_graphics::{
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::{DrawItem3d, PixelTarget, Projection, Rgb888};
+use linkage_blaze_core::{DrawItem3d, PixelTarget, Projection, Rgb888, rgb565_from_rgb888};
 
 use crate::{ContiguousPixels, DrawItem2d, TouchInputEvent, tiling::TileGrid};
 
@@ -71,7 +71,7 @@ pub trait Cyd {
 
     /// Convert an `Rgb888` color to the device's native `Rgb565` format.
     fn to_rgb565(&self, color: Rgb888) -> Rgb565 {
-        Rgb565::from(color)
+        rgb565_from_rgb888(color)
     }
 
     /// Borrow a frame covering `region`, cleared to the device background color.

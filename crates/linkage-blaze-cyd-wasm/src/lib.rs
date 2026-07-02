@@ -21,7 +21,7 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use linkage_blaze_core::PixelTarget;
+use linkage_blaze_core::{PixelTarget, RgbColor, rgb888_from_rgb565};
 use linkage_blaze_cyd_core::{Cyd, CydFrame, CydInfallibleError, Orientation, TouchInputEvent};
 use wasm_bindgen::Clamped;
 use web_sys::{CanvasRenderingContext2d, ImageData};
@@ -178,9 +178,10 @@ fn put_image_data(context: &CanvasRenderingContext2d, rectangle: Rectangle, byte
 }
 
 fn push_rgb565_rgba(bytes: &mut Vec<u8>, pixel: u16) {
-    bytes.push(scale_channel((pixel >> 11) & 0x1f, 31));
-    bytes.push(scale_channel((pixel >> 5) & 0x3f, 63));
-    bytes.push(scale_channel(pixel & 0x1f, 31));
+    let color = rgb888_from_rgb565(pixel);
+    bytes.push(color.r());
+    bytes.push(color.g());
+    bytes.push(color.b());
     bytes.push(255);
 }
 
@@ -229,9 +230,10 @@ impl CydFrameWasm<'_> {
     fn present(&self) {
         let mut bytes = Vec::with_capacity(self.pixels.len() * 4);
         for pixel in &self.pixels {
-            bytes.push(scale_channel((pixel >> 11) & 0x1f, 31));
-            bytes.push(scale_channel((pixel >> 5) & 0x3f, 63));
-            bytes.push(scale_channel(pixel & 0x1f, 31));
+            let color = rgb888_from_rgb565(*pixel);
+            bytes.push(color.r());
+            bytes.push(color.g());
+            bytes.push(color.b());
             bytes.push(255);
         }
         let image_data = ImageData::new_with_u8_clamped_array_and_sh(
@@ -376,9 +378,4 @@ impl CydFrame for CydFrameWasm<'_> {
         self.present();
         Ok(())
     }
-}
-
-/// Expand a 5- or 6-bit `Rgb565` channel to 8 bits.
-fn scale_channel(value: u16, max: u16) -> u8 {
-    ((value * 255) / max) as u8
 }

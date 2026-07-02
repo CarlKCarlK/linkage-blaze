@@ -20,7 +20,7 @@ use linkage_blaze_cyd::{
     RawPoint, RawTouchEvent, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use linkage_blaze_example_core::armatron::{
-    BLACK, WHITE, armatron,
+    BLACK, Error as ArmatronError, WHITE, armatron,
     calibration::{calibration_corner_for_index, draw_calibration_cross},
 };
 use log::info;
@@ -37,6 +37,7 @@ enum MainError {
     InitDisplay,
     DrawCalibrationCross,
     FlushFrameBuffer,
+    FormatFpsReport,
 }
 
 impl From<device_envoy_esp::Error> for MainError {
@@ -71,6 +72,15 @@ impl From<CydError> for MainError {
             CydError::CalibrationUnavailable => {
                 unreachable!("calibration is completed before entering the armatron loop")
             }
+        }
+    }
+}
+
+impl From<ArmatronError<CydError>> for MainError {
+    fn from(error: ArmatronError<CydError>) -> Self {
+        match error {
+            ArmatronError::FpsReport(_) => MainError::FormatFpsReport,
+            ArmatronError::Cyd(error) => error.into(),
         }
     }
 }

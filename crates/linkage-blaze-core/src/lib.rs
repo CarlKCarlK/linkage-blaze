@@ -44,7 +44,7 @@ use alloc::vec::Vec;
 
 pub use math::{Mat3, Vec3};
 
-pub use embedded_graphics::pixelcolor::{Rgb888, WebColors};
+pub use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
 pub use embedded_graphics::prelude::{Point, RgbColor};
 use math::degrees_to_radians;
 
@@ -3912,21 +3912,36 @@ pub trait PixelTarget {
     /// raw value directly and skip the 565→888(→565) reconversion. See
     /// [`pixel_put_565`].
     fn put_pixel_565(&mut self, x: usize, y: usize, rgb565: u16) {
-        self.put_pixel(x, y, rgb565_to_rgb888(rgb565));
+        self.put_pixel(x, y, rgb888_from_rgb565(rgb565));
     }
 }
 
 /// Expands a packed RGB565 value (`RRRRR_GGGGGG_BBBBB`) to [`Rgb888`],
 /// replicating each channel's high bits into its low bits so full-scale inputs
 /// stay full-scale.
-pub fn rgb565_to_rgb888(rgb565: u16) -> Rgb888 {
-    let red5 = (rgb565 >> 11) & 0x1f;
-    let green6 = (rgb565 >> 5) & 0x3f;
-    let blue5 = rgb565 & 0x1f;
-    let red = ((red5 << 3) | (red5 >> 2)) as u8;
-    let green = ((green6 << 2) | (green6 >> 4)) as u8;
-    let blue = ((blue5 << 3) | (blue5 >> 2)) as u8;
+pub const fn rgb888_from_rgb565(rgb565: u16) -> Rgb888 {
+    let red5 = ((rgb565 >> 11) & 0x1f) as u8;
+    let green6 = ((rgb565 >> 5) & 0x3f) as u8;
+    let blue5 = (rgb565 & 0x1f) as u8;
+
+    let red = (red5 << 3) | (red5 >> 2);
+    let green = (green6 << 2) | (green6 >> 4);
+    let blue = (blue5 << 3) | (blue5 >> 2);
+
     Rgb888::new(red, green, blue)
+}
+
+/// Converts 8-bit RGB components to [`Rgb565`] by keeping each channel's high
+/// bits.
+pub const fn rgb565_from_rgb888_components(red: u8, green: u8, blue: u8) -> Rgb565 {
+    Rgb565::new(red >> 3, green >> 2, blue >> 3)
+}
+
+/// Converts [`Rgb888`] to [`Rgb565`].
+///
+/// Use [`rgb565_from_rgb888_components`] in const contexts.
+pub fn rgb565_from_rgb888(color: Rgb888) -> Rgb565 {
+    rgb565_from_rgb888_components(color.r(), color.g(), color.b())
 }
 
 /// Bounds-checked pixel write for a [`PixelTarget`].  Out-of-bounds writes are
@@ -4356,9 +4371,12 @@ mod test_helpers;
 
 #[cfg(test)]
 mod tests {
-    use super::{Arg, DrawItem3d, LinkageFixed, Mat3, Point, Pose, Projection, Step, Vec3};
     #[cfg(feature = "alloc")]
-    use super::{LinkageBuf, Rgb888};
+    use super::LinkageBuf;
+    use super::{
+        Arg, DrawItem3d, LinkageFixed, Mat3, Point, Pose, Projection, Rgb565, Rgb888, Step, Vec3,
+        rgb565_from_rgb888, rgb565_from_rgb888_components, rgb888_from_rgb565,
+    };
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
@@ -4423,6 +4441,36 @@ mod tests {
             (actual - expected).abs() <= tolerance,
             "actual {actual} was not within {tolerance} of expected {expected}",
         );
+    }
+
+    #[test]
+    fn rgb888_from_rgb565_is_const() {
+        const BLACK: Rgb888 = rgb888_from_rgb565(0x0000); // black
+        const WHITE: Rgb888 = rgb888_from_rgb565(0xffff); // white
+        const RED: Rgb888 = rgb888_from_rgb565(0xf800); // red
+        const GREEN: Rgb888 = rgb888_from_rgb565(0x07e0); // green
+        const BLUE: Rgb888 = rgb888_from_rgb565(0x001f); // blue
+
+        assert_eq!(BLACK, Rgb888::new(0, 0, 0));
+        assert_eq!(WHITE, Rgb888::new(255, 255, 255));
+        assert_eq!(RED, Rgb888::new(255, 0, 0));
+        assert_eq!(GREEN, Rgb888::new(0, 255, 0));
+        assert_eq!(BLUE, Rgb888::new(0, 0, 255));
+    }
+
+    #[test]
+    fn rgb565_from_rgb888_components_is_const() {
+        const BLACK: Rgb565 = rgb565_from_rgb888_components(0, 0, 0); // black
+        const WHITE: Rgb565 = rgb565_from_rgb888_components(255, 255, 255); // white
+        const RED: Rgb565 = rgb565_from_rgb888_components(255, 0, 0); // red
+        const GREEN: Rgb565 = rgb565_from_rgb888_components(0, 255, 0); // green
+        const BLUE: Rgb565 = rgb565_from_rgb888_components(0, 0, 255); // blue
+
+        assert_eq!(BLACK, rgb565_from_rgb888(Rgb888::new(0, 0, 0)));
+        assert_eq!(WHITE, rgb565_from_rgb888(Rgb888::new(255, 255, 255)));
+        assert_eq!(RED, rgb565_from_rgb888(Rgb888::new(255, 0, 0)));
+        assert_eq!(GREEN, rgb565_from_rgb888(Rgb888::new(0, 255, 0)));
+        assert_eq!(BLUE, rgb565_from_rgb888(Rgb888::new(0, 0, 255)));
     }
 
     #[test]
