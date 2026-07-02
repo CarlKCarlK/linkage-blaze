@@ -7,9 +7,9 @@ use embedded_graphics::{
     primitives::{Circle, Line, PrimitiveStyle, Rectangle, Triangle},
     text::{Baseline, Text},
 };
-use linkage_blaze_cyd_core::TouchEvent;
+use linkage_blaze_cyd_core::{SCREEN_WIDTH, TouchEvent};
 
-use super::{CYAN, GREEN, LIGHT_SLATE_GRAY, SCREEN_WIDTH, SIM_WHITE, SIM_YELLOW};
+use super::{CYAN, GREEN, LIGHT_SLATE_GRAY, SIM_WHITE, SIM_YELLOW};
 
 const TILT_X: i32 = 16;
 const DOLLY_X: i32 = 42;
@@ -34,7 +34,7 @@ const CALIBRATE_BUTTON_TOP: i32 = 212;
 const CALIBRATE_BUTTON_WIDTH: u32 = 30;
 const CALIBRATE_BUTTON_HEIGHT: u32 = 14;
 const CONTROL_TEXT_CHAR_WIDTH: i32 = 6;
-const TARGET_CONTROL_TOP: i32 = 17;
+pub(super) const TARGET_CONTROL_TOP: i32 = 17;
 const TARGET_BUTTON_WIDTH: u32 = 42;
 const TARGET_BUTTON_HEIGHT: u32 = 14;
 const TARGET_BUTTON_LABEL_WIDTH: i32 = 4 * CONTROL_TEXT_CHAR_WIDTH;
@@ -43,7 +43,8 @@ const TARGET_CONTROL_GAP: i32 = 4;
 const TARGET_CONTROL_WIDTH: i32 =
     TARGET_BUTTON_WIDTH as i32 * 2 + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP * 2;
 const PREV_BUTTON_LEFT: i32 = ((SCREEN_WIDTH as i32 - TARGET_CONTROL_WIDTH) / 2) - 16;
-const TARGET_LABEL_LEFT: i32 = PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32 + TARGET_CONTROL_GAP;
+pub(super) const TARGET_LABEL_LEFT: i32 =
+    PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32 + TARGET_CONTROL_GAP;
 const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP;
 
 pub(super) const EXTRA_SLIDER_COUNT: usize = 6;
@@ -196,7 +197,6 @@ impl ArmatronControls {
     pub(super) fn draw<D: DrawTarget<Color = Rgb565>>(
         &self,
         target: &mut D,
-        target_label: &str,
     ) -> Result<(), D::Error> {
         self.tilt.draw(target)?;
         self.dolly.draw(target)?;
@@ -205,14 +205,6 @@ impl ArmatronControls {
         self.calibrate.draw(target)?;
         self.previous_target.draw(target)?;
         self.next_target.draw(target)?;
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
-        Text::with_baseline(
-            target_label,
-            Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2),
-            text_style,
-            Baseline::Top,
-        )
-        .draw(target)?;
         for slider in &self.extra_sliders {
             slider.draw(target)?;
         }

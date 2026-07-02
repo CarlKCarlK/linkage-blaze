@@ -27,11 +27,16 @@ use linkage_blaze_core::{
     LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
     rgb565_from_rgb888_components,
 };
-use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, DrawItem3dExt};
+use linkage_blaze_cyd_core::{
+    Cyd, CydDisplay, CydFrame, CydTouch, DrawItem3dExt, SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH,
+};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use controls::{ArmatronControlValues, ArmatronControls, EXTRA_SLIDER_COUNT};
+use controls::{
+    ArmatronControlValues, ArmatronControls, EXTRA_SLIDER_COUNT, TARGET_CONTROL_TOP,
+    TARGET_LABEL_LEFT,
+};
 
 use crate::infallible::InfallibleResultExt;
 
@@ -45,14 +50,17 @@ const BACKGROUND_565: Rgb565 = rgb565_from_rgb888_components(0, 0, 0); // black
 
 // ── Armatron state constants ─────────────────────────────────────────────────
 
-// todo00 I hate all these constants.
-pub const SCREEN_WIDTH: usize = 320;
-pub const SCREEN_HEIGHT: usize = 240;
-pub const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
-
 const TEXT_CHAR_WIDTH: i32 = 6;
 const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
 const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
+const DISTANCE_REPORT_TOP: i32 = 5;
+const DISTANCE_TEXT_POINT: Point = Point::new(DISTANCE_REPORT_LEFT, DISTANCE_REPORT_TOP);
+const DISTANCE_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
+    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
+const TARGET_TEXT_POINT: Point = Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2);
+const TARGET_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
+    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
+const TEXT_BUFFER_LEN: usize = 14; // "distance 99.99", the longest of the status texts
 const FPS_TEXT_BUFFER_LEN: usize = 8;
 const FPS_REPORT_WIDTH: i32 = FPS_TEXT_BUFFER_LEN as i32 * TEXT_CHAR_WIDTH;
 const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH;
@@ -65,6 +73,9 @@ const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 const VERSION_REPORT_LEFT: i32 =
     FPS_REPORT_LEFT - (VERSION_TEXT.len() as i32 * TEXT_CHAR_WIDTH) - TEXT_CHAR_WIDTH;
 const VERSION_REPORT_TOP: i32 = FPS_REPORT_TOP;
+const VERSION_TEXT_POINT: Point = Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP);
+const VERSION_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
+    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
 
 // ---- world / display constants ----
 const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span the screen width
@@ -172,7 +183,7 @@ where
 
     // Set up buffers
     let mut frame = display.full_frame_mut();
-    let mut fps_text = heapless::String::<FPS_TEXT_BUFFER_LEN>::new();
+    let mut text_buf = heapless::String::<TEXT_BUFFER_LEN>::new();
 
     loop {
         // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
@@ -185,9 +196,9 @@ where
             && let Some(previous_tick) = previous_tick
             && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)
         {
-            fps_text.clear();
-            write!(&mut fps_text, "{fps_whole:>2}.{fps_fraction} fps")?;
-            Text::with_baseline(&fps_text, FPS_TEXT_POINT, FPS_TEXT_STYLE, Baseline::Top)
+            text_buf.clear();
+            write!(&mut text_buf, "{fps_whole:>2}.{fps_fraction} fps")?;
+            Text::with_baseline(&text_buf, FPS_TEXT_POINT, FPS_TEXT_STYLE, Baseline::Top)
                 .draw(&mut frame)
                 .unwrap_infallible();
         }
@@ -217,32 +228,47 @@ where
             randomize_target_params(target_seed, &mut params);
         }
 
-        let projection = projection();
-        for draw_item3d in LINKAGE.draw_items_3d(&params) {
-            draw_item3d.project(&projection).draw(&mut frame);
+        // Draw the linkage
+        for draw_item_3d in LINKAGE.draw_items_3d(&params) {
+            draw_item_3d.project(&PROJECTION).draw(&mut frame);
         }
 
-        let mut target_label = TargetLabel::new();
-        controls
-            .draw(&mut frame, target_label.as_str(target_seed))
-            .unwrap_infallible();
+        // Draw the controls
+        controls.draw(&mut frame).unwrap_infallible();
 
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(SIM_WHITE));
-        let mut report = DistanceReport::new();
+        // Draw the target # and distance to target.
+        text_buf.clear();
+        write!(&mut text_buf, "target #{target_seed}")?;
         Text::with_baseline(
-            report.as_str(target_distance(&params)),
-            Point::new(DISTANCE_REPORT_LEFT, 5),
-            text_style,
+            &text_buf,
+            TARGET_TEXT_POINT,
+            TARGET_TEXT_STYLE,
             Baseline::Top,
         )
         .draw(&mut frame)
         .unwrap_infallible();
 
-        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::from(LIGHT_SLATE_GRAY));
+        let distance_hundredths = round_to_u32(target_distance(&params).clamp(0.0, 99.99) * 100.0);
+        text_buf.clear();
+        write!(
+            &mut text_buf,
+            "distance {:02}.{:02}",
+            distance_hundredths / 100,
+            distance_hundredths % 100
+        )?;
+        Text::with_baseline(
+            &text_buf,
+            DISTANCE_TEXT_POINT,
+            DISTANCE_TEXT_STYLE,
+            Baseline::Top,
+        )
+        .draw(&mut frame)
+        .unwrap_infallible();
+
         Text::with_baseline(
             VERSION_TEXT,
-            Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP),
-            text_style,
+            VERSION_TEXT_POINT,
+            VERSION_TEXT_STYLE,
             Baseline::Top,
         )
         .draw(&mut frame)
@@ -271,13 +297,11 @@ pub enum Error<F> {
 }
 
 //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-fn projection() -> Projection {
-    Projection::front_perspective(
-        Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
-        PIXELS_PER_UNIT,
-        30.0,
-    )
-}
+const PROJECTION: Projection = Projection::front_perspective(
+    Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
+    PIXELS_PER_UNIT,
+    30.0,
+);
 
 // ── FrameBuffer ────────────────────────────────────────────────────────────────
 
@@ -412,67 +436,4 @@ fn square(value: f32) -> f32 {
 
 fn round_to_u32(value: f32) -> u32 {
     libm::roundf(value) as u32
-}
-
-struct TargetLabel {
-    bytes: [u8; 11],
-    len: usize,
-}
-
-impl TargetLabel {
-    fn new() -> Self {
-        Self {
-            bytes: *b"target #000",
-            len: 11,
-        }
-    }
-
-    fn as_str(&mut self, value: u8) -> &str {
-        let hundreds = value / 100;
-        let tens = (value / 10) % 10;
-        let ones = value % 10;
-
-        if hundreds > 0 {
-            self.bytes[8] = b'0' + hundreds;
-            self.bytes[9] = b'0' + tens;
-            self.bytes[10] = b'0' + ones;
-            self.len = 11;
-        } else if tens > 0 {
-            self.bytes[8] = b'0' + tens;
-            self.bytes[9] = b'0' + ones;
-            self.len = 10;
-        } else {
-            self.bytes[8] = b'0' + ones;
-            self.len = 9;
-        }
-
-        core::str::from_utf8(&self.bytes[..self.len]).expect("target label is ASCII")
-    }
-}
-
-struct DistanceReport {
-    bytes: [u8; 14],
-    len: usize,
-}
-
-impl DistanceReport {
-    fn new() -> Self {
-        Self {
-            bytes: *b"distance 00.00",
-            len: 14,
-        }
-    }
-
-    fn as_str(&mut self, value: f32) -> &str {
-        let hundredths = round_to_u32(value.clamp(0.0, 99.99) * 100.0);
-        let whole = hundredths / 100;
-        let fraction = hundredths % 100;
-
-        self.bytes[9] = b'0' + (whole / 10) as u8;
-        self.bytes[10] = b'0' + (whole % 10) as u8;
-        self.bytes[12] = b'0' + (fraction / 10) as u8;
-        self.bytes[13] = b'0' + (fraction % 10) as u8;
-
-        core::str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
-    }
 }
