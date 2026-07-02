@@ -32,7 +32,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = parse_port(sys.argv)
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", port), NoCacheHandler) as httpd:
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    with socketserver.ThreadingTCPServer(("", port), NoCacheHandler) as httpd:
         print(f"Serving no-cache HTTP on 0.0.0.0 port {port}")
         httpd.serve_forever()

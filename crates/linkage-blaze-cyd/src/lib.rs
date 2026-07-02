@@ -32,7 +32,7 @@ use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydDisplay, CydFlushError, CydF
 pub use linkage_blaze_cyd_core::{
     Cyd as CydDevice, CydDisplay as CydDisplayTrait, CydFrame as CydFrameTrait,
     CydTouch as CydTouchTrait, Orientation, RegionPixels, SCREEN_HEIGHT, SCREEN_PIXELS,
-    SCREEN_WIDTH, TouchInputEvent, tiling,
+    SCREEN_WIDTH, TouchEvent, tiling,
 };
 pub use text::DEFAULT_FONT;
 pub use touch::{CydTouchEspInitError, RawTouchEvent, TOUCH_SPI_HZ};
@@ -503,7 +503,7 @@ impl CalibratedCydEsp<'_> {
         self.cyd.remove_calibration();
     }
 
-    pub fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
+    pub fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, CydError> {
         let raw_touch_event = self
             .cyd
             .touch
@@ -515,13 +515,13 @@ impl CalibratedCydEsp<'_> {
             raw_touch_event.map(|raw_touch_event| match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
                     let (x, y) = map_raw_to_screen(raw_x, raw_y, self.calibration_config);
-                    TouchInputEvent::Down { x, y }
+                    TouchEvent::Down { x, y }
                 }
                 RawTouchEvent::Move { raw_x, raw_y } => {
                     let (x, y) = map_raw_to_screen(raw_x, raw_y, self.calibration_config);
-                    TouchInputEvent::Move { x, y }
+                    TouchEvent::Move { x, y }
                 }
-                RawTouchEvent::Up => TouchInputEvent::Up,
+                RawTouchEvent::Up => TouchEvent::Up,
             }),
         )
     }
@@ -661,7 +661,7 @@ impl Cyd for CalibratedCydEsp<'_> {
 impl CydTouch for CydTouchEspPart<'_> {
     type Error = CydError;
 
-    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
+    fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, CydError> {
         let Some(calibration_config) = self.calibration_config else {
             return Ok(None);
         };
@@ -673,13 +673,13 @@ impl CydTouch for CydTouchEspPart<'_> {
             .map(|raw_touch_event| match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
                     let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
-                    TouchInputEvent::Down { x, y }
+                    TouchEvent::Down { x, y }
                 }
                 RawTouchEvent::Move { raw_x, raw_y } => {
                     let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
-                    TouchInputEvent::Move { x, y }
+                    TouchEvent::Move { x, y }
                 }
-                RawTouchEvent::Up => TouchInputEvent::Up,
+                RawTouchEvent::Up => TouchEvent::Up,
             }))
     }
 }

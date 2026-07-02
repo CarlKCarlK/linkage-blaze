@@ -11,7 +11,8 @@
 
 mod animation_frame;
 
-use core::convert::Infallible;
+use core::{cell::RefCell, convert::Infallible};
+use std::{collections::VecDeque, rc::Rc};
 
 use embedded_graphics::{
     Drawable, Pixel,
@@ -23,7 +24,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{PixelTarget, RgbColor, rgb888_from_rgb565};
 use linkage_blaze_cyd_core::{
-    Cyd, CydDisplay, CydFrame, CydInfallibleError, CydTouch, Orientation, TouchInputEvent,
+    Cyd, CydDisplay, CydFrame, CydInfallibleError, CydTouch, Orientation, TouchEvent,
 };
 use wasm_bindgen::Clamped;
 use web_sys::{CanvasRenderingContext2d, ImageData};
@@ -39,6 +40,7 @@ pub struct CydWasm {
     background565: Rgb565,
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
+    touch_events: TouchEvents,
 }
 
 pub struct CydDisplayWasmPart<'a> {
@@ -51,7 +53,16 @@ pub struct CydDisplayWasmPart<'a> {
     font: &'static MonoFont<'static>,
 }
 
-pub struct CydTouchWasmPart;
+pub struct CydTouchWasmPart {
+    touch_events: TouchEvents,
+}
+
+#[derive(Clone)]
+pub struct CydTouchWasmSource {
+    touch_events: TouchEvents,
+}
+
+type TouchEvents = Rc<RefCell<VecDeque<TouchEvent>>>;
 
 impl CydWasm {
     /// Build a simulated CYD that presents onto `context`, sized for `orientation`.
@@ -71,7 +82,33 @@ impl CydWasm {
             background565: Rgb565::from(background),
             foreground565: Rgb565::from(foreground),
             font,
+            touch_events: Rc::new(RefCell::new(VecDeque::new())),
         }
+    }
+
+    #[must_use]
+    pub fn touch_source(&self) -> CydTouchWasmSource {
+        CydTouchWasmSource {
+            touch_events: self.touch_events.clone(),
+        }
+    }
+}
+
+impl CydTouchWasmSource {
+    pub fn touch_down(&self, x: f32, y: f32) {
+        self.push(TouchEvent::Down { x, y });
+    }
+
+    pub fn touch_move(&self, x: f32, y: f32) {
+        self.push(TouchEvent::Move { x, y });
+    }
+
+    pub fn touch_up(&self) {
+        self.push(TouchEvent::Up);
+    }
+
+    fn push(&self, touch_event: TouchEvent) {
+        self.touch_events.borrow_mut().push_back(touch_event);
     }
 }
 
@@ -93,7 +130,9 @@ impl Cyd for CydWasm {
                 foreground565: self.foreground565,
                 font: self.font,
             },
-            CydTouchWasmPart,
+            CydTouchWasmPart {
+                touch_events: self.touch_events.clone(),
+            },
         )
     }
 }
@@ -197,9 +236,8 @@ impl CydDisplay for CydDisplayWasmPart<'_> {
 impl CydTouch for CydTouchWasmPart {
     type Error = CydInfallibleError;
 
-    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydInfallibleError> {
-        // Touch is not wired up yet; the WASM examples (ballet) do not use it.
-        Ok(None)
+    fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, CydInfallibleError> {
+        Ok(self.touch_events.borrow_mut().pop_front())
     }
 }
 
@@ -414,10 +452,11 @@ impl CydFrame for CydFrameWasm<'_> {
     }
 
     async fn flush(&mut self) -> Result<(), CydInfallibleError> {
-        // The frame boundary: yield to the browser, then present the
-        // freshly-drawn buffer so it paints on this animation frame.
-        next_animation_frame().await;
+        // Present immediately so the first drawn frame is visible without
+        // waiting a browser tick, then yield to the next animation frame to
+        // pace the loop.
         self.present();
+        next_animation_frame().await;
         Ok(())
     }
 }

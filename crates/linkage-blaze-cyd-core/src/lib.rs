@@ -21,7 +21,7 @@ pub use cyd::{
 pub use draw_item_2d::{DrawItem2d, DrawItem3dExt, Image565View};
 pub use orientation::Orientation;
 pub use tga::{Image565Fixed, Image565Mask};
-pub use touch_event::TouchInputEvent;
+pub use touch_event::TouchEvent;
 
 /// Native panel width in pixels (landscape). The CYD panel is fixed hardware.
 pub const SCREEN_WIDTH: usize = 320;

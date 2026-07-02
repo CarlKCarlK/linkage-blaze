@@ -298,6 +298,18 @@ run-arm-wasm port=_arm_sim_port:
     just build-arm-wasm
     just serve-arm-wasm {{port}}
 
+check-armatron-wasm:
+    just check-arm-wasm
+
+build-armatron-wasm:
+    just build-arm-wasm
+
+serve-armatron-wasm port=_arm_sim_port:
+    just serve-arm-wasm {{port}}
+
+run-armatron-wasm port=_arm_sim_port:
+    just run-arm-wasm {{port}}
+
 serve-arm-viewer-wasm port=_arm_viewer_port:
     -lsof -ti:{{port}} | xargs -r kill
     cd {{_arm_wasm_viewer_www}} && python3 ../../../../.tools/no_cache_http_server.py {{port}}

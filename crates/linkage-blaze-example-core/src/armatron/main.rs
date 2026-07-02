@@ -2,7 +2,7 @@
 //!
 //! The device-agnostic game loop lives here.
 //!
-//! The generic loop updates the armatron state, dispatches touch input, renders
+//! The generic loop updates the armatron state, dispatches touch events, renders
 //! changed frames, and flushes them through the [`Cyd`](linkage_blaze_cyd_core::Cyd)
 //! frame boundary.
 
@@ -26,7 +26,7 @@ use linkage_blaze_core::{
     DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
     render_draw_items_3d, rgb565_from_rgb888_components,
 };
-use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, TouchInputEvent};
+use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, TouchEvent};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
@@ -149,7 +149,7 @@ const SHOW_FPS_TEXT: bool = true;
 /// Run the armatron example forever.
 ///
 /// Each iteration:
-/// 1. Reads the next touch event from [`CydTouch::read_touch_input`].
+/// 1. Reads the next touch event from [`CydTouch::read_touch_event`].
 /// 2. Updates local armatron params, touch, and fps state.
 /// 3. If the frame changed, renders and presents a full-screen CYD frame.
 ///
@@ -162,6 +162,8 @@ pub async fn armatron<C>(cyd: &mut C) -> Result<Infallible, Error<C::Error>>
 where
     C: Cyd,
 {
+    let (mut display, mut touch) = cyd.parts();
+
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
     let mut target_seed = 0;
@@ -171,50 +173,46 @@ where
         *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
     }
 
+    // Set up state.
     let mut active_control = None;
     let mut previous_tick = None;
     let mut touch_cursor = None;
-    let mut fps_text_buffer = heapless::String::<FPS_TEXT_BUFFER_LEN>::new();
-    let (mut display, mut touch) = cyd.parts();
-    // todo000 move out the the loop somehow? (may no longer apply)
+
+    // Set up buffers
     let mut frame = display.full_frame_mut();
+    let mut fps_text = heapless::String::<FPS_TEXT_BUFFER_LEN>::new();
 
     loop {
-        let now = Instant::now();
-        let touch = touch.read_touch_input().map_err(Error::Cyd)?;
-
         // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
         // generic frame code use fill(...) instead, which makes the clear helper much less useful.
         frame.fill(BACKGROUND_565);
 
+        // Display FPS if requested and available.
+        let current_tick = Instant::now();
         if SHOW_FPS_TEXT
             && let Some(previous_tick) = previous_tick
-            && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, now)
+            && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)
         {
-            fps_text_buffer.clear();
-            write!(&mut fps_text_buffer, "{fps_whole:>2}.{fps_fraction} fps")?;
-            Text::with_baseline(
-                &fps_text_buffer,
-                FPS_TEXT_POINT,
-                FPS_TEXT_STYLE,
-                Baseline::Top,
-            )
-            .draw(&mut frame)
-            .unwrap_infallible();
+            fps_text.clear();
+            write!(&mut fps_text, "{fps_whole:>2}.{fps_fraction} fps")?;
+            Text::with_baseline(&fps_text, FPS_TEXT_POINT, FPS_TEXT_STYLE, Baseline::Top)
+                .draw(&mut frame)
+                .unwrap_infallible();
         }
-        previous_tick = Some(now);
+        previous_tick = Some(current_tick);
 
-        if let Some(touch) = touch {
-            match touch {
-                TouchInputEvent::Down { x, y } => {
+        // todo It's weird this doesn't return an error of the right type already and needs to be converted
+        if let Some(touch_event) = touch.read_touch_event().map_err(Error::Cyd)? {
+            match touch_event {
+                TouchEvent::Down { x, y } => {
                     touch_cursor = Some((x, y));
                     touch_down(x, y, &mut params, &mut target_seed, &mut active_control);
                 }
-                TouchInputEvent::Move { x, y } => {
+                TouchEvent::Move { x, y } => {
                     touch_cursor = Some((x, y));
                     update_touch(x, y, &mut params, &mut active_control);
                 }
-                TouchInputEvent::Up => {
+                TouchEvent::Up => {
                     touch_cursor = None;
                     touch_up(&mut active_control);
                 }
@@ -231,11 +229,17 @@ where
     }
 }
 
+/// Error from the generic armatron loop, generic over the CYD device error `F`.
+///
+/// Local errors such as [`core::fmt::Error`] get a derived `From`, so they
+/// propagate with a plain `?`. The CYD device error `F` is converted explicitly
+/// with `.map_err(Error::Cyd)` at the call site: a blanket `From<F>` would be
+/// greedy enough to collide with those concrete `From`s under coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Formatting the FPS report failed.
     FpsReport(core::fmt::Error),
-    /// Reading touch input or flushing a frame failed.
+    /// Reading touch events or flushing a frame failed.
     #[from(ignore)]
     Cyd(F),
 }
@@ -698,8 +702,10 @@ fn touch_up(active_control: &mut Option<ActiveControl>) {
     *active_control = None;
 }
 
-fn display_fps_since(previous_tick: Instant, now: Instant) -> Option<(u32, u32)> {
-    let elapsed_micros = now.saturating_duration_since(previous_tick).as_micros();
+fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u32, u32)> {
+    let elapsed_micros = current_tick
+        .saturating_duration_since(previous_tick)
+        .as_micros();
 
     (elapsed_micros != 0).then(|| {
         // Convert microseconds/frame to tenths of frames/second, rounded.

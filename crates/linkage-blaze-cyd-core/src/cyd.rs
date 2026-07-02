@@ -9,7 +9,7 @@
 //! A [`CydDisplay`] hands out per-region [frames](CydFrame); each frame starts
 //! cleared to the device background, can have a line of default-style text
 //! written into it, and is flushed to a screen position. [`CydTouch`] reads
-//! calibrated, screen-space [`TouchInputEvent`]s (or `None` when there is no
+//! calibrated, screen-space [`TouchEvent`]s (or `None` when there is no
 //! touch).
 
 use core::{convert::Infallible, future::Future};
@@ -21,7 +21,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{DrawItem3d, PixelTarget, Projection, Rgb888, rgb565_from_rgb888};
 
-use crate::{ContiguousPixels, DrawItem2d, TouchInputEvent, tiling::TileGrid};
+use crate::{ContiguousPixels, DrawItem2d, TouchEvent, tiling::TileGrid};
 
 pub trait RegionPixels {
     fn width(&self) -> usize;
@@ -250,7 +250,7 @@ pub trait CydDisplay {
     }
 }
 
-/// A CYD touch input source.
+/// A CYD touch source.
 pub trait CydTouch {
     /// Error returned when reading touch fails.
     type Error: CydFlushError;
@@ -259,7 +259,7 @@ pub trait CydTouch {
     ///
     /// Returns `Ok(None)` when there is no pending touch (including devices
     /// constructed without touch). Errors only on a hardware/read failure.
-    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, Self::Error>;
+    fn read_touch_event(&mut self) -> Result<Option<TouchEvent>, Self::Error>;
 }
 
 /// A lending/streaming iterator over a [`TileGrid`]'s tiles.

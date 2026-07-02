@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Robot Arm Simulator</title>
+  <title>CYD Armatron Simulator</title>
   <link rel="stylesheet" href="./styles.css" />
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#111418" />
@@ -14,10 +14,11 @@
 </head>
 
 <body>
-  <main class="shell">
-    <canvas id="screen" width="320" height="240" aria-label="CYD display simulator"></canvas>
-    <button id="fullscreen-btn" aria-label="Enter fullscreen">⛶</button>
-  </main>
+  <div class="stage">
+    <div class="cord"></div>
+    <img class="case" src="./case.png" alt="CYD device case" />
+    <canvas id="screen" aria-label="CYD armatron display simulator"></canvas>
+  </div>
   <script type="module" src="./app.js"></script>
 </body>
 

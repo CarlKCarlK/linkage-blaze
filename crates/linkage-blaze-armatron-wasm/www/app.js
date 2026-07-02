@@ -1,4 +1,4 @@
-import init, { CydSim } from "./pkg/linkage_blaze_armatron_wasm.js";
+import init, { start } from "./pkg/linkage_blaze_armatron_wasm.js";
 
 if ("serviceWorker" in navigator) {
   if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
@@ -10,13 +10,15 @@ if ("serviceWorker" in navigator) {
   }
 }
 
-
-const canvas = document.querySelector("#screen");
+const { canvas } = ensureFramedLayout();
 const context = canvas.getContext("2d");
+trackBrowserZoom();
 
 try {
   await init();
+  start("screen");
 } catch (e) {
+  console.error(e);
   context.fillStyle = "#111418";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = "#ff4444";
@@ -26,77 +28,48 @@ try {
   throw e;
 }
 
-const sim = new CydSim();
-const image = context.createImageData(sim.width(), sim.height());
-let animationFrame = null;
-
-render();
-scheduleFrame();
-
-canvas.addEventListener("pointerdown", (event) => {
-  canvas.setPointerCapture(event.pointerId);
-  const point = eventToScreen(event);
-  sim.touch_down(point.x, point.y);
-  render();
-});
-
-canvas.addEventListener("pointermove", (event) => {
-  if (!(event.buttons & 1)) {
-    return;
+function ensureFramedLayout() {
+  const canvas = document.querySelector("#screen");
+  if (!(canvas instanceof HTMLCanvasElement)) {
+    throw new Error("missing #screen canvas");
   }
-  const point = eventToScreen(event);
-  sim.touch_move(point.x, point.y);
-  render();
-});
 
-canvas.addEventListener("pointerup", (event) => {
-  canvas.releasePointerCapture(event.pointerId);
-  sim.touch_up();
-  render();
-});
+  let stage = document.querySelector(".stage");
+  if (!(stage instanceof HTMLDivElement)) {
+    stage = document.createElement("div");
+    stage.className = "stage";
+    canvas.replaceWith(stage);
+    stage.appendChild(canvas);
+  }
 
-canvas.addEventListener("pointercancel", () => {
-  sim.touch_up();
-  render();
-});
+  let cord = stage.querySelector(".cord");
+  if (!(cord instanceof HTMLDivElement)) {
+    cord = document.createElement("div");
+    cord.className = "cord";
+    stage.prepend(cord);
+  }
 
-function render() {
-  image.data.set(sim.rgba());
-  context.putImageData(image, 0, 0);
+  let caseImage = stage.querySelector(".case");
+  if (!(caseImage instanceof HTMLImageElement)) {
+    caseImage = document.createElement("img");
+    caseImage.className = "case";
+    caseImage.src = "./case.png";
+    caseImage.alt = "CYD device case";
+    stage.insertBefore(caseImage, canvas);
+  }
+
+  return { canvas };
 }
 
-function eventToScreen(event) {
-  const bounds = canvas.getBoundingClientRect();
-  return {
-    x: ((event.clientX - bounds.left) * canvas.width) / bounds.width,
-    y: ((event.clientY - bounds.top) * canvas.height) / bounds.height,
+function trackBrowserZoom() {
+  const initialDevicePixelRatio = window.devicePixelRatio || 1;
+
+  const updateBrowserZoom = () => {
+    const browserZoom = (window.devicePixelRatio || 1) / initialDevicePixelRatio;
+    document.documentElement.style.setProperty("--browser-zoom", String(browserZoom));
   };
-}
 
-const fullscreenBtn = document.querySelector("#fullscreen-btn");
-fullscreenBtn.addEventListener("click", () => {
-  if (document.fullscreenElement) {
-    document.exitFullscreen();
-  } else {
-    document.documentElement.requestFullscreen();
-  }
-});
-document.addEventListener("fullscreenchange", () => {
-  fullscreenBtn.textContent = document.fullscreenElement ? "✕" : "⛶";
-});
-
-function scheduleFrame() {
-  if (animationFrame !== null) {
-    return;
-  }
-  animationFrame = requestAnimationFrame(tickFrame);
-}
-
-function tickFrame(timestamp) {
-  animationFrame = null;
-
-  if (sim.tick_at(Math.round(timestamp * 1000))) {
-    render();
-  }
-  scheduleFrame();
+  updateBrowserZoom();
+  window.addEventListener("resize", updateBrowserZoom);
+  window.visualViewport?.addEventListener("resize", updateBrowserZoom);
 }

@@ -4,7 +4,7 @@ import init, {
   show_case_alignment_controls,
 } from "./pkg/linkage_blaze_skeleton_clock_wasm.js";
 
-const status = document.querySelector("#status");
+trackBrowserZoom();
 
 try {
   await init();
@@ -18,9 +18,8 @@ try {
   if (show_case_alignment_controls()) {
     await import("./controls.js");
   }
-  status.textContent = "skeleton-clock running";
 } catch (error) {
-  status.textContent = `load failed: ${String(error)}`;
+  console.error(error);
   throw error;
 }
 
@@ -82,4 +81,17 @@ function buildTimeOfDaySlider(setTimeOfDay) {
 
   // Start live (following the real clock) rather than forcing noon on load.
   readout.textContent = "Live";
+}
+
+function trackBrowserZoom() {
+  const initialDevicePixelRatio = window.devicePixelRatio || 1;
+
+  const updateBrowserZoom = () => {
+    const browserZoom = (window.devicePixelRatio || 1) / initialDevicePixelRatio;
+    document.documentElement.style.setProperty("--browser-zoom", String(browserZoom));
+  };
+
+  updateBrowserZoom();
+  window.addEventListener("resize", updateBrowserZoom);
+  window.visualViewport?.addEventListener("resize", updateBrowserZoom);
 }

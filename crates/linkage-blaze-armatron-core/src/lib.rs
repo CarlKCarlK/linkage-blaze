@@ -149,14 +149,14 @@ pub enum ControlledKnob {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum TouchInputEvent {
+pub enum TouchEvent {
     Down { x: f32, y: f32 },
     Move { x: f32, y: f32 },
     Up,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TouchInputOutcome {
+pub enum TouchOutcome {
     Unchanged,
     Changed,
     CalibrationRequested,
@@ -386,62 +386,59 @@ impl CydSim {
         self.rk_step_hold_active = false;
     }
 
-    pub fn handle_touch_input_event(
-        &mut self,
-        touch_input_event: TouchInputEvent,
-    ) -> TouchInputOutcome {
-        match touch_input_event {
-            TouchInputEvent::Down { x, y } => {
+    pub fn handle_touch_event(&mut self, touch_event: TouchEvent) -> TouchOutcome {
+        match touch_event {
+            TouchEvent::Down { x, y } => {
                 self.touch_cursor = Some((x, y));
                 self.touch_down(x, y);
                 if self.take_calibration_request() {
                     self.touch_up();
                     self.touch_cursor = None;
-                    TouchInputOutcome::CalibrationRequested
+                    TouchOutcome::CalibrationRequested
                 } else {
-                    TouchInputOutcome::Changed
+                    TouchOutcome::Changed
                 }
             }
-            TouchInputEvent::Move { x, y } => {
+            TouchEvent::Move { x, y } => {
                 self.touch_cursor = Some((x, y));
                 self.touch_move(x, y);
-                TouchInputOutcome::Changed
+                TouchOutcome::Changed
             }
-            TouchInputEvent::Up => {
+            TouchEvent::Up => {
                 self.touch_cursor = None;
                 self.touch_up();
-                TouchInputOutcome::Changed
+                TouchOutcome::Changed
             }
         }
     }
 
-    pub fn tick(&mut self, now: Instant, touch_input_event: Option<TouchInputEvent>) -> TickOut {
+    pub fn tick(&mut self, now: Instant, touch_event: Option<TouchEvent>) -> TickOut {
         let previous_tick = self.previous_tick;
         let first_tick = previous_tick.is_none();
         let reverse_kinematics_changed = self.tick_reverse_kinematics_at(now);
         let fps_draw_requested = self.update_fps(previous_tick, now);
-        let touch_input_outcome = touch_input_event.map_or(TouchInputOutcome::Unchanged, |event| {
-            self.handle_touch_input_event(event)
+        let touch_outcome = touch_event.map_or(TouchOutcome::Unchanged, |event| {
+            self.handle_touch_event(event)
         });
 
-        match touch_input_outcome {
-            TouchInputOutcome::CalibrationRequested => {
+        match touch_outcome {
+            TouchOutcome::CalibrationRequested => {
                 self.previous_tick = None;
                 self.fps = None;
                 TickOut::Calibrate
             }
-            TouchInputOutcome::Changed
+            TouchOutcome::Changed
                 if first_tick || reverse_kinematics_changed || fps_draw_requested =>
             {
                 TickOut::Draw
             }
-            TouchInputOutcome::Changed => TickOut::Draw,
-            TouchInputOutcome::Unchanged
+            TouchOutcome::Changed => TickOut::Draw,
+            TouchOutcome::Unchanged
                 if first_tick || reverse_kinematics_changed || fps_draw_requested =>
             {
                 TickOut::Draw
             }
-            TouchInputOutcome::Unchanged => TickOut::Nada,
+            TouchOutcome::Unchanged => TickOut::Nada,
         }
     }
 

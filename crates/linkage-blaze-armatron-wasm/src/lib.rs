@@ -1,206 +1,115 @@
 #![forbid(unsafe_code)]
 
-use core::convert::Infallible;
+use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
+use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
+use linkage_blaze_cyd_core::Orientation;
+use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm};
+use linkage_blaze_example_core::armatron::{BACKGROUND, WHITE, armatron};
+use wasm_bindgen::{JsCast, closure::Closure, prelude::wasm_bindgen};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, PointerEvent};
 
-use embassy_time::Instant;
-use embedded_graphics::{
-    Pixel,
-    pixelcolor::Rgb565,
-    prelude::{DrawTarget, Drawable, OriginDimensions, Size},
-};
-use linkage_blaze_armatron_core::{CydSim as CoreCydSim, FrameBuffer, TickOut};
-use linkage_blaze_core::{
-    LinkageFixed, Pose, Rgb888, RgbColor, Vec3, linkage, linkage_fixed, rgb888_from_rgb565,
-};
-use wasm_bindgen::prelude::wasm_bindgen;
+const ORIENTATION: Orientation = Orientation::Landscape;
 
 #[wasm_bindgen]
-pub struct CydSim {
-    sim: CoreCydSim,
-    display: WasmDisplay,
-}
+pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
+    let document = web_sys::window()
+        .expect("a browser window exists")
+        .document()
+        .expect("the window has a document");
+    let canvas: HtmlCanvasElement = document
+        .get_element_by_id(canvas_id)
+        .expect("the canvas element exists")
+        .dyn_into()
+        .expect("the element is a <canvas>");
 
-struct WasmDisplay {
-    frame_buffer: FrameBuffer,
-}
+    let size = ORIENTATION.size();
+    canvas.set_width(size.width);
+    canvas.set_height(size.height);
 
-#[wasm_bindgen]
-impl CydSim {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        Self::new_from_core_sim(CoreCydSim::new()) // or new_with_fps() for testing fps in wasm
-    }
+    let context: CanvasRenderingContext2d = canvas
+        .get_context("2d")?
+        .expect("the canvas supports a 2d context")
+        .dyn_into()
+        .expect("the context is a CanvasRenderingContext2d");
 
-    #[wasm_bindgen(js_name = newWithFps)]
-    pub fn new_with_fps() -> Self {
-        Self::new_from_core_sim(CoreCydSim::new_with_fps())
-    }
+    let mut cyd = CydWasm::new(context, ORIENTATION, BACKGROUND, WHITE, &FONT_9X15_BOLD);
+    install_touch_handlers(&canvas, cyd.touch_source())?;
 
-    pub fn width(&self) -> usize {
-        self.sim.width()
-    }
-
-    pub fn height(&self) -> usize {
-        self.sim.height()
-    }
-
-    pub fn rgba(&self) -> Vec<u8> {
-        self.display.rgba()
-    }
-
-    pub fn touch_down(&mut self, x: f32, y: f32) {
-        use linkage_blaze_armatron_core::TouchInputEvent;
-        self.sim
-            .handle_touch_input_event(TouchInputEvent::Down { x, y });
-        self.draw_frame();
-    }
-
-    pub fn touch_move(&mut self, x: f32, y: f32) {
-        use linkage_blaze_armatron_core::TouchInputEvent;
-        self.sim
-            .handle_touch_input_event(TouchInputEvent::Move { x, y });
-        self.draw_frame();
-    }
-
-    pub fn touch_up(&mut self) {
-        use linkage_blaze_armatron_core::TouchInputEvent;
-        self.sim.handle_touch_input_event(TouchInputEvent::Up);
-        self.draw_frame();
-    }
-
-    #[wasm_bindgen(js_name = paramCount)]
-    pub fn param_count() -> usize {
-        CoreCydSim::param_count()
-    }
-
-    #[wasm_bindgen(js_name = paramName)]
-    pub fn param_name(index: usize) -> String {
-        CoreCydSim::param_name(index).to_string()
-    }
-
-    #[wasm_bindgen(js_name = paramDefault)]
-    pub fn param_default(index: usize) -> f32 {
-        CoreCydSim::param_default(index)
-    }
-
-    #[wasm_bindgen(js_name = getParam)]
-    pub fn get_param(&self, index: usize) -> f32 {
-        self.sim.get_param(index)
-    }
-
-    #[wasm_bindgen(js_name = setParam)]
-    pub fn set_param(&mut self, index: usize, value: f32) {
-        self.sim.set_param_by_index(index, value);
-    }
-
-    #[wasm_bindgen(js_name = drawViewOnly)]
-    pub fn draw_view_only(&mut self) {
-        self.sim
-            .draw_view_only(&mut self.display)
-            .expect("drawing to the Infallible wasm display cannot fail");
-    }
-
-    pub fn reverse_kinematics(&mut self) -> f32 {
-        let distance = self.sim.reverse_kinematics();
-        self.draw_frame();
-        distance
-    }
-
-    pub fn start_reverse_kinematics(&mut self) {
-        self.sim.start_reverse_kinematics();
-        self.draw_frame();
-    }
-
-    pub fn stop_reverse_kinematics(&mut self) {
-        self.sim.stop_reverse_kinematics();
-        self.draw_frame();
-    }
-
-    pub fn is_reverse_kinematics_running(&self) -> bool {
-        self.sim.is_reverse_kinematics_running()
-    }
-
-    pub fn tick_reverse_kinematics_at(&mut self, now_micros: f64) -> bool {
-        let running = self
-            .sim
-            .tick_reverse_kinematics_at(Instant::from_micros(now_micros as u64));
-        self.draw_frame();
-        running
-    }
-
-    pub fn tick_at(&mut self, now_micros: f64) -> bool {
-        match self.sim.tick(Instant::from_micros(now_micros as u64), None) {
-            TickOut::Draw => {
-                self.draw_frame();
-                true
-            }
-            TickOut::Calibrate | TickOut::Nada => false,
+    wasm_bindgen_futures::spawn_local(async move {
+        match armatron(&mut cyd).await {
+            Ok(never) => match never {},
+            Err(error) => web_sys::console::error_1(&format!("armatron stopped: {error:?}").into()),
         }
-    }
+    });
+
+    Ok(())
 }
 
-impl CydSim {
-    fn new_from_core_sim(sim: CoreCydSim) -> Self {
-        let mut display = WasmDisplay::new();
-        sim.draw(&mut display)
-            .expect("drawing to the Infallible wasm display cannot fail");
-        Self { sim, display }
-    }
-
-    fn draw_frame(&mut self) {
-        self.sim
-            .draw(&mut self.display)
-            .expect("drawing to the Infallible wasm display cannot fail");
-    }
-}
-
-impl WasmDisplay {
-    fn new() -> Self {
-        Self {
-            frame_buffer: FrameBuffer::new(),
+fn install_touch_handlers(
+    canvas: &HtmlCanvasElement,
+    touch_source: CydTouchWasmSource,
+) -> Result<(), wasm_bindgen::JsValue> {
+    let pointer_down_canvas = canvas.clone();
+    let pointer_down_source = touch_source.clone();
+    let pointer_down = Closure::wrap(Box::new(move |event: PointerEvent| {
+        event.prevent_default();
+        if let Err(error) = pointer_down_canvas.set_pointer_capture(event.pointer_id()) {
+            web_sys::console::error_1(&error);
         }
-    }
+        let (x, y) = event_to_screen(&pointer_down_canvas, &event);
+        pointer_down_source.touch_down(x, y);
+    }) as Box<dyn FnMut(_)>);
+    canvas
+        .add_event_listener_with_callback("pointerdown", pointer_down.as_ref().unchecked_ref())?;
+    pointer_down.forget();
 
-    fn rgba(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(self.frame_buffer.raw_pixels().len() * 4);
-        for pixel in self.frame_buffer.raw_pixels() {
-            let color = rgb888_from_rgb565(*pixel);
-            bytes.push(color.r());
-            bytes.push(color.g());
-            bytes.push(color.b());
-            bytes.push(255);
+    let pointer_move_canvas = canvas.clone();
+    let pointer_move_source = touch_source.clone();
+    let pointer_move = Closure::wrap(Box::new(move |event: PointerEvent| {
+        if event.buttons() & 1 == 0 {
+            return;
         }
-        bytes
-    }
+        event.prevent_default();
+        let (x, y) = event_to_screen(&pointer_move_canvas, &event);
+        pointer_move_source.touch_move(x, y);
+    }) as Box<dyn FnMut(_)>);
+    canvas
+        .add_event_listener_with_callback("pointermove", pointer_move.as_ref().unchecked_ref())?;
+    pointer_move.forget();
+
+    let pointer_up_canvas = canvas.clone();
+    let pointer_up_source = touch_source.clone();
+    let pointer_up = Closure::wrap(Box::new(move |event: PointerEvent| {
+        event.prevent_default();
+        if let Err(error) = pointer_up_canvas.release_pointer_capture(event.pointer_id()) {
+            web_sys::console::error_1(&error);
+        }
+        pointer_up_source.touch_up();
+    }) as Box<dyn FnMut(_)>);
+    canvas.add_event_listener_with_callback("pointerup", pointer_up.as_ref().unchecked_ref())?;
+    pointer_up.forget();
+
+    let pointer_cancel_source = touch_source;
+    let pointer_cancel = Closure::wrap(Box::new(move |event: PointerEvent| {
+        event.prevent_default();
+        pointer_cancel_source.touch_up();
+    }) as Box<dyn FnMut(_)>);
+    canvas.add_event_listener_with_callback(
+        "pointercancel",
+        pointer_cancel.as_ref().unchecked_ref(),
+    )?;
+    pointer_cancel.forget();
+
+    Ok(())
 }
 
-impl DrawTarget for WasmDisplay {
-    type Color = Rgb565;
-    type Error = Infallible;
-
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.frame_buffer.clear(color);
-        Ok(())
-    }
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
-    {
-        self.frame_buffer.draw_iter(pixels)
-    }
-}
-
-impl OriginDimensions for WasmDisplay {
-    fn size(&self) -> Size {
-        self.frame_buffer.size()
-    }
-}
-
-impl Default for CydSim {
-    fn default() -> Self {
-        Self::new()
-    }
+fn event_to_screen(canvas: &HtmlCanvasElement, event: &PointerEvent) -> (f32, f32) {
+    let bounds = canvas.get_bounding_client_rect();
+    let x =
+        (f64::from(event.client_x()) - bounds.left()) * f64::from(canvas.width()) / bounds.width();
+    let y =
+        (f64::from(event.client_y()) - bounds.top()) * f64::from(canvas.height()) / bounds.height();
+    (x as f32, y as f32)
 }
 
 // ---- Three.js viewer exports ----

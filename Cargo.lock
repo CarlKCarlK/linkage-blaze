@@ -1562,9 +1562,13 @@ version = "0.1.4"
 dependencies = [
  "embassy-time",
  "embedded-graphics",
- "linkage-blaze-armatron-core",
  "linkage-blaze-core",
+ "linkage-blaze-cyd-core",
+ "linkage-blaze-cyd-wasm",
+ "linkage-blaze-example-core",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

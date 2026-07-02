@@ -3,7 +3,7 @@ import init, {
   show_case_alignment_controls,
 } from "./pkg/linkage_blaze_classic_wasm.js";
 
-const status = document.querySelector("#status");
+trackBrowserZoom();
 
 try {
   await init();
@@ -15,8 +15,20 @@ try {
   if (show_case_alignment_controls()) {
     await import("./controls.js");
   }
-  status.textContent = "ballet running";
 } catch (error) {
-  status.textContent = `load failed: ${String(error)}`;
+  console.error(error);
   throw error;
+}
+
+function trackBrowserZoom() {
+  const initialDevicePixelRatio = window.devicePixelRatio || 1;
+
+  const updateBrowserZoom = () => {
+    const browserZoom = (window.devicePixelRatio || 1) / initialDevicePixelRatio;
+    document.documentElement.style.setProperty("--browser-zoom", String(browserZoom));
+  };
+
+  updateBrowserZoom();
+  window.addEventListener("resize", updateBrowserZoom);
+  window.visualViewport?.addEventListener("resize", updateBrowserZoom);
 }

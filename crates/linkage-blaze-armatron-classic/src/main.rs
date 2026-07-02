@@ -21,11 +21,11 @@ use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
 use static_cell::StaticCell;
 
-use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
+use linkage_blaze_armatron_core::{CydSim, TickOut, TouchEvent};
 use linkage_blaze_cyd::{
     CalibratedCydEsp, CalibrationConfig, CydDevice as _, CydDisplayTrait as _, CydError, CydEsp,
     CydStaticEsp, DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, RegionBuffer, SCREEN_HEIGHT,
-    SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
+    SCREEN_WIDTH, TouchEvent as CydTouchEvent,
 };
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -147,7 +147,7 @@ fn inner_main() -> Result<Infallible, MainError> {
         // Keep runtime gated on an active calibration; this may trigger the calibration flow.
         let mut cyd = ensure_calibration(&mut cyd, screen_buffer)?;
 
-        match cyd_sim.tick(Instant::now(), read_touch_input(&mut cyd)?) {
+        match cyd_sim.tick(Instant::now(), read_touch_event(&mut cyd)?) {
             // 1_886_000 fps if only command
             TickOut::Calibrate => cyd.remove_calibration(),
             TickOut::Draw => {
@@ -240,13 +240,13 @@ fn draw_calibration_screen(
     Ok(display.flush_at(screen_buffer, Point::new(0, 0))?)
 }
 
-fn read_touch_input(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchInputEvent>, MainError> {
+fn read_touch_event(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchEvent>, MainError> {
     Ok(cyd
-        .read_touch_input()?
-        .map(|touch_input_event| match touch_input_event {
-            CydTouchInputEvent::Down { x, y } => TouchInputEvent::Down { x, y },
-            CydTouchInputEvent::Move { x, y } => TouchInputEvent::Move { x, y },
-            CydTouchInputEvent::Up => TouchInputEvent::Up,
+        .read_touch_event()?
+        .map(|touch_event| match touch_event {
+            CydTouchEvent::Down { x, y } => TouchEvent::Down { x, y },
+            CydTouchEvent::Move { x, y } => TouchEvent::Move { x, y },
+            CydTouchEvent::Up => TouchEvent::Up,
         }))
 }
 

@@ -1,4 +1,4 @@
-const CACHE = "robot-arm-v5";
+const CACHE = "robot-arm-v6";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
