@@ -550,15 +550,17 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// assert_eq!(view.param_index("x", 1), 2);  // second "x"
     /// ```
     #[must_use]
-    pub fn param_index(&self, name: &str, n: usize) -> usize {
+    pub const fn param_index(&self, name: &str, n: usize) -> usize {
         let mut found = 0;
-        for i in 0..DOF {
+        let mut i = 0;
+        while i < DOF {
             if str_eq(self.params[i].name, name) {
                 if found == n {
                     return i;
                 }
                 found += 1;
             }
+            i += 1;
         }
         panic!("parameter name not found or occurrence index out of range")
     }

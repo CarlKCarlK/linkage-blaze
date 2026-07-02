@@ -125,6 +125,18 @@ const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
 const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
 
+const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_PARAM_NAME, 0);
+const TILT_PARAM_INDEX: usize = LINKAGE.param_index(TILT_PARAM_NAME, 0);
+const DOLLY_PARAM_INDEX: usize = LINKAGE.param_index(DOLLY_PARAM_NAME, 0);
+const ARM_PARAM_INDEXES: [usize; EXTRA_SLIDER_COUNT] = [
+    LINKAGE.param_index(ARM_PARAM_NAMES[0], 0),
+    LINKAGE.param_index(ARM_PARAM_NAMES[1], 0),
+    LINKAGE.param_index(ARM_PARAM_NAMES[2], 0),
+    LINKAGE.param_index(ARM_PARAM_NAMES[3], 0),
+    LINKAGE.param_index(ARM_PARAM_NAMES[4], 0),
+    LINKAGE.param_index(ARM_PARAM_NAMES[5], 0),
+];
+
 pub const DOF: usize = LINKAGE.dof();
 
 const SHOW_FPS_TEXT: bool = true;
@@ -148,17 +160,6 @@ where
     C: Cyd,
 {
     let (mut display, mut touch) = cyd.parts();
-    let xy_view_param_index = LINKAGE.param_index(XY_VIEW_PARAM_NAME, 0);
-    let tilt_param_index = LINKAGE.param_index(TILT_PARAM_NAME, 0);
-    let dolly_param_index = LINKAGE.param_index(DOLLY_PARAM_NAME, 0);
-    let arm_param_indexes = [
-        LINKAGE.param_index(ARM_PARAM_NAMES[0], 0),
-        LINKAGE.param_index(ARM_PARAM_NAMES[1], 0),
-        LINKAGE.param_index(ARM_PARAM_NAMES[2], 0),
-        LINKAGE.param_index(ARM_PARAM_NAMES[3], 0),
-        LINKAGE.param_index(ARM_PARAM_NAMES[4], 0),
-        LINKAGE.param_index(ARM_PARAM_NAMES[5], 0),
-    ];
 
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
@@ -172,10 +173,10 @@ where
     // Set up state.
     let mut controls = ArmatronControls::new(
         ArmatronControlValues {
-            xy_view: params[xy_view_param_index],
-            tilt: params[tilt_param_index],
-            dolly: params[dolly_param_index],
-            extra_sliders: arm_param_indexes.map(|param_index| params[param_index]),
+            xy_view: params[XY_VIEW_PARAM_INDEX],
+            tilt: params[TILT_PARAM_INDEX],
+            dolly: params[DOLLY_PARAM_INDEX],
+            extra_sliders: ARM_PARAM_INDEXES.map(|param_index| params[param_index]),
         },
         ARM_PARAM_NAMES,
     );
@@ -190,45 +191,17 @@ where
         // generic frame code use fill(...) instead, which makes the clear helper much less useful.
         frame.fill(BACKGROUND_565);
 
-        // Display FPS if requested and available.
-        let current_tick = Instant::now();
-        if SHOW_FPS_TEXT
-            && let Some(previous_tick) = previous_tick
-            && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)
-        {
-            text_buf.clear();
-            write!(&mut text_buf, "{fps_whole:>2}.{fps_fraction} fps")?;
-            Text::with_baseline(&text_buf, FPS_TEXT_POINT, FPS_TEXT_STYLE, Baseline::Top)
-                .draw(&mut frame)
-                .unwrap_infallible();
-        }
-        previous_tick = Some(current_tick);
-
         // Update controls from the next touch event (if any).
         // todo It's weird this doesn't return an error of the right type already and needs to be converted
         controls.set_event(touch.read().map_err(Error::Cyd)?);
 
-        // Update state from the controls.
-        params[xy_view_param_index] = controls.xy_view();
-        params[tilt_param_index] = controls.tilt();
-        params[dolly_param_index] = controls.dolly();
-        params[arm_param_indexes[0]] = controls.slider0();
-        params[arm_param_indexes[1]] = controls.slider1();
-        params[arm_param_indexes[2]] = controls.slider2();
-        params[arm_param_indexes[3]] = controls.slider3();
-        params[arm_param_indexes[4]] = controls.slider4();
-        params[arm_param_indexes[5]] = controls.slider5();
+        // Update the main params from the controls.
+        linkage_params(&controls, &mut params);
 
-        if controls.previous_target.was_clicked() {
-            target_seed = target_seed.wrapping_sub(1);
-            randomize_target_params(target_seed, &mut params);
-        }
-        if controls.next_target.was_clicked() {
-            target_seed = target_seed.wrapping_add(1);
-            randomize_target_params(target_seed, &mut params);
-        }
+        // Update the seed and target params if requested.
+        target_seed = update_target(&controls, target_seed, &mut params);
 
-        // Draw the linkage
+        // Draw the linkage (arm + target)
         for draw_item_3d in LINKAGE.draw_items_3d(&params) {
             draw_item_3d.project(&PROJECTION).draw(&mut frame);
         }
@@ -236,43 +209,11 @@ where
         // Draw the controls
         controls.draw(&mut frame).unwrap_infallible();
 
-        // Draw the target # and distance to target.
-        text_buf.clear();
-        write!(&mut text_buf, "target #{target_seed}")?;
-        Text::with_baseline(
-            &text_buf,
-            TARGET_TEXT_POINT,
-            TARGET_TEXT_STYLE,
-            Baseline::Top,
-        )
-        .draw(&mut frame)
-        .unwrap_infallible();
+        // Display FPS if requested and available.
+        previous_tick = draw_fps_text(&mut frame, &mut text_buf, previous_tick)?;
 
-        let distance_hundredths = round_to_u32(target_distance(&params).clamp(0.0, 99.99) * 100.0);
-        text_buf.clear();
-        write!(
-            &mut text_buf,
-            "distance {:02}.{:02}",
-            distance_hundredths / 100,
-            distance_hundredths % 100
-        )?;
-        Text::with_baseline(
-            &text_buf,
-            DISTANCE_TEXT_POINT,
-            DISTANCE_TEXT_STYLE,
-            Baseline::Top,
-        )
-        .draw(&mut frame)
-        .unwrap_infallible();
-
-        Text::with_baseline(
-            VERSION_TEXT,
-            VERSION_TEXT_POINT,
-            VERSION_TEXT_STYLE,
-            Baseline::Top,
-        )
-        .draw(&mut frame)
-        .unwrap_infallible();
+        // Draw the target #, distance to target, and version text.
+        draw_text_info(&mut frame, &mut text_buf, target_seed, &params)?;
 
         controls.draw_touch_cursor(&mut frame).unwrap_infallible();
 
@@ -378,11 +319,99 @@ impl Default for FrameBuffer {
 
 // ── Private helper functions ───────────────────────────────────────────────────
 
-fn randomize_target_params(target_seed: u8, params: &mut [f32; DOF]) {
+fn linkage_params(controls: &ArmatronControls, params: &mut [f32; DOF]) {
+    params[XY_VIEW_PARAM_INDEX] = controls.xy_view();
+    params[TILT_PARAM_INDEX] = controls.tilt();
+    params[DOLLY_PARAM_INDEX] = controls.dolly();
+    params[ARM_PARAM_INDEXES[0]] = controls.slider0();
+    params[ARM_PARAM_INDEXES[1]] = controls.slider1();
+    params[ARM_PARAM_INDEXES[2]] = controls.slider2();
+    params[ARM_PARAM_INDEXES[3]] = controls.slider3();
+    params[ARM_PARAM_INDEXES[4]] = controls.slider4();
+    params[ARM_PARAM_INDEXES[5]] = controls.slider5();
+}
+
+/// Advance `target_seed` if a target button was clicked, randomizing the target params to match.
+///
+/// Returns the new `target_seed`, which is unchanged if neither button was clicked.
+fn update_target(controls: &ArmatronControls, target_seed: u8, params: &mut [f32; DOF]) -> u8 {
+    let target_seed = if controls.previous_target.was_clicked() {
+        target_seed.wrapping_sub(1)
+    } else if controls.next_target.was_clicked() {
+        target_seed.wrapping_add(1)
+    } else {
+        return target_seed;
+    };
+
     let mut rng = WyRand::new_seed(u64::from(target_seed));
     for param in params[TARGET_PARAM_START..].iter_mut() {
         *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
     }
+    target_seed
+}
+
+/// Draw the target #, distance to target, and version text into `frame`.
+fn draw_text_info(
+    frame: &mut impl CydFrame,
+    text_buf: &mut heapless::String<TEXT_BUFFER_LEN>,
+    target_seed: u8,
+    params: &[f32; DOF],
+) -> Result<(), core::fmt::Error> {
+    text_buf.clear();
+    write!(text_buf, "target #{target_seed}")?;
+    Text::with_baseline(text_buf, TARGET_TEXT_POINT, TARGET_TEXT_STYLE, Baseline::Top)
+        .draw(frame)
+        .unwrap_infallible();
+
+    let distance_hundredths = round_to_u32(target_distance(params).clamp(0.0, 99.99) * 100.0);
+    text_buf.clear();
+    write!(
+        text_buf,
+        "distance {:02}.{:02}",
+        distance_hundredths / 100,
+        distance_hundredths % 100
+    )?;
+    Text::with_baseline(
+        text_buf,
+        DISTANCE_TEXT_POINT,
+        DISTANCE_TEXT_STYLE,
+        Baseline::Top,
+    )
+    .draw(frame)
+    .unwrap_infallible();
+
+    Text::with_baseline(
+        VERSION_TEXT,
+        VERSION_TEXT_POINT,
+        VERSION_TEXT_STYLE,
+        Baseline::Top,
+    )
+    .draw(frame)
+    .unwrap_infallible();
+
+    Ok(())
+}
+
+/// Draw the FPS report into `frame` if enabled and a previous tick is available.
+///
+/// Returns the current tick, for the caller to store as the next `previous_tick`.
+fn draw_fps_text(
+    frame: &mut impl CydFrame,
+    text_buf: &mut heapless::String<TEXT_BUFFER_LEN>,
+    previous_tick: Option<Instant>,
+) -> Result<Option<Instant>, core::fmt::Error> {
+    let current_tick = Instant::now();
+    if SHOW_FPS_TEXT
+        && let Some(previous_tick) = previous_tick
+        && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)
+    {
+        text_buf.clear();
+        write!(text_buf, "{fps_whole:>2}.{fps_fraction} fps")?;
+        Text::with_baseline(text_buf, FPS_TEXT_POINT, FPS_TEXT_STYLE, Baseline::Top)
+            .draw(frame)
+            .unwrap_infallible();
+    }
+    Ok(Some(current_tick))
 }
 
 fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u32, u32)> {
