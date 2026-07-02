@@ -20,14 +20,14 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::{IntoStorage, Rgb565, WebColors},
     prelude::*,
-    primitives::{Circle, Line, PrimitiveStyle},
+    primitives::PrimitiveStyle,
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{
-    DrawItem3d, DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage,
-    linkage_fixed, rgb565_from_rgb888_components,
+    LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
+    rgb565_from_rgb888_components,
 };
-use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch};
+use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, DrawItem3dExt};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
@@ -217,45 +217,10 @@ where
             randomize_target_params(target_seed, &mut params);
         }
 
-        let mut surface = ArmatronSurface {
-            buffer: &mut frame,
-            result: Ok(()),
-        };
         let projection = projection();
         for draw_item3d in LINKAGE.draw_items_3d(&params) {
-            match draw_item3d {
-                DrawItem3d::Stroke(stroke_segment) => surface.stroke(
-                    stroke_segment.start().project(&projection),
-                    stroke_segment.end().project(&projection),
-                    stroke_segment.color(),
-                    projection.project_width(stroke_segment.width()),
-                ),
-                DrawItem3d::Disk(disk_item) => {
-                    let orientation = disk_item.pose().orientation();
-                    surface.filled_ellipse(
-                        disk_item.pose().project(&projection),
-                        projection.project_dir(
-                            disk_item.pose(),
-                            orientation.forward(),
-                            disk_item.radius(),
-                        ),
-                        projection.project_dir(
-                            disk_item.pose(),
-                            orientation.left(),
-                            disk_item.radius(),
-                        ),
-                        disk_item.color(),
-                    );
-                }
-                DrawItem3d::Sphere(sphere_item) => surface.filled_circle(
-                    sphere_item.pose().project(&projection),
-                    projection.project_radius(sphere_item.pose(), sphere_item.radius()),
-                    sphere_item.color(),
-                ),
-            }
+            draw_item3d.project(&projection).draw(&mut frame);
         }
-        surface.result.unwrap_infallible();
-        drop(surface);
 
         let mut target_label = TargetLabel::new();
         controls
@@ -303,85 +268,6 @@ pub enum Error<F> {
     /// Reading touch events or flushing a frame failed.
     #[from(ignore)]
     Cyd(F),
-}
-
-struct ArmatronSurface<'a, T: DrawTarget<Color = Rgb565>> {
-    buffer: &'a mut T,
-    /// First error produced by any draw, or `Ok(())` if every draw succeeded.
-    /// Once an error is recorded, later draws are skipped so the first failure wins.
-    result: Result<(), T::Error>,
-}
-
-impl<T: DrawTarget<Color = Rgb565>> DrawSurface for ArmatronSurface<'_, T> {
-    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
-        if self.result.is_err() {
-            return;
-        }
-        let start = Point::new(start.0 as i32, start.1 as i32);
-        let end = Point::new(end.0 as i32, end.1 as i32);
-        let width = round_to_u32(pixel_width).max(1);
-        let color = Rgb565::from(color);
-        self.result = Line::new(start, end)
-            .into_styled(PrimitiveStyle::with_stroke(color, width))
-            .draw(self.buffer);
-    }
-
-    fn filled_ellipse(
-        &mut self,
-        center: (f32, f32),
-        axis_a: (f32, f32),
-        axis_b: (f32, f32),
-        color: Rgb888,
-    ) {
-        if self.result.is_err() {
-            return;
-        }
-        let cx = center.0 as i32;
-        let cy = center.1 as i32;
-        let (ax, ay) = axis_a;
-        let (bx, by) = axis_b;
-        let det = ax * by - bx * ay;
-        let det_sq = det * det;
-        if det_sq < 0.25 {
-            return;
-        }
-        let hw = libm::sqrtf(ax * ax + bx * bx) as i32 + 1;
-        let hh = libm::sqrtf(ay * ay + by * by) as i32 + 1;
-        let x0 = (cx - hw).max(0);
-        let y0 = (cy - hh).max(0);
-        let x1 = (cx + hw).min(SCREEN_WIDTH as i32 - 1);
-        let y1 = (cy + hh).min(SCREEN_HEIGHT as i32 - 1);
-        let color = Rgb565::from(color);
-        self.result = self.buffer.draw_iter((y0..=y1).flat_map(move |y| {
-            (x0..=x1).filter_map(move |x| {
-                let dx = x as f32 - cx as f32;
-                let dy = y as f32 - cy as f32;
-                let u = by * dx - bx * dy;
-                let v = ax * dy - ay * dx;
-                if u * u + v * v <= det_sq {
-                    Some(Pixel(Point::new(x, y), color))
-                } else {
-                    None
-                }
-            })
-        }));
-    }
-
-    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
-        if self.result.is_err() {
-            return;
-        }
-        if pixel_radius <= 0.0 {
-            return;
-        }
-        let diameter = round_to_u32(pixel_radius * 2.0);
-        if diameter == 0 {
-            return;
-        }
-        self.result = Circle::with_center(Point::new(center.0 as i32, center.1 as i32), diameter)
-            .into_styled(PrimitiveStyle::with_fill(Rgb565::from(color)))
-            .draw(self.buffer);
-    }
 }
 
 //todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
