@@ -11,7 +11,7 @@ use linkage_blaze_core::{
 };
 
 use linkage_blaze_cyd_core::{
-    CopySizeError, Cyd, CydFrame, DrawItem3dExt, Image565Fixed, Orientation, tga565,
+    CopySizeError, CydDisplay, CydFrame, DrawItem3dExt, Image565Fixed, Orientation, tga565,
 };
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
@@ -54,9 +54,11 @@ const PROJECTION: Projection = Projection::front_orthographic(
 // ── Generic entry point ────────────────────────────────────────────────────────
 
 /// Run the ballet example forever on the CydDevice (e.g. CydEsp32, CydWasm, etc.) given.
-pub async fn ballet<CydDevice>(cyd: &mut CydDevice) -> Result<Infallible, Error<CydDevice::Error>>
+pub async fn ballet<CydDisplayDevice>(
+    display: &mut CydDisplayDevice,
+) -> Result<Infallible, Error<CydDisplayDevice::Error>>
 where
-    CydDevice: Cyd,
+    CydDisplayDevice: CydDisplay,
 {
     let mut last_sample_duration: Option<Duration> = None;
 
@@ -66,7 +68,7 @@ where
             let started = Instant::now();
 
             // Create a frame to draw into. It uses preallocated memory.
-            let mut cyd_frame = cyd.full_frame_mut();
+            let mut cyd_frame = display.full_frame_mut();
 
             // Draw the background bitmap into the frame via bulk copy.
             // .draw(...) works too, but is slower.

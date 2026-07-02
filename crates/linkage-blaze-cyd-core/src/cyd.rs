@@ -1,15 +1,16 @@
-//! The opinionated CYD device trait.
+//! The opinionated CYD device traits.
 //!
 //! Modeled on device-envoy's opinionated device abstractions (for example
 //! `WifiAuto`, which exposes the useful 95% path rather than raw wifi): [`Cyd`]
-//! bundles the CYD's defining capabilities — tiled drawing and calibrated touch
-//! — into one device. Generic example logic talks only to this trait, so the
-//! same code drives the real esp32 `CydEsp` and a future WASM `CydWasm`.
+//! offers the CYD's defining capabilities — tiled drawing and calibrated touch
+//! — as separate parts. Generic example logic can borrow those parts independently
+//! while still accepting one device value at the entry point.
 //!
-//! A [`Cyd`] hands out per-region [frames](CydFrame); each frame starts cleared
-//! to the device background, can have a line of default-style text written into
-//! it, and is flushed to a screen position. Touch reads return calibrated,
-//! screen-space [`TouchInputEvent`]s (or `None` when there is no touch).
+//! A [`CydDisplay`] hands out per-region [frames](CydFrame); each frame starts
+//! cleared to the device background, can have a line of default-style text
+//! written into it, and is flushed to a screen position. [`CydTouch`] reads
+//! calibrated, screen-space [`TouchInputEvent`]s (or `None` when there is no
+//! touch).
 
 use core::{convert::Infallible, future::Future};
 
@@ -40,14 +41,33 @@ pub enum CydInfallibleError {}
 
 impl CydFlushError for CydInfallibleError {}
 
-/// A CYD display: hands out cleared, region-sized frames and reads calibrated touch.
+/// A complete CYD device that offers display and touch parts.
 pub trait Cyd {
     /// Error returned when flushing a frame or reading touch fails.
     type Error: CydFlushError;
 
+    /// Display part offered by this device.
+    type Display<'a>: CydDisplay<Error = Self::Error>
+    where
+        Self: 'a;
+
+    /// Touch part offered by this device.
+    type Touch<'a>: CydTouch<Error = Self::Error>
+    where
+        Self: 'a;
+
+    /// Borrow display and touch as independent parts.
+    fn parts(&mut self) -> (Self::Display<'_>, Self::Touch<'_>);
+}
+
+/// A CYD display: hands out cleared, region-sized frames.
+pub trait CydDisplay {
+    /// Error returned when flushing a frame fails.
+    type Error: CydFlushError;
+
     /// The per-region frame type this device produces.
     ///
-    /// Its [`CydFrame::Error`] is pinned to this device's [`Cyd::Error`], so
+    /// Its [`CydFrame::Error`] is pinned to this display's [`CydDisplay::Error`], so
     /// `frame.flush().await?` in generic code propagates a single
     /// `S::Error` (see [`ballet`](../../linkage_blaze_example_core/ballet/index.html)).
     type Frame<'a>: CydFrame<Error = Self::Error>
@@ -99,12 +119,6 @@ pub trait Cyd {
     fn full_frame_mut(&mut self) -> Self::Frame<'_> {
         self.frame_mut(Rectangle::new(Point::zero(), self.screen_size()))
     }
-
-    /// Read the next calibrated, screen-space touch event, if any.
-    ///
-    /// Returns `Ok(None)` when there is no pending touch (including devices
-    /// constructed without touch). Errors only on a hardware/read failure.
-    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, Self::Error>;
 
     /// Fill `rectangle` immediately in physical-screen coordinates.
     ///
@@ -213,9 +227,9 @@ pub trait Cyd {
     /// presented with [`CydFrame::flush`]:
     ///
     /// ```rust,no_run
-    /// # use linkage_blaze_cyd_core::{Cyd, CydFrame, tiling::TileGrid};
-    /// # async fn draw<C: Cyd>(cyd: &mut C, grid: TileGrid) -> Result<(), C::Error> {
-    /// let mut tiles = cyd.tiles(grid);
+    /// # use linkage_blaze_cyd_core::{CydDisplay, CydFrame, tiling::TileGrid};
+    /// # async fn draw<D: CydDisplay>(display: &mut D, grid: TileGrid) -> Result<(), D::Error> {
+    /// let mut tiles = display.tiles(grid);
     /// while let Some(mut frame) = tiles.next() {
     ///     // draw into `frame` in screen coordinates...
     ///     frame.flush().await?;
@@ -236,20 +250,32 @@ pub trait Cyd {
     }
 }
 
+/// A CYD touch input source.
+pub trait CydTouch {
+    /// Error returned when reading touch fails.
+    type Error: CydFlushError;
+
+    /// Read the next calibrated, screen-space touch event, if any.
+    ///
+    /// Returns `Ok(None)` when there is no pending touch (including devices
+    /// constructed without touch). Errors only on a hardware/read failure.
+    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, Self::Error>;
+}
+
 /// A lending/streaming iterator over a [`TileGrid`]'s tiles.
 ///
-/// Created by [`Cyd::tiles`]. This deliberately does *not* implement
+/// Created by [`CydDisplay::tiles`]. This deliberately does *not* implement
 /// [`Iterator`]: each yielded frame borrows the device's single reusable frame
 /// buffer, so only one frame can be live at a time. Iterate with a
 /// `while let Some(mut frame) = tiles.next()` loop.
-pub struct Tiles<'a, C: Cyd> {
+pub struct Tiles<'a, C: CydDisplay> {
     cyd: &'a mut C,
     grid: TileGrid,
     column: usize,
     row: usize,
 }
 
-impl<C: Cyd> Tiles<'_, C> {
+impl<C: CydDisplay> Tiles<'_, C> {
     /// Borrow the next tile-backed frame, cleared to the device background
     /// color, or `None` once every tile has been yielded.
     ///
@@ -322,8 +348,8 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
 
     /// Present the frame's pixels at its region's top-left (screen coordinates).
     ///
-    /// The frame was created over a [`Rectangle`] by [`Cyd::frame_mut`], so it
-    /// already knows where it lives and needs no position argument.
+    /// The frame was created over a [`Rectangle`] by [`CydDisplay::frame_mut`],
+    /// so it already knows where it lives and needs no position argument.
     ///
     /// The returned future is the render loop's frame boundary. On the MCU it
     /// flushes over SPI and resolves immediately; on WASM it awaits the next
@@ -358,7 +384,7 @@ mod tests {
         tile_top_left: Point,
     }
 
-    impl Cyd for TestCyd {
+    impl CydDisplay for TestCyd {
         type Error = CydInfallibleError;
         type Frame<'a> = TestFrame;
 
@@ -391,10 +417,6 @@ mod tests {
                 region,
                 tile_top_left,
             }
-        }
-
-        fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydInfallibleError> {
-            Ok(None)
         }
 
         fn fill_rectangle(

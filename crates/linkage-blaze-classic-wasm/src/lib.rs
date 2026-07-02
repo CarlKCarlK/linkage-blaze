@@ -11,6 +11,7 @@
 //! [`CydFrameWasm::flush`](linkage_blaze_cyd_wasm::CydFrameWasm), which awaits
 //! `requestAnimationFrame`.
 
+use linkage_blaze_cyd_core::Cyd;
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
@@ -60,7 +61,8 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
     // borrows it for the whole run.
     wasm_bindgen_futures::spawn_local(async move {
         let mut cyd = cyd;
-        match ballet(&mut cyd).await {
+        let (mut display, _touch) = cyd.parts();
+        match ballet(&mut display).await {
             Ok(never) => match never {},
             Err(error) => panic!("ballet stopped: {error:?}"),
         }

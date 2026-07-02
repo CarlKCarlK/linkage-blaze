@@ -21,8 +21,8 @@ use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565Mask, Orientation, tga565,
-    tga565_magenta_mask,
+    CydDisplay, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565Mask, Orientation,
+    tga565, tga565_magenta_mask,
     tiling::{TileGrid, max_u32},
 };
 
@@ -111,12 +111,12 @@ pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
 
 /// Run the skeleton-clock render loop forever, driven by `clock_sync` ticks and
 /// drawn onto `cyd`.
-pub async fn skeleton_clock<CydDevice, ClockSyncDevice>(
-    cyd: &mut CydDevice,
+pub async fn skeleton_clock<CydDisplayDevice, ClockSyncDevice>(
+    display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
-) -> Result<Infallible, Error<CydDevice::Error>>
+) -> Result<Infallible, Error<CydDisplayDevice::Error>>
 where
-    CydDevice: Cyd,
+    CydDisplayDevice: CydDisplay,
     ClockSyncDevice: ClockSync,
 {
     loop {
@@ -127,7 +127,8 @@ where
         info!("tick {}", text_24h(local_time));
 
         // Write the digital time.
-        cyd.frame_mut(TIME_RECTANGLE)
+        display
+            .frame_mut(TIME_RECTANGLE)
             .write_text(&text_12h(local_time))
             .flush()
             .await
@@ -169,7 +170,7 @@ where
         // (Can't use a `for` loop and Iterator because each yielded frame
         // borrows the CYD's reusable pixel buff. This is the "lending
         // iterator" patten.)
-        let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
+        let mut tiles = display.tiles(FIGURE_TILE_GRID);
         while let Some(mut tile) = tiles.next() {
             BACKGROUND_BITMAP.draw(&mut tile).unwrap_infallible();
 
@@ -213,25 +214,27 @@ where
 /// is initialized) so the user sees the framed clock immediately; the per-tick
 /// [`skeleton_clock`] loop then overwrites the WiFi text, time and figure as they
 /// become available.
-pub async fn skeleton_clock_splash<CydDevice>(
-    cyd: &mut CydDevice,
-) -> Result<(), Error<CydDevice::Error>>
+pub async fn skeleton_clock_splash<CydDisplayDevice>(
+    display: &mut CydDisplayDevice,
+) -> Result<(), Error<CydDisplayDevice::Error>>
 where
-    CydDevice: Cyd,
+    CydDisplayDevice: CydDisplay,
 {
-    cyd.frame_mut(WIFI_STATUS_RECTANGLE)
+    display
+        .frame_mut(WIFI_STATUS_RECTANGLE)
         .write_text("WiFi: --")
         .flush()
         .await
         .map_err(Error::Flush)?;
 
-    cyd.frame_mut(TIME_RECTANGLE)
+    display
+        .frame_mut(TIME_RECTANGLE)
         .write_text("--:--:-- --")
         .flush()
         .await
         .map_err(Error::Flush)?;
 
-    let mut tiles = cyd.tiles(FIGURE_TILE_GRID);
+    let mut tiles = display.tiles(FIGURE_TILE_GRID);
     while let Some(mut frame) = tiles.next() {
         BACKGROUND_BITMAP.draw(&mut frame).unwrap_infallible();
         frame.flush().await.map_err(Error::Flush)?;
@@ -367,7 +370,7 @@ const fn str_eq(left: &str, right: &str) -> bool {
 // ── Skeleton-clock-specific overlay drawing ──────────────────────────────────
 
 // All overlay drawing happens against a `DrawTarget` whose coordinates are in
-// figure-rectangle space; tiled frames from `Cyd::tiles` subtract the shared
+// figure-rectangle space; tiled frames from `CydDisplay::tiles` subtract the shared
 // figure-rectangle tile top-left so these functions never need to know they are
 // rendering into a tile.
 

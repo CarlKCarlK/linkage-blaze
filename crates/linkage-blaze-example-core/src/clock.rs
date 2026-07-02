@@ -16,7 +16,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{
-    ContiguousPixels, Cyd, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565View,
+    ContiguousPixels, CydDisplay, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565View,
     Orientation, tga565, tiling::max_rectangle_pixel_count,
 };
 use log::info;
@@ -65,12 +65,12 @@ const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 
 /// Run the clock render loop forever, driven by `clock_sync` ticks and drawn
 /// onto `cyd`.
-pub async fn clock<CydDevice, ClockSyncDevice>(
-    cyd: &mut CydDevice,
+pub async fn clock<CydDisplayDevice, ClockSyncDevice>(
+    display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
-) -> Result<Infallible, Error<CydDevice::Error>>
+) -> Result<Infallible, Error<CydDisplayDevice::Error>>
 where
-    CydDevice: Cyd,
+    CydDisplayDevice: CydDisplay,
     ClockSyncDevice: ClockSync,
 {
     let background = Rgb565::from(BACKGROUND);
@@ -84,7 +84,7 @@ where
         info!("tick {}", time_text.as_str());
 
         // ── Render the digital time strip (using embedded graphics methods). ─────────
-        let mut time_frame = cyd.frame_mut(TIME_RECTANGLE);
+        let mut time_frame = display.frame_mut(TIME_RECTANGLE);
         time_frame.fill(background);
         Text::with_text_style(
             time_text.as_str(),
@@ -115,17 +115,21 @@ where
                 iter::once(CLOCK_BACKGROUND_BITMAP).chain(draw_items_2d),
             );
 
-        cyd.fill_contiguous(contiguous_pixels.bounds(), contiguous_pixels.iter())
+        display
+            .fill_contiguous(contiguous_pixels.bounds(), contiguous_pixels.iter())
             .map_err(Error::Flush)?;
     }
 }
 
 /// Draw the static full-screen clock background.
-pub async fn clock_splash<CydDevice>(cyd: &mut CydDevice) -> Result<(), Error<CydDevice::Error>>
+pub async fn clock_splash<CydDisplayDevice>(
+    display: &mut CydDisplayDevice,
+) -> Result<(), Error<CydDisplayDevice::Error>>
 where
-    CydDevice: Cyd,
+    CydDisplayDevice: CydDisplay,
 {
-    cyd.fill_contiguous(BACKGROUND_BITMAP_RECTANGLE, BACKGROUND_BITMAP.rgb565_iter())
+    display
+        .fill_contiguous(BACKGROUND_BITMAP_RECTANGLE, BACKGROUND_BITMAP.rgb565_iter())
         .map_err(Error::Flush)?;
     Ok(())
 }

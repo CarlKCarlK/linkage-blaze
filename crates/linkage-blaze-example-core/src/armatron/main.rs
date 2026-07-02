@@ -26,7 +26,7 @@ use linkage_blaze_core::{
     DrawSurface, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
     render_draw_items_3d, rgb565_from_rgb888_components,
 };
-use linkage_blaze_cyd_core::{Cyd, CydFrame, TouchInputEvent};
+use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, TouchInputEvent};
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
@@ -149,7 +149,7 @@ const SHOW_FPS_TEXT: bool = true;
 /// Run the armatron example forever.
 ///
 /// Each iteration:
-/// 1. Reads the next touch event from [`Cyd::read_touch_input`].
+/// 1. Reads the next touch event from [`CydTouch::read_touch_input`].
 /// 2. Updates local armatron params, touch, and fps state.
 /// 3. If the frame changed, renders and presents a full-screen CYD frame.
 ///
@@ -175,12 +175,13 @@ where
     let mut previous_tick = None;
     let mut touch_cursor = None;
     let mut fps_text_buffer = heapless::String::<FPS_TEXT_BUFFER_LEN>::new();
+    let (mut display, mut touch) = cyd.parts();
+    // todo000 move out the the loop somehow? (may no longer apply)
+    let mut frame = display.full_frame_mut();
 
     loop {
         let now = Instant::now();
-        let touch = cyd.read_touch_input().map_err(Error::Cyd)?;
-        // todo000 move out the the loop somehow?
-        let mut frame = cyd.full_frame_mut();
+        let touch = touch.read_touch_input().map_err(Error::Cyd)?;
 
         // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
         // generic frame code use fill(...) instead, which makes the clear helper much less useful.

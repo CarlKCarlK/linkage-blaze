@@ -2,7 +2,8 @@
 
 //! Platform-neutral core of the CYD device abstraction.
 //!
-//! See [`cyd`] for the [`Cyd`] device trait and its [`CydFrame`].
+//! See [`cyd`] for the [`Cyd`] device trait, its [`CydDisplay`] and [`CydTouch`]
+//! parts, and [`CydFrame`].
 
 mod contiguous_pixels;
 mod cyd;
@@ -14,7 +15,8 @@ mod touch_event;
 
 pub use contiguous_pixels::ContiguousPixels;
 pub use cyd::{
-    CopySizeError, Cyd, CydFlushError, CydFrame, CydInfallibleError, RegionPixels, Tiles,
+    CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydInfallibleError, CydTouch,
+    RegionPixels, Tiles,
 };
 pub use draw_item_2d::{DrawItem2d, DrawItem3dExt, Image565View};
 pub use orientation::Orientation;

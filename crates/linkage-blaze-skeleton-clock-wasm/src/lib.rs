@@ -14,7 +14,7 @@
 mod clock;
 
 use clock::WasmClockSync;
-use linkage_blaze_cyd_core::{Cyd, CydFrame};
+use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::skeleton_clock::{
     BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE, skeleton_clock,
@@ -63,22 +63,24 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
     // while `skeleton_clock` borrows them for the whole run.
     wasm_bindgen_futures::spawn_local(async move {
         let mut cyd = cyd;
+        let (mut display, _touch) = cyd.parts();
         let clock_sync = WasmClockSync::new();
         // Show the framed clock immediately (background + placeholder status),
         // mirroring the device's startup screen before the first tick lands.
-        skeleton_clock_splash(&mut cyd)
+        skeleton_clock_splash(&mut display)
             .await
             .expect("flushing the Infallible wasm frame cannot fail");
         // The browser uses the OS clock (no WiFi/NTP), so replace the `WiFi: --`
         // placeholder with `WiFi: OK`; the per-tick loop repaints time and figure.
-        cyd.frame_mut(WIFI_STATUS_RECTANGLE)
+        display
+            .frame_mut(WIFI_STATUS_RECTANGLE)
             .write_text("WiFi: OK")
             .flush()
             .await
             .expect("flushing the Infallible wasm frame cannot fail");
         // `Ok` is `Infallible` (the loop never returns), so this binding is
         // irrefutable; only a `Mark` lookup failure can surface here.
-        let Err(error) = skeleton_clock(&mut cyd, &clock_sync).await;
+        let Err(error) = skeleton_clock(&mut display, &clock_sync).await;
         web_sys::console::error_1(&format!("skeleton_clock stopped: {error:?}").into());
     });
 

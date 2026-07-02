@@ -4,7 +4,9 @@
 //!
 //! The device abstraction itself lives in [`linkage_blaze_cyd_core`]; this crate
 //! holds the generic examples ([`armatron`], [`skeleton_clock`], [`clock`], [`ballet`]) written
-//! against the [`Cyd`](linkage_blaze_cyd_core::Cyd) trait.
+//! against the [`Cyd`](linkage_blaze_cyd_core::Cyd),
+//! [`CydDisplay`](linkage_blaze_cyd_core::CydDisplay), and
+//! [`CydTouch`](linkage_blaze_cyd_core::CydTouch) traits.
 
 #[cfg(feature = "armatron")]
 #[path = "armatron/main.rs"]

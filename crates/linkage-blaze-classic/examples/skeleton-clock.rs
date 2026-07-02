@@ -20,7 +20,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_cyd::{
-    CydDevice, CydError, CydEsp, CydStaticEsp,
+    CydDevice, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp,
     tiling::{max_pixel_count, rectangle_pixel_count},
 };
 use linkage_blaze_example_core::skeleton_clock::{
@@ -79,8 +79,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
+    let (mut display, _touch) = cyd.parts();
+
     // Show the framed clock immediately, before WiFi/NTP, with placeholder status.
-    skeleton_clock::skeleton_clock_splash(&mut cyd).await?;
+    skeleton_clock::skeleton_clock_splash(&mut display).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
@@ -98,7 +100,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
     // reference and mutate it through interior mutability on each event.
-    let wifi_status_frame = RefCell::new(cyd.frame_mut(WIFI_STATUS_RECTANGLE));
+    let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,
@@ -145,5 +147,5 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("clock sync ready; entering skeleton-clock loop");
 
     // Hand off to the device-agnostic render loop.
-    Ok(skeleton_clock(&mut cyd, &clock_sync).await?)
+    Ok(skeleton_clock(&mut display, &clock_sync).await?)
 }

@@ -23,9 +23,9 @@ use static_cell::StaticCell;
 
 use linkage_blaze_armatron_core::{CydSim, TickOut, TouchInputEvent};
 use linkage_blaze_cyd::{
-    CalibratedCydEsp, CalibrationConfig, CydDevice as _, CydError, CydEsp, CydStaticEsp,
-    DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, RegionBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
-    TouchInputEvent as CydTouchInputEvent,
+    CalibratedCydEsp, CalibrationConfig, CydDevice as _, CydDisplayTrait as _, CydError, CydEsp,
+    CydStaticEsp, DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, RegionBuffer, SCREEN_HEIGHT,
+    SCREEN_WIDTH, TouchInputEvent as CydTouchInputEvent,
 };
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -153,7 +153,8 @@ fn inner_main() -> Result<Infallible, MainError> {
             TickOut::Draw => {
                 // todo0000 make nicer
                 draw(screen_buffer, &cyd_sim); // 32.3 fps if only command
-                cyd.flush_at(screen_buffer, Point::new(0, 0))?; // 13.2 fps if only command
+                let (mut display, _touch) = cyd.parts();
+                display.flush_at(screen_buffer, Point::new(0, 0))?; // 13.2 fps if only command
             }
             TickOut::Nada => {}
         }
@@ -235,7 +236,8 @@ fn draw_calibration_screen(
             CydSim::HEIGHT_U16,
         )?;
     }
-    Ok(cyd.flush_at(screen_buffer, Point::new(0, 0))?)
+    let (mut display, _touch) = cyd.parts();
+    Ok(display.flush_at(screen_buffer, Point::new(0, 0))?)
 }
 
 fn read_touch_input(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchInputEvent>, MainError> {

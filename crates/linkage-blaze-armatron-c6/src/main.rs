@@ -21,8 +21,8 @@ use esp_hal::{
 };
 use linkage_blaze_armatron_core::{ControlledKnob, CydSim, TickOut};
 use linkage_blaze_cyd::{
-    CydDevice as _, CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation, RegionBuffer,
-    SCREEN_HEIGHT, SCREEN_WIDTH,
+    CydDevice as _, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp, DEFAULT_FONT,
+    Orientation, RegionBuffer, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use static_cell::StaticCell;
 
@@ -151,6 +151,7 @@ fn inner_main() -> Result<Infallible, MainError> {
     )?;
     static SCREEN_BUFFER: StaticCell<ScreenBuffer> = StaticCell::new();
     let screen_buffer = ScreenBuffer::init_static(&SCREEN_BUFFER);
+    let (mut display, _touch) = cyd.parts();
     esp_println::println!("c6: display initialized");
 
     let mut adc1_config = AdcConfig::new();
@@ -301,13 +302,14 @@ fn inner_main() -> Result<Infallible, MainError> {
         match cyd_sim.tick(now, None) {
             TickOut::Draw => {
                 draw(screen_buffer, &cyd_sim);
-                cyd.flush_at(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
+                display.flush_at(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
             }
             TickOut::Calibrate => {}
             TickOut::Nada => {
                 if control_mode_changed || joystick_changed {
                     draw(screen_buffer, &cyd_sim);
-                    cyd.flush_at(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
+                    display
+                        .flush_at(screen_buffer, embedded_graphics::prelude::Point::new(0, 0))?;
                 }
             }
         }

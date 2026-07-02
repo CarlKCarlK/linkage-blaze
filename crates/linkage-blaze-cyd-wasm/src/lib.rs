@@ -1,9 +1,9 @@
 //! A browser-simulated CYD device.
 //!
-//! [`CydWasm`] implements the device-agnostic
-//! [`Cyd`](linkage_blaze_cyd_core::Cyd) trait against an HTML canvas, so the
-//! same generic example code that drives the real esp32 `CydEsp` also runs in a
-//! web page. Its [`CydFrameWasm::flush`] awaits the next browser animation
+//! [`CydWasm`] offers the device-agnostic
+//! [`Cyd`](linkage_blaze_cyd_core::Cyd) display/touch parts against an HTML
+//! canvas, so the same generic example code that drives the real esp32 `CydEsp`
+//! also runs in a web page. Its [`CydFrameWasm::flush`] awaits the next browser animation
 //! frame (see [`animation_frame`]), blits the frame to the canvas, then
 //! resolves — turning a platform-neutral `loop { draw; flush().await?; }`
 //! into smooth, repaint-paced animation without inverting the loop into a state
@@ -22,7 +22,9 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use linkage_blaze_core::{PixelTarget, RgbColor, rgb888_from_rgb565};
-use linkage_blaze_cyd_core::{Cyd, CydFrame, CydInfallibleError, Orientation, TouchInputEvent};
+use linkage_blaze_cyd_core::{
+    Cyd, CydDisplay, CydFrame, CydInfallibleError, CydTouch, Orientation, TouchInputEvent,
+};
 use wasm_bindgen::Clamped;
 use web_sys::{CanvasRenderingContext2d, ImageData};
 
@@ -38,6 +40,18 @@ pub struct CydWasm {
     foreground565: Rgb565,
     font: &'static MonoFont<'static>,
 }
+
+pub struct CydDisplayWasmPart<'a> {
+    context: &'a CanvasRenderingContext2d,
+    size: Size,
+    background: Rgb888,
+    foreground: Rgb888,
+    background565: Rgb565,
+    foreground565: Rgb565,
+    font: &'static MonoFont<'static>,
+}
+
+pub struct CydTouchWasmPart;
 
 impl CydWasm {
     /// Build a simulated CYD that presents onto `context`, sized for `orientation`.
@@ -65,7 +79,31 @@ impl Cyd for CydWasm {
     // Presenting to a canvas cannot fail, so the device-agnostic render loop
     // never has a real error to propagate.
     type Error = CydInfallibleError;
-    type Frame<'a> = CydFrameWasm<'a>;
+    type Display<'a> = CydDisplayWasmPart<'a>;
+    type Touch<'a> = CydTouchWasmPart;
+
+    fn parts(&mut self) -> (CydDisplayWasmPart<'_>, CydTouchWasmPart) {
+        (
+            CydDisplayWasmPart {
+                context: &self.context,
+                size: self.size,
+                background: self.background,
+                foreground: self.foreground,
+                background565: self.background565,
+                foreground565: self.foreground565,
+                font: self.font,
+            },
+            CydTouchWasmPart,
+        )
+    }
+}
+
+impl CydDisplay for CydDisplayWasmPart<'_> {
+    type Error = CydInfallibleError;
+    type Frame<'a>
+        = CydFrameWasm<'a>
+    where
+        Self: 'a;
 
     fn screen_size(&self) -> Size {
         self.size
@@ -112,11 +150,6 @@ impl Cyd for CydWasm {
         }
     }
 
-    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydInfallibleError> {
-        // Touch is not wired up yet; the WASM examples (ballet) do not use it.
-        Ok(None)
-    }
-
     fn fill_rectangle(
         &mut self,
         rectangle: Rectangle,
@@ -134,7 +167,7 @@ impl Cyd for CydWasm {
             push_rgb565_rgba(&mut bytes, color.into_storage());
         }
 
-        put_image_data(&self.context, rectangle, &bytes);
+        put_image_data(self.context, rectangle, &bytes);
         Ok(())
     }
 
@@ -156,8 +189,17 @@ impl Cyd for CydWasm {
             push_rgb565_rgba(&mut bytes, pixel.into_storage());
         }
 
-        put_image_data(&self.context, rectangle, &bytes);
+        put_image_data(self.context, rectangle, &bytes);
         Ok(())
+    }
+}
+
+impl CydTouch for CydTouchWasmPart {
+    type Error = CydInfallibleError;
+
+    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydInfallibleError> {
+        // Touch is not wired up yet; the WASM examples (ballet) do not use it.
+        Ok(None)
     }
 }
 

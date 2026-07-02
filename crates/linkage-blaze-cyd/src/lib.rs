@@ -26,12 +26,13 @@ use buffer::DynPixelBuffer;
 pub use buffer::{PixelBuffer, RegionBuffer, RegionView};
 pub use calibration::{CalibrationConfig, RawPoint, map_raw_to_screen};
 pub use display::{CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ};
-use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydFlushError, CydFrame};
+use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydTouch};
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
 pub use linkage_blaze_cyd_core::{
-    Cyd as CydDevice, CydFrame as CydFrameTrait, Orientation, RegionPixels, SCREEN_HEIGHT,
-    SCREEN_PIXELS, SCREEN_WIDTH, TouchInputEvent, tiling,
+    Cyd as CydDevice, CydDisplay as CydDisplayTrait, CydFrame as CydFrameTrait,
+    CydTouch as CydTouchTrait, Orientation, RegionPixels, SCREEN_HEIGHT, SCREEN_PIXELS,
+    SCREEN_WIDTH, TouchInputEvent, tiling,
 };
 pub use text::DEFAULT_FONT;
 pub use touch::{CydTouchEspInitError, RawTouchEvent, TOUCH_SPI_HZ};
@@ -89,6 +90,21 @@ pub struct CalibratedCydEsp<'a> {
     calibration_config: CalibrationConfig,
 }
 
+pub struct CydDisplayEspPart<'a> {
+    display: &'a mut CydDisplayEsp,
+    pixel_buffer: &'a mut dyn DynPixelBuffer,
+    background: Rgb888,
+    foreground: Rgb888,
+    background565: Rgb565,
+    foreground565: Rgb565,
+    font: &'static MonoFont<'static>,
+}
+
+pub struct CydTouchEspPart<'a> {
+    touch: Option<&'a mut CydTouchEsp>,
+    calibration_config: Option<CalibrationConfig>,
+}
+
 pub struct CydFrameEsp<'a> {
     display: &'a mut CydDisplayEsp,
     view: RegionView<'a>,
@@ -136,7 +152,7 @@ impl<'a> CydFrameEsp<'a> {
         self.view.raw_pixels_mut()
     }
 
-    /// Present this frame's pixels at its region's top-left (set by [`CydDevice::frame_mut`]).
+    /// Present this frame's pixels at its region's top-left (set by [`CydDisplayTrait::frame_mut`]).
     pub fn flush(&mut self) -> Result<(), CydError> {
         Ok(self
             .display
@@ -273,7 +289,7 @@ impl CydEsp {
     /// initializing the buffer from app-provided [`CydStaticEsp`] storage.
     ///
     /// The app picks the size via `PIXEL_COUNT`; `CydEsp` owns the init protocol. Use
-    /// [`CydDevice::frame_mut`] or [`CydDevice::full_frame_mut`] to render into and flush the owned buffer.
+    /// [`CydDisplayTrait::frame_mut`] or [`CydDisplayTrait::full_frame_mut`] to render into and flush the owned buffer.
     pub fn new_display_only<const PIXEL_COUNT: usize>(
         statics: &'static CydStaticEsp<PIXEL_COUNT>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
@@ -525,7 +541,35 @@ impl fmt::Debug for CydEsp {
 
 impl Cyd for CydEsp {
     type Error = CydError;
-    type Frame<'a> = CydFrameEsp<'a>;
+    type Display<'a> = CydDisplayEspPart<'a>;
+    type Touch<'a> = CydTouchEspPart<'a>;
+
+    #[inline]
+    fn parts(&mut self) -> (CydDisplayEspPart<'_>, CydTouchEspPart<'_>) {
+        (
+            CydDisplayEspPart {
+                display: &mut self.display,
+                pixel_buffer: &mut *self.pixel_buffer,
+                background: self.background,
+                foreground: self.foreground,
+                background565: self.background565,
+                foreground565: self.foreground565,
+                font: self.font,
+            },
+            CydTouchEspPart {
+                touch: self.touch.as_mut(),
+                calibration_config: self.calibration_config,
+            },
+        )
+    }
+}
+
+impl CydDisplay for CydDisplayEspPart<'_> {
+    type Error = CydError;
+    type Frame<'a>
+        = CydFrameEsp<'a>
+    where
+        Self: 'a;
 
     #[inline]
     fn screen_size(&self) -> Size {
@@ -563,28 +607,6 @@ impl Cyd for CydEsp {
         )
     }
 
-    fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
-        let Some(calibration_config) = self.calibration_config else {
-            return Ok(None);
-        };
-        let Some(touch) = self.touch.as_mut() else {
-            return Ok(None);
-        };
-        Ok(touch
-            .read_raw_touch_event()
-            .map(|raw_touch_event| match raw_touch_event {
-                RawTouchEvent::Down { raw_x, raw_y } => {
-                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
-                    TouchInputEvent::Down { x, y }
-                }
-                RawTouchEvent::Move { raw_x, raw_y } => {
-                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
-                    TouchInputEvent::Move { x, y }
-                }
-                RawTouchEvent::Up => TouchInputEvent::Up,
-            }))
-    }
-
     #[inline]
     fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
         Ok(self.display.fill_rectangle(rectangle, color)?)
@@ -606,67 +628,59 @@ impl Cyd for CydEsp {
 
 impl Cyd for CalibratedCydEsp<'_> {
     type Error = CydError;
-    type Frame<'a>
-        = CydFrameEsp<'a>
+    type Display<'a>
+        = CydDisplayEspPart<'a>
+    where
+        Self: 'a;
+    type Touch<'a>
+        = CydTouchEspPart<'a>
     where
         Self: 'a;
 
     #[inline]
-    fn screen_size(&self) -> Size {
-        self.cyd.display.size()
-    }
-
-    fn background(&self) -> Rgb888 {
-        self.cyd.background
-    }
-
-    fn foreground(&self) -> Rgb888 {
-        self.cyd.foreground
-    }
-
-    fn background_565(&self) -> Rgb565 {
-        self.cyd.background565
-    }
-
-    fn foreground_565(&self) -> Rgb565 {
-        self.cyd.foreground565
-    }
-
-    fn frame_mut_with_tile_top_left(
-        &mut self,
-        region: Rectangle,
-        tile_top_left: Point,
-    ) -> CydFrameEsp<'_> {
-        self.cyd.display.make_frame_with_tile_top_left(
-            self.cyd.pixel_buffer,
-            region,
-            tile_top_left,
-            self.cyd.background565,
-            self.cyd.foreground565,
-            self.cyd.font,
+    fn parts(&mut self) -> (CydDisplayEspPart<'_>, CydTouchEspPart<'_>) {
+        let cyd = &mut *self.cyd;
+        (
+            CydDisplayEspPart {
+                display: &mut cyd.display,
+                pixel_buffer: &mut *cyd.pixel_buffer,
+                background: cyd.background,
+                foreground: cyd.foreground,
+                background565: cyd.background565,
+                foreground565: cyd.foreground565,
+                font: cyd.font,
+            },
+            CydTouchEspPart {
+                touch: cyd.touch.as_mut(),
+                calibration_config: Some(self.calibration_config),
+            },
         )
     }
+}
+
+impl CydTouch for CydTouchEspPart<'_> {
+    type Error = CydError;
 
     fn read_touch_input(&mut self) -> Result<Option<TouchInputEvent>, CydError> {
-        CalibratedCydEsp::read_touch_input(self)
-    }
-
-    #[inline]
-    fn fill_rectangle(&mut self, rectangle: Rectangle, color: Rgb565) -> Result<(), CydError> {
-        Ok(self.cyd.display.fill_rectangle(rectangle, color)?)
-    }
-
-    #[inline]
-    fn fill_contiguous<I>(&mut self, rectangle: Rectangle, pixels: I) -> Result<(), CydError>
-    where
-        I: IntoIterator<Item = Rgb565>,
-    {
-        Ok(self.cyd.display.fill_contiguous(rectangle, pixels)?)
-    }
-
-    #[inline]
-    fn flush_at(&mut self, buffer: &impl RegionPixels, top_left: Point) -> Result<(), CydError> {
-        Ok(self.cyd.display.flush_buffer(buffer, top_left)?)
+        let Some(calibration_config) = self.calibration_config else {
+            return Ok(None);
+        };
+        let Some(touch) = self.touch.as_mut() else {
+            return Ok(None);
+        };
+        Ok(touch
+            .read_raw_touch_event()
+            .map(|raw_touch_event| match raw_touch_event {
+                RawTouchEvent::Down { raw_x, raw_y } => {
+                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
+                    TouchInputEvent::Down { x, y }
+                }
+                RawTouchEvent::Move { raw_x, raw_y } => {
+                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
+                    TouchInputEvent::Move { x, y }
+                }
+                RawTouchEvent::Up => TouchInputEvent::Up,
+            }))
     }
 }
 

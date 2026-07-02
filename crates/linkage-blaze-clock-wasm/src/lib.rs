@@ -9,7 +9,7 @@
 mod clock;
 
 use clock::WasmClockSync;
-use linkage_blaze_cyd_core::{Cyd, CydFrame};
+use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame};
 use linkage_blaze_cyd_wasm::CydWasm;
 use linkage_blaze_example_core::clock::{
     BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
@@ -64,17 +64,19 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
     // while `clock` borrows them for the whole run.
     wasm_bindgen_futures::spawn_local(async move {
         let mut cyd = cyd;
+        let (mut display, _touch) = cyd.parts();
         let clock_sync = WasmClockSync::new();
-        clock_splash(&mut cyd)
+        clock_splash(&mut display)
             .await
             .expect("flushing the Infallible wasm background cannot fail");
-        cyd.frame_mut(WIFI_STATUS_RECTANGLE)
+        display
+            .frame_mut(WIFI_STATUS_RECTANGLE)
             .clear()
             .write_text("WiFi: OK")
             .flush()
             .await
             .expect("flushing the Infallible wasm frame cannot fail");
-        let Err(error) = clock(&mut cyd, &clock_sync).await;
+        let Err(error) = clock(&mut display, &clock_sync).await;
         web_sys::console::error_1(&format!("clock stopped: {error:?}").into());
     });
 

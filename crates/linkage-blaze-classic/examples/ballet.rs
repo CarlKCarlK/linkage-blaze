@@ -9,7 +9,7 @@ use core::convert::Infallible;
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp};
+use linkage_blaze_cyd::{CydDevice as _, CydError, CydEsp, CydStaticEsp};
 use linkage_blaze_example_core::ballet::{
     self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
 };
@@ -57,5 +57,6 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     // Hand off to the device-agnostic render loop.
-    Ok(ballet(&mut cyd).await?)
+    let (mut display, _touch) = cyd.parts();
+    Ok(ballet(&mut display).await?)
 }
