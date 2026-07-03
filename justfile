@@ -5,6 +5,8 @@ _c6_args         := "--target riscv32imac-unknown-none-elf --release --no-defaul
 # RUSTFLAGS for ESP targets: -D warnings PLUS the linker script that .cargo/config.toml provides
 # but that env RUSTFLAGS= would otherwise override.
 _esp_rustflags   := "-D warnings -C link-arg=-Tlinkall.x"
+_ballet_rustflags := "-D warnings -A long-running-const-eval"
+_ballet_esp_rustflags := _esp_rustflags + " -A long-running-const-eval"
 
 # ── Tests / checks ───────────────────────────────────────────────────────────
 
@@ -22,9 +24,9 @@ check-all:
     env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_clock_wasm
-    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
+    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-skeleton-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
@@ -221,10 +223,10 @@ _ballet_wasm_www   := "crates/linkage-blaze-classic-wasm/www"
 _ballet_wasm_port  := "8085"
 
 check-ballet-wasm:
-    cargo check -p linkage-blaze-classic-wasm --target wasm32-unknown-unknown
+    env RUSTFLAGS="{{_ballet_rustflags}}" cargo check -p linkage-blaze-classic-wasm --target wasm32-unknown-unknown
 
 build-ballet-wasm:
-    wasm-pack build {{_ballet_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
+    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build {{_ballet_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
 
 serve-ballet-wasm port=_ballet_wasm_port:
     -lsof -ti:{{port}} | xargs -r kill
@@ -259,13 +261,13 @@ generate-ballet:
     cargo run -p linkage-blaze-mocap --example generate_ballet
 
 check-ballet-classic:
-    cargo +esp check -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp check -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
 build-ballet-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
 size-ballet-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
     source ~/export-esp.sh && xtensa-esp32-elf-size target/xtensa-esp32-none-elf/release/examples/ballet
     source ~/export-esp.sh && xtensa-esp32-elf-size -A target/xtensa-esp32-none-elf/release/examples/ballet
     source ~/export-esp.sh && xtensa-esp32-elf-nm -S --size-sort target/xtensa-esp32-none-elf/release/examples/ballet | tail -n 30
@@ -273,7 +275,7 @@ size-ballet-classic:
 run-ballet-classic:
     just check-ballet-classic
     just build-ballet-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp run -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
 # ── linkage-blaze-armatron-wasm (web simulator + 3D viewer) ─────────────────
 
