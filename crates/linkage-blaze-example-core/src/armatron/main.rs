@@ -117,6 +117,7 @@ const SHOW_FPS_TEXT: bool = true;
 /// Each iteration:
 /// 1. Reads the next touch event from [`CydTouch::read`].
 /// 2. Updates local armatron params, touch, and fps state.
+/// todo000 this comment is out of date. Fix it later.
 /// 3. If the frame changed, renders and presents a full-screen CYD frame.
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
