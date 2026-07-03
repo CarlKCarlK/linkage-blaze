@@ -2,16 +2,15 @@
 //!
 //! The device-agnostic game loop lives here.
 //!
-//! The generic loop updates the armatron state, dispatches touch events, renders
-//! changed frames, and flushes them through the [`Cyd`](linkage_blaze_cyd_core::Cyd)
-//! frame boundary.
+//! The generic loop updates the armatron state, redraws every frame, and
+//! flushes frames through the [`Cyd`](linkage_blaze_cyd_core::Cyd) boundary.
 
 pub mod calibration;
 mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
-use core::{convert::Infallible, fmt};
+use core::convert::Infallible;
 
 use embassy_time::Instant;
 use embedded_graphics::{
@@ -30,9 +29,12 @@ use linkage_blaze_cyd_core::{
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use controls::{ArmatronUi, PARAM_SLIDER_COUNT};
-
-use crate::infallible::InfallibleResultExt;
+use crate::ui::{Ui, UiError};
+use controls::{
+    CALIBRATE_BUTTON, DISTANCE_LABEL, DOLLY_SLIDER, FPS_LABEL, NEXT_TARGET_BUTTON,
+    PARAM_SLIDER_COUNT, PARAM_SLIDERS, PREVIOUS_TARGET_BUTTON, RK_RUN_BUTTON, RK_STEP_BUTTON,
+    TARGET_LABEL, TILT_SLIDER, VERSION_LABEL, VERSION_TEXT, XY_VIEW_SLIDER,
+};
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
@@ -64,10 +66,9 @@ const ARM_PARAM_NAMES: [&str; PARAM_SLIDER_COUNT] = [
 ];
 
 // ---- colors ----
-const SIM_WHITE: Rgb888 = Rgb888::CSS_WHITE;
-const CYAN: Rgb888 = Rgb888::CSS_CYAN;
 const SIM_YELLOW: Rgb888 = Rgb888::CSS_YELLOW;
 const GREEN: Rgb888 = Rgb888::CSS_LIME;
+const SIM_WHITE: Rgb888 = Rgb888::CSS_WHITE;
 const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 
 // ---- linkages ----
@@ -116,9 +117,10 @@ const SHOW_FPS_TEXT: bool = true;
 ///
 /// Each iteration:
 /// 1. Reads the next touch event from [`CydTouch::read`].
-/// 2. Updates local armatron params, touch, and fps state.
-/// todo000 this comment is out of date. Fix it later.
-/// 3. If the frame changed, renders and presents a full-screen CYD frame.
+/// 2. Draws the scene from the params produced by the previous frame's widgets.
+/// 3. Runs immediate-mode widgets on top, which update params for the next
+///    frame and therefore introduce a one-frame scene latency.
+/// 4. Presents a full-screen CYD frame.
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
 /// provide calibrated touch before calling [`armatron`]. The temporary
@@ -134,20 +136,10 @@ where
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
     let mut target_seed: u8 = 0;
-    let mut rng = WyRand::new_seed(u64::from(target_seed));
-    // todo00 how to we feel about "TARGET_PARAM_START"
-    for param in params[TARGET_PARAM_START..].iter_mut() {
-        *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
-    }
+    randomize_target(target_seed, &mut params);
 
     // Set up state.
-    let mut armatron_ui = ArmatronUi::new(
-        params[XY_VIEW_PARAM_INDEX],
-        params[TILT_PARAM_INDEX],
-        params[DOLLY_PARAM_INDEX],
-        ARM_PARAM_INDEXES.map(|param_index| params[param_index]),
-        ARM_PARAM_NAMES,
-    );
+    let mut ui = Ui::new();
     let mut previous_tick = None;
 
     // Set up buffers
@@ -158,31 +150,66 @@ where
         // generic frame code use fill(...) instead, which makes the clear helper much less useful.
         frame.fill(BACKGROUND_565);
 
-        // Update controls from the next touch event (if any).
-        // todo It's weird this doesn't return an error of the right type already and needs to be converted
-        armatron_ui.set_event(touch.read().map_err(Error::Cyd)?);
-
-        // Update the main params from the controls.
-        linkage_params(&armatron_ui, &mut params);
-
-        // Update the seed and target params if requested.
-        target_seed = update_target(&armatron_ui, target_seed, &mut params);
-
-        // Update the status text boxes.
-        previous_tick = update_fps_text(&mut armatron_ui, previous_tick)?;
-        update_text_info(&mut armatron_ui, target_seed, &params)?;
-
-        // Draw the linkage (arm + target)
+        // Scene first, UI on top: params here were updated by last frame's
+        // widgets, so input affects the scene with the standard one-frame
+        // immediate-mode latency.
         for draw_item_3d in LINKAGE.draw_items_3d(&params) {
             draw_item_3d.project(&PROJECTION).draw(&mut frame);
         }
 
-        // Draw the controls and status text.
-        armatron_ui.draw(&mut frame).unwrap_infallible();
+        // todo It's weird this doesn't return an error of the right type already and needs to be converted
+        ui.begin(touch.read().map_err(Error::Cyd)?);
 
-        armatron_ui
-            .draw_touch_cursor(&mut frame)
-            .unwrap_infallible();
+        ui.slider(&mut frame, &TILT_SLIDER, &mut params[TILT_PARAM_INDEX])?;
+        ui.slider(&mut frame, &DOLLY_SLIDER, &mut params[DOLLY_PARAM_INDEX])?;
+        ui.slider(
+            &mut frame,
+            &XY_VIEW_SLIDER,
+            &mut params[XY_VIEW_PARAM_INDEX],
+        )?;
+        for (param_slider, param_index) in PARAM_SLIDERS.iter().zip(ARM_PARAM_INDEXES) {
+            ui.slider(&mut frame, param_slider, &mut params[param_index])?;
+        }
+
+        if ui.button(&mut frame, &PREVIOUS_TARGET_BUTTON)? {
+            target_seed = target_seed.wrapping_sub(1);
+            randomize_target(target_seed, &mut params);
+        }
+        if ui.button(&mut frame, &NEXT_TARGET_BUTTON)? {
+            target_seed = target_seed.wrapping_add(1);
+            randomize_target(target_seed, &mut params);
+        }
+
+        // Clicks not yet wired to actions (matches current behavior).
+        ui.icon_button(&mut frame, &RK_RUN_BUTTON)?;
+        ui.icon_button(&mut frame, &RK_STEP_BUTTON)?;
+        ui.button(&mut frame, &CALIBRATE_BUTTON)?;
+
+        ui.label(
+            &mut frame,
+            &TARGET_LABEL,
+            format_args!("target #{target_seed}"),
+        )?;
+        let distance_hundredths = target_distance_hundredths(&params);
+        ui.label(
+            &mut frame,
+            &DISTANCE_LABEL,
+            format_args!(
+                "distance {:02}.{:02}",
+                distance_hundredths / 100,
+                distance_hundredths % 100
+            ),
+        )?;
+        if let Some((fps_whole, fps_fraction)) = next_fps_label(&mut previous_tick) {
+            ui.label(
+                &mut frame,
+                &FPS_LABEL,
+                format_args!("{fps_whole:>2}.{fps_fraction} fps"),
+            )?;
+        }
+        ui.label(&mut frame, &VERSION_LABEL, format_args!("{VERSION_TEXT}"))?;
+
+        ui.end(&mut frame)?;
 
         frame.flush().await.map_err(Error::Cyd)?;
     }
@@ -190,15 +217,15 @@ where
 
 /// Error from the generic armatron loop, generic over the CYD device error `F`.
 ///
-/// Local errors such as [`fmt::Error`] get a derived `From`, so they
-/// propagate with a plain `?`. The CYD device error `F` is the one exception:
-/// it is converted explicitly with `.map_err(Error::Cyd)` at the call site,
-/// because a blanket `From<F>` would overlap with those concrete `From`s under
+/// Local UI errors such as [`UiError`] get a derived `From`, so they propagate
+/// with a plain `?`. The CYD device error `F` is the one exception: it is
+/// converted explicitly with `.map_err(Error::Cyd)` at the call site, because
+/// a blanket `From<F>` would overlap with those concrete `From`s under
 /// coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
-    /// Formatting UI text failed.
-    Text(fmt::Error),
+    /// A UI widget failed (text formatting; draw is [`Infallible`] here).
+    Ui(UiError<Infallible>),
     /// Reading touch events or flushing a frame failed.
     #[from(ignore)]
     Cyd(F),
@@ -286,66 +313,30 @@ impl Default for FrameBuffer {
 
 // ── Private helper functions ───────────────────────────────────────────────────
 
-fn linkage_params(armatron_ui: &ArmatronUi, params: &mut [f32; DOF]) {
-    params[XY_VIEW_PARAM_INDEX] = armatron_ui.xy_view();
-    params[TILT_PARAM_INDEX] = armatron_ui.tilt();
-    params[DOLLY_PARAM_INDEX] = armatron_ui.dolly();
-    let param_sliders = armatron_ui.param_sliders();
-    for (slider_value, param_index) in param_sliders.into_iter().zip(ARM_PARAM_INDEXES) {
-        params[param_index] = slider_value;
-    }
-}
-
-/// Advance `target_seed` if a target button was clicked, randomizing the target params to match.
-///
-/// Returns the new `target_seed`, which is unchanged if neither button was clicked.
-fn update_target(armatron_ui: &ArmatronUi, target_seed: u8, params: &mut [f32; DOF]) -> u8 {
-    let target_seed = if armatron_ui.previous_target_was_clicked() {
-        target_seed.wrapping_sub(1)
-    } else if armatron_ui.next_target_was_clicked() {
-        target_seed.wrapping_add(1)
-    } else {
-        return target_seed;
-    };
-
+fn randomize_target(target_seed: u8, params: &mut [f32; DOF]) {
     let mut rng = WyRand::new_seed(u64::from(target_seed));
+    // todo00 how to we feel about "TARGET_PARAM_START"
     for param in params[TARGET_PARAM_START..].iter_mut() {
         *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
     }
-    target_seed
 }
 
-/// Update the target # and distance-to-target status text.
-fn update_text_info(
-    armatron_ui: &mut ArmatronUi,
-    target_seed: u8,
-    params: &[f32; DOF],
-) -> Result<(), fmt::Error> {
-    let distance_hundredths = round_to_u32(target_distance(params).clamp(0.0, 99.99) * 100.0);
-    armatron_ui.set_target_text(format_args!("target #{target_seed}"))?;
-    armatron_ui.set_distance_text(format_args!(
-        "distance {:02}.{:02}",
-        distance_hundredths / 100,
-        distance_hundredths % 100
-    ))?;
-    Ok(())
+fn target_distance_hundredths(params: &[f32; DOF]) -> u32 {
+    round_to_u32(target_distance(params).clamp(0.0, 99.99) * 100.0)
 }
 
-/// Update the FPS report if enabled and a previous tick is available.
-///
-/// Returns the current tick, for the caller to store as the next `previous_tick`.
-fn update_fps_text(
-    armatron_ui: &mut ArmatronUi,
-    previous_tick: Option<Instant>,
-) -> Result<Option<Instant>, fmt::Error> {
+fn next_fps_label(previous_tick: &mut Option<Instant>) -> Option<(u32, u32)> {
     let current_tick = Instant::now();
-    if SHOW_FPS_TEXT
-        && let Some(previous_tick) = previous_tick
+    let fps_label = if SHOW_FPS_TEXT
+        && let Some(previous_tick) = *previous_tick
         && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)
     {
-        armatron_ui.set_fps_text(format_args!("{fps_whole:>2}.{fps_fraction} fps"))?;
-    }
-    Ok(Some(current_tick))
+        Some((fps_whole, fps_fraction))
+    } else {
+        None
+    };
+    *previous_tick = Some(current_tick);
+    fps_label
 }
 
 fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u32, u32)> {

@@ -30,8 +30,9 @@
 //! # use linkage_blaze_example_core::ui::{Slider, Ui};
 //! static TILT_SLIDER: Slider = Slider::vertical(
 //!     "z",
-//!     Rectangle::new(Point::new(2, 24), Size::new(29, 201)),
-//!     Rectangle::new(Point::new(16, 24), Size::new(1, 201)),
+//!     16,
+//!     24,
+//!     201,
 //!     1.0,
 //!     0.0,
 //! );
@@ -61,6 +62,7 @@ use heapless::String;
 use linkage_blaze_cyd_core::TouchEvent;
 
 const LABEL_CAPACITY: usize = 24;
+const SLIDER_TOUCH_PAD: i32 = 14;
 const CYAN: Rgb565 = Rgb565::CSS_CYAN;
 const GREEN: Rgb565 = Rgb565::CSS_LIME;
 const LIGHT_SLATE_GRAY: Rgb565 = Rgb565::CSS_LIGHT_SLATE_GRAY;
@@ -226,6 +228,7 @@ impl Ui {
 #[derive(Clone, Copy)]
 pub struct Slider {
     label: &'static str,
+    label_position: Point,
     touch_rectangle: Rectangle,
     track_start: Point,
     track_end: Point,
@@ -235,18 +238,22 @@ pub struct Slider {
 }
 
 impl Slider {
-    /// Creates a horizontal slider from explicit touch and track rectangles.
+    /// Creates a horizontal slider from its track geometry.
     pub const fn horizontal(
         label: &'static str,
-        touch_rectangle: Rectangle,
-        track_rectangle: Rectangle,
+        track_x: i32,
+        track_y: i32,
+        track_length: u32,
         range_start: f32,
         range_end: f32,
     ) -> Self {
+        let track_rectangle =
+            Rectangle::new(Point::new(track_x, track_y), Size::new(track_length, 1));
         let track_start = track_rectangle.top_left;
         Self {
             label,
-            touch_rectangle,
+            label_position: Point::new(track_start.x, track_start.y - 15),
+            touch_rectangle: horizontal_touch_rectangle(track_rectangle),
             track_start,
             track_end: Point::new(
                 track_rectangle.top_left.x + track_rectangle.size.width as i32 - 1,
@@ -258,18 +265,22 @@ impl Slider {
         }
     }
 
-    /// Creates a vertical slider from explicit touch and track rectangles.
+    /// Creates a vertical slider from its track geometry.
     pub const fn vertical(
         label: &'static str,
-        touch_rectangle: Rectangle,
-        track_rectangle: Rectangle,
+        track_x: i32,
+        track_y: i32,
+        track_length: u32,
         range_start: f32,
         range_end: f32,
     ) -> Self {
+        let track_rectangle =
+            Rectangle::new(Point::new(track_x, track_y), Size::new(1, track_length));
         let track_start = track_rectangle.top_left;
         Self {
             label,
-            touch_rectangle,
+            label_position: Point::new(track_start.x - 5, 5),
+            touch_rectangle: vertical_touch_rectangle(track_rectangle),
             track_start,
             track_end: Point::new(
                 track_rectangle.top_left.x,
@@ -281,12 +292,35 @@ impl Slider {
         }
     }
 
+    /// Creates a column of `N` identical horizontal sliders, each ranged
+    /// `0.0..=1.0`, with their tracks at `x`, the first track at `first_track_y`,
+    /// and successive tracks spaced `step_y` apart. Touch rectangles follow the
+    /// same symmetric-pad rule as any other horizontal slider.
+    pub const fn column<const N: usize>(
+        x: i32,
+        first_track_y: i32,
+        step_y: i32,
+        track_length: u32,
+        labels: [&'static str; N],
+    ) -> [Self; N] {
+        let mut slider_array =
+            [Self::horizontal("", x, first_track_y, track_length, 0.0, 1.0); N];
+        let mut slider_index = 0;
+        while slider_index < N {
+            let track_y = first_track_y + slider_index as i32 * step_y;
+            slider_array[slider_index] =
+                Self::horizontal(labels[slider_index], x, track_y, track_length, 0.0, 1.0);
+            slider_index += 1;
+        }
+        slider_array
+    }
+
     fn draw<D>(&self, target: &mut D, value: f32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Rgb565>,
     {
         let text_style = MonoTextStyle::new(&FONT_6X10, SIM_WHITE);
-        Text::with_baseline(self.label, self.label_position(), text_style, Baseline::Top)
+        Text::with_baseline(self.label, self.label_position, text_style, Baseline::Top)
             .draw(target)?;
         Line::new(self.track_start, self.track_end)
             .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
@@ -295,15 +329,6 @@ impl Slider {
             .into_styled(fill_style(SIM_YELLOW))
             .draw(target)?;
         Ok(())
-    }
-
-    fn label_position(&self) -> Point {
-        match self.orientation {
-            SliderOrientation::Horizontal => {
-                Point::new(self.track_start.x, self.track_start.y - 15)
-            }
-            SliderOrientation::Vertical => Point::new(self.track_start.x - 5, 5),
-        }
     }
 
     fn knob_center(&self, value: f32) -> Point {
@@ -524,6 +549,32 @@ fn centered_text_position(touch_rectangle: Rectangle, label: &str) -> Point {
     Point::new(
         touch_rectangle.top_left.x + (touch_rectangle.size.width as i32 - label_width) / 2,
         touch_rectangle.top_left.y + 2,
+    )
+}
+
+const fn horizontal_touch_rectangle(track_rectangle: Rectangle) -> Rectangle {
+    Rectangle::new(
+        Point::new(
+            track_rectangle.top_left.x,
+            track_rectangle.top_left.y - SLIDER_TOUCH_PAD,
+        ),
+        Size::new(
+            track_rectangle.size.width,
+            track_rectangle.size.height + (SLIDER_TOUCH_PAD as u32 * 2),
+        ),
+    )
+}
+
+const fn vertical_touch_rectangle(track_rectangle: Rectangle) -> Rectangle {
+    Rectangle::new(
+        Point::new(
+            track_rectangle.top_left.x - SLIDER_TOUCH_PAD,
+            track_rectangle.top_left.y,
+        ),
+        Size::new(
+            track_rectangle.size.width + (SLIDER_TOUCH_PAD as u32 * 2),
+            track_rectangle.size.height,
+        ),
     )
 }
 

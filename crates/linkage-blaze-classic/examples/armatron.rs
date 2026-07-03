@@ -79,7 +79,7 @@ impl From<CydError> for MainError {
 impl From<ArmatronError<CydError>> for MainError {
     fn from(error: ArmatronError<CydError>) -> Self {
         match error {
-            ArmatronError::Text(_) => MainError::FormatText,
+            ArmatronError::Ui(_) => MainError::FormatText,
             ArmatronError::Cyd(error) => error.into(),
         }
     }

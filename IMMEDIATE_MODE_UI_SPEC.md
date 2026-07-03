@@ -353,7 +353,7 @@ documented, and compiling on all targets, but is not yet called.
 The big cut-over. App behavior must be preserved except for the documented
 one-frame scene latency.
 
-- [ ] impl — Rewrite `armatron/controls.rs` as a layout description only:
+- [x] impl — Rewrite `armatron/controls.rs` as a layout description only:
       `static` specs (`TILT_SLIDER`, `DOLLY_SLIDER`, `XY_VIEW_SLIDER`,
       `PARAM_SLIDERS: [Slider; PARAM_SLIDER_COUNT]`,
       `PREVIOUS_TARGET_BUTTON`, `NEXT_TARGET_BUTTON`, `RK_RUN_BUTTON`,
@@ -365,48 +365,48 @@ one-frame scene latency.
       "Left-side camera controls…", etc.) — they are part of the layout
       language's readability. `PARAM_SLIDERS` may be written as six literal
       entries in this phase (the column constructor is phase 3).
-  - [ ] verify
-- [ ] impl — Delete `ArmatronUi`, `ActiveControl`, `TextBox`, `TextButton`,
+  - [x] verify
+- [x] impl — Delete `ArmatronUi`, `ActiveControl`, `TextBox`, `TextButton`,
       `ShapeButton`, `ShapeButtonKind`, `SliderLayout`, `SliderControl`,
       `SliderOrientation`, and the RK draw functions from `controls.rs` (their
       logic now lives in `ui.rs`). Relocate any `todo` comments to the
       corresponding new code; never drop one.
-  - [ ] verify
-- [ ] impl — Rewrite the loop in `armatron/main.rs` per the target shape
+  - [x] verify
+- [x] impl — Rewrite the loop in `armatron/main.rs` per the target shape
       above: scene first, then widgets, labels, `ui.end`, flush. Delete
       `linkage_params` (sliders now write `params` directly). Replace
       `update_target` with `randomize_target(seed, &mut params)` used both
       before the loop and on button clicks. Keep the loop at the top of the
       file per `AGENTS.md` entry-point placement.
-  - [ ] verify
-- [ ] impl — Change `armatron::Error` to the `Ui(UiError<Infallible>)` form
+  - [x] verify
+- [x] impl — Change `armatron::Error` to the `Ui(UiError<Infallible>)` form
       specified above; fix up platform crates if they reference the old
       `Text` variant.
-  - [ ] verify
-- [ ] impl — FPS label: compute via `display_fps_since` and draw only when a
+  - [x] verify
+- [x] impl — FPS label: compute via `display_fps_since` and draw only when a
       previous tick exists (first frame draws nothing — acceptable parity).
       Distance/target labels: same formatting as today
       (`"target #{seed}"`, `"distance {:02}.{:02}"`). Version label: pass
       `format_args!("{VERSION_TEXT}")`.
-  - [ ] verify
-- [ ] impl — Fix the `armatron()` doc comment: the loop redraws
+  - [x] verify
+- [x] impl — Fix the `armatron()` doc comment: the loop redraws
       unconditionally every frame ("If the frame changed" is wrong today);
       document the scene-first/one-frame-lag ordering.
-  - [ ] verify
+  - [x] verify
 
 **PHASE 2 GATE — stop here and test (the critical one):**
 
-- [ ] `just check-all` passes.
-- [ ] `just run-armatron-wasm` manual checklist:
-  - [ ] Each of the 6 param sliders drags; the arm follows (next frame).
-  - [ ] z (tilt), zoom (dolly), and x/y view sliders drag; view follows.
-  - [ ] Drag started inside a slider continues when the cursor leaves it;
+- [x] `just check-all` passes.
+- [x] `just run-armatron-wasm` manual checklist (human-confirmed "perfect"):
+  - [x] Each of the 6 param sliders drags; the arm follows (next frame).
+  - [x] z (tilt), zoom (dolly), and x/y view sliders drag; view follows.
+  - [x] Drag started inside a slider continues when the cursor leaves it;
         releases cleanly on up.
-  - [ ] prev/next change `target #N` text and move the red target; distance
+  - [x] prev/next change `target #N` text and move the red target; distance
         text updates.
-  - [ ] RK play/step icons and `cal` button render as before; pressing them
+  - [x] RK play/step icons and `cal` button render as before; pressing them
         does nothing (unchanged).
-  - [ ] FPS text updates; version text shows; cyan touch cursor tracks and
+  - [x] FPS text updates; version text shows; cyan touch cursor tracks and
         draws on top.
 - [ ] If hardware is available: `just run-armatron-classic` boots and touch
       works after calibration.
@@ -416,7 +416,7 @@ one-frame scene latency.
 
 Make `controls.rs` read as a layout description with no redundant numbers.
 
-- [ ] impl — Derive slider touch rectangles instead of hand-writing them:
+- [x] impl — Derive slider touch rectangles instead of hand-writing them:
       `Slider::vertical(label, track_x, track_y, track_length, range_start,
       range_end)` and the horizontal twin compute the touch rectangle as the
       track expanded by `SLIDER_TOUCH_PAD` (14 px) perpendicular to the track
@@ -425,21 +425,28 @@ Make `controls.rs` read as a layout description with no redundant numbers.
       change. If a slider genuinely needs a custom touch area, allow an
       explicit `with_touch_rectangle` variant rather than contorting the
       general rule.
-  - [ ] verify
-- [ ] impl — `Slider::column(x, top, step_y, labels: [&'static str; N])`
+  - [x] verify
+- [x] impl — `Slider::column(x, top, step_y, labels: [&'static str; N])`
       (`const fn`, e.g. via a `while` loop over a `Copy` placeholder array)
       replaces the six literal `PARAM_SLIDERS` entries and the old
       `param_slider()` runtime math. If const-fn limitations make this ugly,
       fall back to literal entries and note why in a comment.
-  - [ ] verify
-- [ ] impl — Move slider label placement into the constructors as a rule
+      **De-duplicate the arm labels while doing this.** Phase 2 left the six
+      label strings ("raise hand", …) in BOTH `controls.rs` (`param_slider`
+      calls) and `main.rs` (`ARM_PARAM_NAMES`, which drives the linkage
+      `param_index` lookup). They must stay in sync or a slider's label and the
+      joint it controls silently disconnect. Feed `Slider::column` from a single
+      source of truth: pass `ARM_PARAM_NAMES` into it so the drawn label and the
+      `param_index` key come from the same array. Delete the duplicate literals.
+  - [x] verify
+- [x] impl — Move slider label placement into the constructors as a rule
       (horizontal: above track start; vertical: current offset), replacing the
       scattered magic offsets (`y - 15`, `Point::new(x - 5, 5)`).
-  - [ ] verify
+  - [x] verify
 
 **PHASE 3 GATE — stop here and test:**
 
-- [ ] `just check-all` passes.
+- [x] `just check-all` passes.
 - [ ] `just run-armatron-wasm`: spot-check every control still hits and draws
       in the same place (compare against a phase-2 screenshot).
 - [ ] Suggest a commit message; human commits.
