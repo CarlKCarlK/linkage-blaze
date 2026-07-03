@@ -11,16 +11,17 @@
 use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::Point,
-    pixelcolor::Rgb565,
+    pixelcolor::{Rgb565, Rgb888, WebColors},
     prelude::*,
     primitives::{Circle, Line, PrimitiveStyle},
 };
 
-use super::{WHITE, YELLOW};
-
 pub const CALIBRATION_CROSS_MARGIN: i32 = 28;
 pub const CALIBRATION_CROSS_HALF_SIZE: i32 = 18;
 pub const CALIBRATION_CENTER_DOT_RADIUS: i32 = 3;
+
+const CALIBRATION_CROSS_COLOR: Rgb888 = Rgb888::CSS_YELLOW;
+const CALIBRATION_DOT_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 
 #[derive(Clone, Copy)]
 pub enum CalibrationCorner {
@@ -80,10 +81,16 @@ pub fn draw_calibration_cross<E>(
     let bottom = Point::new(center.x, center.y + CALIBRATION_CROSS_HALF_SIZE);
 
     Line::new(left, right)
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::from(YELLOW), 4))
+        .into_styled(PrimitiveStyle::with_stroke(
+            Rgb565::from(CALIBRATION_CROSS_COLOR),
+            4,
+        ))
         .draw(target)?;
     Line::new(top, bottom)
-        .into_styled(PrimitiveStyle::with_stroke(Rgb565::from(YELLOW), 4))
+        .into_styled(PrimitiveStyle::with_stroke(
+            Rgb565::from(CALIBRATION_CROSS_COLOR),
+            4,
+        ))
         .draw(target)?;
 
     Circle::new(
@@ -93,7 +100,9 @@ pub fn draw_calibration_cross<E>(
         ),
         (CALIBRATION_CENTER_DOT_RADIUS * 2 + 1) as u32,
     )
-    .into_styled(PrimitiveStyle::with_fill(Rgb565::from(WHITE)))
+    .into_styled(PrimitiveStyle::with_fill(Rgb565::from(
+        CALIBRATION_DOT_COLOR,
+    )))
     .draw(target)?;
 
     Ok(())

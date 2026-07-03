@@ -26,6 +26,7 @@ use embedded_graphics::{
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
+use linkage_blaze_core::rgb565_raw_from_rgb888_components;
 
 /// An opaque RGB565 image decoded from a TGA at compile time.
 ///
@@ -73,14 +74,6 @@ pub struct PlacedImage565Mask<
 /// Little-endian `u16` read at `offset`.
 const fn read_u16(bytes: &[u8], offset: usize) -> u16 {
     (bytes[offset] as u16) | ((bytes[offset + 1] as u16) << 8)
-}
-
-/// Packs 8-bit channels into RGB565.
-const fn to_rgb565(red: u8, green: u8, blue: u8) -> u16 {
-    let red5 = (red >> 3) as u16;
-    let green6 = (green >> 2) as u16;
-    let blue5 = (blue >> 3) as u16;
-    (red5 << 11) | (green6 << 5) | blue5
 }
 
 /// Validates the 18-byte header against the v1 subset and returns
@@ -177,7 +170,7 @@ impl<const W: usize, const H: usize, const N: usize> Image565Fixed<W, H, N> {
                 let blue = bytes[offset];
                 let green = bytes[offset + 1];
                 let red = bytes[offset + 2];
-                pixels[y * W + x] = to_rgb565(red, green, blue);
+                pixels[y * W + x] = rgb565_raw_from_rgb888_components(red, green, blue);
                 x += 1;
             }
             y += 1;
@@ -323,7 +316,7 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize>
                 let green = bytes[offset + 1];
                 let red = bytes[offset + 2];
                 let index = y * W + x;
-                pixels[index] = to_rgb565(red, green, blue);
+                pixels[index] = rgb565_raw_from_rgb888_components(red, green, blue);
                 // 24-bit has no alpha and is fully opaque; 32-bit uses binary
                 // alpha (0 transparent, nonzero opaque).
                 let is_opaque = bytes_per_pixel == 3 || bytes[offset + 3] != 0;
@@ -365,7 +358,7 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize>
                 let green = bytes[offset + 1];
                 let red = bytes[offset + 2];
                 let index = y * W + x;
-                pixels[index] = to_rgb565(red, green, blue);
+                pixels[index] = rgb565_raw_from_rgb888_components(red, green, blue);
                 // Magenta color-key: transparent where red and blue are high and
                 // green is low (covers the anti-aliased fringe of pure magenta).
                 let is_magenta = red >= 200 && blue >= 200 && green <= 60;
@@ -407,7 +400,7 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize>
                 let green = bytes[offset + 1];
                 let red = bytes[offset + 2];
                 let index = y * W + x;
-                pixels[index] = to_rgb565(red, green, blue);
+                pixels[index] = rgb565_raw_from_rgb888_components(red, green, blue);
                 // White color-key: transparent where all channels are near full
                 // (covers the anti-aliased fringe of pure white).
                 let is_white = red >= 220 && green >= 220 && blue >= 220;
@@ -613,7 +606,13 @@ mod tests {
         bytes.extend_from_slice(&[0x00, 0x00, 0xff]); // red
         bytes.extend_from_slice(&[0xff, 0x00, 0x00]); // blue
         let image = Image565Fixed::<2, 1, 2>::from_tga(&bytes);
-        assert_eq!(image.pixels, [to_rgb565(0xff, 0, 0), to_rgb565(0, 0, 0xff)]);
+        assert_eq!(
+            image.pixels,
+            [
+                rgb565_raw_from_rgb888_components(0xff, 0, 0),
+                rgb565_raw_from_rgb888_components(0, 0, 0xff)
+            ]
+        );
     }
 
     #[test]
@@ -623,7 +622,13 @@ mod tests {
         bytes.extend_from_slice(&[0x00, 0x00, 0xff]); // file row 0 -> output row 1
         bytes.extend_from_slice(&[0xff, 0x00, 0x00]); // file row 1 -> output row 0
         let image = Image565Fixed::<1, 2, 2>::from_tga(&bytes);
-        assert_eq!(image.pixels, [to_rgb565(0, 0, 0xff), to_rgb565(0xff, 0, 0)]);
+        assert_eq!(
+            image.pixels,
+            [
+                rgb565_raw_from_rgb888_components(0, 0, 0xff),
+                rgb565_raw_from_rgb888_components(0xff, 0, 0)
+            ]
+        );
     }
 
     #[test]

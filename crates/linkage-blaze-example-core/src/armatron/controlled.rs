@@ -11,14 +11,13 @@
 //!
 //! To restore: reintroduce a `controlled_knobs: [ControlledKnob; 2]` value
 //! threaded through `armatron`'s loop and `draw_sliders`, and swap the plain
-//! `fill_style(SIM_YELLOW)` knob draws back to
+//! `fill_style(Rgb888::CSS_YELLOW)` knob draws back to
 //! `knob_fill_style(&controlled_knobs, ControlledKnob::Param(...))`.
 
 #![allow(dead_code)]
 
 use embedded_graphics::{pixelcolor::Rgb565, primitives::PrimitiveStyle};
-
-use super::{GREEN, SIM_YELLOW};
+use linkage_blaze_core::{Rgb888, WebColors};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlledKnob {
@@ -30,12 +29,12 @@ fn knob_fill_style(
     knob: ControlledKnob,
 ) -> PrimitiveStyle<Rgb565> {
     if controlled_knobs[0] == knob || controlled_knobs[1] == knob {
-        fill_style(GREEN)
+        fill_style(Rgb888::CSS_LIME)
     } else {
-        fill_style(SIM_YELLOW)
+        fill_style(Rgb888::CSS_YELLOW)
     }
 }
 
-fn fill_style(color: super::Rgb888) -> PrimitiveStyle<Rgb565> {
+fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
     PrimitiveStyle::with_fill(Rgb565::from(color))
 }

@@ -20,8 +20,7 @@ use embedded_graphics::{
     prelude::*,
 };
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
-    rgb565_from_rgb888_components,
+    LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed, rgb565_from_rgb888,
 };
 use linkage_blaze_cyd_core::{
     Cyd, CydDisplay, CydFrame, CydTouch, DrawItem3dExt, SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH,
@@ -38,18 +37,12 @@ use controls::{
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-pub const BACKGROUND: Rgb888 = Rgb888::new(0, 0, 0); // black
-pub const BLACK: Rgb888 = BACKGROUND;
-pub const WHITE: Rgb888 = Rgb888::new(255, 255, 255); // white
-pub const YELLOW: Rgb888 = Rgb888::new(255, 255, 0); // yellow
-const BACKGROUND_565: Rgb565 = rgb565_from_rgb888_components(0, 0, 0); // black
+pub const BACKGROUND: Rgb888 = Rgb888::CSS_BLACK;
+pub const FOREGROUND: Rgb888 = Rgb888::CSS_WHITE;
 
 // ── Armatron state constants ─────────────────────────────────────────────────
 
 const FPS_TEXT_MAX_TENTHS: u32 = 990;
-
-// ---- world / display constants ----
-const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span the screen width
 
 // ---- parameter indices ----
 const TARGET_PARAM_START: usize = 9;
@@ -64,12 +57,6 @@ const ARM_PARAM_NAMES: [&str; PARAM_SLIDER_COUNT] = [
     "spin whole arm",
     "spin hand",
 ];
-
-// ---- colors ----
-const SIM_YELLOW: Rgb888 = Rgb888::CSS_YELLOW;
-const GREEN: Rgb888 = Rgb888::CSS_LIME;
-const SIM_WHITE: Rgb888 = Rgb888::CSS_WHITE;
-const LIGHT_SLATE_GRAY: Rgb888 = Rgb888::CSS_LIGHT_SLATE_GRAY;
 
 // ---- linkages ----
 //
@@ -111,6 +98,13 @@ pub const DOF: usize = LINKAGE.dof();
 
 const SHOW_FPS_TEXT: bool = true;
 
+//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
+const PROJECTION: Projection = Projection::front_perspective(
+    Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
+    SCREEN_WIDTH as f32 / 16.0, // 16 world units span the screen width
+    30.0,
+);
+
 // ── Generic armatron loop ─────────────────────────────────────────────────────
 
 /// Run the armatron example forever.
@@ -144,11 +138,12 @@ where
 
     // Set up buffers
     let mut frame = display.full_frame_mut();
+    let background565 = rgb565_from_rgb888(BACKGROUND);
 
     loop {
         // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
         // generic frame code use fill(...) instead, which makes the clear helper much less useful.
-        frame.fill(BACKGROUND_565);
+        frame.fill(background565);
 
         // Scene first, UI on top: params here were updated by last frame's
         // widgets, so input affects the scene with the standard one-frame
@@ -230,13 +225,6 @@ pub enum Error<F> {
     #[from(ignore)]
     Cyd(F),
 }
-
-//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
-const PROJECTION: Projection = Projection::front_perspective(
-    Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
-    PIXELS_PER_UNIT,
-    30.0,
-);
 
 // ── FrameBuffer ────────────────────────────────────────────────────────────────
 

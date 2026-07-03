@@ -1,22 +1,23 @@
 use embedded_graphics::{
     geometry::{Point, Size},
+    pixelcolor::{Rgb888, WebColors},
     primitives::Rectangle,
 };
 
 use crate::ui::{Button, Icon, IconButton, Label, Slider};
 
-use super::{ARM_PARAM_NAMES, LIGHT_SLATE_GRAY, SIM_WHITE};
+use super::ARM_PARAM_NAMES;
 
 // Target selector strip: previous button, target text, next button.
 pub(super) static PREVIOUS_TARGET_BUTTON: Button = Button::new(rectangle(65, 17, 42, 14), "prev");
 pub(super) static NEXT_TARGET_BUTTON: Button = Button::new(rectangle(181, 17, 42, 14), "next");
 
-pub(super) static TARGET_LABEL: Label = Label::new(point(111, 19), SIM_WHITE);
-pub(super) static DISTANCE_LABEL: Label = Label::new(point(102, 5), SIM_WHITE);
-pub(super) static FPS_LABEL: Label = Label::new(point(272, 229), LIGHT_SLATE_GRAY);
+pub(super) static TARGET_LABEL: Label = Label::new(point(111, 19), Rgb888::CSS_WHITE);
+pub(super) static DISTANCE_LABEL: Label = Label::new(point(102, 5), Rgb888::CSS_WHITE);
+pub(super) static FPS_LABEL: Label = Label::new(point(272, 229), Rgb888::CSS_LIGHT_SLATE_GRAY);
 
 pub(super) const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
-pub(super) static VERSION_LABEL: Label = Label::new(point(218, 229), LIGHT_SLATE_GRAY);
+pub(super) static VERSION_LABEL: Label = Label::new(point(218, 229), Rgb888::CSS_LIGHT_SLATE_GRAY);
 
 // Left-side camera controls: tall z tilt slider and short zoom/dolly slider.
 pub(super) static TILT_SLIDER: Slider = Slider::vertical("z", 16, 24, 201, 1.0, 0.0);

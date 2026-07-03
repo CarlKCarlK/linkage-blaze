@@ -3904,6 +3904,19 @@ pub const fn rgb565_from_rgb888_components(red: u8, green: u8, blue: u8) -> Rgb5
     Rgb565::new(red >> 3, green >> 2, blue >> 3)
 }
 
+/// Packs 8-bit RGB components into a raw RGB565 `u16` by keeping each channel's
+/// high bits.
+///
+/// This is the raw-`u16` twin of [`rgb565_from_rgb888_components`], for const
+/// contexts that store packed pixels directly (such as flash-resident images)
+/// and cannot go through [`Rgb565`], whose `into_storage` is not `const`.
+pub const fn rgb565_raw_from_rgb888_components(red: u8, green: u8, blue: u8) -> u16 {
+    let red5 = (red >> 3) as u16;
+    let green6 = (green >> 2) as u16;
+    let blue5 = (blue >> 3) as u16;
+    (red5 << 11) | (green6 << 5) | blue5
+}
+
 /// Converts [`Rgb888`] to [`Rgb565`].
 ///
 /// Use [`rgb565_from_rgb888_components`] in const contexts.

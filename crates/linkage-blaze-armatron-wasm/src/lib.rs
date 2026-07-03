@@ -4,7 +4,7 @@ use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
 use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::Orientation;
 use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm};
-use linkage_blaze_example_core::armatron::{BACKGROUND, WHITE, armatron};
+use linkage_blaze_example_core::armatron::{BACKGROUND, FOREGROUND, armatron};
 use wasm_bindgen::{JsCast, closure::Closure, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, PointerEvent};
 
@@ -32,7 +32,13 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .dyn_into()
         .expect("the context is a CanvasRenderingContext2d");
 
-    let mut cyd = CydWasm::new(context, ORIENTATION, BACKGROUND, WHITE, &FONT_9X15_BOLD);
+    let mut cyd = CydWasm::new(
+        context,
+        ORIENTATION,
+        BACKGROUND,
+        FOREGROUND,
+        &FONT_9X15_BOLD,
+    );
     install_touch_handlers(&canvas, cyd.touch_source())?;
 
     wasm_bindgen_futures::spawn_local(async move {

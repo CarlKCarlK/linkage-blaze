@@ -20,7 +20,7 @@ use linkage_blaze_cyd::{
     DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use linkage_blaze_example_core::armatron::{
-    BLACK, Error as ArmatronError, WHITE, armatron,
+    BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
     calibration::{calibration_corner_for_index, draw_calibration_cross},
 };
 use log::info;
@@ -111,8 +111,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO4,  // display reset
         p.GPIO21, // display backlight
         Orientation::Landscape,
-        BLACK,                   // default background
-        WHITE,                   // default foreground
+        BACKGROUND,              // default background
+        FOREGROUND,              // default foreground
         &DEFAULT_FONT,           // default font
         p.SPI3,                  // touch SPI
         p.GPIO25,                // touch SCK
@@ -188,7 +188,7 @@ fn calibrate(cyd: &mut CydEsp) -> Result<(), MainError> {
 fn draw_calibration_screen(cyd: &mut CydEsp, calibration_index: usize) -> Result<(), MainError> {
     let (mut display, _touch) = cyd.parts();
     let mut frame = display.full_frame_mut();
-    frame.fill(CydEsp::rgb565(BLACK));
+    frame.fill(CydEsp::rgb565(BACKGROUND));
     if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
         draw_calibration_cross(
             &mut frame,

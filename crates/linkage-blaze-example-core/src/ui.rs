@@ -63,11 +63,6 @@ use linkage_blaze_cyd_core::TouchEvent;
 
 const LABEL_CAPACITY: usize = 24;
 const SLIDER_TOUCH_PAD: i32 = 14;
-const CYAN: Rgb565 = Rgb565::CSS_CYAN;
-const GREEN: Rgb565 = Rgb565::CSS_LIME;
-const LIGHT_SLATE_GRAY: Rgb565 = Rgb565::CSS_LIGHT_SLATE_GRAY;
-const SIM_WHITE: Rgb565 = Rgb565::CSS_WHITE;
-const SIM_YELLOW: Rgb565 = Rgb565::CSS_YELLOW;
 
 /// Immediate-mode UI state for one touch pointer.
 #[derive(Default)]
@@ -200,7 +195,7 @@ impl Ui {
             Point::new(center_x - radius, center_y - radius),
             (radius * 2 + 1) as u32,
         )
-        .into_styled(PrimitiveStyle::with_fill(CYAN))
+        .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_CYAN))
         .draw(target)
         .map_err(UiError::Draw)?;
         Ok(())
@@ -303,8 +298,7 @@ impl Slider {
         track_length: u32,
         labels: [&'static str; N],
     ) -> [Self; N] {
-        let mut slider_array =
-            [Self::horizontal("", x, first_track_y, track_length, 0.0, 1.0); N];
+        let mut slider_array = [Self::horizontal("", x, first_track_y, track_length, 0.0, 1.0); N];
         let mut slider_index = 0;
         while slider_index < N {
             let track_y = first_track_y + slider_index as i32 * step_y;
@@ -319,14 +313,14 @@ impl Slider {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        let text_style = MonoTextStyle::new(&FONT_6X10, SIM_WHITE);
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
         Text::with_baseline(self.label, self.label_position, text_style, Baseline::Top)
             .draw(target)?;
         Line::new(self.track_start, self.track_end)
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 2))
+            .into_styled(stroke_style(Rgb565::CSS_LIGHT_SLATE_GRAY, 2))
             .draw(target)?;
         Circle::with_center(self.knob_center(value), 9)
-            .into_styled(fill_style(SIM_YELLOW))
+            .into_styled(fill_style(Rgb565::CSS_YELLOW))
             .draw(target)?;
         Ok(())
     }
@@ -389,9 +383,9 @@ impl Button {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        let text_style = MonoTextStyle::new(&FONT_6X10, SIM_WHITE);
+        let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
         self.touch_rectangle
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+            .into_styled(stroke_style(Rgb565::CSS_LIGHT_SLATE_GRAY, 1))
             .draw(target)?;
         Text::with_baseline(
             self.label,
@@ -463,7 +457,7 @@ impl Icon {
                 touch_rectangle.top_left.y + touch_rectangle.size.height as i32 / 2,
             ),
         )
-        .into_styled(fill_style(GREEN))
+        .into_styled(fill_style(Rgb565::CSS_LIME))
         .draw(target)?;
         Ok(())
     }
@@ -475,7 +469,7 @@ impl Icon {
         let width = touch_rectangle.size.width as i32;
         let height = touch_rectangle.size.height as i32;
         touch_rectangle
-            .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+            .into_styled(stroke_style(Rgb565::CSS_LIGHT_SLATE_GRAY, 1))
             .draw(target)?;
         Rectangle::new(
             Point::new(
@@ -484,7 +478,7 @@ impl Icon {
             ),
             Size::new(scale_size(width, 2), scale_size(height, 10)),
         )
-        .into_styled(fill_style(SIM_WHITE))
+        .into_styled(fill_style(Rgb565::CSS_WHITE))
         .draw(target)?;
         Triangle::new(
             Point::new(
@@ -500,7 +494,7 @@ impl Icon {
                 touch_rectangle.top_left.y + height / 2,
             ),
         )
-        .into_styled(fill_style(GREEN))
+        .into_styled(fill_style(Rgb565::CSS_LIME))
         .draw(target)?;
         Ok(())
     }
