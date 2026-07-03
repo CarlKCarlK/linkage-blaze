@@ -37,7 +37,7 @@ enum MainError {
     InitDisplay,
     DrawCalibrationCross,
     FlushFrameBuffer,
-    FormatFpsReport,
+    FormatText,
 }
 
 impl From<device_envoy_esp::Error> for MainError {
@@ -79,7 +79,7 @@ impl From<CydError> for MainError {
 impl From<ArmatronError<CydError>> for MainError {
     fn from(error: ArmatronError<CydError>) -> Self {
         match error {
-            ArmatronError::FpsReport(_) => MainError::FormatFpsReport,
+            ArmatronError::Text(_) => MainError::FormatText,
             ArmatronError::Cyd(error) => error.into(),
         }
     }

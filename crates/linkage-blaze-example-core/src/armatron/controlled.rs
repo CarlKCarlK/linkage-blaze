@@ -18,7 +18,7 @@
 
 use embedded_graphics::{pixelcolor::Rgb565, primitives::PrimitiveStyle};
 
-use super::{GREEN, SIM_YELLOW, fill_style};
+use super::{GREEN, SIM_YELLOW};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlledKnob {
@@ -34,4 +34,8 @@ fn knob_fill_style(
     } else {
         fill_style(SIM_YELLOW)
     }
+}
+
+fn fill_style(color: super::Rgb888) -> PrimitiveStyle<Rgb565> {
+    PrimitiveStyle::with_fill(Rgb565::from(color))
 }

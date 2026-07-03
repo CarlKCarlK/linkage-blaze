@@ -314,7 +314,7 @@ impl<const N: usize> TextBox<N> {
         let mut text_box = Self::new(position, color);
         match text_box.text.push_str(text) {
             Ok(()) => {}
-            Err(()) => unreachable!("static text fits its TextBox capacity"),
+            Err(_) => unreachable!("static text fits its TextBox capacity"),
         }
         text_box
     }
