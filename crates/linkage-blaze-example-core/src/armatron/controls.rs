@@ -1,3 +1,5 @@
+use core::fmt::{self, Write};
+
 use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{Point, Size},
@@ -13,8 +15,20 @@ use super::{CYAN, GREEN, LIGHT_SLATE_GRAY, SIM_WHITE, SIM_YELLOW};
 
 // Target selector strip: previous button, target text, next button.
 const PREVIOUS_TARGET_BUTTON_RECTANGLE: Rectangle = rectangle(65, 17, 42, 14);
-pub(super) const TARGET_TEXT_POINT: Point = point(111, 19);
 const NEXT_TARGET_BUTTON_RECTANGLE: Rectangle = rectangle(181, 17, 42, 14);
+
+const TARGET_TEXT_BUFFER_LEN: usize = 11; // "target #255"
+const TARGET_TEXT_POINT: Point = point(111, 19);
+
+const DISTANCE_TEXT_BUFFER_LEN: usize = 14; // "distance 99.99"
+const DISTANCE_TEXT_POINT: Point = point(102, 5);
+
+const FPS_TEXT_BUFFER_LEN: usize = 8; // "99.0 fps"
+const FPS_TEXT_POINT: Point = point(272, 229);
+
+const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+const VERSION_TEXT_BUFFER_LEN: usize = VERSION_TEXT.len();
+const VERSION_TEXT_POINT: Point = point(218, 229);
 
 // Left-side camera controls: tall z tilt slider and short zoom/dolly slider.
 const TILT_SLIDER_LAYOUT: SliderLayout =
@@ -39,21 +53,31 @@ const PARAM_SLIDER_STEP_Y: i32 = 32;
 
 pub(super) const PARAM_SLIDER_COUNT: usize = 6;
 
-pub(super) struct ArmatronControls {
+pub(super) struct ArmatronUi {
+    // 3d view sliders
     tilt: SliderControl,
     dolly: SliderControl,
-    pub(super) previous_target: TextButton,
-    pub(super) next_target: TextButton,
+    xy_view: SliderControl,
+    // Target selector buttons and text
+    previous_target: TextButton,
+    target_text: TextBox<TARGET_TEXT_BUFFER_LEN>,
+    next_target: TextButton,
+    // Parameter sliders
+    param_sliders: [SliderControl; PARAM_SLIDER_COUNT],
+    // More buttons
     reverse_kinematics_run: ShapeButton,
     reverse_kinematics_step: ShapeButton,
     calibrate: TextButton,
-    param_sliders: [SliderControl; PARAM_SLIDER_COUNT],
-    xy_view: SliderControl,
+    // More text
+    distance_text: TextBox<DISTANCE_TEXT_BUFFER_LEN>,
+    fps_text: TextBox<FPS_TEXT_BUFFER_LEN>,
+    version_text: TextBox<VERSION_TEXT_BUFFER_LEN>,
+    // Touch input state
     active_control: Option<ActiveControl>,
     touch_cursor: Option<(f32, f32)>,
 }
 
-impl ArmatronControls {
+impl ArmatronUi {
     pub(super) fn new(
         xy_view: f32,
         tilt: f32,
@@ -80,6 +104,14 @@ impl ArmatronControls {
             xy_view: SliderControl::horizontal("x/y view", VIEW_SLIDER_LAYOUT, xy_view, 0.0, 1.0),
             active_control: None,
             touch_cursor: None,
+            target_text: TextBox::new(TARGET_TEXT_POINT, Rgb565::from(SIM_WHITE)),
+            distance_text: TextBox::new(DISTANCE_TEXT_POINT, Rgb565::from(SIM_WHITE)),
+            fps_text: TextBox::new(FPS_TEXT_POINT, Rgb565::from(LIGHT_SLATE_GRAY)),
+            version_text: TextBox::with_text(
+                VERSION_TEXT_POINT,
+                Rgb565::from(LIGHT_SLATE_GRAY),
+                VERSION_TEXT,
+            ),
         }
     }
 
@@ -109,6 +141,26 @@ impl ArmatronControls {
         self.param_sliders.each_ref().map(SliderControl::value)
     }
 
+    pub(super) fn previous_target_was_clicked(&self) -> bool {
+        self.previous_target.was_clicked()
+    }
+
+    pub(super) fn next_target_was_clicked(&self) -> bool {
+        self.next_target.was_clicked()
+    }
+
+    pub(super) fn set_target_text(&mut self, args: fmt::Arguments<'_>) -> Result<(), fmt::Error> {
+        self.target_text.set(args)
+    }
+
+    pub(super) fn set_distance_text(&mut self, args: fmt::Arguments<'_>) -> Result<(), fmt::Error> {
+        self.distance_text.set(args)
+    }
+
+    pub(super) fn set_fps_text(&mut self, args: fmt::Arguments<'_>) -> Result<(), fmt::Error> {
+        self.fps_text.set(args)
+    }
+
     pub(super) fn draw<D: DrawTarget<Color = Rgb565>>(
         &self,
         target: &mut D,
@@ -124,6 +176,10 @@ impl ArmatronControls {
             slider.draw(target)?;
         }
         self.xy_view.draw(target)?;
+        self.target_text.draw(target)?;
+        self.distance_text.draw(target)?;
+        self.fps_text.draw(target)?;
+        self.version_text.draw(target)?;
         Ok(())
     }
 
@@ -239,7 +295,48 @@ enum ActiveControl {
     XyView,
 }
 
-pub(super) struct TextButton {
+struct TextBox<const N: usize> {
+    position: Point,
+    text_style: MonoTextStyle<'static, Rgb565>,
+    text: heapless::String<N>,
+}
+
+impl<const N: usize> TextBox<N> {
+    fn new(position: Point, color: Rgb565) -> Self {
+        Self {
+            position,
+            text_style: MonoTextStyle::new(&FONT_6X10, color),
+            text: heapless::String::new(),
+        }
+    }
+
+    fn with_text(position: Point, color: Rgb565, text: &str) -> Self {
+        let mut text_box = Self::new(position, color);
+        match text_box.text.push_str(text) {
+            Ok(()) => {}
+            Err(()) => unreachable!("static text fits its TextBox capacity"),
+        }
+        text_box
+    }
+
+    fn set(&mut self, args: fmt::Arguments<'_>) -> Result<(), fmt::Error> {
+        self.text.clear();
+        self.text.write_fmt(args)
+    }
+
+    fn draw<D: DrawTarget<Color = Rgb565>>(&self, target: &mut D) -> Result<(), D::Error> {
+        Text::with_baseline(
+            self.text.as_str(),
+            self.position,
+            self.text_style,
+            Baseline::Top,
+        )
+        .draw(target)?;
+        Ok(())
+    }
+}
+
+struct TextButton {
     touch_rectangle: Rectangle,
     label: &'static str,
     label_position: Point,

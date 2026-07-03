@@ -11,20 +11,14 @@ mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
-use core::{
-    convert::Infallible,
-    fmt::{self, Write},
-};
+use core::{convert::Infallible, fmt};
 
 use embassy_time::Instant;
 use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{OriginDimensions, Point, Size},
-    mono_font::{MonoTextStyle, ascii::FONT_6X10},
     pixelcolor::{IntoStorage, Rgb565, WebColors},
     prelude::*,
-    primitives::PrimitiveStyle,
-    text::{Baseline, Text},
 };
 use linkage_blaze_core::{
     LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
@@ -36,7 +30,7 @@ use linkage_blaze_cyd_core::{
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use controls::{ArmatronControls, PARAM_SLIDER_COUNT, TARGET_TEXT_POINT};
+use controls::{ArmatronUi, PARAM_SLIDER_COUNT};
 
 use crate::infallible::InfallibleResultExt;
 
@@ -50,31 +44,7 @@ const BACKGROUND_565: Rgb565 = rgb565_from_rgb888_components(0, 0, 0); // black
 
 // ── Armatron state constants ─────────────────────────────────────────────────
 
-const TEXT_CHAR_WIDTH: i32 = 6;
-const DISTANCE_REPORT_WIDTH: i32 = 14 * TEXT_CHAR_WIDTH;
-const DISTANCE_REPORT_LEFT: i32 = ((SCREEN_WIDTH as i32 - DISTANCE_REPORT_WIDTH) / 2) - 16;
-const DISTANCE_REPORT_TOP: i32 = 5;
-const DISTANCE_TEXT_POINT: Point = Point::new(DISTANCE_REPORT_LEFT, DISTANCE_REPORT_TOP);
-const DISTANCE_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
-    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
-const TARGET_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
-    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
-const TEXT_BUFFER_LEN: usize = 14; // "distance 99.99", the longest of the status texts
-const FPS_TEXT_BUFFER_LEN: usize = 8;
-const FPS_REPORT_WIDTH: i32 = FPS_TEXT_BUFFER_LEN as i32 * TEXT_CHAR_WIDTH;
-const FPS_REPORT_LEFT: i32 = SCREEN_WIDTH as i32 - FPS_REPORT_WIDTH;
-const FPS_REPORT_TOP: i32 = SCREEN_HEIGHT as i32 - 11;
-const FPS_TEXT_POINT: Point = Point::new(FPS_REPORT_LEFT, FPS_REPORT_TOP);
-const FPS_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
-    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
 const FPS_TEXT_MAX_TENTHS: u32 = 990;
-const VERSION_TEXT: &str = concat!("v", env!("CARGO_PKG_VERSION"));
-const VERSION_REPORT_LEFT: i32 =
-    FPS_REPORT_LEFT - (VERSION_TEXT.len() as i32 * TEXT_CHAR_WIDTH) - TEXT_CHAR_WIDTH;
-const VERSION_REPORT_TOP: i32 = FPS_REPORT_TOP;
-const VERSION_TEXT_POINT: Point = Point::new(VERSION_REPORT_LEFT, VERSION_REPORT_TOP);
-const VERSION_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
-    MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_LIGHT_SLATE_GRAY);
 
 // ---- world / display constants ----
 const PIXELS_PER_UNIT: f32 = SCREEN_WIDTH as f32 / 16.0; // 16 world units span the screen width
@@ -170,7 +140,7 @@ where
     }
 
     // Set up state.
-    let mut controls = ArmatronControls::new(
+    let mut armatron_ui = ArmatronUi::new(
         params[XY_VIEW_PARAM_INDEX],
         params[TILT_PARAM_INDEX],
         params[DOLLY_PARAM_INDEX],
@@ -181,7 +151,6 @@ where
 
     // Set up buffers
     let mut frame = display.full_frame_mut();
-    let mut text_buf = heapless::String::<TEXT_BUFFER_LEN>::new();
 
     loop {
         // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
@@ -190,29 +159,29 @@ where
 
         // Update controls from the next touch event (if any).
         // todo It's weird this doesn't return an error of the right type already and needs to be converted
-        controls.set_event(touch.read().map_err(Error::Cyd)?);
+        armatron_ui.set_event(touch.read().map_err(Error::Cyd)?);
 
         // Update the main params from the controls.
-        linkage_params(&controls, &mut params);
+        linkage_params(&armatron_ui, &mut params);
 
         // Update the seed and target params if requested.
-        target_seed = update_target(&controls, target_seed, &mut params);
+        target_seed = update_target(&armatron_ui, target_seed, &mut params);
+
+        // Update the status text boxes.
+        previous_tick = update_fps_text(&mut armatron_ui, previous_tick)?;
+        update_text_info(&mut armatron_ui, target_seed, &params)?;
 
         // Draw the linkage (arm + target)
         for draw_item_3d in LINKAGE.draw_items_3d(&params) {
             draw_item_3d.project(&PROJECTION).draw(&mut frame);
         }
 
-        // Draw the controls
-        controls.draw(&mut frame).unwrap_infallible();
+        // Draw the controls and status text.
+        armatron_ui.draw(&mut frame).unwrap_infallible();
 
-        // Display FPS if requested and available.
-        previous_tick = draw_fps_text(&mut frame, &mut text_buf, previous_tick)?;
-
-        // Draw the target #, distance to target, and version text.
-        draw_text_info(&mut frame, &mut text_buf, target_seed, &params)?;
-
-        controls.draw_touch_cursor(&mut frame).unwrap_infallible();
+        armatron_ui
+            .draw_touch_cursor(&mut frame)
+            .unwrap_infallible();
 
         frame.flush().await.map_err(Error::Cyd)?;
     }
@@ -227,8 +196,8 @@ where
 /// coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
-    /// Formatting the FPS report failed.
-    FpsReport(fmt::Error),
+    /// Formatting UI text failed.
+    Text(fmt::Error),
     /// Reading touch events or flushing a frame failed.
     #[from(ignore)]
     Cyd(F),
@@ -316,11 +285,11 @@ impl Default for FrameBuffer {
 
 // ── Private helper functions ───────────────────────────────────────────────────
 
-fn linkage_params(controls: &ArmatronControls, params: &mut [f32; DOF]) {
-    params[XY_VIEW_PARAM_INDEX] = controls.xy_view();
-    params[TILT_PARAM_INDEX] = controls.tilt();
-    params[DOLLY_PARAM_INDEX] = controls.dolly();
-    let param_sliders = controls.param_sliders();
+fn linkage_params(armatron_ui: &ArmatronUi, params: &mut [f32; DOF]) {
+    params[XY_VIEW_PARAM_INDEX] = armatron_ui.xy_view();
+    params[TILT_PARAM_INDEX] = armatron_ui.tilt();
+    params[DOLLY_PARAM_INDEX] = armatron_ui.dolly();
+    let param_sliders = armatron_ui.param_sliders();
     for (slider_value, param_index) in param_sliders.into_iter().zip(ARM_PARAM_INDEXES) {
         params[param_index] = slider_value;
     }
@@ -329,10 +298,10 @@ fn linkage_params(controls: &ArmatronControls, params: &mut [f32; DOF]) {
 /// Advance `target_seed` if a target button was clicked, randomizing the target params to match.
 ///
 /// Returns the new `target_seed`, which is unchanged if neither button was clicked.
-fn update_target(controls: &ArmatronControls, target_seed: u8, params: &mut [f32; DOF]) -> u8 {
-    let target_seed = if controls.previous_target.was_clicked() {
+fn update_target(armatron_ui: &ArmatronUi, target_seed: u8, params: &mut [f32; DOF]) -> u8 {
+    let target_seed = if armatron_ui.previous_target_was_clicked() {
         target_seed.wrapping_sub(1)
-    } else if controls.next_target.was_clicked() {
+    } else if armatron_ui.next_target_was_clicked() {
         target_seed.wrapping_add(1)
     } else {
         return target_seed;
@@ -345,59 +314,27 @@ fn update_target(controls: &ArmatronControls, target_seed: u8, params: &mut [f32
     target_seed
 }
 
-/// Draw the target #, distance to target, and version text into `frame`.
-fn draw_text_info(
-    frame: &mut impl CydFrame,
-    text_buf: &mut heapless::String<TEXT_BUFFER_LEN>,
+/// Update the target # and distance-to-target status text.
+fn update_text_info(
+    armatron_ui: &mut ArmatronUi,
     target_seed: u8,
     params: &[f32; DOF],
 ) -> Result<(), fmt::Error> {
-    text_buf.clear();
-    write!(text_buf, "target #{target_seed}")?;
-    Text::with_baseline(
-        text_buf,
-        TARGET_TEXT_POINT,
-        TARGET_TEXT_STYLE,
-        Baseline::Top,
-    )
-    .draw(frame)
-    .unwrap_infallible();
-
     let distance_hundredths = round_to_u32(target_distance(params).clamp(0.0, 99.99) * 100.0);
-    text_buf.clear();
-    write!(
-        text_buf,
+    armatron_ui.set_target_text(format_args!("target #{target_seed}"))?;
+    armatron_ui.set_distance_text(format_args!(
         "distance {:02}.{:02}",
         distance_hundredths / 100,
         distance_hundredths % 100
-    )?;
-    Text::with_baseline(
-        text_buf,
-        DISTANCE_TEXT_POINT,
-        DISTANCE_TEXT_STYLE,
-        Baseline::Top,
-    )
-    .draw(frame)
-    .unwrap_infallible();
-
-    Text::with_baseline(
-        VERSION_TEXT,
-        VERSION_TEXT_POINT,
-        VERSION_TEXT_STYLE,
-        Baseline::Top,
-    )
-    .draw(frame)
-    .unwrap_infallible();
-
+    ))?;
     Ok(())
 }
 
-/// Draw the FPS report into `frame` if enabled and a previous tick is available.
+/// Update the FPS report if enabled and a previous tick is available.
 ///
 /// Returns the current tick, for the caller to store as the next `previous_tick`.
-fn draw_fps_text(
-    frame: &mut impl CydFrame,
-    text_buf: &mut heapless::String<TEXT_BUFFER_LEN>,
+fn update_fps_text(
+    armatron_ui: &mut ArmatronUi,
     previous_tick: Option<Instant>,
 ) -> Result<Option<Instant>, fmt::Error> {
     let current_tick = Instant::now();
@@ -405,11 +342,7 @@ fn draw_fps_text(
         && let Some(previous_tick) = previous_tick
         && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)
     {
-        text_buf.clear();
-        write!(text_buf, "{fps_whole:>2}.{fps_fraction} fps")?;
-        Text::with_baseline(text_buf, FPS_TEXT_POINT, FPS_TEXT_STYLE, Baseline::Top)
-            .draw(frame)
-            .unwrap_infallible();
+        armatron_ui.set_fps_text(format_args!("{fps_whole:>2}.{fps_fraction} fps"))?;
     }
     Ok(Some(current_tick))
 }
@@ -447,10 +380,6 @@ fn compute_target_distance(
 
 fn target_distance(params: &[f32; DOF]) -> f32 {
     compute_target_distance(ARM_TIP_LINKAGE, LINKAGE, params)
-}
-
-fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
-    PrimitiveStyle::with_fill(Rgb565::from(color))
 }
 
 fn distance(left: Vec3, right: Vec3) -> f32 {
