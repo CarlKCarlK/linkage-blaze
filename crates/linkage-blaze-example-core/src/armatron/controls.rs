@@ -11,50 +11,33 @@ use linkage_blaze_cyd_core::{SCREEN_WIDTH, TouchEvent};
 
 use super::{CYAN, GREEN, LIGHT_SLATE_GRAY, SIM_WHITE, SIM_YELLOW};
 
-const TILT_X: i32 = 16;
-const DOLLY_X: i32 = 42;
-const TILT_TOP: i32 = 24;
-const TILT_BOTTOM: i32 = 224;
-const DOLLY_TOP: i32 = 24;
-const DOLLY_BOTTOM: i32 = 74;
-const RK_CONTROL_TOP: i32 = 86;
-const RK_RUN_LEFT: i32 = 27;
-const RK_STEP_LEFT: i32 = 55;
-const RK_BUTTON_SIZE: i32 = 18;
-const SLIDER_LEFT: i32 = 230;
-const SLIDER_RIGHT: i32 = 312;
-const SLIDER_TRACK_LEFT: i32 = 230;
-const SLIDER_TOP: i32 = 24;
-const SLIDER_STEP: i32 = 32;
-const VIEW_SLIDER_LEFT: i32 = 40;
-const VIEW_SLIDER_RIGHT: i32 = 252;
-const VIEW_SLIDER_Y: i32 = 226;
-const CALIBRATE_BUTTON_LEFT: i32 = 288;
-const CALIBRATE_BUTTON_TOP: i32 = 212;
-const CALIBRATE_BUTTON_WIDTH: u32 = 30;
-const CALIBRATE_BUTTON_HEIGHT: u32 = 14;
-const CONTROL_TEXT_CHAR_WIDTH: i32 = 6;
-pub(super) const TARGET_CONTROL_TOP: i32 = 17;
-const TARGET_BUTTON_WIDTH: u32 = 42;
-const TARGET_BUTTON_HEIGHT: u32 = 14;
-const TARGET_BUTTON_LABEL_WIDTH: i32 = 4 * CONTROL_TEXT_CHAR_WIDTH;
-const TARGET_LABEL_WIDTH: i32 = 11 * CONTROL_TEXT_CHAR_WIDTH;
-const TARGET_CONTROL_GAP: i32 = 4;
-const TARGET_CONTROL_WIDTH: i32 =
-    TARGET_BUTTON_WIDTH as i32 * 2 + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP * 2;
-const PREV_BUTTON_LEFT: i32 = ((SCREEN_WIDTH as i32 - TARGET_CONTROL_WIDTH) / 2) - 16;
-pub(super) const TARGET_LABEL_LEFT: i32 =
-    PREV_BUTTON_LEFT + TARGET_BUTTON_WIDTH as i32 + TARGET_CONTROL_GAP;
-const NEXT_BUTTON_LEFT: i32 = TARGET_LABEL_LEFT + TARGET_LABEL_WIDTH + TARGET_CONTROL_GAP;
+// Target selector strip: previous button, target text, next button.
+const PREVIOUS_TARGET_BUTTON_RECTANGLE: Rectangle = rectangle(65, 17, 42, 14);
+pub(super) const TARGET_TEXT_POINT: Point = point(111, 19);
+const NEXT_TARGET_BUTTON_RECTANGLE: Rectangle = rectangle(181, 17, 42, 14);
 
-pub(super) const EXTRA_SLIDER_COUNT: usize = 6;
+// Left-side camera controls: tall z tilt slider and short zoom/dolly slider.
+const TILT_SLIDER_LAYOUT: SliderLayout =
+    SliderLayout::new(rectangle(2, 24, 29, 201), rectangle(16, 24, 1, 201));
+const DOLLY_SLIDER_LAYOUT: SliderLayout =
+    SliderLayout::new(rectangle(28, 24, 29, 51), rectangle(42, 24, 1, 51));
 
-pub(super) struct ArmatronControlValues {
-    pub(super) xy_view: f32,
-    pub(super) tilt: f32,
-    pub(super) dolly: f32,
-    pub(super) extra_sliders: [f32; EXTRA_SLIDER_COUNT],
-}
+// Bottom x/y view slider spanning under the arm display.
+const VIEW_SLIDER_LAYOUT: SliderLayout =
+    SliderLayout::new(rectangle(40, 212, 213, 29), rectangle(40, 226, 213, 1));
+
+// Reverse-kinematics buttons below the left-side camera controls.
+const RK_RUN_BUTTON_RECTANGLE: Rectangle = rectangle(27, 86, 18, 18);
+const RK_STEP_BUTTON_RECTANGLE: Rectangle = rectangle(55, 86, 18, 18);
+
+// Tiny calibration button in the lower-right corner.
+const CALIBRATE_BUTTON_RECTANGLE: Rectangle = rectangle(288, 212, 30, 14);
+
+// Right-side parameter sliders, stacked vertically at a fixed row spacing.
+const PARAM_SLIDER_TOP: i32 = 24;
+const PARAM_SLIDER_STEP_Y: i32 = 32;
+
+pub(super) const PARAM_SLIDER_COUNT: usize = 6;
 
 pub(super) struct ArmatronControls {
     tilt: SliderControl,
@@ -64,7 +47,7 @@ pub(super) struct ArmatronControls {
     reverse_kinematics_run: ShapeButton,
     reverse_kinematics_step: ShapeButton,
     calibrate: TextButton,
-    extra_sliders: [SliderControl; EXTRA_SLIDER_COUNT],
+    param_sliders: [SliderControl; PARAM_SLIDER_COUNT],
     xy_view: SliderControl,
     active_control: Option<ActiveControl>,
     touch_cursor: Option<(f32, f32)>,
@@ -72,77 +55,29 @@ pub(super) struct ArmatronControls {
 
 impl ArmatronControls {
     pub(super) fn new(
-        control_values: ArmatronControlValues,
-        extra_slider_labels: [&'static str; EXTRA_SLIDER_COUNT],
+        xy_view: f32,
+        tilt: f32,
+        dolly: f32,
+        param_sliders: [f32; PARAM_SLIDER_COUNT],
+        param_slider_labels: [&'static str; PARAM_SLIDER_COUNT],
     ) -> Self {
         Self {
-            tilt: SliderControl::vertical(
-                "z",
-                Rectangle::new(Point::new(TILT_X - 14, TILT_TOP), Size::new(29, 201)),
-                Point::new(TILT_X, TILT_TOP),
-                Point::new(TILT_X, TILT_BOTTOM),
-                control_values.tilt,
-                true,
-            ),
-            dolly: SliderControl::vertical(
-                "zoom",
-                Rectangle::new(Point::new(DOLLY_X - 14, DOLLY_TOP), Size::new(29, 51)),
-                Point::new(DOLLY_X, DOLLY_TOP),
-                Point::new(DOLLY_X, DOLLY_BOTTOM),
-                control_values.dolly,
-                false,
-            ),
-            previous_target: TextButton::new(
-                Rectangle::new(
-                    Point::new(PREV_BUTTON_LEFT, TARGET_CONTROL_TOP),
-                    Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
-                ),
-                "prev",
-                Point::new(
-                    PREV_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
-                    TARGET_CONTROL_TOP + 2,
-                ),
-            ),
-            next_target: TextButton::new(
-                Rectangle::new(
-                    Point::new(NEXT_BUTTON_LEFT, TARGET_CONTROL_TOP),
-                    Size::new(TARGET_BUTTON_WIDTH, TARGET_BUTTON_HEIGHT),
-                ),
-                "next",
-                Point::new(
-                    NEXT_BUTTON_LEFT + (TARGET_BUTTON_WIDTH as i32 - TARGET_BUTTON_LABEL_WIDTH) / 2,
-                    TARGET_CONTROL_TOP + 2,
-                ),
-            ),
+            tilt: SliderControl::vertical("z", TILT_SLIDER_LAYOUT, tilt, 1.0, 0.0),
+            dolly: SliderControl::vertical("zoom", DOLLY_SLIDER_LAYOUT, dolly, 0.0, 1.0),
+            previous_target: TextButton::new(PREVIOUS_TARGET_BUTTON_RECTANGLE, "prev"),
+            next_target: TextButton::new(NEXT_TARGET_BUTTON_RECTANGLE, "next"),
             reverse_kinematics_run: ShapeButton::new(ShapeButtonKind::ReverseKinematicsRun),
             reverse_kinematics_step: ShapeButton::new(ShapeButtonKind::ReverseKinematicsStep),
-            calibrate: TextButton::new(
-                Rectangle::new(
-                    Point::new(CALIBRATE_BUTTON_LEFT, CALIBRATE_BUTTON_TOP),
-                    Size::new(CALIBRATE_BUTTON_WIDTH, CALIBRATE_BUTTON_HEIGHT),
-                ),
-                "cal",
-                Point::new(CALIBRATE_BUTTON_LEFT + 6, CALIBRATE_BUTTON_TOP + 2),
-            ),
-            extra_sliders: [
-                Self::slider(0, extra_slider_labels[0], control_values.extra_sliders[0]),
-                Self::slider(1, extra_slider_labels[1], control_values.extra_sliders[1]),
-                Self::slider(2, extra_slider_labels[2], control_values.extra_sliders[2]),
-                Self::slider(3, extra_slider_labels[3], control_values.extra_sliders[3]),
-                Self::slider(4, extra_slider_labels[4], control_values.extra_sliders[4]),
-                Self::slider(5, extra_slider_labels[5], control_values.extra_sliders[5]),
+            calibrate: TextButton::new(CALIBRATE_BUTTON_RECTANGLE, "cal"),
+            param_sliders: [
+                Self::param_slider(0, param_slider_labels[0], param_sliders[0]),
+                Self::param_slider(1, param_slider_labels[1], param_sliders[1]),
+                Self::param_slider(2, param_slider_labels[2], param_sliders[2]),
+                Self::param_slider(3, param_slider_labels[3], param_sliders[3]),
+                Self::param_slider(4, param_slider_labels[4], param_sliders[4]),
+                Self::param_slider(5, param_slider_labels[5], param_sliders[5]),
             ],
-            xy_view: SliderControl::horizontal(
-                "x/y view",
-                Rectangle::new(
-                    Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y - 14),
-                    Size::new((VIEW_SLIDER_RIGHT - VIEW_SLIDER_LEFT + 1) as u32, 29),
-                ),
-                Point::new(VIEW_SLIDER_LEFT, VIEW_SLIDER_Y),
-                Point::new(VIEW_SLIDER_RIGHT, VIEW_SLIDER_Y),
-                control_values.xy_view,
-                false,
-            ),
+            xy_view: SliderControl::horizontal("x/y view", VIEW_SLIDER_LAYOUT, xy_view, 0.0, 1.0),
             active_control: None,
             touch_cursor: None,
         }
@@ -170,28 +105,8 @@ impl ArmatronControls {
         self.xy_view.value()
     }
 
-    pub(super) fn slider0(&self) -> f32 {
-        self.extra_sliders[0].value()
-    }
-
-    pub(super) fn slider1(&self) -> f32 {
-        self.extra_sliders[1].value()
-    }
-
-    pub(super) fn slider2(&self) -> f32 {
-        self.extra_sliders[2].value()
-    }
-
-    pub(super) fn slider3(&self) -> f32 {
-        self.extra_sliders[3].value()
-    }
-
-    pub(super) fn slider4(&self) -> f32 {
-        self.extra_sliders[4].value()
-    }
-
-    pub(super) fn slider5(&self) -> f32 {
-        self.extra_sliders[5].value()
+    pub(super) fn param_sliders(&self) -> [f32; PARAM_SLIDER_COUNT] {
+        self.param_sliders.each_ref().map(SliderControl::value)
     }
 
     pub(super) fn draw<D: DrawTarget<Color = Rgb565>>(
@@ -205,7 +120,7 @@ impl ArmatronControls {
         self.calibrate.draw(target)?;
         self.previous_target.draw(target)?;
         self.next_target.draw(target)?;
-        for slider in &self.extra_sliders {
+        for slider in &self.param_sliders {
             slider.draw(target)?;
         }
         self.xy_view.draw(target)?;
@@ -228,18 +143,17 @@ impl ArmatronControls {
         Ok(())
     }
 
-    fn slider(slider_offset: usize, label: &'static str, value: f32) -> SliderControl {
-        let slider_y = SLIDER_TOP + slider_offset as i32 * SLIDER_STEP;
+    fn param_slider(slider_offset: usize, label: &'static str, value: f32) -> SliderControl {
+        let slider_y = PARAM_SLIDER_TOP + slider_offset as i32 * PARAM_SLIDER_STEP_Y;
         SliderControl::horizontal(
             label,
-            Rectangle::new(
-                Point::new(SLIDER_LEFT, slider_y - 13),
-                Size::new((SCREEN_WIDTH as i32 - SLIDER_LEFT) as u32, 27),
+            SliderLayout::new(
+                rectangle(230, slider_y - 13, (SCREEN_WIDTH - 230) as u32, 27),
+                rectangle(230, slider_y + 8, 83, 1),
             ),
-            Point::new(SLIDER_TRACK_LEFT, slider_y + 8),
-            Point::new(SLIDER_RIGHT, slider_y + 8),
             value,
-            false,
+            0.0,
+            1.0,
         )
     }
 
@@ -296,7 +210,7 @@ impl ArmatronControls {
         if self.xy_view.contains(touch_point) {
             return Some(ActiveControl::XyView);
         }
-        for (slider_offset, slider) in self.extra_sliders.iter().enumerate() {
+        for (slider_offset, slider) in self.param_sliders.iter().enumerate() {
             if slider.contains(touch_point) {
                 return Some(ActiveControl::Slider(slider_offset));
             }
@@ -310,7 +224,7 @@ impl ArmatronControls {
             Some(ActiveControl::Dolly) => self.dolly.set_value_from_touch(x, y),
             Some(ActiveControl::XyView) => self.xy_view.set_value_from_touch(x, y),
             Some(ActiveControl::Slider(slider_offset)) => {
-                self.extra_sliders[slider_offset].set_value_from_touch(x, y);
+                self.param_sliders[slider_offset].set_value_from_touch(x, y);
             }
             None => {}
         }
@@ -334,11 +248,11 @@ pub(super) struct TextButton {
 }
 
 impl TextButton {
-    fn new(touch_rectangle: Rectangle, label: &'static str, label_position: Point) -> Self {
+    fn new(touch_rectangle: Rectangle, label: &'static str) -> Self {
         Self {
             touch_rectangle,
             label,
-            label_position,
+            label_position: centered_text_position(touch_rectangle, label),
             is_pressed: false,
             was_clicked: false,
         }
@@ -406,14 +320,8 @@ impl ShapeButton {
 
     fn touch_rectangle(&self) -> Rectangle {
         match self.kind {
-            ShapeButtonKind::ReverseKinematicsRun => Rectangle::new(
-                Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
-                Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
-            ),
-            ShapeButtonKind::ReverseKinematicsStep => Rectangle::new(
-                Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
-                Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
-            ),
+            ShapeButtonKind::ReverseKinematicsRun => RK_RUN_BUTTON_RECTANGLE,
+            ShapeButtonKind::ReverseKinematicsStep => RK_STEP_BUTTON_RECTANGLE,
         }
     }
 
@@ -431,6 +339,41 @@ enum ShapeButtonKind {
     ReverseKinematicsStep,
 }
 
+#[derive(Clone, Copy)]
+struct SliderLayout {
+    // Wider hit target for touch input.
+    touch_rectangle: Rectangle,
+    // Thin visual track used for drawing and value interpolation.
+    track_rectangle: Rectangle,
+}
+
+impl SliderLayout {
+    const fn new(touch_rectangle: Rectangle, track_rectangle: Rectangle) -> Self {
+        Self {
+            touch_rectangle,
+            track_rectangle,
+        }
+    }
+
+    fn track_start(self) -> Point {
+        self.track_rectangle.top_left
+    }
+
+    fn horizontal_track_end(self) -> Point {
+        Point::new(
+            self.track_rectangle.top_left.x + self.track_rectangle.size.width as i32 - 1,
+            self.track_rectangle.top_left.y,
+        )
+    }
+
+    fn vertical_track_end(self) -> Point {
+        Point::new(
+            self.track_rectangle.top_left.x,
+            self.track_rectangle.top_left.y + self.track_rectangle.size.height as i32 - 1,
+        )
+    }
+}
+
 struct SliderControl {
     label: &'static str,
     touch_rectangle: Rectangle,
@@ -439,47 +382,50 @@ struct SliderControl {
     track_end: Point,
     orientation: SliderOrientation,
     value: f32,
-    inverted: bool,
+    start: f32,
+    last: f32,
 }
 
 impl SliderControl {
     fn horizontal(
         label: &'static str,
-        touch_rectangle: Rectangle,
-        track_start: Point,
-        track_end: Point,
+        slider_layout: SliderLayout,
         value: f32,
-        inverted: bool,
+        start: f32,
+        last: f32,
     ) -> Self {
+        let track_start = slider_layout.track_start();
         Self {
             label,
-            touch_rectangle,
+            touch_rectangle: slider_layout.touch_rectangle,
             label_position: Point::new(track_start.x, track_start.y - 15),
             track_start,
-            track_end,
+            track_end: slider_layout.horizontal_track_end(),
             orientation: SliderOrientation::Horizontal,
             value,
-            inverted,
+            start,
+            last,
         }
     }
 
     fn vertical(
         label: &'static str,
-        touch_rectangle: Rectangle,
-        track_start: Point,
-        track_end: Point,
+        slider_layout: SliderLayout,
         value: f32,
-        inverted: bool,
+        start: f32,
+        last: f32,
     ) -> Self {
+        let track_start = slider_layout.track_start();
         Self {
             label,
-            touch_rectangle,
+            touch_rectangle: slider_layout.touch_rectangle,
             label_position: Point::new(track_start.x - 5, 5),
             track_start,
-            track_end,
+            track_end: slider_layout.vertical_track_end(),
             orientation: SliderOrientation::Vertical,
             value,
-            inverted,
+            start,
+            last,
         }
     }
 
@@ -492,7 +438,7 @@ impl SliderControl {
     }
 
     fn set_value_from_touch(&mut self, x: f32, y: f32) {
-        let raw_value = match self.orientation {
+        let slider_position = match self.orientation {
             SliderOrientation::Horizontal => {
                 (x - self.track_start.x as f32) / (self.track_end.x - self.track_start.x) as f32
             }
@@ -500,12 +446,8 @@ impl SliderControl {
                 (y - self.track_start.y as f32) / (self.track_end.y - self.track_start.y) as f32
             }
         };
-        self.value = if self.inverted {
-            1.0 - raw_value
-        } else {
-            raw_value
-        }
-        .clamp(0.0, 1.0);
+        let slider_position = slider_position.clamp(0.0, 1.0);
+        self.value = self.start + (self.last - self.start) * slider_position;
     }
 
     fn draw<D: DrawTarget<Color = Rgb565>>(&self, target: &mut D) -> Result<(), D::Error> {
@@ -522,11 +464,7 @@ impl SliderControl {
     }
 
     fn knob_center(&self) -> Point {
-        let display_value = if self.inverted {
-            1.0 - self.value
-        } else {
-            self.value
-        };
+        let display_value = (self.value - self.start) / (self.last - self.start);
         match self.orientation {
             SliderOrientation::Horizontal => Point::new(
                 self.track_start.x
@@ -552,11 +490,14 @@ fn draw_reverse_kinematics_run_button<D: DrawTarget<Color = Rgb565>>(
     buffer: &mut D,
 ) -> Result<(), D::Error> {
     Triangle::new(
-        Point::new(RK_RUN_LEFT, RK_CONTROL_TOP),
-        Point::new(RK_RUN_LEFT, RK_CONTROL_TOP + RK_BUTTON_SIZE),
+        RK_RUN_BUTTON_RECTANGLE.top_left,
         Point::new(
-            RK_RUN_LEFT + RK_BUTTON_SIZE,
-            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+            RK_RUN_BUTTON_RECTANGLE.top_left.x,
+            RK_RUN_BUTTON_RECTANGLE.top_left.y + RK_RUN_BUTTON_RECTANGLE.size.height as i32,
+        ),
+        Point::new(
+            RK_RUN_BUTTON_RECTANGLE.top_left.x + RK_RUN_BUTTON_RECTANGLE.size.width as i32,
+            RK_RUN_BUTTON_RECTANGLE.top_left.y + RK_RUN_BUTTON_RECTANGLE.size.height as i32 / 2,
         ),
     )
     .into_styled(fill_style(GREEN))
@@ -567,27 +508,31 @@ fn draw_reverse_kinematics_run_button<D: DrawTarget<Color = Rgb565>>(
 fn draw_reverse_kinematics_step_button<D: DrawTarget<Color = Rgb565>>(
     buffer: &mut D,
 ) -> Result<(), D::Error> {
-    Rectangle::new(
-        Point::new(RK_STEP_LEFT, RK_CONTROL_TOP),
-        Size::new(RK_BUTTON_SIZE as u32, RK_BUTTON_SIZE as u32),
-    )
-    .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
-    .draw(buffer)?;
+    RK_STEP_BUTTON_RECTANGLE
+        .into_styled(stroke_style(LIGHT_SLATE_GRAY, 1))
+        .draw(buffer)?;
     Rectangle::new(
         Point::new(
-            RK_STEP_LEFT + RK_BUTTON_SIZE - 5,
-            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2 - 5,
+            RK_STEP_BUTTON_RECTANGLE.top_left.x + RK_STEP_BUTTON_RECTANGLE.size.width as i32 - 5,
+            RK_STEP_BUTTON_RECTANGLE.top_left.y + RK_STEP_BUTTON_RECTANGLE.size.height as i32 / 2
+                - 5,
         ),
         Size::new(2, 10),
     )
     .into_styled(fill_style(SIM_WHITE))
     .draw(buffer)?;
     Triangle::new(
-        Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + 4),
-        Point::new(RK_STEP_LEFT + 3, RK_CONTROL_TOP + RK_BUTTON_SIZE - 4),
         Point::new(
-            RK_STEP_LEFT + RK_BUTTON_SIZE - 7,
-            RK_CONTROL_TOP + RK_BUTTON_SIZE / 2,
+            RK_STEP_BUTTON_RECTANGLE.top_left.x + 3,
+            RK_STEP_BUTTON_RECTANGLE.top_left.y + 4,
+        ),
+        Point::new(
+            RK_STEP_BUTTON_RECTANGLE.top_left.x + 3,
+            RK_STEP_BUTTON_RECTANGLE.top_left.y + RK_STEP_BUTTON_RECTANGLE.size.height as i32 - 4,
+        ),
+        Point::new(
+            RK_STEP_BUTTON_RECTANGLE.top_left.x + RK_STEP_BUTTON_RECTANGLE.size.width as i32 - 7,
+            RK_STEP_BUTTON_RECTANGLE.top_left.y + RK_STEP_BUTTON_RECTANGLE.size.height as i32 / 2,
         ),
     )
     .into_styled(fill_style(GREEN))
@@ -601,6 +546,22 @@ fn fill_style(color: super::Rgb888) -> PrimitiveStyle<Rgb565> {
 
 fn stroke_style(color: super::Rgb888, stroke_width: u32) -> PrimitiveStyle<Rgb565> {
     PrimitiveStyle::with_stroke(Rgb565::from(color), stroke_width)
+}
+
+fn centered_text_position(touch_rectangle: Rectangle, label: &str) -> Point {
+    let label_width = label.len() as i32 * 6;
+    Point::new(
+        touch_rectangle.top_left.x + (touch_rectangle.size.width as i32 - label_width) / 2,
+        touch_rectangle.top_left.y + 2,
+    )
+}
+
+const fn point(x: i32, y: i32) -> Point {
+    Point::new(x, y)
+}
+
+const fn rectangle(x: i32, y: i32, width: u32, height: u32) -> Rectangle {
+    Rectangle::new(point(x, y), Size::new(width, height))
 }
 
 fn round_to_i32(value: f32) -> i32 {

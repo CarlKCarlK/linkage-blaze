@@ -11,7 +11,10 @@ mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
-use core::{convert::Infallible, fmt::Write};
+use core::{
+    convert::Infallible,
+    fmt::{self, Write},
+};
 
 use embassy_time::Instant;
 use embedded_graphics::{
@@ -33,10 +36,7 @@ use linkage_blaze_cyd_core::{
 use nanorand::{Rng, WyRand};
 use static_cell::StaticCell;
 
-use controls::{
-    ArmatronControlValues, ArmatronControls, EXTRA_SLIDER_COUNT, TARGET_CONTROL_TOP,
-    TARGET_LABEL_LEFT,
-};
+use controls::{ArmatronControls, PARAM_SLIDER_COUNT, TARGET_TEXT_POINT};
 
 use crate::infallible::InfallibleResultExt;
 
@@ -57,7 +57,6 @@ const DISTANCE_REPORT_TOP: i32 = 5;
 const DISTANCE_TEXT_POINT: Point = Point::new(DISTANCE_REPORT_LEFT, DISTANCE_REPORT_TOP);
 const DISTANCE_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
     MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
-const TARGET_TEXT_POINT: Point = Point::new(TARGET_LABEL_LEFT, TARGET_CONTROL_TOP + 2);
 const TARGET_TEXT_STYLE: MonoTextStyle<'static, Rgb565> =
     MonoTextStyle::new(&FONT_6X10, Rgb565::CSS_WHITE);
 const TEXT_BUFFER_LEN: usize = 14; // "distance 99.99", the longest of the status texts
@@ -85,7 +84,7 @@ const TARGET_PARAM_START: usize = 9;
 const XY_VIEW_PARAM_NAME: &str = "x/y view";
 const TILT_PARAM_NAME: &str = "z";
 const DOLLY_PARAM_NAME: &str = "zoom";
-const ARM_PARAM_NAMES: [&str; EXTRA_SLIDER_COUNT] = [
+const ARM_PARAM_NAMES: [&str; PARAM_SLIDER_COUNT] = [
     "raise hand",
     "bend elbow",
     "close hand",
@@ -128,7 +127,7 @@ const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
 const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_PARAM_NAME, 0);
 const TILT_PARAM_INDEX: usize = LINKAGE.param_index(TILT_PARAM_NAME, 0);
 const DOLLY_PARAM_INDEX: usize = LINKAGE.param_index(DOLLY_PARAM_NAME, 0);
-const ARM_PARAM_INDEXES: [usize; EXTRA_SLIDER_COUNT] = [
+const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = [
     LINKAGE.param_index(ARM_PARAM_NAMES[0], 0),
     LINKAGE.param_index(ARM_PARAM_NAMES[1], 0),
     LINKAGE.param_index(ARM_PARAM_NAMES[2], 0),
@@ -172,12 +171,10 @@ where
 
     // Set up state.
     let mut controls = ArmatronControls::new(
-        ArmatronControlValues {
-            xy_view: params[XY_VIEW_PARAM_INDEX],
-            tilt: params[TILT_PARAM_INDEX],
-            dolly: params[DOLLY_PARAM_INDEX],
-            extra_sliders: ARM_PARAM_INDEXES.map(|param_index| params[param_index]),
-        },
+        params[XY_VIEW_PARAM_INDEX],
+        params[TILT_PARAM_INDEX],
+        params[DOLLY_PARAM_INDEX],
+        ARM_PARAM_INDEXES.map(|param_index| params[param_index]),
         ARM_PARAM_NAMES,
     );
     let mut previous_tick = None;
@@ -223,7 +220,7 @@ where
 
 /// Error from the generic armatron loop, generic over the CYD device error `F`.
 ///
-/// Local errors such as [`core::fmt::Error`] get a derived `From`, so they
+/// Local errors such as [`fmt::Error`] get a derived `From`, so they
 /// propagate with a plain `?`. The CYD device error `F` is the one exception:
 /// it is converted explicitly with `.map_err(Error::Cyd)` at the call site,
 /// because a blanket `From<F>` would overlap with those concrete `From`s under
@@ -231,7 +228,7 @@ where
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Formatting the FPS report failed.
-    FpsReport(core::fmt::Error),
+    FpsReport(fmt::Error),
     /// Reading touch events or flushing a frame failed.
     #[from(ignore)]
     Cyd(F),
@@ -323,12 +320,10 @@ fn linkage_params(controls: &ArmatronControls, params: &mut [f32; DOF]) {
     params[XY_VIEW_PARAM_INDEX] = controls.xy_view();
     params[TILT_PARAM_INDEX] = controls.tilt();
     params[DOLLY_PARAM_INDEX] = controls.dolly();
-    params[ARM_PARAM_INDEXES[0]] = controls.slider0();
-    params[ARM_PARAM_INDEXES[1]] = controls.slider1();
-    params[ARM_PARAM_INDEXES[2]] = controls.slider2();
-    params[ARM_PARAM_INDEXES[3]] = controls.slider3();
-    params[ARM_PARAM_INDEXES[4]] = controls.slider4();
-    params[ARM_PARAM_INDEXES[5]] = controls.slider5();
+    let param_sliders = controls.param_sliders();
+    for (slider_value, param_index) in param_sliders.into_iter().zip(ARM_PARAM_INDEXES) {
+        params[param_index] = slider_value;
+    }
 }
 
 /// Advance `target_seed` if a target button was clicked, randomizing the target params to match.
@@ -356,12 +351,17 @@ fn draw_text_info(
     text_buf: &mut heapless::String<TEXT_BUFFER_LEN>,
     target_seed: u8,
     params: &[f32; DOF],
-) -> Result<(), core::fmt::Error> {
+) -> Result<(), fmt::Error> {
     text_buf.clear();
     write!(text_buf, "target #{target_seed}")?;
-    Text::with_baseline(text_buf, TARGET_TEXT_POINT, TARGET_TEXT_STYLE, Baseline::Top)
-        .draw(frame)
-        .unwrap_infallible();
+    Text::with_baseline(
+        text_buf,
+        TARGET_TEXT_POINT,
+        TARGET_TEXT_STYLE,
+        Baseline::Top,
+    )
+    .draw(frame)
+    .unwrap_infallible();
 
     let distance_hundredths = round_to_u32(target_distance(params).clamp(0.0, 99.99) * 100.0);
     text_buf.clear();
@@ -399,7 +399,7 @@ fn draw_fps_text(
     frame: &mut impl CydFrame,
     text_buf: &mut heapless::String<TEXT_BUFFER_LEN>,
     previous_tick: Option<Instant>,
-) -> Result<Option<Instant>, core::fmt::Error> {
+) -> Result<Option<Instant>, fmt::Error> {
     let current_tick = Instant::now();
     if SHOW_FPS_TEXT
         && let Some(previous_tick) = previous_tick
