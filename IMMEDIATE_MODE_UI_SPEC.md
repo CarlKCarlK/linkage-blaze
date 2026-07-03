@@ -453,25 +453,25 @@ Make `controls.rs` read as a layout description with no redundant numbers.
 
 ## Phase 4 — Polish and article prep
 
-- [ ] impl — `centered_text_position` derives glyph width from
+- [x] impl — `centered_text_position` derives glyph width from
       `FONT_6X10.character_size` instead of the hardcoded 6.
-  - [ ] verify
-- [ ] impl — Sweep `ui.rs` + `controls.rs` + `main.rs` doc comments for
+  - [x] verify
+- [x] impl — Sweep `ui.rs` + `controls.rs` + `main.rs` doc comments for
       accuracy; ensure `ui` module docs read as the article's design section
       (they can be its first draft).
-  - [ ] verify
-- [ ] impl — Review surviving `todo` comments: relocate any still attached to
+  - [x] verify
+- [x] impl — Review surviving `todo` comments: relocate any still attached to
       moved code; append `(may no longer apply)` where the refactor plausibly
       resolved them. Do not delete any.
-  - [ ] verify
-- [ ] impl — Record final metrics below: line counts of `ui.rs`,
+  - [x] verify
+- [x] impl — Record final metrics below: line counts of `ui.rs`,
       `controls.rs`, `main.rs`, and "places touched to add one widget"
       (target: 2 — one `static` spec, one loop call).
-  - [ ] verify
+  - [x] verify
 
 **PHASE 4 GATE:**
 
-- [ ] `just check-all` passes.
+- [x] `just check-all` passes.
 - [ ] Final `just run-armatron-wasm` walkthrough of the phase-2 checklist.
 - [ ] Suggest a commit message; human commits.
 
@@ -479,7 +479,7 @@ Make `controls.rs` read as a layout description with no redundant numbers.
 
 | Measure | Before | After |
 | --- | --- | --- |
-| `controls.rs` lines | 667 | |
-| `main.rs` lines | 398 | |
-| `ui.rs` lines | — | |
-| Places touched to add one widget | 7 | |
+| `controls.rs` lines | 667 | 62 |
+| `main.rs` lines | 398 | 377 |
+| `ui.rs` lines | — | 593 |
+| Places touched to add one widget | 7 | 2 |

@@ -2,7 +2,7 @@
 //!
 //! The device-agnostic game loop lives here.
 //!
-//! The generic loop updates the armatron state, redraws every frame, and
+//! The generic loop redraws every frame, updates immediate-mode controls, and
 //! flushes frames through the [`Cyd`](linkage_blaze_cyd_core::Cyd) boundary.
 
 pub mod calibration;

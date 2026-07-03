@@ -1,3 +1,5 @@
+//! Immediate-mode layout specs for the armatron controls.
+
 use embedded_graphics::{
     geometry::{Point, Size},
     pixelcolor::{Rgb888, WebColors},

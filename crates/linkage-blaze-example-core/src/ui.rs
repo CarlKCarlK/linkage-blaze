@@ -11,13 +11,13 @@
 //! duplicated at each use site.
 //!
 //! Widgets update state and draw in the same call, so call order is draw order.
-//! That means apps typically render their scene first, then call widgets on
-//! top; scene changes caused by this frame's input become visible on the next
-//! frame.
+//! Apps typically render their main scene first, then call widgets on top;
+//! scene changes caused by this frame's input become visible on the next frame.
 //!
 //! Buttons fire on touch-down inside their rectangle. This matches resistive
 //! touchscreen interaction and intentionally does not implement a press-cancel
-//! gesture.
+//! gesture. A touch-down is consumed by the first widget, in call order, whose
+//! touch rectangle contains it.
 //!
 //! ```rust,no_run
 //! # use embedded_graphics::{
@@ -539,7 +539,7 @@ pub enum UiError<D> {
 }
 
 fn centered_text_position(touch_rectangle: Rectangle, label: &str) -> Point {
-    let label_width = label.len() as i32 * 6;
+    let label_width = label.len() as i32 * FONT_6X10.character_size.width as i32;
     Point::new(
         touch_rectangle.top_left.x + (touch_rectangle.size.width as i32 - label_width) / 2,
         touch_rectangle.top_left.y + 2,
