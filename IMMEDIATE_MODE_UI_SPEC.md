@@ -36,12 +36,12 @@ one phase per session.
 
 For article metrics, record these before starting:
 
-- [ ] impl — Record baseline: `controls.rs` line count (667), `main.rs` line
+- [x] impl — Record baseline: `controls.rs` line count (667), `main.rs` line
       count (398), and "places touched to add one widget" (7: struct field,
       `new()`, `begin_frame()`, `handle_touch_down/up`, `control_at`/
       `ActiveControl`, `draw()`, getter on `ArmatronUi`). Save the numbers at
       the bottom of this file under "Metrics".
-  - [ ] verify
+  - [x] verify
 
 ## Target design (read fully before phase 1)
 
@@ -317,34 +317,34 @@ randomization before the loop calls the same function. Keep
 Nothing in armatron changes in this phase. The new module must be complete,
 documented, and compiling on all targets, but is not yet called.
 
-- [ ] impl — Create `crates/linkage-blaze-example-core/src/ui.rs` with the
+- [x] impl — Create `crates/linkage-blaze-example-core/src/ui.rs` with the
       types, constructors, and `Ui` methods specified above. Include module
       docs stating the pattern (immediate mode, no widget state, statics as
       identity, on-down click semantics, one-frame lag).
-  - [ ] verify
-- [ ] impl — Add `pub mod ui;` to `lib.rs`. Public (not `pub(crate)`): the
+  - [x] verify
+- [x] impl — Add `pub mod ui;` to `lib.rs`. Public (not `pub(crate)`): the
       module is intended as a reusable showcase library, and public visibility
       avoids dead-code warnings while it is not yet wired up.
-  - [ ] verify
-- [ ] impl — Port slider geometry/value math from today's `SliderControl`
+  - [x] verify
+- [x] impl — Port slider geometry/value math from today's `SliderControl`
       (`set_value_from_touch` clamping, `knob_center` rounding via
       `libm::roundf`) so knob positions are pixel-identical.
-  - [ ] verify
-- [ ] impl — Port `TextButton` drawing (slate-gray 1px stroke rectangle,
+  - [x] verify
+- [x] impl — Port `TextButton` drawing (slate-gray 1px stroke rectangle,
       white centered `FONT_6X10` label via `centered_text_position` logic) and
       `Icon` drawing (parameterized by rectangle, per "Layout spec types").
-  - [ ] verify
-- [ ] impl — Define `UiError<D>` as specified, with the coherence-asymmetry
+  - [x] verify
+- [x] impl — Define `UiError<D>` as specified, with the coherence-asymmetry
       doc comment.
-  - [ ] verify
-- [ ] impl — Add one compilable `rust,no_run` doctest on `Ui` showing a
+  - [x] verify
+- [x] impl — Add one compilable `rust,no_run` doctest on `Ui` showing a
       minimal begin/slider/end frame (hide boilerplate with `#` lines per
       `AGENTS.md`).
-  - [ ] verify
+  - [x] verify
 
 **PHASE 1 GATE — stop here and test:**
 
-- [ ] `just check-all` passes (all targets, `-D warnings`).
+- [x] `just check-all` passes (all targets, `-D warnings`).
 - [ ] Human review of the `ui.rs` API before phase 2 builds on it.
 - [ ] Suggest a commit message; human commits.
 

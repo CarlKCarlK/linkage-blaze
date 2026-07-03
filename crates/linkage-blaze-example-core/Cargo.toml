@@ -19,7 +19,7 @@ license.workspace = true
 # on by default; every consumer opts in to the examples it needs.
 default = []
 # The `armatron` example — local armatron state, calibration geometry, and the generic game loop.
-armatron = ["dep:libm", "dep:nanorand"]
+armatron = ["dep:nanorand"]
 # The `ballet` example embeds a motion-capture const that is slow to evaluate;
 # keep it off unless the `ballet` example is being built.
 ballet = []
@@ -34,7 +34,7 @@ clock = ["dep:device-envoy-core"]
 
 [dependencies]
 derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
-libm = { version = "0.2", optional = true }
+libm = { version = "0.2" }
 nanorand = { version = "0.8", default-features = false, features = ["wyrand"], optional = true }
 embedded-graphics = { version = "0.8", default-features = false }
 embassy-time = "0.5.1"
