@@ -113,7 +113,7 @@ const PROJECTION: Projection = Projection::front_perspective(
 /// provide calibrated touch before calling [`armatron`]. Shared calibration
 /// UI helpers now live in [`linkage_blaze_cyd_core::calibration`], alongside
 /// the rest of the CYD touch-calibration flow.
-pub async fn armatron<C>(cyd: &mut C) -> Result<Infallible, Error<C::Error>>
+pub async fn armatron<C>(cyd: &mut C) -> Result<ArmatronOutcome, Error<C::Error>>
 where
     C: Cyd,
 {
@@ -187,7 +187,9 @@ where
         }
         let hold_button_state = ui.hold_button(&mut frame, &RK_STEP_BUTTON)?;
         reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds);
-        ui.button(&mut frame, &CALIBRATE_BUTTON)?;
+        if ui.button(&mut frame, &CALIBRATE_BUTTON)? {
+            return Ok(ArmatronOutcome::CalibrateRequested);
+        }
 
         // Explicit per-frame solver schedule slot.
         reverse_kinematics.tick(&mut params, dt_seconds);
@@ -222,6 +224,10 @@ where
 
         frame.flush().await.map_err(Error::Cyd)?;
     }
+}
+
+pub enum ArmatronOutcome {
+    CalibrateRequested,
 }
 
 /// Error from the generic armatron loop, generic over the CYD device error `F`.

@@ -1,5 +1,4 @@
 use device_envoy_core::flash_block::FlashBlock;
-use embassy_futures::yield_now;
 
 use crate::{Cyd, CydDisplay, CydFrame, CydRawTouch};
 
@@ -60,44 +59,37 @@ where
     }
 
     let mut calibration_flow = CalibrationFlow::new();
-    let mut redraw_requested = true;
-
     loop {
-        if redraw_requested {
-            redraw_requested = false;
-            draw_calibration_screen(cyd, &calibration_flow)
-                .await
-                .map_err(EnsureCalibrationError::Device)?;
-        }
-
         if recalibration_requested() {
             calibration_flow.restart();
-            redraw_requested = true;
-            continue;
         }
 
-        let raw_touch_event = cyd
-            .read_raw_touch_event()
+        loop {
+            let raw_touch_event = cyd
+                .read_raw_touch_event()
+                .map_err(EnsureCalibrationError::Device)?;
+            let Some(calibration_flow_event) =
+                calibration_flow.handle_raw_touch_event(raw_touch_event)
+            else {
+                break;
+            };
+
+            match calibration_flow_event {
+                CalibrationFlowEvent::PointCaptured { .. } => {}
+                CalibrationFlowEvent::Completed {
+                    calibration_config, ..
+                } => {
+                    calibration_flash_block
+                        .save(&calibration_config)
+                        .map_err(EnsureCalibrationError::Flash)?;
+                    return Ok(EnsureCalibrationOutcome::Saved(calibration_config));
+                }
+            }
+        }
+
+        draw_calibration_screen(cyd, &calibration_flow)
+            .await
             .map_err(EnsureCalibrationError::Device)?;
-        let Some(calibration_flow_event) = calibration_flow.handle_raw_touch_event(raw_touch_event)
-        else {
-            yield_now().await;
-            continue;
-        };
-
-        match calibration_flow_event {
-            CalibrationFlowEvent::PointCaptured { .. } => {
-                redraw_requested = true;
-            }
-            CalibrationFlowEvent::Completed {
-                calibration_config, ..
-            } => {
-                calibration_flash_block
-                    .save(&calibration_config)
-                    .map_err(EnsureCalibrationError::Flash)?;
-                return Ok(EnsureCalibrationOutcome::Saved(calibration_config));
-            }
-        }
     }
 }
 

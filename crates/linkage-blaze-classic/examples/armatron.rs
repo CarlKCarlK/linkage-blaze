@@ -7,7 +7,7 @@ use core::convert::Infallible;
 
 use device_envoy_esp::{
     button::{Button as _, ButtonEsp, PressedTo},
-    flash_block::FlashBlockEsp,
+    flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
 use embassy_executor::Spawner;
@@ -18,7 +18,7 @@ use linkage_blaze_cyd::{
 };
 use linkage_blaze_cyd_core::{EnsureCalibrationError, ensure_calibration};
 use linkage_blaze_example_core::armatron::{
-    BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
+    ArmatronOutcome, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
 };
 use log::info;
 
@@ -140,5 +140,11 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         esp_hal::system::software_reset();
     }
 
-    Ok(armatron(&mut cyd).await?)
+    match armatron(&mut cyd).await? {
+        ArmatronOutcome::CalibrateRequested => {
+            calibration_flash_block.clear()?;
+            info!("Calibration cleared; restarting");
+            esp_hal::system::software_reset();
+        }
+    }
 }

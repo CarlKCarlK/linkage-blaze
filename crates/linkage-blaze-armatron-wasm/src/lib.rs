@@ -1,10 +1,14 @@
 #![forbid(unsafe_code)]
 
+use device_envoy_core::flash_block::FlashBlock as _;
 use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
 use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
-use linkage_blaze_cyd_core::Orientation;
-use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm};
-use linkage_blaze_example_core::armatron::{BACKGROUND, FOREGROUND, armatron};
+use linkage_blaze_cyd_core::{Orientation, ensure_calibration};
+use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm, CydWasmCalibrationFlashBlock};
+use linkage_blaze_example_core::{
+    armatron::{ArmatronOutcome, BACKGROUND, FOREGROUND, armatron},
+    infallible::InfallibleResultExt,
+};
 use wasm_bindgen::{JsCast, closure::Closure, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, PointerEvent};
 
@@ -32,19 +36,43 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .dyn_into()
         .expect("the context is a CanvasRenderingContext2d");
 
-    let mut cyd = CydWasm::new(
-        context,
-        ORIENTATION,
-        BACKGROUND,
-        FOREGROUND,
-        &FONT_9X15_BOLD,
-    );
-    install_touch_handlers(&canvas, cyd.touch_source())?;
+    let touch_source = CydTouchWasmSource::new();
+    install_touch_handlers(&canvas, touch_source.clone())?;
+    let mut calibration_flash_block = CydWasmCalibrationFlashBlock::new_precalibrated();
 
     wasm_bindgen_futures::spawn_local(async move {
-        match armatron(&mut cyd).await {
-            Ok(never) => match never {},
-            Err(error) => web_sys::console::error_1(&format!("armatron stopped: {error:?}").into()),
+        loop {
+            let mut cyd = CydWasm::new_with_touch_source(
+                context.clone(),
+                ORIENTATION,
+                BACKGROUND,
+                FOREGROUND,
+                &FONT_9X15_BOLD,
+                touch_source.clone(),
+            );
+
+            match ensure_calibration(&mut cyd, &mut calibration_flash_block, || false).await {
+                Ok(calibration_outcome) => {
+                    if calibration_outcome.was_saved() {
+                        continue;
+                    }
+                    let calibration_config = calibration_outcome.calibration_config();
+                    cyd.set_calibration(calibration_config);
+                }
+                Err(infallible) => match infallible {},
+            }
+
+            match armatron(&mut cyd).await {
+                Ok(ArmatronOutcome::CalibrateRequested) => {
+                    cyd.clear_calibration();
+                    calibration_flash_block.clear().unwrap_infallible();
+                    touch_source.wait_for_fresh_press();
+                }
+                Err(error) => {
+                    web_sys::console::error_1(&format!("armatron stopped: {error:?}").into());
+                    break;
+                }
+            }
         }
     });
 
