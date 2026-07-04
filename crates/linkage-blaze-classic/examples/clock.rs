@@ -92,6 +92,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
     // reference and mutate it through interior mutability on each event.
     let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
+    let background565 = display.background_565();
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,
@@ -103,7 +104,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 };
                 if let Err(error) = wifi_status_frame
                     .borrow_mut()
-                    .clear()
+                    .fill(background565)
                     .write_text(message)
                     .flush()
                 {
@@ -117,7 +118,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     wifi_status_frame
         .borrow_mut()
-        .clear()
+        .fill(background565)
         .write_text("WiFi OK")
         .flush()?;
     drop(wifi_status_frame);

@@ -136,8 +136,9 @@ where
         }
 
         let current_tick = Instant::now();
-        // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
-        // generic frame code use fill(...) instead, which makes the clear helper much less useful.
+        // todo000 review whether armatron should use the display's default background instead of
+        // its own `BACKGROUND` constant; this explicit color fill is correct today because the
+        // loop intentionally clears to `background565`, not merely to whatever the device default is.
         frame.fill(background565);
 
         // Scene first, UI on top: params here were updated by last frame's

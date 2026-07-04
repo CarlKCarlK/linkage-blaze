@@ -167,7 +167,6 @@ impl CydDisplayEsp {
         pixel_buffer: &'a mut dyn DynPixelBuffer,
         region: Rectangle,
         tile_top_left: Point,
-        background565: Rgb565,
         foreground565: Rgb565,
         font: &'static MonoFont<'static>,
     ) -> CydFrameEsp<'a> {
@@ -181,7 +180,6 @@ impl CydDisplayEsp {
             view,
             region,
             tile_top_left,
-            background565,
             foreground565,
             font,
         }

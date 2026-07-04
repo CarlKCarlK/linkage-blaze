@@ -334,13 +334,11 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
         Point::zero()
     }
 
+    //todo0x Arg! "region"
     /// This frame's region (top-left and size) in physical-screen coordinates.
     fn region(&self) -> Rectangle;
 
-    /// Fill this frame with the device default background color.
-    fn clear(&mut self) -> &mut Self;
-
-    /// Fill this frame with an explicit color.
+    /// Fill this frame with an explicit color and return `self`.
     fn fill(&mut self, color: Rgb565) -> &mut Self;
 
     /// Draw `text` at the frame's top-left using the device default font and
@@ -495,10 +493,6 @@ mod tests {
 
         fn region(&self) -> Rectangle {
             self.region
-        }
-
-        fn clear(&mut self) -> &mut Self {
-            self
         }
 
         fn fill(&mut self, _color: Rgb565) -> &mut Self {

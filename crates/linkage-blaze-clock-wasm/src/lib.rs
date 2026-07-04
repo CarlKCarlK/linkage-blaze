@@ -69,9 +69,10 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         clock_splash(&mut display)
             .await
             .expect("flushing the Infallible wasm background cannot fail");
+        let background565 = display.background_565();
         display
             .frame_mut(WIFI_STATUS_RECTANGLE)
-            .clear()
+            .fill(background565)
             .write_text("WiFi: OK")
             .flush()
             .await

@@ -108,9 +108,8 @@ pub struct CydFrameEsp<'a> {
     // Tile top-left in screen coordinates. Drawing coordinates are translated
     // by this point before reaching the local frame buffer.
     tile_top_left: Point,
-    // Default background and foreground colors and font, copied from the owning
-    // `CydEsp`, so `clear` and `write_text` can render with the device default style.
-    pub(crate) background565: Rgb565,
+    // Default foreground color and font, copied from the owning `CydEsp`, so
+    // `write_text` can render with the device default style.
     pub(crate) foreground565: Rgb565,
     pub(crate) font: &'static MonoFont<'static>,
 }
@@ -118,12 +117,6 @@ pub struct CydFrameEsp<'a> {
 impl<'a> CydFrameEsp<'a> {
     pub fn view_mut(&mut self) -> &mut RegionView<'a> {
         &mut self.view
-    }
-
-    /// Fill the frame with the device default background color.
-    pub fn clear(&mut self) -> &mut Self {
-        self.view.fill(self.background565);
-        self
     }
 
     /// Fill the frame with an explicit color.
@@ -558,7 +551,6 @@ impl CydDisplay for CydDisplayEspPart<'_> {
             self.pixel_buffer,
             region,
             tile_top_left,
-            self.background565,
             self.foreground565,
             self.font,
         )
@@ -654,10 +646,6 @@ impl CydFrame for CydFrameEsp<'_> {
 
     fn region(&self) -> Rectangle {
         self.region
-    }
-
-    fn clear(&mut self) -> &mut Self {
-        CydFrameEsp::clear(self)
     }
 
     fn fill(&mut self, color: Rgb565) -> &mut Self {

@@ -270,8 +270,9 @@ where
     C: Cyd,
 {
     let (mut display, _touch) = cyd.parts();
+    let background565 = display.background_565();
     let mut frame = display.full_frame_mut();
-    frame.clear();
+    frame.fill(background565);
     frame.write_text(message).flush().await
 }
 
@@ -332,8 +333,9 @@ where
     C: Cyd,
 {
     let (mut display, _touch) = cyd.parts();
+    let background565 = display.background_565();
     let mut frame = display.full_frame_mut();
-    frame.clear();
+    frame.fill(background565);
 
     match calibration_driver_state {
         CalibrationDriverState::Capturing => {

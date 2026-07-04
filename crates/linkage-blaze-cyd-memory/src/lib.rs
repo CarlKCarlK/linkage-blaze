@@ -97,7 +97,6 @@ pub struct MemoryFrame<'a> {
     screen_size: Size,
     region: Rectangle,
     tile_top_left: Point,
-    background565: Rgb565,
     foreground565: Rgb565,
     pixels: Vec<u16>,
 }
@@ -356,7 +355,6 @@ impl CydDisplay for MemoryDisplayPart<'_> {
             screen_size: self.size,
             region,
             tile_top_left,
-            background565: self.background565,
             foreground565: self.foreground565,
             pixels: vec![self.background565.into_storage(); pixel_count],
         }
@@ -521,10 +519,6 @@ impl CydFrame for MemoryFrame<'_> {
 
     fn region(&self) -> Rectangle {
         self.region
-    }
-
-    fn clear(&mut self) -> &mut Self {
-        self.fill(self.background565)
     }
 
     fn fill(&mut self, color: Rgb565) -> &mut Self {
