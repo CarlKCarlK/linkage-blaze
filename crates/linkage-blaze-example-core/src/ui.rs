@@ -22,9 +22,7 @@
 //! ```rust,no_run
 //! # use embedded_graphics::{
 //! #     mock_display::MockDisplay,
-//! #     pixelcolor::{Rgb565, Rgb888},
-//! #     prelude::*,
-//! #     primitives::Rectangle,
+//! #     pixelcolor::Rgb565,
 //! # };
 //! # use linkage_blaze_cyd_core::TouchEvent;
 //! # use linkage_blaze_example_core::ui::{Slider, Ui};
@@ -228,8 +226,10 @@ pub struct Slider {
     track_start: Point,
     track_end: Point,
     orientation: SliderOrientation,
-    range_start: f32,
-    range_end: f32,
+    /// The value at `track_start`.
+    start: f32,
+    /// The value at `track_end`.
+    last: f32,
 }
 
 impl Slider {
@@ -239,8 +239,8 @@ impl Slider {
         track_x: i32,
         track_y: i32,
         track_length: u32,
-        range_start: f32,
-        range_end: f32,
+        start: f32,
+        last: f32,
     ) -> Self {
         let track_rectangle =
             Rectangle::new(Point::new(track_x, track_y), Size::new(track_length, 1));
@@ -255,8 +255,8 @@ impl Slider {
                 track_rectangle.top_left.y,
             ),
             orientation: SliderOrientation::Horizontal,
-            range_start,
-            range_end,
+            start,
+            last,
         }
     }
 
@@ -266,8 +266,8 @@ impl Slider {
         track_x: i32,
         track_y: i32,
         track_length: u32,
-        range_start: f32,
-        range_end: f32,
+        start: f32,
+        last: f32,
     ) -> Self {
         let track_rectangle =
             Rectangle::new(Point::new(track_x, track_y), Size::new(1, track_length));
@@ -282,8 +282,8 @@ impl Slider {
                 track_rectangle.top_left.y + track_rectangle.size.height as i32 - 1,
             ),
             orientation: SliderOrientation::Vertical,
-            range_start,
-            range_end,
+            start,
+            last,
         }
     }
 
@@ -332,7 +332,7 @@ impl Slider {
     }
 
     fn knob_center(&self, value: f32) -> Point {
-        let display_value = (value - self.range_start) / (self.range_end - self.range_start);
+        let display_value = (value - self.start) / (self.last - self.start);
         match self.orientation {
             SliderOrientation::Horizontal => Point::new(
                 self.track_start.x
@@ -359,7 +359,7 @@ impl Slider {
             }
         }
         .clamp(0.0, 1.0);
-        self.range_start + (self.range_end - self.range_start) * slider_position
+        self.start + (self.last - self.start) * slider_position
     }
 }
 

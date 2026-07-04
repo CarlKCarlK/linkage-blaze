@@ -155,24 +155,24 @@ truth, and the index lookup reads from it.
 
 ## Phase 3 — Derived constants, naming, and the `start`/`last` rename
 
-- [ ] impl — Derive `TARGET_PARAM_START` instead of hardcoding 9: the ghost
+- [x] impl — Derive `TARGET_PARAM_START` instead of hardcoding 9: the ghost
       arm's params begin exactly where the pre-ghost linkage's end, so
       `const TARGET_PARAM_START: usize = <pre-ghost linkage>.view().dof();`
       (`dof` is `const fn`). This answers the existing
       `todo00 how to we feel about "TARGET_PARAM_START"` — append
       `(now derived from the linkage)` to it rather than deleting.
-  - [ ] verify
-- [ ] impl — Replace the two hardcoded `9`s in `arm_tip` (array size and
+  - [x] verify
+- [x] impl — Replace the two hardcoded `9`s in `arm_tip` (array size and
       slice bound) with the same derived constant. The `[f32; 9]` array
       length can use `TARGET_PARAM_START` directly since the arm params are
       exactly the pre-ghost params.
-  - [ ] verify
-- [ ] impl — Rename `LINKAGE0` to a self-describing name (suggested:
+  - [x] verify
+- [x] impl — Rename `LINKAGE0` to a self-describing name (suggested:
       `SCENE_WITH_ARM` — camera + grid + jointed arm; executor may pick
       better). Keep all intermediate consts: they carry the type annotations
       that let turbofish be omitted per `AGENTS.md`.
-  - [ ] verify
-- [ ] impl — In `ui.rs`, rename `Slider`'s `range_start`/`range_end` fields
+  - [x] verify
+- [x] impl — In `ui.rs`, rename `Slider`'s `range_start`/`range_end` fields
       and the matching constructor parameters to `start`/`last`. Rationale:
       "range" is redundant on a slider, and `last` matches the new
       `core::range::RangeInclusive { start, last }` vocabulary for an
@@ -182,20 +182,20 @@ truth, and the index lookup reads from it.
       `track_start`" / "value at `track_end`" to keep the pairing obvious.
       Update `Slider::column`'s hardcoded `0.0, 1.0` call and the module
       docs/doctest if they mention the old names.
-  - [ ] verify
-- [ ] impl — Trim the unused hidden imports (`Rgb888`, `Rectangle`,
+  - [x] verify
+- [x] impl — Trim the unused hidden imports (`Rgb888`, `Rectangle`,
       `prelude`) from the `ui.rs` module doctest — it is article material and
       should carry no dead lines.
-  - [ ] verify
-- [ ] impl — Add a one-line comment on the clamp in
+  - [x] verify
+- [x] impl — Add a one-line comment on the clamp in
       `target_distance_hundredths` stating it is a display bound (the label
       is at most `"distance 99.99"`), so it does not read as the silent
       clamping `AGENTS.md` forbids.
-  - [ ] verify
+  - [x] verify
 
 **PHASE 3 GATE — stop here and test:**
 
-- [ ] `just check-all` passes.
+- [x] `just check-all` passes.
 - [ ] `just run-armatron-wasm`: full spot-check — target prev/next and
       distance text (derived `TARGET_PARAM_START`), all sliders (renamed
       fields), knob resting positions at both extremes of the z slider (its

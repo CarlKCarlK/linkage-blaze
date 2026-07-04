@@ -44,15 +44,15 @@ pub const FOREGROUND: Rgb888 = Rgb888::CSS_WHITE;
 
 const FPS_TEXT_MAX_TENTHS: u32 = 990;
 
-// ---- parameter indices ----
-const TARGET_PARAM_START: usize = 9;
-
 // ---- linkages ----
 //
-// Section 1: floor disk + axis lines (commented out).
-// Section 2: arm.  Pen down for strokes.
-// Section 3: target traversal (pen up) then target disk (commented out).
-// todo0000000 can we use functions to avoid double allocation?
+// Build the displayed scene in layers:
+// - `CAMERA_CONTROL` provides the view-control params shared by the scene and
+//   the arm-tip distance helper linkage.
+// - `CAMERA_AND_GRID` adds the static floor grid under the arm.
+// - `SCENE_WITH_ARM` adds the articulated arm plus joint spheres for display.
+//       The arm linkage ends with an invisible tip in the center of the hand.
+// - `LINKAGE_FIXED` appends a red ghost arm that shows the current target pose.
 const CAMERA_CONTROL: LinkageFixed<3, 1, 8> =
     linkage_fixed!("../../../linkage-blaze-armatron-core/src/camera_control.lb.rs");
 const GRID_9X9: LinkageFixed<0, 1, 81> =
@@ -61,15 +61,19 @@ const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9)
 const ARMATRON1: LinkageFixed<6, 1, 25> =
     linkage_fixed!("../../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
-const LINKAGE0: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
-const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = LINKAGE0
+const SCENE_WITH_ARM: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
+const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM
     .restore("scene origin")
-    .combine(ARMATRON1) // Add ghost arm to hold target.
+    .combine(ARMATRON1) // Add a red ghost arm to hold the current target pose.
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
 const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
+// Minimal linkage used only to measure arm-tip distance to the target.
 const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
+
+// The ghost arm's params begin immediately after the displayed scene's params.
+const TARGET_PARAM_START: usize = SCENE_WITH_ARM.view().dof();
 
 const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_SLIDER.label(), 0);
 const TILT_PARAM_INDEX: usize = LINKAGE.param_index(TILT_SLIDER.label(), 0);
@@ -88,7 +92,6 @@ pub const DOF: usize = LINKAGE.dof();
 
 const SHOW_FPS_TEXT: bool = true;
 
-//todo0000 revisit Robot Ortho projection (+Z up, +Y left, drops X): reconsider after camera_control is updated
 const PROJECTION: Projection = Projection::front_perspective(
     Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
     SCREEN_WIDTH as f32 / 16.0, // 16 world units span the screen width
@@ -120,7 +123,7 @@ where
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
     let mut target_seed: u8 = 0;
-    randomize_target(target_seed, &mut params);
+    randomize_target_from_seed(target_seed, &mut params);
 
     // Set up state.
     let mut ui = Ui::new();
@@ -158,11 +161,11 @@ where
 
         if ui.button(&mut frame, &PREVIOUS_TARGET_BUTTON)? {
             target_seed = target_seed.wrapping_sub(1);
-            randomize_target(target_seed, &mut params);
+            randomize_target_from_seed(target_seed, &mut params);
         }
         if ui.button(&mut frame, &NEXT_TARGET_BUTTON)? {
             target_seed = target_seed.wrapping_add(1);
-            randomize_target(target_seed, &mut params);
+            randomize_target_from_seed(target_seed, &mut params);
         }
 
         // Clicks not yet wired to actions (matches current behavior).
@@ -294,15 +297,15 @@ impl Default for FrameBuffer {
 // todo000 shared home question from SINGLE_SOURCE_SPEC.md: if both armatron UI
 // paths stay live, move arm_tip/target_center/compute_target_distance/
 // VERSION_TEXT into one shared module instead of duplicating them here.
-fn randomize_target(target_seed: u8, params: &mut [f32; DOF]) {
+fn randomize_target_from_seed(target_seed: u8, params: &mut [f32; DOF]) {
     let mut rng = WyRand::new_seed(u64::from(target_seed));
-    // todo00 how to we feel about "TARGET_PARAM_START"
     for param in params[TARGET_PARAM_START..].iter_mut() {
         *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
     }
 }
 
 fn target_distance_hundredths(params: &[f32; DOF]) -> u32 {
+    // Display bound: the label format only has room for "distance 99.99".
     libm::roundf(target_distance(params).clamp(0.0, 99.99) * 100.0) as u32
 }
 
@@ -334,8 +337,8 @@ fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u
 }
 
 fn arm_tip(rk_linkage: LinkageView<'_, 9, 2>, params: &[f32; DOF]) -> Vec3 {
-    let mut arm_params = [0.0f32; 9];
-    arm_params.copy_from_slice(&params[..9]);
+    let mut arm_params = [0.0f32; TARGET_PARAM_START];
+    arm_params.copy_from_slice(&params[..TARGET_PARAM_START]);
     rk_linkage.final_pose(&arm_params).position()
 }
 
