@@ -233,6 +233,42 @@ pub enum ArmatronExit {
     CalibrationRequested,
 }
 
+#[cfg(test)]
+mod tests {
+    use futures_executor::block_on;
+    use linkage_blaze_cyd_core::TouchEvent;
+    use linkage_blaze_cyd_memory::MemoryCyd;
+
+    use super::{ArmatronExit, armatron};
+    use controls::CALIBRATE_BUTTON;
+
+    #[test]
+    fn tapping_the_calibrate_button_requests_calibration() {
+        let mut memory_cyd = MemoryCyd::classic();
+        let touch_rectangle = CALIBRATE_BUTTON.touch_rectangle();
+        let touch_center = touch_rectangle.top_left
+            + embedded_graphics::geometry::Point::new(
+                touch_rectangle.size.width as i32 / 2,
+                touch_rectangle.size.height as i32 / 2,
+            );
+        memory_cyd.push_touch_event(TouchEvent::Down {
+            x: touch_center.x as f32,
+            y: touch_center.y as f32,
+        });
+        let mut memory_button = memory_cyd.memory_button();
+
+        let armatron_exit = block_on(armatron(&mut memory_cyd, &mut memory_button))
+            .expect("tapping the calibrate button should exit cleanly, not error");
+
+        assert!(matches!(armatron_exit, ArmatronExit::CalibrationRequested));
+        assert_eq!(
+            memory_cyd.flush_count(),
+            0,
+            "the calibrate-button exit happens before the frame is flushed"
+        );
+    }
+}
+
 /// Error from the generic armatron loop, generic over the CYD device error `F`.
 ///
 /// Local UI errors such as [`UiError`] get a derived `From`, so they propagate

@@ -425,6 +425,12 @@ impl Button {
         }
     }
 
+    /// This button's touch-hit rectangle, in screen coordinates.
+    #[must_use]
+    pub const fn touch_rectangle(&self) -> Rectangle {
+        self.touch_rectangle
+    }
+
     fn draw<D>(&self, target: &mut D) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Rgb565>,

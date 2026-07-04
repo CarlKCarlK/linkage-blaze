@@ -325,7 +325,7 @@ corresponding driver-level test.
 
 ## Phase 3 — Shared example smoke tests
 
-- [ ] impl / [ ] verify — **Ballet smoke test.** In
+- [x] impl / [ ] verify — **Ballet smoke test.** In
   `linkage-blaze-example-core` (dev-dependency on the memory crate), run the
   ballet loop for a bounded number of frames against `MemoryCyd`: no error,
   `flush_count` advanced, and every `last_flush_region` observed lies within
@@ -333,7 +333,7 @@ corresponding driver-level test.
   frames then stop", add the smallest hook that allows it — prefer the
   frame-budget error as the natural stop signal over new parameters.
 
-- [ ] impl / [ ] verify — **One state-based interaction test.** Pick one
+- [x] impl / [ ] verify — **One state-based interaction test.** Pick one
   touch-driven behavior in example/armatron core logic (for example a
   button hit region) and test it: script a calibrated `TouchEvent`, run a
   frame, assert the expected state change or pixel change. This is the

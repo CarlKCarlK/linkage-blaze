@@ -48,3 +48,8 @@ linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
 device-envoy-core = { version = "0.1.0", default-features = false, features = [
     "wifi",
 ], optional = true }
+
+[dev-dependencies]
+embassy-time = { version = "0.5.1", features = ["std"] }
+futures-executor = "0.3"
+linkage-blaze-cyd-memory = { path = "../linkage-blaze-cyd-memory" }
