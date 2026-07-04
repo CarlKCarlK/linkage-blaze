@@ -1,7 +1,10 @@
 //! The generic "ballet" example: free-runs a motion-captured pirouette across
 //! the full screen, with an fps / slow-motion status line.
 
-use core::{convert::Infallible, fmt::Write};
+use core::{
+    convert::Infallible,
+    fmt::{self, Write},
+};
 
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
@@ -157,7 +160,7 @@ mod tests {
 }
 
 #[derive(Debug, derive_more::From)]
-pub struct StatusTextError(pub core::fmt::Error);
+pub struct StatusTextError(pub fmt::Error);
 
 // todo0000 review this.
 /// Error from the generic ballet loop, generic over the surface's flush error `F`.

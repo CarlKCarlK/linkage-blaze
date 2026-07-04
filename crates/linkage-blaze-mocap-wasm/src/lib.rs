@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
 
+use core::fmt::Display;
 use embedded_graphics_core::pixelcolor::RgbColor;
 use linkage_blaze_core::{DrawItem3d, LinkageBuf};
 use linkage_blaze_mocap::{
@@ -128,6 +129,6 @@ fn flatten_draw_item_3d(draw_item_3d: DrawItem3d) -> [f32; STRIDE] {
     record
 }
 
-fn to_js_error(error: impl core::fmt::Display) -> JsValue {
+fn to_js_error(error: impl Display) -> JsValue {
     JsValue::from_str(&String::from(error.to_string()))
 }

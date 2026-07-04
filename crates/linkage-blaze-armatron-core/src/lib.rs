@@ -1,6 +1,6 @@
 #![no_std]
 
-use core::convert::Infallible;
+use core::{convert::Infallible, str};
 
 use embassy_time::Instant;
 use embedded_graphics::{
@@ -1449,7 +1449,7 @@ impl TargetLabel {
             self.len = 9;
         }
 
-        core::str::from_utf8(&self.bytes[..self.len]).expect("target label is ASCII")
+        str::from_utf8(&self.bytes[..self.len]).expect("target label is ASCII")
     }
 }
 
@@ -1481,7 +1481,7 @@ impl DistanceReport {
         self.bytes[12] = b'0' + (fraction / 10) as u8;
         self.bytes[13] = b'0' + (fraction % 10) as u8;
 
-        core::str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
+        str::from_utf8(&self.bytes[..self.len]).expect("distance report is ASCII")
     }
 }
 
@@ -1509,7 +1509,7 @@ impl FpsReport {
             self.bytes[2] = b'0' + (fps % 10) as u8;
         }
 
-        core::str::from_utf8(&self.bytes[..self.len]).expect("fps report is ASCII")
+        str::from_utf8(&self.bytes[..self.len]).expect("fps report is ASCII")
     }
 }
 

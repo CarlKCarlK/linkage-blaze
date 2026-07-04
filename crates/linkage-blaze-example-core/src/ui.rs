@@ -25,6 +25,7 @@
 //! #     mock_display::MockDisplay,
 //! #     pixelcolor::Rgb565,
 //! # };
+//! # use core::convert::Infallible;
 //! # use linkage_blaze_cyd_core::TouchEvent;
 //! # use linkage_blaze_example_core::ui::{Slider, Ui};
 //! static TILT_SLIDER: Slider = Slider::vertical(
@@ -43,10 +44,10 @@
 //! ui.begin(Some(TouchEvent::Down { x: 16.0, y: 124.0 }));
 //! ui.slider(&mut display, &TILT_SLIDER, &mut tilt)?;
 //! ui.end(&mut display)?;
-//! # Ok::<(), linkage_blaze_example_core::ui::UiError<core::convert::Infallible>>(())
+//! # Ok::<(), linkage_blaze_example_core::ui::UiError<Infallible>>(())
 //! ```
 
-use core::{fmt, fmt::Write};
+use core::{fmt, fmt::Write, ptr};
 
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -126,10 +127,9 @@ impl Ui {
                 self.down_consumed = true;
             }
         }
-        //todo0x violation of the  core:: rule
         let is_active = self
             .active_slider
-            .is_some_and(|active_slider| core::ptr::eq(active_slider, slider));
+            .is_some_and(|active_slider| ptr::eq(active_slider, slider));
         if is_active {
             if let Some((position_x, position_y)) = self.touch_cursor {
                 *value = slider.value_from_touch(position_x, position_y);
@@ -192,7 +192,7 @@ impl Ui {
 
         let is_pressed = self
             .active_hold_button
-            .is_some_and(|active_hold_button| core::ptr::eq(active_hold_button, icon_button));
+            .is_some_and(|active_hold_button| ptr::eq(active_hold_button, icon_button));
         if is_pressed && matches!(hold_button_state, HoldButtonState::Idle) {
             hold_button_state = HoldButtonState::Held;
         }

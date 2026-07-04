@@ -42,6 +42,8 @@ use alloc::string::String;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
+use core::convert::Infallible;
+
 pub use math::{Mat3, Vec3};
 
 pub use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
@@ -3959,7 +3961,7 @@ pub struct PixelTargetAdapter<'a, T: PixelTarget>(pub &'a mut T);
 
 impl<T: PixelTarget> embedded_graphics::draw_target::DrawTarget for PixelTargetAdapter<'_, T> {
     type Color = Rgb888;
-    type Error = core::convert::Infallible;
+    type Error = Infallible;
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where
@@ -4136,7 +4138,7 @@ struct TiledDrawAdapter<'a, T: PixelTarget> {
 
 impl<T: PixelTarget> embedded_graphics::draw_target::DrawTarget for TiledDrawAdapter<'_, T> {
     type Color = Rgb888;
-    type Error = core::convert::Infallible;
+    type Error = Infallible;
 
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
     where

@@ -6,7 +6,7 @@
 // TODO00000 the analog clock-hand rendering is commented out in the generic
 // `clock` module; see the `TODO00000` there for what it needs to be ported.
 
-use core::convert::Infallible;
+use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_esp::{
     Error,
@@ -91,7 +91,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
     // reference and mutate it through interior mutability on each event.
-    let wifi_status_frame = core::cell::RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
+    let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
         .connect(
             &mut force_portal_button,

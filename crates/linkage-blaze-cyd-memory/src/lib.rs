@@ -1,7 +1,7 @@
 use core::{
     cell::{Cell, RefCell},
     convert::Infallible,
-    future::ready,
+    future::{Future, ready},
     ops::Range,
 };
 use std::{fs, path::Path, rc::Rc, vec::Vec};
@@ -557,7 +557,7 @@ impl CydFrame for MemoryFrame<'_> {
 
     fn flush(
         &mut self,
-    ) -> impl core::future::Future<Output = Result<(), <Self as CydFrame>::Error>> {
+    ) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>> {
         ready(self.flush_now())
     }
 }

@@ -2,8 +2,7 @@
 //! act as clock hands, with hour/minute placards hanging from its hands.
 // todo000 the esp32 may not have a reset button for wifi
 
-use core::array::from_fn;
-use core::convert::Infallible;
+use core::{array::from_fn, convert::Infallible, fmt};
 
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embedded_graphics::{
@@ -259,7 +258,7 @@ fn text_12h(local_time: &OffsetDateTime) -> heapless::String<24> {
     // "12:04:32 PM"), but the string starts at the left edge with no extra leading
     // spaces.
     let mut text = heapless::String::new();
-    core::fmt::write(
+    fmt::write(
         &mut text,
         format_args!("{hour_12:>2}:{minute:02}:{second:02} {suffix}"),
     )
@@ -270,7 +269,7 @@ fn text_12h(local_time: &OffsetDateTime) -> heapless::String<24> {
 /// Format a 24-hour `HH:MM:SS` clock string.
 fn text_24h(local_time: &OffsetDateTime) -> heapless::String<9> {
     let mut text = heapless::String::new();
-    core::fmt::write(
+    fmt::write(
         &mut text,
         format_args!(
             "{:02}:{:02}:{:02}",
@@ -407,7 +406,7 @@ fn draw_centered_sign_value<D>(
     D: DrawTarget<Color = Rgb565, Error = Infallible>,
 {
     let mut value_text = heapless::String::<4>::new();
-    core::fmt::write(&mut value_text, format_args!("{:02}", number % 100))
+    fmt::write(&mut value_text, format_args!("{:02}", number % 100))
         .expect("two-digit sign value fits in 4 bytes");
     draw_centered_text(
         target,
