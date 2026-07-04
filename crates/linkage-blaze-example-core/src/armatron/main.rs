@@ -31,9 +31,10 @@ use static_cell::StaticCell;
 use crate::ui::{Ui, UiError};
 use controls::{
     CALIBRATE_BUTTON, DISTANCE_LABEL, DOLLY_SLIDER, FPS_LABEL, NEXT_TARGET_BUTTON,
-    PARAM_SLIDER_COUNT, PARAM_SLIDERS, PREVIOUS_TARGET_BUTTON, RK_RUN_BUTTON, RK_STEP_BUTTON,
-    TARGET_LABEL, TILT_SLIDER, VERSION_LABEL, VERSION_TEXT, XY_VIEW_SLIDER,
+    PARAM_SLIDER_COUNT, PARAM_SLIDERS, PREVIOUS_TARGET_BUTTON, RK_STEP_BUTTON, TARGET_LABEL,
+    TILT_SLIDER, VERSION_LABEL, VERSION_TEXT, XY_VIEW_SLIDER,
 };
+use reverse_kinematics::ReverseKinematics;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
@@ -67,10 +68,10 @@ const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM
     .combine(ARMATRON1) // Add a red ghost arm to hold the current target pose.
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
-const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
+pub(super) const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
 // Minimal linkage used only to measure arm-tip distance to the target.
 const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
-const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
+pub(super) const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
 
 // The ghost arm's params begin immediately after the displayed scene's params.
 const TARGET_PARAM_START: usize = SCENE_WITH_ARM.view().dof();
@@ -78,7 +79,7 @@ const TARGET_PARAM_START: usize = SCENE_WITH_ARM.view().dof();
 const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_SLIDER.label(), 0);
 const TILT_PARAM_INDEX: usize = LINKAGE.param_index(TILT_SLIDER.label(), 0);
 const DOLLY_PARAM_INDEX: usize = LINKAGE.param_index(DOLLY_SLIDER.label(), 0);
-const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = {
+pub(super) const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = {
     let mut indexes = [0; PARAM_SLIDER_COUNT];
     let mut slider_index = 0;
     while slider_index < PARAM_SLIDER_COUNT {
@@ -127,6 +128,7 @@ where
 
     // Set up state.
     let mut ui = Ui::new();
+    let mut reverse_kinematics = ReverseKinematics::new();
     let mut previous_tick = None;
 
     // Set up buffers
@@ -134,6 +136,16 @@ where
     let background565 = rgb565_from_rgb888(BACKGROUND);
 
     loop {
+        let current_tick = Instant::now();
+        let previous_tick_before_frame = previous_tick;
+        let dt_seconds = previous_tick_before_frame.map_or(0.0, |previous_tick| {
+            current_tick
+                .saturating_duration_since(previous_tick)
+                .as_micros() as f32
+                / 1_000_000.0
+        });
+        previous_tick = Some(current_tick);
+
         // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
         // generic frame code use fill(...) instead, which makes the clear helper much less useful.
         frame.fill(background565);
@@ -156,22 +168,31 @@ where
             &mut params[XY_VIEW_PARAM_INDEX],
         )?;
         for (param_slider, param_index) in PARAM_SLIDERS.iter().zip(ARM_PARAM_INDEXES) {
-            ui.slider(&mut frame, param_slider, &mut params[param_index])?;
+            if ui.slider(&mut frame, param_slider, &mut params[param_index])? {
+                reverse_kinematics.clear();
+            }
         }
 
         if ui.button(&mut frame, &PREVIOUS_TARGET_BUTTON)? {
+            reverse_kinematics.clear();
             target_seed = target_seed.wrapping_sub(1);
             randomize_target_from_seed(target_seed, &mut params);
         }
         if ui.button(&mut frame, &NEXT_TARGET_BUTTON)? {
+            reverse_kinematics.clear();
             target_seed = target_seed.wrapping_add(1);
             randomize_target_from_seed(target_seed, &mut params);
         }
 
-        // Clicks not yet wired to actions (matches current behavior).
-        ui.icon_button(&mut frame, &RK_RUN_BUTTON)?;
-        ui.icon_button(&mut frame, &RK_STEP_BUTTON)?;
+        if ui.icon_button(&mut frame, reverse_kinematics.run_button())? {
+            reverse_kinematics.toggle(&params);
+        }
+        let hold_button_state = ui.hold_button(&mut frame, &RK_STEP_BUTTON)?;
+        reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds);
         ui.button(&mut frame, &CALIBRATE_BUTTON)?;
+
+        // Explicit per-frame solver schedule slot.
+        reverse_kinematics.tick(&mut params, dt_seconds);
 
         ui.label(
             &mut frame,
@@ -188,7 +209,9 @@ where
                 distance_hundredths % 100
             ),
         )?;
-        if let Some((fps_whole, fps_fraction)) = next_fps_label(&mut previous_tick) {
+        if let Some((fps_whole, fps_fraction)) =
+            next_fps_label(previous_tick_before_frame, current_tick)
+        {
             ui.label(
                 &mut frame,
                 &FPS_LABEL,
@@ -309,18 +332,18 @@ fn target_distance_hundredths(params: &[f32; DOF]) -> u32 {
     libm::roundf(target_distance(params).clamp(0.0, 99.99) * 100.0) as u32
 }
 
-fn next_fps_label(previous_tick: &mut Option<Instant>) -> Option<(u32, u32)> {
-    let current_tick = Instant::now();
-    let fps_label = if SHOW_FPS_TEXT
-        && let Some(previous_tick) = *previous_tick
+fn next_fps_label(
+    previous_tick: Option<Instant>,
+    current_tick: Instant,
+) -> Option<(u32, u32)> {
+    if SHOW_FPS_TEXT
+        && let Some(previous_tick) = previous_tick
         && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)
     {
         Some((fps_whole, fps_fraction))
     } else {
         None
-    };
-    *previous_tick = Some(current_tick);
-    fps_label
+    }
 }
 
 fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u32, u32)> {
@@ -346,7 +369,7 @@ fn target_center(linkage: LinkageView<'_, 15, 4>, params: &[f32; DOF]) -> Vec3 {
     linkage.final_pose(params).position()
 }
 
-fn compute_target_distance(
+pub(super) fn compute_target_distance(
     rk_linkage: LinkageView<'_, 9, 2>,
     linkage: LinkageView<'_, 15, 4>,
     params: &[f32; DOF],

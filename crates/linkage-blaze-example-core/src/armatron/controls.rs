@@ -29,6 +29,8 @@ pub(super) static XY_VIEW_SLIDER: Slider = Slider::horizontal("x/y view", 40, 22
 // Reverse-kinematics buttons below the left-side camera controls.
 pub(super) static RK_RUN_BUTTON: IconButton =
     IconButton::new(rectangle(27, 86, 18, 18), Icon::Play);
+pub(super) static RK_STOP_BUTTON: IconButton =
+    IconButton::new(rectangle(27, 86, 18, 18), Icon::Stop);
 pub(super) static RK_STEP_BUTTON: IconButton =
     IconButton::new(rectangle(55, 86, 18, 18), Icon::StepForward);
 

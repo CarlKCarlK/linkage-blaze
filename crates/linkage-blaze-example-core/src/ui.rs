@@ -2,7 +2,8 @@
 //!
 //! Widgets in this module do not own application state. Callers keep the
 //! authoritative values and pass them into [`Ui::slider`] or react to
-//! [`Ui::button`] and [`Ui::icon_button`] return values each frame.
+//! [`Ui::button`], [`Ui::icon_button`], and [`Ui::hold_button`] return values
+//! each frame.
 //!
 //! Layout specs such as [`Slider`] and [`Button`] are plain data. A slider drag
 //! is identified by pointer equality on the layout spec, so sliders used with
@@ -68,6 +69,7 @@ pub struct Ui {
     touch_cursor: Option<(f32, f32)>,
     touch_event: Option<TouchEvent>,
     active_slider: Option<&'static Slider>,
+    active_hold_button: Option<&'static IconButton>,
     down_consumed: bool,
 }
 
@@ -78,6 +80,7 @@ impl Ui {
             touch_cursor: None,
             touch_event: None,
             active_slider: None,
+            active_hold_button: None,
             down_consumed: false,
         }
     }
@@ -96,6 +99,7 @@ impl Ui {
             Some(TouchEvent::Up) => {
                 self.touch_cursor = None;
                 self.active_slider = None;
+                self.active_hold_button = None;
             }
             None => {}
         }
@@ -110,7 +114,7 @@ impl Ui {
         target: &mut D,
         slider: &'static Slider,
         value: &mut f32,
-    ) -> Result<(), UiError<D::Error>>
+    ) -> Result<bool, UiError<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
@@ -122,16 +126,17 @@ impl Ui {
             }
         }
 
-        if self
+        let is_active = self
             .active_slider
-            .is_some_and(|active_slider| core::ptr::eq(active_slider, slider))
-        {
+            .is_some_and(|active_slider| core::ptr::eq(active_slider, slider));
+        if is_active {
             if let Some((position_x, position_y)) = self.touch_cursor {
                 *value = slider.value_from_touch(position_x, position_y);
             }
         }
 
-        slider.draw(target, *value).map_err(UiError::Draw)
+        slider.draw(target, *value).map_err(UiError::Draw)?;
+        Ok(is_active)
     }
 
     /// Draws the button and returns `true` only on the frame a touch-down lands
@@ -161,6 +166,40 @@ impl Ui {
         let was_clicked = self.consume_down(icon_button.touch_rectangle);
         icon_button.draw(target).map_err(UiError::Draw)?;
         Ok(was_clicked)
+    }
+
+    /// Like [`Ui::icon_button`], but captures the touch and reports a
+    /// frame-by-frame hold state until touch-up.
+    pub fn hold_button<D>(
+        &mut self,
+        target: &mut D,
+        icon_button: &'static IconButton,
+    ) -> Result<HoldButtonState, UiError<D::Error>>
+    where
+        D: DrawTarget<Color = Rgb565>,
+    {
+        let mut hold_button_state = HoldButtonState::Idle;
+
+        if let Some(TouchEvent::Down { x, y }) = self.touch_event {
+            let touch_point = Point::new(x as i32, y as i32);
+            if !self.down_consumed && icon_button.touch_rectangle.contains(touch_point) {
+                self.active_hold_button = Some(icon_button);
+                self.down_consumed = true;
+                hold_button_state = HoldButtonState::Pressed;
+            }
+        }
+
+        let is_pressed = self
+            .active_hold_button
+            .is_some_and(|active_hold_button| core::ptr::eq(active_hold_button, icon_button));
+        if is_pressed && matches!(hold_button_state, HoldButtonState::Idle) {
+            hold_button_state = HoldButtonState::Held;
+        }
+
+        icon_button
+            .draw_with_state(target, is_pressed)
+            .map_err(UiError::Draw)?;
+        Ok(hold_button_state)
     }
 
     /// Formats `args` into a stack buffer and draws the label text.
@@ -424,6 +463,19 @@ impl IconButton {
     where
         D: DrawTarget<Color = Rgb565>,
     {
+        self.draw_with_state(target, false)
+    }
+
+    fn draw_with_state<D>(&self, target: &mut D, is_pressed: bool) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Rgb565>,
+    {
+        if is_pressed {
+            // Dark slate gray.
+            self.touch_rectangle
+                .into_styled(fill_style(Rgb565::CSS_DARK_SLATE_GRAY))
+                .draw(target)?;
+        }
         self.icon.draw(target, self.touch_rectangle)
     }
 }
@@ -433,6 +485,8 @@ impl IconButton {
 pub enum Icon {
     /// Filled green triangle.
     Play,
+    /// Filled green square.
+    Stop,
     /// Outlined box, green triangle, and white bar.
     StepForward,
 }
@@ -444,6 +498,7 @@ impl Icon {
     {
         match self {
             Self::Play => Self::draw_play(target, touch_rectangle),
+            Self::Stop => Self::draw_stop(target, touch_rectangle),
             Self::StepForward => Self::draw_step_forward(target, touch_rectangle),
         }
     }
@@ -504,6 +559,35 @@ impl Icon {
         .draw(target)?;
         Ok(())
     }
+
+    fn draw_stop<D>(target: &mut D, touch_rectangle: Rectangle) -> Result<(), D::Error>
+    where
+        D: DrawTarget<Color = Rgb565>,
+    {
+        let width = touch_rectangle.size.width as i32;
+        let height = touch_rectangle.size.height as i32;
+        Rectangle::new(
+            Point::new(
+                touch_rectangle.top_left.x + scale_offset(width, 4),
+                touch_rectangle.top_left.y + scale_offset(height, 4),
+            ),
+            Size::new(scale_size(width, 10), scale_size(height, 10)),
+        )
+        .into_styled(fill_style(Rgb565::CSS_LIME))
+        .draw(target)?;
+        Ok(())
+    }
+}
+
+/// Per-frame hold-button state returned by [`Ui::hold_button`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HoldButtonState {
+    /// No active hold for this button this frame.
+    Idle,
+    /// The button captured a touch-down on this frame.
+    Pressed,
+    /// The button remains captured after the initial press frame.
+    Held,
 }
 
 /// Text label position and color.

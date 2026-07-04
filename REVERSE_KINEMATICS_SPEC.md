@@ -193,11 +193,11 @@ the loop computes `dt_seconds` once per frame (Phase 3).
 All in `crates/linkage-blaze-example-core/src/ui.rs` and
 `armatron/controls.rs`.
 
-- [ ] impl / [ ] verify — **`Icon::Stop`**: filled square icon, drawn inside
+- [x] impl / [x] verify — **`Icon::Stop`**: filled square icon, drawn inside
   the button rectangle with the same inset style as `Play`. Reuse the play
   icon's green unless the old stop drawing used another color (check
   `4fbeda7^`); add the approximate-color-name comment.
-- [ ] impl / [ ] verify — **`Ui::hold_button`**: same drawing as
+- [x] impl / [x] verify — **`Ui::hold_button`**: same drawing as
   `icon_button`, different interaction. On an unconsumed `Down` inside the
   rectangle, the button captures the touch (new `active_hold_button:
   Option<&'static IconButton>` field, cleared on `Up` in `Ui::begin`,
@@ -206,10 +206,10 @@ All in `crates/linkage-blaze-example-core/src/ui.rs` and
   while captured, `Idle` otherwise. While captured, draw a pressed state
   (e.g. filled background behind the icon) so the repeat is visible.
   `HoldButtonState` is a new public enum in `ui.rs`.
-- [ ] impl / [ ] verify — **`Ui::slider` returns `Ok(bool)`**: `true` when
+- [x] impl / [x] verify — **`Ui::slider` returns `Ok(bool)`**: `true` when
   this slider is the active slider this frame (grabbed on `Down` or being
   dragged). Camera-slider call sites simply keep `?;` and drop the bool.
-- [ ] impl / [ ] verify — **`RK_STOP_BUTTON`** static in `controls.rs`,
+- [x] impl / [x] verify — **`RK_STOP_BUTTON`** static in `controls.rs`,
   same rectangle as `RK_RUN_BUTTON`, `Icon::Stop`.
 
 Phase gate: `just check-all`.
@@ -218,20 +218,20 @@ Phase gate: `just check-all`.
 
 All in `crates/linkage-blaze-example-core/src/armatron/reverse_kinematics.rs`.
 
-- [ ] impl / [ ] verify — Restore `Run` (old `ReverseKinematicsRun`) and
+- [x] impl / [x] verify — Restore `Run` (old `ReverseKinematicsRun`) and
   `Phase` (old `ReverseKinematicsPhase`) as private types, logic unchanged
   except: label-derived `BEND_ELBOW_PARAM_INDEX` / `SPIN_WHOLE_ARM_PARAM_INDEX`
   consts (via `LINKAGE.param_index`), sweeps over `super::ARM_PARAM_INDEXES`,
   and the un-prefixed constant names from the table above.
-- [ ] impl / [ ] verify — `ReverseKinematics` controller with the exact API
+- [x] impl / [x] verify — `ReverseKinematics` controller with the exact API
   above wrapping `Option<Run>` + `playing: bool`. `move_params_toward` and
   the paired-candidate helper live here, private.
-- [ ] impl / [ ] verify — Replace the parked-notes module doc with real
+- [x] impl / [x] verify — Replace the parked-notes module doc with real
   documentation: what the solver does (greedy coordinate search with step
   decay, amortized across frames), and the ownership rule (solver state
   never leaks into the game loop; the distance label in `main.rs` is not
   solver-owned).
-- [ ] impl / [ ] verify — Make the `main.rs` items the solver needs
+- [x] impl / [x] verify — Make the `main.rs` items the solver needs
   visible to it (`pub(super)` or moving `ARM_PARAM_INDEXES` etc. as
   appropriate — prefer the smallest visibility change, no new modules).
 
@@ -244,10 +244,10 @@ rather than adding `#[allow]`).
 
 All in `crates/linkage-blaze-example-core/src/armatron/main.rs`.
 
-- [ ] impl / [ ] verify — Compute `dt_seconds` once per frame from
+- [x] impl / [x] verify — Compute `dt_seconds` once per frame from
   `previous_tick` at the top of the loop and feed both the fps label and
   `reverse_kinematics.tick`; refactor `next_fps_label` accordingly.
-- [ ] impl / [ ] verify — One `let mut reverse_kinematics =
+- [x] impl / [x] verify — One `let mut reverse_kinematics =
   ReverseKinematics::new();` before the loop. Wire the buttons:
 
   ```rust,no_run
@@ -264,11 +264,11 @@ All in `crates/linkage-blaze-example-core/src/armatron/main.rs`.
 
   Remove the "Clicks not yet wired to actions" comment (it is a plain
   comment, not a `todo`).
-- [ ] impl / [ ] verify — Cancellation: arm-slider calls become
+- [x] impl / [x] verify — Cancellation: arm-slider calls become
   `if ui.slider(...)? { reverse_kinematics.clear(); }`; prev/next target
   handlers call `reverse_kinematics.clear()` before reseeding. Camera
   sliders keep plain `?;`.
-- [ ] impl / [ ] verify — `reverse_kinematics.tick(&mut params, dt_seconds);`
+- [x] impl / [x] verify — `reverse_kinematics.tick(&mut params, dt_seconds);`
   after the widget section, before `ui.end` — one line, commented as the
   solver's explicit frame-schedule slot.
 
