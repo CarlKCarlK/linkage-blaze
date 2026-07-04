@@ -113,7 +113,7 @@ where
         const SAMPLES: u32 = 3;
         // TODO probe-level median-of-N may reject raw ADC outliers better than
         // this plain average, but calibration-flow release averaging is the
-        // current fix of record.
+        // current fix of record (may no longer apply).
         let mut sum_x: u32 = 0;
         let mut sum_y: u32 = 0;
         let mut count: u32 = 0;

@@ -14,10 +14,15 @@ mod animation_frame;
 use core::{
     cell::{Cell, RefCell},
     convert::Infallible,
+    ops::Range,
 };
 use std::{collections::VecDeque, rc::Rc};
 
-use device_envoy_core::flash_block::FlashBlock;
+use device_envoy_core::{
+    button::{__ButtonMonitor, BUTTON_POLL_INTERVAL, Button},
+    flash_block::{FlashBlock, FlashBlockError, FlashDevice, clear_block, load_block, save_block},
+};
+use embassy_time::Timer;
 use embedded_graphics::{
     Drawable, Pixel,
     mono_font::{MonoFont, MonoTextStyle},
@@ -28,15 +33,18 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{PixelTarget, RgbColor, rgb888_from_rgb565};
 use linkage_blaze_cyd_core::{
-    CalibrationConfig, CalibrationCorner, Cyd, CydDisplay, CydFrame, CydInfallibleError,
-    CydRawTouch, CydTouch, Orientation, RawTouchEvent, TouchEvent, calibration_corner_center,
-    distort_demo_screen_to_raw,
+    CalibrationConfig, Cyd, CydDisplay, CydFrame, CydInfallibleError, CydRawTouch, CydTouch,
+    Orientation, RawTouchEvent, TouchEvent, distort_demo_screen_to_raw,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::Clamped;
-use web_sys::{CanvasRenderingContext2d, ImageData};
+use web_sys::{CanvasRenderingContext2d, ImageData, Storage};
 
 pub use animation_frame::next_animation_frame;
+
+const FLASH_BLOCK_SIZE: usize = 4096;
+const FLASH_BLOCK_OFFSET: u32 = 0;
+const FLASH_ERASED_BYTE: u8 = 0xFF;
 
 /// A CYD display simulated on an HTML canvas.
 pub struct CydWasm {
@@ -73,11 +81,32 @@ pub struct CydTouchWasmSource {
     interaction_state: Rc<Cell<InteractionState>>,
 }
 
-pub struct CydWasmCalibrationFlashBlock {
-    bytes: Rc<RefCell<Option<Vec<u8>>>>,
+pub struct ButtonWasm {
+    pressed: Rc<Cell<bool>>,
+}
+
+#[derive(Clone)]
+pub struct ButtonWasmSource {
+    pressed: Rc<Cell<bool>>,
+}
+
+pub struct FlashBlockWasm {
+    flash_device: FlashDeviceWasm,
 }
 
 type RawTouchEvents = Rc<RefCell<VecDeque<RawTouchEvent>>>;
+
+struct FlashDeviceWasm {
+    storage: Storage,
+    storage_key: String,
+    bytes: [u8; FLASH_BLOCK_SIZE],
+}
+
+#[derive(Debug)]
+pub enum FlashDeviceWasmError {
+    StorageUnavailable,
+    StorageAccess,
+}
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum InteractionState {
@@ -208,60 +237,201 @@ impl Default for CydTouchWasmSource {
     }
 }
 
-impl CydWasmCalibrationFlashBlock {
+impl ButtonWasmSource {
     #[must_use]
-    pub fn new_precalibrated() -> Self {
-        let calibration_corners = [
-            CalibrationCorner::UpperLeft,
-            CalibrationCorner::UpperRight,
-            CalibrationCorner::LowerRight,
-            CalibrationCorner::LowerLeft,
-        ];
-        let mut raw_points = [distort_demo_screen_to_raw(0.0, 0.0); 4];
-
-        for (point_index, calibration_corner) in calibration_corners.into_iter().enumerate() {
-            let screen_point = calibration_corner_center(calibration_corner);
-            raw_points[point_index] =
-                distort_demo_screen_to_raw(screen_point.x as f32, screen_point.y as f32);
-        }
-
-        let calibration_config = CalibrationConfig::from_four_points(raw_points);
-        let bytes = postcard::to_stdvec(&calibration_config)
-            .expect("CalibrationConfig postcard serialization must succeed");
-
+    pub fn new() -> Self {
         Self {
-            bytes: Rc::new(RefCell::new(Some(bytes))),
+            pressed: Rc::new(Cell::new(false)),
+        }
+    }
+
+    #[must_use]
+    pub fn button(&self) -> ButtonWasm {
+        ButtonWasm {
+            pressed: self.pressed.clone(),
+        }
+    }
+
+    pub fn press(&self) {
+        self.pressed.set(true);
+    }
+
+    pub fn release(&self) {
+        self.pressed.set(false);
+    }
+}
+
+impl Default for ButtonWasmSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// TODO When a dedicated `device-envoy-wasm` crate exists, move `ButtonWasm`
+// there so browser button plumbing lives beside the platform button adapter.
+impl __ButtonMonitor for ButtonWasm {
+    fn is_pressed_raw(&self) -> bool {
+        self.pressed.get()
+    }
+
+    async fn wait_until_pressed_state(&mut self, pressed: bool) {
+        loop {
+            if self.is_pressed_raw() == pressed {
+                break;
+            }
+            Timer::after(BUTTON_POLL_INTERVAL).await;
         }
     }
 }
 
-impl FlashBlock for CydWasmCalibrationFlashBlock {
-    type Error = Infallible;
+impl Button for ButtonWasm {}
+
+impl FlashBlockWasm {
+    pub fn new(storage_key: &str) -> Result<Self, FlashDeviceWasmError> {
+        Ok(Self {
+            flash_device: FlashDeviceWasm::new(storage_key)?,
+        })
+    }
+}
+
+impl FlashDeviceWasm {
+    fn new(storage_key: &str) -> Result<Self, FlashDeviceWasmError> {
+        let window = web_sys::window().ok_or(FlashDeviceWasmError::StorageUnavailable)?;
+        let storage = window
+            .local_storage()
+            .map_err(|_error| FlashDeviceWasmError::StorageAccess)?
+            .ok_or(FlashDeviceWasmError::StorageUnavailable)?;
+        let mut flash_device = Self {
+            storage,
+            storage_key: storage_key.to_owned(),
+            bytes: [FLASH_ERASED_BYTE; FLASH_BLOCK_SIZE],
+        };
+        flash_device.load_from_storage()?;
+        Ok(flash_device)
+    }
+
+    fn load_from_storage(&mut self) -> Result<(), FlashDeviceWasmError> {
+        let Some(encoded_bytes) = self
+            .storage
+            .get_item(&self.storage_key)
+            .map_err(|_error| FlashDeviceWasmError::StorageAccess)?
+        else {
+            return Ok(());
+        };
+
+        if encoded_bytes.len() != FLASH_BLOCK_SIZE * 2 {
+            return Ok(());
+        }
+
+        let mut decoded_bytes = [FLASH_ERASED_BYTE; FLASH_BLOCK_SIZE];
+        if !decode_hex_into(&encoded_bytes, &mut decoded_bytes) {
+            return Ok(());
+        }
+        self.bytes = decoded_bytes;
+        Ok(())
+    }
+
+    fn persist(&self) -> Result<(), FlashDeviceWasmError> {
+        let encoded_bytes = encode_hex(&self.bytes);
+        self.storage
+            .set_item(&self.storage_key, &encoded_bytes)
+            .map_err(|_error| FlashDeviceWasmError::StorageAccess)
+    }
+
+    fn checked_range(&self, offset: u32, len: usize) -> Range<usize> {
+        let start = usize::try_from(offset).expect("flash offset must fit in usize");
+        let end = start
+            .checked_add(len)
+            .expect("flash range must fit in usize");
+        assert!(
+            end <= FLASH_BLOCK_SIZE,
+            "flash range must stay within the block"
+        );
+        start..end
+    }
+}
+
+impl FlashDevice for FlashDeviceWasm {
+    type Error = FlashDeviceWasmError;
+
+    fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        let checked_range = self.checked_range(offset, bytes.len());
+        bytes.copy_from_slice(&self.bytes[checked_range]);
+        Ok(())
+    }
+
+    fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        let checked_range = self.checked_range(offset, bytes.len());
+        self.bytes[checked_range].copy_from_slice(bytes);
+        self.persist()
+    }
+
+    fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        let len = usize::try_from(to.saturating_sub(from)).expect("flash erase length fits usize");
+        let checked_range = self.checked_range(from, len);
+        self.bytes[checked_range].fill(FLASH_ERASED_BYTE);
+        self.persist()
+    }
+}
+
+impl FlashBlock for FlashBlockWasm {
+    type Error = FlashBlockError<FlashDeviceWasmError>;
 
     fn load<T>(&mut self) -> Result<Option<T>, Self::Error>
     where
         T: Serialize + for<'de> Deserialize<'de>,
     {
-        let bytes_ref = self.bytes.borrow();
-        let Some(bytes) = bytes_ref.as_ref() else {
-            return Ok(None);
-        };
-        Ok(postcard::from_bytes(bytes).ok())
+        load_block::<FLASH_BLOCK_SIZE, T, _>(&mut self.flash_device, FLASH_BLOCK_OFFSET)
     }
 
     fn save<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize + for<'de> Deserialize<'de>,
     {
-        let bytes =
-            postcard::to_stdvec(value).expect("WASM in-memory flash serialization must succeed");
-        *self.bytes.borrow_mut() = Some(bytes);
-        Ok(())
+        save_block::<FLASH_BLOCK_SIZE, _, _>(&mut self.flash_device, FLASH_BLOCK_OFFSET, value)
     }
 
     fn clear(&mut self) -> Result<(), Self::Error> {
-        *self.bytes.borrow_mut() = None;
-        Ok(())
+        clear_block::<FLASH_BLOCK_SIZE, _>(&mut self.flash_device, FLASH_BLOCK_OFFSET)
+    }
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(HEX_DIGITS[(byte >> 4) as usize] as char);
+        encoded.push(HEX_DIGITS[(byte & 0x0F) as usize] as char);
+    }
+    encoded
+}
+
+fn decode_hex_into(encoded_bytes: &str, dst: &mut [u8]) -> bool {
+    let encoded_bytes = encoded_bytes.as_bytes();
+    if encoded_bytes.len() != dst.len() * 2 {
+        return false;
+    }
+
+    for (dst_index, chunk) in encoded_bytes.chunks_exact(2).enumerate() {
+        let Some(high) = decode_hex_nibble(chunk[0]) else {
+            return false;
+        };
+        let Some(low) = decode_hex_nibble(chunk[1]) else {
+            return false;
+        };
+        dst[dst_index] = (high << 4) | low;
+    }
+
+    true
+}
+
+const fn decode_hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
 

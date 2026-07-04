@@ -17,18 +17,28 @@ body {
   justify-content: center;
 }
 
+.simulator {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .stage {
   /* The live display: crisp landscape 2x (320x240 panel -> 640x480).
      Note: one CYD pixel is two browser pixels here. */
   --screen-width: 640px;
   --screen-height: 480px;
+  --stage-height: calc(var(--screen-height) / 0.44158);
   --screen-center-x: calc(24.212% + 45.845% / 2);
   --screen-center-y: calc(27.691% + 44.158% / 2);
+  --boot-button-left: 47.3%;
+  --boot-button-top: 78.3%;
   position: relative;
   z-index: 0;
   flex: 0 0 auto;
   width: calc(var(--screen-width) / 0.45845);
-  height: calc(var(--screen-height) / 0.44158);
+  height: var(--stage-height);
   transform: translate(
     calc(50% - var(--screen-center-x)),
     calc(50% - var(--screen-center-y))
@@ -72,4 +82,42 @@ body {
     rgb(67, 72, 103) 50% 90%,
     rgb(20, 20, 27) 90% 100%
   );
+}
+
+.boot-button {
+  position: absolute;
+  left: var(--boot-button-left);
+  top: var(--boot-button-top);
+  transform: translateX(-50%);
+  z-index: 3;
+  min-width: 72px;
+  padding: 7px 16px 8px;
+  border: 1px solid rgb(58, 60, 66); /* charcoal gray */
+  border-radius: 6px;
+  background: linear-gradient(
+    to bottom,
+    rgb(116, 120, 127) 0%,
+    rgb(67, 71, 79) 52%,
+    rgb(44, 47, 53) 100%
+  );
+  color: rgb(230, 232, 235); /* off-white */
+  font: 600 13px/1.1 "Trebuchet MS", "Verdana", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  box-shadow:
+    0 2px 0 rgb(30, 31, 35),
+    0 8px 18px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.boot-button:hover {
+  filter: brightness(1.05);
+}
+
+.boot-button:active {
+  transform: translate(-50%, 1px);
+  box-shadow:
+    0 1px 0 rgb(30, 31, 35),
+    0 5px 12px rgba(0, 0, 0, 0.28);
 }

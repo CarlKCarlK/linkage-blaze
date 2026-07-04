@@ -11,6 +11,7 @@ pub mod reverse_kinematics;
 
 use core::convert::Infallible;
 
+use device_envoy_core::button::Button;
 use embassy_time::Instant;
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -113,9 +114,13 @@ const PROJECTION: Projection = Projection::front_perspective(
 /// provide calibrated touch before calling [`armatron`]. Shared calibration
 /// UI helpers now live in [`linkage_blaze_cyd_core::calibration`], alongside
 /// the rest of the CYD touch-calibration flow.
-pub async fn armatron<C>(cyd: &mut C) -> Result<ArmatronOutcome, Error<C::Error>>
+pub async fn armatron<C, R>(
+    cyd: &mut C,
+    recalibration_button: &mut R,
+) -> Result<ArmatronOutcome, Error<C::Error>>
 where
     C: Cyd,
+    R: Button,
 {
     let (mut display, mut touch) = cyd.parts();
 
@@ -135,6 +140,9 @@ where
 
     loop {
         let current_tick = Instant::now();
+        if recalibration_button.is_pressed() {
+            return Ok(ArmatronOutcome::RecalibrateRequested);
+        }
         let previous_tick_before_frame = previous_tick;
         let dt_seconds = previous_tick_before_frame.map_or(0.0, |previous_tick| {
             current_tick
@@ -225,9 +233,10 @@ where
         frame.flush().await.map_err(Error::Cyd)?;
     }
 }
-
+// todo000000 how evil would it be to return the calibration request as an Error?
 pub enum ArmatronOutcome {
     CalibrateRequested,
+    RecalibrateRequested,
 }
 
 /// Error from the generic armatron loop, generic over the CYD device error `F`.
@@ -247,7 +256,7 @@ pub enum Error<F> {
 }
 
 // ── FrameBuffer ────────────────────────────────────────────────────────────────
-
+//todo00000000 understand why this is needed here.
 pub struct FrameBuffer {
     pixels: [u16; SCREEN_PIXELS],
 }

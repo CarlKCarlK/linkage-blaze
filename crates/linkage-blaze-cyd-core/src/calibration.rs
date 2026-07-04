@@ -32,7 +32,6 @@ pub const MAX_RESIDUAL_PIXELS: f32 = 12.0;
 pub const VERIFY_HIT_RADIUS_PIXELS: f32 = 20.0;
 
 const CALIBRATION_CROSS_COLOR: Rgb888 = Rgb888::CSS_YELLOW;
-const CALIBRATION_CAPTURED_CROSS_COLOR: Rgb888 = Rgb888::CSS_LIME;
 const CALIBRATION_REJECTED_CROSS_COLOR: Rgb888 = Rgb888::CSS_RED;
 const CALIBRATION_DOT_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 const AFFINE_DETERMINANT_EPSILON: f32 = 0.000_001;
@@ -217,18 +216,6 @@ pub fn draw_calibration_cross<E>(
     )
 }
 
-pub fn draw_calibration_captured_cross<E>(
-    target: &mut impl DrawTarget<Color = Rgb565, Error = E>,
-    calibration_corner: CalibrationCorner,
-) -> Result<(), E> {
-    draw_crosshair_at(
-        target,
-        calibration_corner_center(calibration_corner),
-        Rgb565::from(CALIBRATION_CAPTURED_CROSS_COLOR),
-        Rgb565::from(CALIBRATION_DOT_COLOR),
-    )
-}
-
 pub fn draw_calibration_rejected_cross<E>(
     target: &mut impl DrawTarget<Color = Rgb565, Error = E>,
     calibration_corner: CalibrationCorner,
@@ -267,6 +254,22 @@ pub fn draw_calibration_instruction<E>(
         MonoTextStyle::new(&FONT_6X10, Rgb565::from(CALIBRATION_DOT_COLOR)),
         Baseline::Top,
     )
+    .draw(target)?;
+    Ok(())
+}
+
+pub fn draw_calibration_ack_dot<E>(
+    target: &mut impl DrawTarget<Color = Rgb565, Error = E>,
+    calibration_corner: CalibrationCorner,
+) -> Result<(), E> {
+    Circle::new(
+        calibration_corner_center(calibration_corner)
+            - Point::new(CALIBRATION_CENTER_DOT_RADIUS, CALIBRATION_CENTER_DOT_RADIUS),
+        (CALIBRATION_CENTER_DOT_RADIUS * 2) as u32,
+    )
+    .into_styled(PrimitiveStyle::with_fill(Rgb565::from(
+        CALIBRATION_DOT_COLOR,
+    )))
     .draw(target)?;
     Ok(())
 }

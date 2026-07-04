@@ -1,5 +1,6 @@
 use core::fmt::Write;
 
+use device_envoy_core::button::Button;
 use device_envoy_core::flash_block::FlashBlock;
 use heapless::String;
 
@@ -7,7 +8,7 @@ use crate::{Cyd, CydDisplay, CydFrame, CydRawTouch};
 
 use super::{
     CalibrationConfig, CalibrationCorner, CalibrationFlow, CalibrationSolveError,
-    draw_calibration_captured_cross, draw_calibration_cross, draw_calibration_instruction,
+    draw_calibration_ack_dot, draw_calibration_cross, draw_calibration_instruction,
     draw_calibration_rejected_cross, draw_calibration_verify_target,
     flow::CalibrationFlowEvent,
     flow::{ReleaseTouchCapture, ReleaseTouchCaptureEvent},
@@ -16,8 +17,12 @@ use super::{
 
 const CAPTURE_ACK_FRAME_COUNT: usize = 8;
 const REJECTED_FRAME_COUNT: usize = 30;
-const VERIFY_TIMEOUT_POLLS: usize = 600;
-const CONFIRMATION_FRAME_COUNT: usize = 60;
+const MAX_RAW_EVENTS_PER_FRAME: usize = 64;
+const VERIFY_TIMEOUT_SECONDS: usize = 10;
+// The ESP classic CYD currently redraws the full calibration screen at about
+// 10 fps, so 100 drawn frames is roughly the intended 10-second timeout.
+const CALIBRATION_DRAW_FRAMES_PER_SECOND: usize = 10;
+const VERIFY_TIMEOUT_FRAMES: usize = VERIFY_TIMEOUT_SECONDS * CALIBRATION_DRAW_FRAMES_PER_SECOND;
 
 /// Result of ensuring calibration at startup.
 #[derive(Clone, Copy, Debug)]
@@ -53,7 +58,6 @@ enum CalibrationDriverState {
     Capturing,
     ShowCaptured {
         calibration_corner: CalibrationCorner,
-        next_corner: CalibrationCorner,
         frames_remaining: usize,
     },
     ShowRejected {
@@ -65,10 +69,6 @@ enum CalibrationDriverState {
         release_touch_capture: ReleaseTouchCapture,
         polls_remaining: usize,
     },
-    Confirming {
-        calibration_config: CalibrationConfig,
-        frames_remaining: usize,
-    },
 }
 
 /// Ensure that `cyd` has a calibration, running the shared four-tap flow when
@@ -77,16 +77,18 @@ enum CalibrationDriverState {
 /// Invalid, corrupt, or absent flash content is treated as "not calibrated"
 /// instead of bricking boot. The driver simply reruns the calibration flow and
 /// overwrites the block with a fresh solve after the candidate is validated and
-/// the user confirms it by hitting the center verify target.
+/// the user confirms it by hitting the center verify target, then returns so
+/// the caller can proceed immediately.
 pub async fn ensure_calibration<C, F, R, E>(
     cyd: &mut C,
     calibration_flash_block: &mut F,
-    mut recalibration_requested: R,
+    recalibration_button: &mut R,
+    confirmed_message: Option<&str>,
 ) -> Result<EnsureCalibrationOutcome, EnsureCalibrationError<E, F::Error>>
 where
     C: Cyd<Error = E> + CydRawTouch<Error = E>,
     F: FlashBlock,
-    R: FnMut() -> bool,
+    R: Button,
 {
     if let Some(calibration_config) = calibration_flash_block
         .load::<CalibrationConfig>()
@@ -99,20 +101,21 @@ where
     let mut calibration_driver_state = CalibrationDriverState::Capturing;
 
     loop {
-        if recalibration_requested() {
+        // A plain Button is intentional here: this loop does synchronous
+        // per-frame polling, not cancelable button futures, so ButtonWatch
+        // would add an ESP-only dependency without buying correctness.
+        if recalibration_button.is_pressed() {
             calibration_flow.restart();
             calibration_driver_state = CalibrationDriverState::Capturing;
         }
 
-        loop {
+        let mut saw_idle = false;
+        for _raw_event_index in 0..MAX_RAW_EVENTS_PER_FRAME {
             let raw_touch_event = cyd
                 .read_raw_touch_event()
                 .map_err(EnsureCalibrationError::Device)?;
             let Some(raw_touch_event) = raw_touch_event else {
-                advance_driver_state_after_idle(
-                    &mut calibration_flow,
-                    &mut calibration_driver_state,
-                );
+                saw_idle = true;
                 break;
             };
 
@@ -126,13 +129,10 @@ where
 
                     match calibration_flow_event {
                         CalibrationFlowEvent::PointCaptured {
-                            calibration_corner,
-                            next_corner,
-                            ..
+                            calibration_corner, ..
                         } => {
                             calibration_driver_state = CalibrationDriverState::ShowCaptured {
                                 calibration_corner,
-                                next_corner,
                                 frames_remaining: CAPTURE_ACK_FRAME_COUNT,
                             };
                         }
@@ -143,7 +143,7 @@ where
                                         candidate_config: calibration_validation
                                             .calibration_config(),
                                         release_touch_capture: ReleaseTouchCapture::new(),
-                                        polls_remaining: VERIFY_TIMEOUT_POLLS,
+                                        polls_remaining: VERIFY_TIMEOUT_FRAMES,
                                     };
                                 }
                                 Err(CalibrationSolveError::ResidualTooLarge {
@@ -181,13 +181,15 @@ where
                     let (mapped_x, mapped_y) =
                         candidate_config.map_raw_to_screen(raw_point.x, raw_point.y);
                     if hit_verify_target(mapped_x, mapped_y) {
+                        if let Some(confirmed_message) = confirmed_message {
+                            draw_message_screen(cyd, confirmed_message)
+                                .await
+                                .map_err(EnsureCalibrationError::Device)?;
+                        }
                         calibration_flash_block
                             .save(candidate_config)
                             .map_err(EnsureCalibrationError::Flash)?;
-                        calibration_driver_state = CalibrationDriverState::Confirming {
-                            calibration_config: *candidate_config,
-                            frames_remaining: CONFIRMATION_FRAME_COUNT,
-                        };
+                        return Ok(EnsureCalibrationOutcome::Saved(*candidate_config));
                     } else {
                         calibration_flow.restart();
                         calibration_driver_state = CalibrationDriverState::ShowRejected {
@@ -197,23 +199,28 @@ where
                     }
                 }
                 CalibrationDriverState::ShowCaptured { .. }
-                | CalibrationDriverState::ShowRejected { .. }
-                | CalibrationDriverState::Confirming { .. } => {}
+                | CalibrationDriverState::ShowRejected { .. } => {}
             }
+        }
+
+        if saw_idle {
+            advance_driver_state_after_idle(&mut calibration_flow, &mut calibration_driver_state);
         }
 
         draw_calibration_screen(cyd, &calibration_flow, &calibration_driver_state)
             .await
             .map_err(EnsureCalibrationError::Device)?;
-
-        if let CalibrationDriverState::Confirming {
-            calibration_config,
-            frames_remaining: 0,
-        } = calibration_driver_state
-        {
-            return Ok(EnsureCalibrationOutcome::Saved(calibration_config));
-        }
     }
+}
+
+async fn draw_message_screen<C>(cyd: &mut C, message: &str) -> Result<(), C::Error>
+where
+    C: Cyd,
+{
+    let (mut display, _touch) = cyd.parts();
+    let mut frame = display.full_frame_mut();
+    frame.clear();
+    frame.write_text(message).flush().await
 }
 
 fn advance_driver_state_after_idle(
@@ -261,13 +268,6 @@ fn advance_driver_state_after_idle(
                 };
             }
         }
-        CalibrationDriverState::Confirming {
-            frames_remaining, ..
-        } => {
-            if *frames_remaining > 0 {
-                *frames_remaining -= 1;
-            }
-        }
     }
 }
 
@@ -297,17 +297,17 @@ where
             }
         }
         CalibrationDriverState::ShowCaptured {
-            calibration_corner,
-            next_corner,
-            ..
+            calibration_corner, ..
         } => {
-            match draw_calibration_captured_cross(&mut frame, *calibration_corner) {
+            match draw_calibration_ack_dot(&mut frame, *calibration_corner) {
                 Ok(()) => {}
                 Err(infallible) => match infallible {},
             }
-            match draw_calibration_cross(&mut frame, *next_corner) {
-                Ok(()) => {}
-                Err(infallible) => match infallible {},
+            if let Some(next_corner) = calibration_flow.next_corner() {
+                match draw_calibration_cross(&mut frame, next_corner) {
+                    Ok(()) => {}
+                    Err(infallible) => match infallible {},
+                }
             }
             match draw_calibration_instruction(&mut frame, "Corner captured") {
                 Ok(()) => {}
@@ -348,16 +348,6 @@ where
                 Err(infallible) => match infallible {},
             }
             match draw_calibration_instruction(&mut frame, "Tap center to save") {
-                Ok(()) => {}
-                Err(infallible) => match infallible {},
-            }
-        }
-        CalibrationDriverState::Confirming { .. } => {
-            match draw_calibration_verify_target(&mut frame) {
-                Ok(()) => {}
-                Err(infallible) => match infallible {},
-            }
-            match draw_calibration_instruction(&mut frame, "Calibrated") {
                 Ok(()) => {}
                 Err(infallible) => match infallible {},
             }

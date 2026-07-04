@@ -12,6 +12,7 @@ license.workspace = true
 
 [dependencies]
 device-envoy-core = { version = "0.1.0", default-features = false }
+embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
 embedded-graphics = { version = "0.8", default-features = false }
 linkage-blaze-core.workspace = true
 linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
@@ -23,4 +24,5 @@ web-sys = { version = "0.3", features = [
     "Window",
     "CanvasRenderingContext2d",
     "ImageData",
+    "Storage",
 ] }

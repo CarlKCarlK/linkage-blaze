@@ -4,15 +4,13 @@ use device_envoy_core::flash_block::FlashBlock as _;
 use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
 use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{Orientation, ensure_calibration};
-use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm, CydWasmCalibrationFlashBlock};
-use linkage_blaze_example_core::{
-    armatron::{ArmatronOutcome, BACKGROUND, FOREGROUND, armatron},
-    infallible::InfallibleResultExt,
-};
+use linkage_blaze_cyd_wasm::{ButtonWasmSource, CydTouchWasmSource, CydWasm, FlashBlockWasm};
+use linkage_blaze_example_core::armatron::{ArmatronOutcome, BACKGROUND, FOREGROUND, armatron};
 use wasm_bindgen::{JsCast, closure::Closure, prelude::wasm_bindgen};
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, PointerEvent};
+use web_sys::{CanvasRenderingContext2d, Element, HtmlCanvasElement, PointerEvent};
 
 const ORIENTATION: Orientation = Orientation::Landscape;
+const CALIBRATION_STORAGE_KEY: &str = "linkage-blaze.armatron.calibration";
 
 #[wasm_bindgen]
 pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
@@ -25,6 +23,9 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .expect("the canvas element exists")
         .dyn_into()
         .expect("the element is a <canvas>");
+    let boot_button = document
+        .get_element_by_id("boot-button")
+        .expect("the boot button element exists");
 
     let size = ORIENTATION.size();
     canvas.set_width(size.width);
@@ -37,8 +38,11 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .expect("the context is a CanvasRenderingContext2d");
 
     let touch_source = CydTouchWasmSource::new();
+    let button_source = ButtonWasmSource::new();
     install_touch_handlers(&canvas, touch_source.clone())?;
-    let mut calibration_flash_block = CydWasmCalibrationFlashBlock::new_precalibrated();
+    install_boot_button_handlers(&boot_button, button_source.clone())?;
+    let mut calibration_flash_block = FlashBlockWasm::new(CALIBRATION_STORAGE_KEY)
+        .map_err(|error| wasm_bindgen::JsValue::from_str(&format!("{error:?}")))?;
 
     wasm_bindgen_futures::spawn_local(async move {
         loop {
@@ -51,7 +55,15 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
                 touch_source.clone(),
             );
 
-            match ensure_calibration(&mut cyd, &mut calibration_flash_block, || false).await {
+            let mut recalibration_button = button_source.button();
+            match ensure_calibration(
+                &mut cyd,
+                &mut calibration_flash_block,
+                &mut recalibration_button,
+                None,
+            )
+            .await
+            {
                 Ok(calibration_outcome) => {
                     if calibration_outcome.was_saved() {
                         continue;
@@ -59,13 +71,33 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
                     let calibration_config = calibration_outcome.calibration_config();
                     cyd.set_calibration(calibration_config);
                 }
-                Err(infallible) => match infallible {},
+                Err(error) => {
+                    web_sys::console::error_1(
+                        &format!("calibration bootstrap stopped: {error:?}").into(),
+                    );
+                    break;
+                }
             }
 
-            match armatron(&mut cyd).await {
+            match armatron(&mut cyd, &mut recalibration_button).await {
                 Ok(ArmatronOutcome::CalibrateRequested) => {
                     cyd.clear_calibration();
-                    calibration_flash_block.clear().unwrap_infallible();
+                    if let Err(error) = calibration_flash_block.clear() {
+                        web_sys::console::error_1(
+                            &format!("failed to clear calibration flash: {error:?}").into(),
+                        );
+                        break;
+                    }
+                    touch_source.wait_for_fresh_press();
+                }
+                Ok(ArmatronOutcome::RecalibrateRequested) => {
+                    cyd.clear_calibration();
+                    if let Err(error) = calibration_flash_block.clear() {
+                        web_sys::console::error_1(
+                            &format!("failed to clear calibration flash: {error:?}").into(),
+                        );
+                        break;
+                    }
                     touch_source.wait_for_fresh_press();
                 }
                 Err(error) => {
@@ -133,6 +165,51 @@ fn install_touch_handlers(
         pointer_cancel.as_ref().unchecked_ref(),
     )?;
     pointer_cancel.forget();
+
+    Ok(())
+}
+
+fn install_boot_button_handlers(
+    boot_button: &Element,
+    button_source: ButtonWasmSource,
+) -> Result<(), wasm_bindgen::JsValue> {
+    let pointer_down_source = button_source.clone();
+    let pointer_down = Closure::wrap(Box::new(move |event: PointerEvent| {
+        event.prevent_default();
+        pointer_down_source.press();
+    }) as Box<dyn FnMut(_)>);
+    boot_button
+        .add_event_listener_with_callback("pointerdown", pointer_down.as_ref().unchecked_ref())?;
+    pointer_down.forget();
+
+    let pointer_up_source = button_source.clone();
+    let pointer_up = Closure::wrap(Box::new(move |event: PointerEvent| {
+        event.prevent_default();
+        pointer_up_source.release();
+    }) as Box<dyn FnMut(_)>);
+    boot_button
+        .add_event_listener_with_callback("pointerup", pointer_up.as_ref().unchecked_ref())?;
+    pointer_up.forget();
+
+    let pointer_cancel_source = button_source.clone();
+    let pointer_cancel = Closure::wrap(Box::new(move |event: PointerEvent| {
+        event.prevent_default();
+        pointer_cancel_source.release();
+    }) as Box<dyn FnMut(_)>);
+    boot_button.add_event_listener_with_callback(
+        "pointercancel",
+        pointer_cancel.as_ref().unchecked_ref(),
+    )?;
+    pointer_cancel.forget();
+
+    let pointer_leave_source = button_source;
+    let pointer_leave = Closure::wrap(Box::new(move |event: PointerEvent| {
+        event.prevent_default();
+        pointer_leave_source.release();
+    }) as Box<dyn FnMut(_)>);
+    boot_button
+        .add_event_listener_with_callback("pointerleave", pointer_leave.as_ref().unchecked_ref())?;
+    pointer_leave.forget();
 
     Ok(())
 }

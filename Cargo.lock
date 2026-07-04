@@ -1608,6 +1608,7 @@ dependencies = [
 name = "linkage-blaze-classic-wasm"
 version = "0.1.4"
 dependencies = [
+ "embassy-executor",
  "embassy-time",
  "embedded-graphics",
  "linkage-blaze-cyd-core",
@@ -1685,6 +1686,7 @@ name = "linkage-blaze-cyd-wasm"
 version = "0.1.4"
 dependencies = [
  "device-envoy-core",
+ "embassy-time",
  "embedded-graphics",
  "js-sys",
  "linkage-blaze-core",

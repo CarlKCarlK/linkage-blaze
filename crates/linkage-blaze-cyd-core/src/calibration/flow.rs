@@ -3,9 +3,8 @@ use super::{
     calibration_corner_for_index,
 };
 
-const SAMPLES_DISCARDED_AFTER_DOWN: usize = 1;
-const SAMPLE_CAPACITY: usize = 16;
-const MIN_SAMPLES_PER_POINT: usize = 1;
+const SAMPLES_DISCARDED_AFTER_DOWN: usize = 4;
+const MIN_SAMPLES_PER_POINT: usize = 3;
 
 /// Sans-io state machine for the four-tap calibration flow.
 ///
@@ -24,8 +23,12 @@ enum ReleaseTouchCaptureState {
     Armed,
     Sampling {
         discarded_sample_count: usize,
+        // Raw coordinates peak around 4095 (~2^12), so even an absurdly long
+        // press would need more than 2^50 samples before these u64 sums could
+        // overflow.
+        sum_x: u64,
+        sum_y: u64,
         usable_sample_count: usize,
-        usable_samples: [RawPoint; SAMPLE_CAPACITY],
     },
     WaitForIdle,
 }
@@ -121,40 +124,37 @@ impl ReleaseTouchCapture {
                 let Some(RawTouchEvent::Down { raw_x, raw_y }) = raw_touch_event else {
                     return None;
                 };
-                let mut usable_samples = [RawPoint { x: 0, y: 0 }; SAMPLE_CAPACITY];
-                usable_samples[0] = RawPoint { x: raw_x, y: raw_y };
                 self.release_touch_capture_state = ReleaseTouchCaptureState::Sampling {
                     discarded_sample_count: 0,
+                    sum_x: u64::from(raw_x),
+                    sum_y: u64::from(raw_y),
                     usable_sample_count: 1,
-                    usable_samples,
                 };
                 None
             }
             ReleaseTouchCaptureState::Sampling {
                 discarded_sample_count,
+                sum_x,
+                sum_y,
                 usable_sample_count,
-                mut usable_samples,
             } => match raw_touch_event {
                 Some(RawTouchEvent::Down { raw_x, raw_y })
                 | Some(RawTouchEvent::Move { raw_x, raw_y }) => {
                     if discarded_sample_count < SAMPLES_DISCARDED_AFTER_DOWN {
                         self.release_touch_capture_state = ReleaseTouchCaptureState::Sampling {
                             discarded_sample_count: discarded_sample_count + 1,
+                            sum_x,
+                            sum_y,
                             usable_sample_count,
-                            usable_samples,
                         };
                         return None;
                     }
 
-                    let usable_sample_count = store_usable_sample(
-                        &mut usable_samples,
-                        usable_sample_count,
-                        RawPoint { x: raw_x, y: raw_y },
-                    );
                     self.release_touch_capture_state = ReleaseTouchCaptureState::Sampling {
                         discarded_sample_count,
-                        usable_sample_count,
-                        usable_samples,
+                        sum_x: sum_x + u64::from(raw_x),
+                        sum_y: sum_y + u64::from(raw_y),
+                        usable_sample_count: usable_sample_count + 1,
                     };
                     None
                 }
@@ -165,7 +165,7 @@ impl ReleaseTouchCapture {
                     }
 
                     Some(ReleaseTouchCaptureEvent::Captured {
-                        raw_point: average_samples(&usable_samples, usable_sample_count),
+                        raw_point: average_samples(sum_x, sum_y, usable_sample_count),
                         usable_sample_count,
                     })
                 }
@@ -208,40 +208,8 @@ pub(super) enum ReleaseTouchCaptureEvent {
     },
 }
 
-fn store_usable_sample(
-    usable_samples: &mut [RawPoint; SAMPLE_CAPACITY],
-    usable_sample_count: usize,
-    raw_point: RawPoint,
-) -> usize {
-    if usable_sample_count < SAMPLE_CAPACITY {
-        usable_samples[usable_sample_count] = raw_point;
-        return usable_sample_count + 1;
-    }
-
-    let mut sample_index = 1;
-    while sample_index < SAMPLE_CAPACITY {
-        usable_samples[sample_index - 1] = usable_samples[sample_index];
-        sample_index += 1;
-    }
-    usable_samples[SAMPLE_CAPACITY - 1] = raw_point;
-    SAMPLE_CAPACITY
-}
-
-fn average_samples(
-    usable_samples: &[RawPoint; SAMPLE_CAPACITY],
-    usable_sample_count: usize,
-) -> RawPoint {
-    let mut sum_x = 0_u32;
-    let mut sum_y = 0_u32;
-    let mut sample_index = 0;
-    while sample_index < usable_sample_count {
-        let raw_point = usable_samples[sample_index];
-        sum_x += u32::from(raw_point.x);
-        sum_y += u32::from(raw_point.y);
-        sample_index += 1;
-    }
-
-    let usable_sample_count = usable_sample_count as u32;
+fn average_samples(sum_x: u64, sum_y: u64, usable_sample_count: usize) -> RawPoint {
+    let usable_sample_count = usable_sample_count as u64;
     RawPoint {
         x: ((sum_x + usable_sample_count / 2) / usable_sample_count) as u16,
         y: ((sum_y + usable_sample_count / 2) / usable_sample_count) as u16,
@@ -261,40 +229,68 @@ mod tests {
 
         let calibration_flow_event = run_tap(
             &mut calibration_flow,
-            [(100, 200), (101, 201), (102, 202), (103, 203), (104, 204)],
+            &[
+                (100, 200),
+                (101, 201),
+                (102, 202),
+                (103, 203),
+                (104, 204),
+                (105, 205),
+            ],
         );
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperLeft,
-            RawPoint { x: 102, y: 202 },
+            RawPoint { x: 104, y: 204 },
             CalibrationCorner::UpperRight,
         );
 
         let calibration_flow_event = run_tap(
             &mut calibration_flow,
-            [(900, 210), (901, 211), (902, 212), (903, 213), (904, 214)],
+            &[
+                (900, 210),
+                (901, 211),
+                (902, 212),
+                (903, 213),
+                (904, 214),
+                (905, 215),
+            ],
         );
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperRight,
-            RawPoint { x: 902, y: 212 },
+            RawPoint { x: 904, y: 214 },
             CalibrationCorner::LowerRight,
         );
 
         let calibration_flow_event = run_tap(
             &mut calibration_flow,
-            [(910, 800), (911, 801), (912, 802), (913, 803), (914, 804)],
+            &[
+                (910, 800),
+                (911, 801),
+                (912, 802),
+                (913, 803),
+                (914, 804),
+                (915, 805),
+            ],
         );
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::LowerRight,
-            RawPoint { x: 912, y: 802 },
+            RawPoint { x: 914, y: 804 },
             CalibrationCorner::LowerLeft,
         );
 
         let calibration_flow_event = run_tap(
             &mut calibration_flow,
-            [(120, 790), (121, 791), (122, 792), (123, 793), (124, 794)],
+            &[
+                (120, 790),
+                (121, 791),
+                (122, 792),
+                (123, 793),
+                (124, 794),
+                (125, 795),
+            ],
         );
         let CalibrationFlowEvent::Completed {
             raw_points,
@@ -307,14 +303,14 @@ mod tests {
         };
 
         assert_eq!(calibration_corner, CalibrationCorner::LowerLeft);
-        assert_eq!(usable_sample_count, 4);
+        assert_eq!(usable_sample_count, 3);
         assert_eq!(
             raw_points,
             [
-                RawPoint { x: 102, y: 202 },
-                RawPoint { x: 902, y: 212 },
-                RawPoint { x: 912, y: 802 },
-                RawPoint { x: 122, y: 792 },
+                RawPoint { x: 104, y: 204 },
+                RawPoint { x: 904, y: 214 },
+                RawPoint { x: 914, y: 804 },
+                RawPoint { x: 124, y: 794 },
             ]
         );
     }
@@ -324,23 +320,37 @@ mod tests {
         let mut calibration_flow = CalibrationFlow::new();
         let calibration_flow_event = run_tap(
             &mut calibration_flow,
-            [(100, 200), (101, 201), (102, 202), (103, 203), (104, 204)],
+            &[
+                (100, 200),
+                (101, 201),
+                (102, 202),
+                (103, 203),
+                (104, 204),
+                (105, 205),
+            ],
         );
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperLeft,
-            RawPoint { x: 102, y: 202 },
+            RawPoint { x: 104, y: 204 },
             CalibrationCorner::UpperRight,
         );
 
         let calibration_flow_event = consume_tap_without_assert(
             &mut calibration_flow,
-            [(900, 210), (901, 211), (902, 212), (903, 213), (904, 214)],
+            &[
+                (900, 210),
+                (901, 211),
+                (902, 212),
+                (903, 213),
+                (904, 214),
+                (905, 215),
+            ],
         );
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperRight,
-            RawPoint { x: 902, y: 212 },
+            RawPoint { x: 904, y: 214 },
             CalibrationCorner::LowerRight,
         );
 
@@ -375,18 +385,25 @@ mod tests {
 
         let calibration_flow_event = run_tap(
             &mut calibration_flow,
-            [(910, 800), (911, 801), (912, 802), (913, 803), (914, 804)],
+            &[
+                (910, 800),
+                (911, 801),
+                (912, 802),
+                (913, 803),
+                (914, 804),
+                (915, 805),
+            ],
         );
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::LowerRight,
-            RawPoint { x: 912, y: 802 },
+            RawPoint { x: 914, y: 804 },
             CalibrationCorner::LowerLeft,
         );
     }
 
     #[test]
-    fn single_tap_without_moves_captures_corner() {
+    fn short_graze_below_minimum_samples_does_not_capture_corner() {
         let mut calibration_flow = CalibrationFlow::new();
 
         assert!(
@@ -397,16 +414,17 @@ mod tests {
                 }))
                 .is_none()
         );
-        let calibration_flow_event = calibration_flow
-            .handle_raw_touch_event(Some(RawTouchEvent::Up))
-            .expect("single tap should capture a calibration point");
-        assert_point_captured(
-            calibration_flow_event,
-            CalibrationCorner::UpperLeft,
-            RawPoint { x: 100, y: 200 },
-            CalibrationCorner::UpperRight,
+        assert!(
+            calibration_flow
+                .handle_raw_touch_event(Some(RawTouchEvent::Up))
+                .is_none()
         );
         assert!(calibration_flow.handle_raw_touch_event(None).is_none());
+        assert_eq!(calibration_flow.calibration_index(), 0);
+        assert_eq!(
+            calibration_flow.next_corner(),
+            Some(CalibrationCorner::UpperLeft)
+        );
     }
 
     #[test]
@@ -433,9 +451,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn long_press_average_ignores_lift_off_drift() {
+        let mut calibration_flow = CalibrationFlow::new();
+
+        assert!(
+            calibration_flow
+                .handle_raw_touch_event(Some(RawTouchEvent::Down {
+                    raw_x: 1000,
+                    raw_y: 2000,
+                }))
+                .is_none()
+        );
+
+        for _ in 0..1004 {
+            assert!(
+                calibration_flow
+                    .handle_raw_touch_event(Some(RawTouchEvent::Move {
+                        raw_x: 1000,
+                        raw_y: 2000,
+                    }))
+                    .is_none()
+            );
+        }
+
+        for _ in 0..5 {
+            assert!(
+                calibration_flow
+                    .handle_raw_touch_event(Some(RawTouchEvent::Move {
+                        raw_x: 1400,
+                        raw_y: 2400,
+                    }))
+                    .is_none()
+            );
+        }
+
+        let calibration_flow_event = calibration_flow
+            .handle_raw_touch_event(Some(RawTouchEvent::Up))
+            .expect("long press should capture a calibration point");
+        assert_point_captured(
+            calibration_flow_event,
+            CalibrationCorner::UpperLeft,
+            RawPoint { x: 1002, y: 2002 },
+            CalibrationCorner::UpperRight,
+        );
+        assert!(calibration_flow.handle_raw_touch_event(None).is_none());
+    }
+
     fn run_tap(
         calibration_flow: &mut CalibrationFlow,
-        raw_samples: [(u16, u16); 5],
+        raw_samples: &[(u16, u16)],
     ) -> CalibrationFlowEvent {
         let calibration_flow_event = consume_tap_without_assert(calibration_flow, raw_samples);
         assert!(calibration_flow.handle_raw_touch_event(None).is_none());
@@ -444,15 +509,11 @@ mod tests {
 
     fn consume_tap_without_assert(
         calibration_flow: &mut CalibrationFlow,
-        raw_samples: [(u16, u16); 5],
+        raw_samples: &[(u16, u16)],
     ) -> CalibrationFlowEvent {
-        let [
-            (down_x, down_y),
-            (move1_x, move1_y),
-            (move2_x, move2_y),
-            (move3_x, move3_y),
-            (move4_x, move4_y),
-        ] = raw_samples;
+        let Some(&(down_x, down_y)) = raw_samples.first() else {
+            panic!("tap must include a down sample");
+        };
 
         assert!(
             calibration_flow
@@ -462,38 +523,16 @@ mod tests {
                 }))
                 .is_none()
         );
-        assert!(
-            calibration_flow
-                .handle_raw_touch_event(Some(RawTouchEvent::Move {
-                    raw_x: move1_x,
-                    raw_y: move1_y,
-                }))
-                .is_none()
-        );
-        assert!(
-            calibration_flow
-                .handle_raw_touch_event(Some(RawTouchEvent::Move {
-                    raw_x: move2_x,
-                    raw_y: move2_y,
-                }))
-                .is_none()
-        );
-        assert!(
-            calibration_flow
-                .handle_raw_touch_event(Some(RawTouchEvent::Move {
-                    raw_x: move3_x,
-                    raw_y: move3_y,
-                }))
-                .is_none()
-        );
-        assert!(
-            calibration_flow
-                .handle_raw_touch_event(Some(RawTouchEvent::Move {
-                    raw_x: move4_x,
-                    raw_y: move4_y,
-                }))
-                .is_none()
-        );
+        for &(move_x, move_y) in &raw_samples[1..] {
+            assert!(
+                calibration_flow
+                    .handle_raw_touch_event(Some(RawTouchEvent::Move {
+                        raw_x: move_x,
+                        raw_y: move_y,
+                    }))
+                    .is_none()
+            );
+        }
         calibration_flow
             .handle_raw_touch_event(Some(RawTouchEvent::Up))
             .expect("tap should capture a calibration point")

@@ -19,7 +19,7 @@ license.workspace = true
 # on by default; every consumer opts in to the examples it needs.
 default = []
 # The `armatron` example — local armatron state, calibration geometry, and the generic game loop.
-armatron = ["dep:nanorand"]
+armatron = ["dep:device-envoy-core", "dep:nanorand"]
 # The `ballet` example embeds a motion-capture const that is slow to evaluate;
 # keep it off unless the `ballet` example is being built.
 ballet = []
