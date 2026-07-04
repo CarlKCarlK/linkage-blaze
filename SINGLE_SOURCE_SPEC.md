@@ -49,10 +49,10 @@ Decision: ______________________
 All in `crates/linkage-blaze-core/src/math.rs` unless noted. `libm` is
 already a dependency of this crate (`Mat3::yaw` etc.).
 
-- [ ] impl — Add `impl Sub for Vec3` (component-wise), matching the style of
+- [x] impl — Add `impl Sub for Vec3` (component-wise), matching the style of
       the existing `Add` impl.
-  - [ ] verify
-- [ ] impl — Add three methods on `Vec3`, each `#[must_use]` with a one-line
+  - [x] verify
+- [x] impl — Add three methods on `Vec3`, each `#[must_use]` with a one-line
       doc comment:
 
       ```rust
@@ -61,33 +61,33 @@ already a dependency of this crate (`Mat3::yaw` etc.).
       pub fn distance_to(self, other: Self) -> f32;  // (self - other).length()
       ```
 
-  - [ ] verify
-- [ ] impl — Add unit tests in the existing `math.rs` test module: `Sub`,
+  - [x] verify
+- [x] impl — Add unit tests in the existing `math.rs` test module: `Sub`,
       `dot`, `length` on a 3-4-0 triangle (length 5), and `distance_to`
       symmetry (`a.distance_to(b) == b.distance_to(a)`).
-  - [ ] verify
-- [ ] impl — In `linkage-blaze-example-core/src/armatron/main.rs`: replace
+  - [x] verify
+- [x] impl — In `linkage-blaze-example-core/src/armatron/main.rs`: replace
       the `distance` free function with `Vec3::distance_to`; delete `distance`
       and `square`; inline `round_to_u32` as `libm::roundf(...) as u32` at its
       single call site in `target_distance_hundredths`. Move the attached
       `todo1` comments per `AGENTS.md` (they said these helpers seemed silly —
       append `(resolved by Vec3 methods)` context rather than deleting if any
       wording survives).
-  - [ ] verify
-- [ ] impl — In `linkage-blaze-armatron-core/src/lib.rs`: replace its
+  - [x] verify
+- [x] impl — In `linkage-blaze-armatron-core/src/lib.rs`: replace its
       `distance` free function (~line 1408) and any `square` helper with
       `Vec3::distance_to`.
-  - [ ] verify
-- [ ] impl — Add a `todo` at the top of the duplicated helper block in
+  - [x] verify
+- [x] impl — Add a `todo` at the top of the duplicated helper block in
       `main.rs` referencing the open question above (shared home for
       `arm_tip`/`target_center`/`compute_target_distance`/`VERSION_TEXT`),
       unless the human has already answered it.
-  - [ ] verify
+  - [x] verify
 
 **PHASE 1 GATE — stop here and test:**
 
-- [ ] `just check-all` passes (all targets, `-D warnings`).
-- [ ] `cargo test -p linkage-blaze-core` and armatron-core tests pass
+- [x] `just check-all` passes (all targets, `-D warnings`).
+- [x] `cargo test -p linkage-blaze-core` and armatron-core tests pass
       (the reverse-kinematics distance tests exercise the migrated code).
 - [ ] Suggest a commit message; human commits.
 
@@ -100,7 +100,7 @@ BOTH as slider labels in `controls.rs` and as `TILT_PARAM_NAME` /
 slider silently controls the wrong joint. Same fix as before: one source of
 truth, and the index lookup reads from it.
 
-- [ ] impl — In `ui.rs`, add a getter on `Slider`:
+- [x] impl — In `ui.rs`, add a getter on `Slider`:
 
       ```rust
       /// The label drawn beside the track. Apps may also use it as a
@@ -109,8 +109,8 @@ truth, and the index lookup reads from it.
       pub const fn label(&self) -> &'static str;
       ```
 
-  - [ ] verify
-- [ ] impl — In `main.rs`, derive the camera indices from the layout specs
+  - [x] verify
+- [x] impl — In `main.rs`, derive the camera indices from the layout specs
       and delete the three `*_PARAM_NAME` consts:
 
       ```rust
@@ -119,13 +119,13 @@ truth, and the index lookup reads from it.
       const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_SLIDER.label(), 0);
       ```
 
-  - [ ] verify
-- [ ] impl — Move `ARM_PARAM_NAMES` from `main.rs` into `controls.rs`, next
+  - [x] verify
+- [x] impl — Move `ARM_PARAM_NAMES` from `main.rs` into `controls.rs`, next
       to the `PARAM_SLIDERS` column it feeds, and export it `pub(super)`.
       This fixes the odd dependency direction where the layout module reaches
       back into `main.rs` via `use super::ARM_PARAM_NAMES`.
-  - [ ] verify
-- [ ] impl — Collapse the six hand-written `ARM_PARAM_INDEXES` entries into a
+  - [x] verify
+- [x] impl — Collapse the six hand-written `ARM_PARAM_INDEXES` entries into a
       const block using the same `while`-loop trick `Slider::column` already
       uses (`param_index` is `const fn`). Read the labels from
       `PARAM_SLIDERS[slider_index].label()` so the drawn label and the index
@@ -144,11 +144,11 @@ truth, and the index lookup reads from it.
       };
       ```
 
-  - [ ] verify
+  - [x] verify
 
 **PHASE 2 GATE — stop here and test:**
 
-- [ ] `just check-all` passes.
+- [x] `just check-all` passes.
 - [ ] `just run-armatron-wasm`: every slider still moves its own joint —
       especially z, zoom, and x/y view (the three whose keys changed source).
 - [ ] Suggest a commit message; human commits.

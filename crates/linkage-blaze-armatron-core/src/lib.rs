@@ -1257,7 +1257,7 @@ fn compute_target_distance(
     linkage: LinkageView<'_, 15, 4>,
     params: &[f32; DOF],
 ) -> f32 {
-    distance(arm_tip(rk_linkage, params), target_center(linkage, params))
+    arm_tip(rk_linkage, params).distance_to(target_center(linkage, params))
 }
 
 fn reverse_kinematics(params: &mut [f32; DOF]) -> f32 {
@@ -1403,16 +1403,6 @@ fn fill_style(color: Rgb888) -> PrimitiveStyle<Rgb565> {
 
 fn stroke_style(color: Rgb888, stroke_width: u32) -> PrimitiveStyle<Rgb565> {
     PrimitiveStyle::with_stroke(rgb565_from_rgb888(color), stroke_width)
-}
-
-fn distance(left: Vec3, right: Vec3) -> f32 {
-    let Vec3([left_x, left_y, left_z]) = left;
-    let Vec3([right_x, right_y, right_z]) = right;
-    libm::sqrtf(square(left_x - right_x) + square(left_y - right_y) + square(left_z - right_z))
-}
-
-fn square(value: f32) -> f32 {
-    value * value
 }
 
 fn round_to_i32(value: f32) -> i32 {

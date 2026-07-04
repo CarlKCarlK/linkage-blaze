@@ -8,8 +8,6 @@ use embedded_graphics::{
 
 use crate::ui::{Button, Icon, IconButton, Label, Slider};
 
-use super::ARM_PARAM_NAMES;
-
 // Target selector strip: previous button, target text, next button.
 pub(super) static PREVIOUS_TARGET_BUTTON: Button = Button::new(rectangle(65, 17, 42, 14), "prev");
 pub(super) static NEXT_TARGET_BUTTON: Button = Button::new(rectangle(181, 17, 42, 14), "next");
@@ -44,6 +42,14 @@ const PARAM_SLIDER_STEP_Y: i32 = 32;
 const PARAM_SLIDER_TRACK_LENGTH: u32 = 83;
 
 pub(super) const PARAM_SLIDER_COUNT: usize = 6;
+pub(super) const ARM_PARAM_NAMES: [&str; PARAM_SLIDER_COUNT] = [
+    "raise hand",
+    "bend elbow",
+    "close hand",
+    "lower arm",
+    "spin whole arm",
+    "spin hand",
+];
 
 pub(super) static PARAM_SLIDERS: [Slider; PARAM_SLIDER_COUNT] = Slider::column(
     PARAM_SLIDER_TRACK_X,

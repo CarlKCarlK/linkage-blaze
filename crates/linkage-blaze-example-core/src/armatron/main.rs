@@ -46,17 +46,6 @@ const FPS_TEXT_MAX_TENTHS: u32 = 990;
 
 // ---- parameter indices ----
 const TARGET_PARAM_START: usize = 9;
-const XY_VIEW_PARAM_NAME: &str = "x/y view";
-const TILT_PARAM_NAME: &str = "z";
-const DOLLY_PARAM_NAME: &str = "zoom";
-const ARM_PARAM_NAMES: [&str; PARAM_SLIDER_COUNT] = [
-    "raise hand",
-    "bend elbow",
-    "close hand",
-    "lower arm",
-    "spin whole arm",
-    "spin hand",
-];
 
 // ---- linkages ----
 //
@@ -82,17 +71,18 @@ const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
 const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
 const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
 
-const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_PARAM_NAME, 0);
-const TILT_PARAM_INDEX: usize = LINKAGE.param_index(TILT_PARAM_NAME, 0);
-const DOLLY_PARAM_INDEX: usize = LINKAGE.param_index(DOLLY_PARAM_NAME, 0);
-const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = [
-    LINKAGE.param_index(ARM_PARAM_NAMES[0], 0),
-    LINKAGE.param_index(ARM_PARAM_NAMES[1], 0),
-    LINKAGE.param_index(ARM_PARAM_NAMES[2], 0),
-    LINKAGE.param_index(ARM_PARAM_NAMES[3], 0),
-    LINKAGE.param_index(ARM_PARAM_NAMES[4], 0),
-    LINKAGE.param_index(ARM_PARAM_NAMES[5], 0),
-];
+const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_SLIDER.label(), 0);
+const TILT_PARAM_INDEX: usize = LINKAGE.param_index(TILT_SLIDER.label(), 0);
+const DOLLY_PARAM_INDEX: usize = LINKAGE.param_index(DOLLY_SLIDER.label(), 0);
+const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = {
+    let mut indexes = [0; PARAM_SLIDER_COUNT];
+    let mut slider_index = 0;
+    while slider_index < PARAM_SLIDER_COUNT {
+        indexes[slider_index] = LINKAGE.param_index(PARAM_SLIDERS[slider_index].label(), 0);
+        slider_index += 1;
+    }
+    indexes
+};
 
 pub const DOF: usize = LINKAGE.dof();
 
@@ -301,6 +291,9 @@ impl Default for FrameBuffer {
 
 // ── Private helper functions ───────────────────────────────────────────────────
 
+// todo000 shared home question from SINGLE_SOURCE_SPEC.md: if both armatron UI
+// paths stay live, move arm_tip/target_center/compute_target_distance/
+// VERSION_TEXT into one shared module instead of duplicating them here.
 fn randomize_target(target_seed: u8, params: &mut [f32; DOF]) {
     let mut rng = WyRand::new_seed(u64::from(target_seed));
     // todo00 how to we feel about "TARGET_PARAM_START"
@@ -310,7 +303,7 @@ fn randomize_target(target_seed: u8, params: &mut [f32; DOF]) {
 }
 
 fn target_distance_hundredths(params: &[f32; DOF]) -> u32 {
-    round_to_u32(target_distance(params).clamp(0.0, 99.99) * 100.0)
+    libm::roundf(target_distance(params).clamp(0.0, 99.99) * 100.0) as u32
 }
 
 fn next_fps_label(previous_tick: &mut Option<Instant>) -> Option<(u32, u32)> {
@@ -355,23 +348,9 @@ fn compute_target_distance(
     linkage: LinkageView<'_, 15, 4>,
     params: &[f32; DOF],
 ) -> f32 {
-    distance(arm_tip(rk_linkage, params), target_center(linkage, params))
+    arm_tip(rk_linkage, params).distance_to(target_center(linkage, params))
 }
 
 fn target_distance(params: &[f32; DOF]) -> f32 {
     compute_target_distance(ARM_TIP_LINKAGE, LINKAGE, params)
-}
-
-fn distance(left: Vec3, right: Vec3) -> f32 {
-    let Vec3([left_x, left_y, left_z]) = left;
-    let Vec3([right_x, right_y, right_z]) = right;
-    libm::sqrtf(square(left_x - right_x) + square(left_y - right_y) + square(left_z - right_z))
-}
-
-fn square(value: f32) -> f32 {
-    value * value
-}
-
-fn round_to_u32(value: f32) -> u32 {
-    libm::roundf(value) as u32
 }

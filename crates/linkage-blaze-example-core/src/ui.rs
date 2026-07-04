@@ -309,6 +309,12 @@ impl Slider {
         slider_array
     }
 
+    /// The label drawn beside the track.
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
+        self.label
+    }
+
     fn draw<D>(&self, target: &mut D, value: f32) -> Result<(), D::Error>
     where
         D: DrawTarget<Color = Rgb565>,

@@ -1,6 +1,6 @@
 use core::{
     f32::consts::PI,
-    ops::{Add, AddAssign, Index, IndexMut, Mul},
+    ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
 };
 
 /// 3D position or vector [x, y, z].
@@ -39,6 +39,24 @@ impl Vec3 {
             .iter()
             .zip(other.0.iter())
             .all(|(left, right)| left.is_close_to(*right, tolerance))
+    }
+
+    /// Return the dot product with `rhs`.
+    #[must_use]
+    pub fn dot(self, rhs: Self) -> f32 {
+        self[0] * rhs[0] + self[1] * rhs[1] + self[2] * rhs[2]
+    }
+
+    /// Return the Euclidean length.
+    #[must_use]
+    pub fn length(self) -> f32 {
+        libm::sqrtf(self.dot(self))
+    }
+
+    /// Return the Euclidean distance to `other`.
+    #[must_use]
+    pub fn distance_to(self, other: Self) -> f32 {
+        (self - other).length()
     }
 }
 
@@ -79,6 +97,14 @@ impl Add for Vec3 {
 impl AddAssign for Vec3 {
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
+    }
+}
+
+impl Sub for Vec3 {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self([self[0] - rhs[0], self[1] - rhs[1], self[2] - rhs[2]])
     }
 }
 
@@ -227,6 +253,41 @@ mod tests {
         let expected = Vec3::from([9.0, 0.0, 4.0]);
 
         assert!(actual.is_close_to(&expected, 1e-6));
+    }
+
+    #[test]
+    fn test_vec3_sub() {
+        let actual = Vec3::from([5.0, 7.0, 9.0]) - Vec3::from([1.0, 2.0, 3.0]);
+        let expected = Vec3::from([4.0, 5.0, 6.0]);
+
+        assert!(actual.is_close_to(&expected, 1e-6));
+    }
+
+    #[test]
+    fn test_vec3_dot() {
+        let left = Vec3::from([1.0, 2.0, 3.0]);
+        let right = Vec3::from([4.0, -5.0, 6.0]);
+
+        assert!(left.dot(right).is_close_to(12.0, 1e-6));
+    }
+
+    #[test]
+    fn test_vec3_length() {
+        let vec3 = Vec3::from([3.0, 4.0, 0.0]);
+
+        assert!(vec3.length().is_close_to(5.0, 1e-6));
+    }
+
+    #[test]
+    fn test_vec3_distance_to_is_symmetric() {
+        let first = Vec3::from([1.0, 2.0, 3.0]);
+        let second = Vec3::from([4.0, 6.0, 3.0]);
+
+        let first_to_second = first.distance_to(second);
+        let second_to_first = second.distance_to(first);
+
+        assert!(first_to_second.is_close_to(5.0, 1e-6));
+        assert!(first_to_second.is_close_to(second_to_first, 1e-6));
     }
 
     #[test]
