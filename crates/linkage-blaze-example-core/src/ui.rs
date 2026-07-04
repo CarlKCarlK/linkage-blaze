@@ -106,7 +106,7 @@ impl Ui {
     }
 
     /// Updates `value` from any captured drag, then draws the slider.
-    ///
+    /// todo0x alternatives to static and eq?
     /// Slider identity uses pointer equality on `slider`, so callers must pass
     /// a `static` layout spec instead of a `const` one.
     pub fn slider<D>(
@@ -118,6 +118,7 @@ impl Ui {
     where
         D: DrawTarget<Color = Rgb565>,
     {
+        //todo0x should down etc contain a point?
         if let Some(TouchEvent::Down { x, y }) = self.touch_event {
             let touch_point = Point::new(x as i32, y as i32);
             if !self.down_consumed && slider.touch_rectangle.contains(touch_point) {
@@ -125,7 +126,7 @@ impl Ui {
                 self.down_consumed = true;
             }
         }
-
+        //todo0x violation of the  core:: rule
         let is_active = self
             .active_slider
             .is_some_and(|active_slider| core::ptr::eq(active_slider, slider));

@@ -239,7 +239,7 @@ the driver's private consts (`CAPTURE_ACK_FRAME_COUNT`,
 `VERIFY_TIMEOUT_FRAMES`, `MAX_RAW_EVENTS_PER_FRAME`, …) instead of
 duplicating their values. These tests are the point of the whole exercise.
 
-- [ ] impl / [ ] verify — **Happy path.** Script one clean tap-and-release
+- [x] impl / [ ] verify — **Happy path.** Script one clean tap-and-release
   per corner (each with enough usable samples to clear
   `MIN_SAMPLES_PER_POINT` after the post-`Down` discards), idle frames
   between corners so the `ShowCaptured` acknowledgment expires, then a
@@ -249,67 +249,67 @@ duplicating their values. These tests are the point of the whole exercise.
   cross center. Choose scripted raw points via a known synthetic mapping
   (as the WASM distortion does) so the expected config is predictable.
 
-- [ ] impl / [ ] verify — **Preloaded flash.** A valid pre-saved config →
+- [x] impl / [ ] verify — **Preloaded flash.** A valid pre-saved config →
   returns `Loaded` with that config, `flush_count() == 0`, and no touch
   events consumed.
 
-- [ ] impl / [ ] verify — **Corrupt flash reruns calibration.** Preloaded
+- [x] impl / [ ] verify — **Corrupt flash reruns calibration.** Preloaded
   garbage bytes → the flow runs and overwrites the block (the driver's
   documented "don't brick boot" promise).
 
-- [ ] impl / [ ] verify — **Pacing.** With empty event batches, the driver
+- [x] impl / [ ] verify — **Pacing.** With empty event batches, the driver
   flushes once per loop iteration: after running under a small
   `frame_budget`, it fails with `OutOfFrames` (not a hang) and
   `flush_count` equals the budget — proving there is no non-flushing idle
   path left.
 
-- [ ] impl / [ ] verify — **Drain, don't sip.** A complete tap
+- [x] impl / [ ] verify — **Drain, don't sip.** A complete tap
   (`Down`/samples/`Up`) inside a single frame batch registers the corner in
   that same iteration rather than one event per frame.
 
-- [ ] impl / [ ] verify — **Drain cap under a held stylus.** A frame batch
+- [x] impl / [ ] verify — **Drain cap under a held stylus.** A frame batch
   larger than `MAX_RAW_EVENTS_PER_FRAME` (the ESP direct-sampling case:
   events on every read while pressed) → the driver still flushes that
   iteration (no frozen screen), the leftover events are consumed on later
   frames, and — because the queue never reported idle — no `ShowCaptured` /
   `ShowRejected` / verify-timeout counters ticked during the hold.
 
-- [ ] impl / [ ] verify — **Dropout regression, end-to-end.** The field bug
+- [x] impl / [ ] verify — **Dropout regression, end-to-end.** The field bug
   from `TOUCH_CALIBRATION_ROBUSTNESS_SPEC.md`: hold on corner 2 with a
   mid-hold spurious `Up` + `Down`, then release → corner 3 is **not**
   captured from corner-2 coordinates. This duplicates a flow-level unit
   test on purpose: it proves the *driver* wiring preserves the property.
 
-- [ ] impl / [ ] verify — **Lift-off transient regression, end-to-end.**
+- [x] impl / [ ] verify — **Lift-off transient regression, end-to-end.**
   The field bug from `CALIBRATION_SAMPLING_FIX_SPEC.md`: a long press of
   many stable samples followed by a few heavily drifted lift-off samples →
   the captured point stays within ~1 raw unit of the stable point (the
   whole-press mean, not a last-N window).
 
-- [ ] impl / [ ] verify — **Recalibration button.** A `MemoryButton`
+- [x] impl / [ ] verify — **Recalibration button.** A `MemoryButton`
   pressed for one frame mid-flow → the flow restarts from corner 1 and
   still completes correctly afterwards.
 
-- [ ] impl / [ ] verify — **Rendering spot-checks.** After the first frame,
+- [x] impl / [ ] verify — **Rendering spot-checks.** After the first frame,
   the pixel at corner 1's cross center is the foreground color and a
   far-away pixel is the background. Assert individual meaningful pixels,
   not full-buffer snapshots — snapshot-exact tests break on every cosmetic
   tweak and teach people to regenerate them blindly.
 
-- [ ] impl / [ ] verify — **Rejected solve restarts.** Contradictory
+- [x] impl / [ ] verify — **Rejected solve restarts.** Contradictory
   duplicate-corner taps → the flow enters `ShowRejected` and restarts from
   corner 1; nothing is saved; a subsequent honest script still completes.
 
-- [ ] impl / [ ] verify — **Verify miss restarts.** Four good corners, then
+- [x] impl / [ ] verify — **Verify miss restarts.** Four good corners, then
   a verify tap outside `VERIFY_HIT_RADIUS_PIXELS` of the center → candidate
   discarded, flow restarts, nothing saved.
 
-- [ ] impl / [ ] verify — **Verify timeout restarts.** Four good corners,
+- [x] impl / [ ] verify — **Verify timeout restarts.** Four good corners,
   then `VERIFY_TIMEOUT_FRAMES` idle frames with no tap → candidate
   discarded, flow restarts, nothing saved. (This is the test that makes
   reading the private const worthwhile.)
 
-- [ ] impl / [ ] verify — **Save exactly once, confirmation first.** Across
+- [x] impl / [ ] verify — **Save exactly once, confirmation first.** Across
   any completing script, `MemoryFlashBlock` observes exactly one `save`,
   and when `confirmed_message` is `Some`, the last flushed frame before
   `ensure_calibration` returns shows the message (spot-check a pixel or,

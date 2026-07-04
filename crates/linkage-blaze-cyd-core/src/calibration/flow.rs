@@ -3,8 +3,8 @@ use super::{
     calibration_corner_for_index,
 };
 
-const SAMPLES_DISCARDED_AFTER_DOWN: usize = 4;
-const MIN_SAMPLES_PER_POINT: usize = 3;
+pub const SAMPLES_DISCARDED_AFTER_DOWN: usize = 4;
+pub const MIN_SAMPLES_PER_POINT: usize = 3;
 
 /// Sans-io state machine for the four-tap calibration flow.
 ///
@@ -218,8 +218,11 @@ fn average_samples(sum_x: u64, sum_y: u64, usable_sample_count: usize) -> RawPoi
 
 #[cfg(test)]
 mod tests {
+    use std::vec::Vec;
+
     use super::{
         CalibrationFlow, CalibrationFlowEvent, MIN_SAMPLES_PER_POINT, RawPoint, RawTouchEvent,
+        SAMPLES_DISCARDED_AFTER_DOWN,
     };
     use crate::calibration::CalibrationCorner;
 
@@ -227,18 +230,8 @@ mod tests {
     fn clean_taps_complete_with_averaged_points() {
         let mut calibration_flow = CalibrationFlow::new();
 
-        let calibration_flow_event = run_tap(
-            &mut calibration_flow,
-            &[
-                (100, 200),
-                (101, 201),
-                (102, 202),
-                (103, 203),
-                (104, 204),
-                (105, 205),
-                (106, 206),
-            ],
-        );
+        let calibration_flow_event =
+            run_tap(&mut calibration_flow, &sample_fixture(100, 200, 1, 1, 0));
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperLeft,
@@ -246,18 +239,8 @@ mod tests {
             CalibrationCorner::UpperRight,
         );
 
-        let calibration_flow_event = run_tap(
-            &mut calibration_flow,
-            &[
-                (900, 210),
-                (901, 211),
-                (902, 212),
-                (903, 213),
-                (904, 214),
-                (905, 215),
-                (906, 216),
-            ],
-        );
+        let calibration_flow_event =
+            run_tap(&mut calibration_flow, &sample_fixture(900, 210, 1, 1, 0));
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperRight,
@@ -265,18 +248,8 @@ mod tests {
             CalibrationCorner::LowerRight,
         );
 
-        let calibration_flow_event = run_tap(
-            &mut calibration_flow,
-            &[
-                (910, 800),
-                (911, 801),
-                (912, 802),
-                (913, 803),
-                (914, 804),
-                (915, 805),
-                (916, 806),
-            ],
-        );
+        let calibration_flow_event =
+            run_tap(&mut calibration_flow, &sample_fixture(910, 800, 1, 1, 0));
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::LowerRight,
@@ -284,18 +257,8 @@ mod tests {
             CalibrationCorner::LowerLeft,
         );
 
-        let calibration_flow_event = run_tap(
-            &mut calibration_flow,
-            &[
-                (120, 790),
-                (121, 791),
-                (122, 792),
-                (123, 793),
-                (124, 794),
-                (125, 795),
-                (126, 796),
-            ],
-        );
+        let calibration_flow_event =
+            run_tap(&mut calibration_flow, &sample_fixture(120, 790, 1, 1, 0));
         let CalibrationFlowEvent::Completed {
             raw_points,
             calibration_corner,
@@ -322,18 +285,8 @@ mod tests {
     #[test]
     fn held_stylus_dropout_does_not_capture_next_corner_from_old_spot() {
         let mut calibration_flow = CalibrationFlow::new();
-        let calibration_flow_event = run_tap(
-            &mut calibration_flow,
-            &[
-                (100, 200),
-                (101, 201),
-                (102, 202),
-                (103, 203),
-                (104, 204),
-                (105, 205),
-                (106, 206),
-            ],
-        );
+        let calibration_flow_event =
+            run_tap(&mut calibration_flow, &sample_fixture(100, 200, 1, 1, 0));
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperLeft,
@@ -341,18 +294,8 @@ mod tests {
             CalibrationCorner::UpperRight,
         );
 
-        let calibration_flow_event = consume_tap_without_assert(
-            &mut calibration_flow,
-            &[
-                (900, 210),
-                (901, 211),
-                (902, 212),
-                (903, 213),
-                (904, 214),
-                (905, 215),
-                (906, 216),
-            ],
-        );
+        let calibration_flow_event =
+            consume_tap_without_assert(&mut calibration_flow, &sample_fixture(900, 210, 1, 1, 0));
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::UpperRight,
@@ -389,18 +332,8 @@ mod tests {
 
         assert!(calibration_flow.handle_raw_touch_event(None).is_none());
 
-        let calibration_flow_event = run_tap(
-            &mut calibration_flow,
-            &[
-                (910, 800),
-                (911, 801),
-                (912, 802),
-                (913, 803),
-                (914, 804),
-                (915, 805),
-                (916, 806),
-            ],
-        );
+        let calibration_flow_event =
+            run_tap(&mut calibration_flow, &sample_fixture(910, 800, 1, 1, 0));
         assert_point_captured(
             calibration_flow_event,
             CalibrationCorner::LowerRight,
@@ -503,6 +436,25 @@ mod tests {
             CalibrationCorner::UpperRight,
         );
         assert!(calibration_flow.handle_raw_touch_event(None).is_none());
+    }
+
+    fn sample_fixture(
+        start_x: u16,
+        start_y: u16,
+        delta_x: u16,
+        delta_y: u16,
+        extra_usable_sample_count: usize,
+    ) -> Vec<(u16, u16)> {
+        let sample_count =
+            1 + SAMPLES_DISCARDED_AFTER_DOWN + MIN_SAMPLES_PER_POINT + extra_usable_sample_count;
+        let mut raw_samples = Vec::with_capacity(sample_count);
+        for sample_index in 0..sample_count {
+            raw_samples.push((
+                start_x + sample_index as u16 * delta_x,
+                start_y + sample_index as u16 * delta_y,
+            ));
+        }
+        raw_samples
     }
 
     fn run_tap(

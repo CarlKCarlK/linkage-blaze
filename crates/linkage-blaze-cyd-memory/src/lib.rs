@@ -12,7 +12,7 @@ use device_envoy_core::{
 };
 use embedded_graphics::{
     Drawable, Pixel,
-    mono_font::{MonoTextStyle, ascii::FONT_6X10},
+    mono_font::{MonoTextStyle, ascii::FONT_9X15_BOLD},
     pixelcolor::{IntoStorage, Rgb565, raw::RawU16},
     prelude::{Dimensions, DrawTarget, Point, Size},
     primitives::Rectangle,
@@ -22,6 +22,7 @@ use linkage_blaze_core::{PixelTarget, Rgb888, RgbColor, WebColors, rgb888_from_r
 use linkage_blaze_cyd_core::{
     CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydRawTouch, CydTouch, RawTouchEvent,
     RegionPixels, TouchEvent,
+    calibration::flow::{MIN_SAMPLES_PER_POINT, SAMPLES_DISCARDED_AFTER_DOWN},
 };
 use serde::{Deserialize, Serialize};
 
@@ -208,23 +209,9 @@ impl MemoryCyd {
     }
 
     pub fn script_tap(&mut self, raw_point: linkage_blaze_cyd_core::RawPoint) {
-        self.push_raw_touch_event(RawTouchEvent::Down {
-            raw_x: raw_point.x,
-            raw_y: raw_point.y,
-        });
-        for _discarded_sample_index in 0..4 {
-            self.push_raw_touch_event(RawTouchEvent::Move {
-                raw_x: raw_point.x,
-                raw_y: raw_point.y,
-            });
+        for raw_touch_event in tap_events(raw_point) {
+            self.push_raw_touch_event(raw_touch_event);
         }
-        for _usable_sample_index in 0..3 {
-            self.push_raw_touch_event(RawTouchEvent::Move {
-                raw_x: raw_point.x,
-                raw_y: raw_point.y,
-            });
-        }
-        self.push_raw_touch_event(RawTouchEvent::Up);
     }
 
     #[must_use]
@@ -238,17 +225,19 @@ impl MemoryCyd {
     }
 
     #[must_use]
-    pub fn pixel(&self, x: usize, y: usize) -> Rgb565 {
+    pub fn pixel(&self, position_x: usize, position_y: usize) -> Rgb565 {
         assert!(
-            x < self.size.width as usize,
-            "x must stay within the screen"
+            position_x < self.size.width as usize,
+            "position_x must stay within the screen"
         );
         assert!(
-            y < self.size.height as usize,
-            "y must stay within the screen"
+            position_y < self.size.height as usize,
+            "position_y must stay within the screen"
         );
         let stride = self.size.width as usize;
-        Rgb565::from(RawU16::new(self.framebuffer[y * stride + x]))
+        Rgb565::from(RawU16::new(
+            self.framebuffer[position_y * stride + position_x],
+        ))
     }
 
     #[must_use]
@@ -409,12 +398,12 @@ impl MemoryFrame<'_> {
         self.region.size.height as usize
     }
 
-    fn local_x(&self, x: i32) -> Option<usize> {
-        usize::try_from(x.checked_sub(self.tile_top_left.x)?).ok()
+    fn local_x(&self, position_x: i32) -> Option<usize> {
+        usize::try_from(position_x.checked_sub(self.tile_top_left.x)?).ok()
     }
 
-    fn local_y(&self, y: i32) -> Option<usize> {
-        usize::try_from(y.checked_sub(self.tile_top_left.y)?).ok()
+    fn local_y(&self, position_y: i32) -> Option<usize> {
+        usize::try_from(position_y.checked_sub(self.tile_top_left.y)?).ok()
     }
 
     fn flush_now(&mut self) -> Result<(), MemoryCydError> {
@@ -547,7 +536,7 @@ impl CydFrame for MemoryFrame<'_> {
         Text::with_baseline(
             text,
             Point::zero(),
-            MonoTextStyle::new(&FONT_6X10, self.foreground565),
+            MonoTextStyle::new(&FONT_9X15_BOLD, self.foreground565),
             Baseline::Top,
         )
         .draw(self)
@@ -720,6 +709,8 @@ impl FlashBlock for MemoryFlashBlock {
 }
 
 impl MemoryFlashDevice {
+    // TODO Consider consolidating this host-side flash test double with the
+    // test-private `MemoryFlashDevice` in device-envoy-core's flash_block.rs tests.
     fn new() -> Self {
         Self {
             bytes: [FLASH_ERASED_BYTE; FLASH_BLOCK_SIZE],
@@ -844,13 +835,13 @@ fn fill_rectangle_in_framebuffer(
         return;
     }
     let stride = screen_size.width as usize;
-    for y in clipped_rectangle.top_left.y
+    for position_y in clipped_rectangle.top_left.y
         ..clipped_rectangle.top_left.y + clipped_rectangle.size.height as i32
     {
-        for x in clipped_rectangle.top_left.x
+        for position_x in clipped_rectangle.top_left.x
             ..clipped_rectangle.top_left.x + clipped_rectangle.size.width as i32
         {
-            let index = y as usize * stride + x as usize;
+            let index = position_y as usize * stride + position_x as usize;
             framebuffer[index] = color;
         }
     }
@@ -874,12 +865,16 @@ fn fill_contiguous_in_framebuffer<I>(
         if local_y >= rectangle.size.height as usize {
             break;
         }
-        let x = rectangle.top_left.x + local_x as i32;
-        let y = rectangle.top_left.y + local_y as i32;
-        if x < 0 || y < 0 || x >= screen_size.width as i32 || y >= screen_size.height as i32 {
+        let position_x = rectangle.top_left.x + local_x as i32;
+        let position_y = rectangle.top_left.y + local_y as i32;
+        if position_x < 0
+            || position_y < 0
+            || position_x >= screen_size.width as i32
+            || position_y >= screen_size.height as i32
+        {
             continue;
         }
-        framebuffer[y as usize * stride + x as usize] = pixel;
+        framebuffer[position_y as usize * stride + position_x as usize] = pixel;
     }
 }
 
@@ -903,11 +898,15 @@ mod tests {
         primitives::Rectangle,
     };
     use futures_executor::block_on;
+    use linkage_blaze_cyd_core::calibration::driver::{
+        CAPTURE_ACK_FRAME_COUNT, MAX_RAW_EVENTS_PER_FRAME, REJECTED_FRAME_COUNT,
+        VERIFY_TIMEOUT_FRAMES,
+    };
     use linkage_blaze_cyd_core::{
         CalibrationConfig, CalibrationCorner, Cyd, CydDisplay, CydFrame, CydRawTouch,
         EnsureCalibrationError, EnsureCalibrationOutcome, RawPoint, RawTouchEvent, RegionPixels,
-        calibration_corner_center, calibration_verify_target_center, distort_demo_screen_to_raw,
-        ensure_calibration,
+        VERIFY_HIT_RADIUS_PIXELS, calibration_corner_center, calibration_verify_target_center,
+        distort_demo_screen_to_raw, ensure_calibration,
     };
     use serde::{Deserialize, Serialize};
 
@@ -915,10 +914,6 @@ mod tests {
     struct DemoValue {
         count: u16,
     }
-
-    const CAPTURE_ACK_EXTRA_IDLE_FRAMES: usize = 8;
-    const REJECTED_RESTART_IDLE_FRAMES: usize = 30;
-    const VERIFY_TIMEOUT_EXTRA_IDLE_FRAMES: usize = 99;
 
     #[test]
     fn fresh_frame_starts_cleared_to_background() {
@@ -1201,7 +1196,7 @@ mod tests {
         let mut memory_cyd = MemoryCyd::classic();
         memory_cyd.set_frame_budget(1);
         let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
-        memory_cyd.script_raw_frames_owned(vec![tap_frame(upper_left_raw_point)]);
+        memory_cyd.script_raw_frames_owned(vec![tap_events(upper_left_raw_point)]);
         let mut memory_flash_block = MemoryFlashBlock::new();
         let mut memory_button = memory_cyd.memory_button();
 
@@ -1235,8 +1230,8 @@ mod tests {
         let mut memory_cyd = MemoryCyd::classic();
         let mut frames = happy_path_frames();
         frames.truncate(frames.len() - 1);
-        frames.extend((0..VERIFY_TIMEOUT_EXTRA_IDLE_FRAMES).map(|_| Vec::new()));
-        frames.extend((0..REJECTED_RESTART_IDLE_FRAMES).map(|_| Vec::new()));
+        frames.extend((0..verify_timeout_extra_idle_frames()).map(|_| Vec::new()));
+        frames.extend((0..rejected_restart_idle_frames()).map(|_| Vec::new()));
         frames.extend(happy_path_frames());
         memory_cyd.script_raw_frames_owned(frames);
 
@@ -1255,6 +1250,244 @@ mod tests {
         assert_eq!(memory_flash_block.save_count(), 1);
     }
 
+    #[test]
+    fn ensure_calibration_dropout_does_not_leak_corner_two_into_corner_three() {
+        let mut memory_cyd = MemoryCyd::classic();
+        let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
+        let upper_right_raw_point = raw_point_for_corner(CalibrationCorner::UpperRight);
+        let lower_right_raw_point = raw_point_for_corner(CalibrationCorner::LowerRight);
+        let lower_left_raw_point = raw_point_for_corner(CalibrationCorner::LowerLeft);
+        let verify_raw_point = raw_point_for_verify_target();
+        let mut frames = vec![tap_events(upper_left_raw_point)];
+        append_idle_frames(&mut frames, capture_ack_extra_idle_frames());
+        frames.push(dropout_tap_events(upper_right_raw_point));
+        append_idle_frames(&mut frames, capture_ack_extra_idle_frames());
+        frames.push(tap_events(lower_right_raw_point));
+        append_idle_frames(&mut frames, capture_ack_extra_idle_frames());
+        frames.push(tap_events(lower_left_raw_point));
+        frames.push(tap_events(verify_raw_point));
+        memory_cyd.script_raw_frames_owned(frames);
+
+        let mut memory_flash_block = MemoryFlashBlock::new();
+        let mut memory_button = memory_cyd.memory_button();
+        let outcome = block_on(ensure_calibration(
+            &mut memory_cyd,
+            &mut memory_flash_block,
+            &mut memory_button,
+            None,
+        ))
+        .expect("dropout sequence should still save a calibration");
+
+        let EnsureCalibrationOutcome::Saved(calibration_config) = outcome else {
+            panic!("dropout sequence should save a calibration");
+        };
+        assert_maps_near_corner(
+            calibration_config,
+            lower_right_raw_point,
+            CalibrationCorner::LowerRight,
+        );
+    }
+
+    #[test]
+    fn ensure_calibration_lift_off_drift_keeps_captured_point_near_stable_raw_point() {
+        let mut memory_cyd = MemoryCyd::classic();
+        let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
+        let drifted_raw_point = RawPoint {
+            x: upper_left_raw_point.x + 400,
+            y: upper_left_raw_point.y + 400,
+        };
+        let upper_right_raw_point = raw_point_for_corner(CalibrationCorner::UpperRight);
+        let lower_right_raw_point = raw_point_for_corner(CalibrationCorner::LowerRight);
+        let lower_left_raw_point = raw_point_for_corner(CalibrationCorner::LowerLeft);
+        let verify_raw_point = raw_point_for_verify_target();
+        let mut frames = vec![long_press_with_lift_off_drift_frame(
+            upper_left_raw_point,
+            drifted_raw_point,
+        )];
+        append_idle_frames(&mut frames, capture_ack_extra_idle_frames());
+        frames.extend(calibration_attempt_frames(&[
+            upper_right_raw_point,
+            lower_right_raw_point,
+            lower_left_raw_point,
+            verify_raw_point,
+        ]));
+        memory_cyd.script_raw_frames_owned(frames);
+
+        let mut memory_flash_block = MemoryFlashBlock::new();
+        let mut memory_button = memory_cyd.memory_button();
+        let outcome = block_on(ensure_calibration(
+            &mut memory_cyd,
+            &mut memory_flash_block,
+            &mut memory_button,
+            None,
+        ))
+        .expect("lift-off drift sequence should still save a calibration");
+
+        let EnsureCalibrationOutcome::Saved(calibration_config) = outcome else {
+            panic!("lift-off drift sequence should save a calibration");
+        };
+        assert_maps_near_corner(
+            calibration_config,
+            upper_left_raw_point,
+            CalibrationCorner::UpperLeft,
+        );
+    }
+
+    #[test]
+    fn ensure_calibration_rejected_solve_restarts_and_then_saves_honest_script() {
+        let mut memory_cyd = MemoryCyd::classic();
+        let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
+        let lower_right_raw_point = raw_point_for_corner(CalibrationCorner::LowerRight);
+        let lower_left_raw_point = raw_point_for_corner(CalibrationCorner::LowerLeft);
+        let mut frames = calibration_attempt_frames(&[
+            upper_left_raw_point,
+            upper_left_raw_point,
+            lower_right_raw_point,
+            lower_left_raw_point,
+            raw_point_for_verify_target(),
+        ]);
+        append_idle_frames(&mut frames, rejected_restart_idle_frames());
+        frames.extend(happy_path_frames());
+        memory_cyd.script_raw_frames_owned(frames);
+
+        let mut memory_flash_block = MemoryFlashBlock::new();
+        let mut memory_button = memory_cyd.memory_button();
+        let outcome = block_on(ensure_calibration(
+            &mut memory_cyd,
+            &mut memory_flash_block,
+            &mut memory_button,
+            None,
+        ))
+        .expect("rejected solve should restart and then save");
+
+        let EnsureCalibrationOutcome::Saved(calibration_config) = outcome else {
+            panic!("rejected solve should eventually save");
+        };
+        assert_eq!(memory_flash_block.save_count(), 1);
+        assert_maps_near_corner(
+            calibration_config,
+            raw_point_for_corner(CalibrationCorner::UpperRight),
+            CalibrationCorner::UpperRight,
+        );
+    }
+
+    #[test]
+    fn ensure_calibration_verify_miss_restarts_without_saving_candidate() {
+        let mut memory_cyd = MemoryCyd::classic();
+        let verify_target_center = calibration_verify_target_center();
+        let verify_miss_screen_x =
+            verify_target_center.x + VERIFY_HIT_RADIUS_PIXELS.ceil() as i32 + 10;
+        let verify_miss_raw_point =
+            distort_demo_screen_to_raw(verify_miss_screen_x as f32, verify_target_center.y as f32);
+        let mut frames = calibration_attempt_frames(&[
+            raw_point_for_corner(CalibrationCorner::UpperLeft),
+            raw_point_for_corner(CalibrationCorner::UpperRight),
+            raw_point_for_corner(CalibrationCorner::LowerRight),
+            raw_point_for_corner(CalibrationCorner::LowerLeft),
+            verify_miss_raw_point,
+        ]);
+        append_idle_frames(&mut frames, rejected_restart_idle_frames());
+        frames.extend(happy_path_frames());
+        memory_cyd.script_raw_frames_owned(frames);
+
+        let mut memory_flash_block = MemoryFlashBlock::new();
+        let mut memory_button = memory_cyd.memory_button();
+        let outcome = block_on(ensure_calibration(
+            &mut memory_cyd,
+            &mut memory_flash_block,
+            &mut memory_button,
+            None,
+        ))
+        .expect("verify miss should restart and then save");
+
+        assert!(matches!(outcome, EnsureCalibrationOutcome::Saved(_)));
+        assert_eq!(memory_flash_block.save_count(), 1);
+    }
+
+    #[test]
+    fn ensure_calibration_recalibration_button_restarts_mid_flow() {
+        let mut memory_cyd = MemoryCyd::classic();
+        let mut frames = vec![tap_events(raw_point_for_corner(
+            CalibrationCorner::UpperLeft,
+        ))];
+        append_idle_frames(&mut frames, 2);
+        frames.extend(happy_path_frames());
+        memory_cyd.script_raw_frames_owned(frames);
+
+        let mut memory_flash_block = MemoryFlashBlock::new();
+        let mut memory_button = memory_cyd.memory_button();
+        memory_button.set_pressed_for_frame(2, true);
+        let outcome = block_on(ensure_calibration(
+            &mut memory_cyd,
+            &mut memory_flash_block,
+            &mut memory_button,
+            None,
+        ))
+        .expect("button-triggered recalibration should restart and then save");
+
+        let EnsureCalibrationOutcome::Saved(calibration_config) = outcome else {
+            panic!("button-triggered recalibration should save");
+        };
+        assert_eq!(memory_flash_block.save_count(), 1);
+        assert_maps_near_corner(
+            calibration_config,
+            raw_point_for_corner(CalibrationCorner::UpperLeft),
+            CalibrationCorner::UpperLeft,
+        );
+    }
+
+    #[test]
+    fn ensure_calibration_drain_cap_flushes_and_preserves_leftovers_during_hold() {
+        let mut memory_cyd = MemoryCyd::classic();
+        memory_cyd.set_frame_budget(2);
+        let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
+        let mut oversized_hold_frame = Vec::new();
+        oversized_hold_frame.push(RawTouchEvent::Down {
+            raw_x: upper_left_raw_point.x,
+            raw_y: upper_left_raw_point.y,
+        });
+        for _raw_event_index in 0..MAX_RAW_EVENTS_PER_FRAME.saturating_sub(1) {
+            oversized_hold_frame.push(RawTouchEvent::Move {
+                raw_x: upper_left_raw_point.x,
+                raw_y: upper_left_raw_point.y,
+            });
+        }
+        oversized_hold_frame.push(RawTouchEvent::Up);
+        memory_cyd.script_raw_frames_owned(vec![oversized_hold_frame]);
+
+        let mut memory_flash_block = MemoryFlashBlock::new();
+        let mut memory_button = memory_cyd.memory_button();
+        let error = block_on(ensure_calibration(
+            &mut memory_cyd,
+            &mut memory_flash_block,
+            &mut memory_button,
+            None,
+        ))
+        .expect_err("oversized hold should stop at the frame budget");
+
+        assert!(matches!(
+            error,
+            EnsureCalibrationError::Device(MemoryCydError::OutOfFrames)
+        ));
+        assert_eq!(memory_cyd.flush_count(), 2);
+        let upper_left_center = calibration_corner_center(CalibrationCorner::UpperLeft);
+        let upper_right_center = calibration_corner_center(CalibrationCorner::UpperRight);
+        assert_eq!(
+            memory_cyd.pixel(upper_left_center.x as usize, upper_left_center.y as usize),
+            Rgb565::CSS_WHITE
+        );
+        assert_eq!(
+            memory_cyd.pixel(upper_right_center.x as usize, upper_right_center.y as usize),
+            Rgb565::CSS_WHITE
+        );
+        assert_eq!(
+            memory_cyd
+                .read_raw_touch_event()
+                .expect("the oversized frame should be fully drained by the second iteration"),
+            None
+        );
+    }
+
     fn script_happy_path(memory_cyd: &mut MemoryCyd) -> [RawPoint; 4] {
         memory_cyd.script_raw_frames_owned(happy_path_frames());
         [
@@ -1266,25 +1499,13 @@ mod tests {
     }
 
     fn happy_path_frames() -> Vec<Vec<RawTouchEvent>> {
-        let mut frames = Vec::new();
-        let calibration_corners = [
-            CalibrationCorner::UpperLeft,
-            CalibrationCorner::UpperRight,
-            CalibrationCorner::LowerRight,
-            CalibrationCorner::LowerLeft,
-        ];
-        for (corner_index, calibration_corner) in calibration_corners.into_iter().enumerate() {
-            frames.push(tap_frame(raw_point_for_corner(calibration_corner)));
-            if corner_index + 1 != calibration_corners.len() {
-                frames.extend((0..CAPTURE_ACK_EXTRA_IDLE_FRAMES).map(|_| Vec::new()));
-            }
-        }
-        let verify_center = calibration_verify_target_center();
-        frames.push(tap_frame(distort_demo_screen_to_raw(
-            verify_center.x as f32,
-            verify_center.y as f32,
-        )));
-        frames
+        calibration_attempt_frames(&[
+            raw_point_for_corner(CalibrationCorner::UpperLeft),
+            raw_point_for_corner(CalibrationCorner::UpperRight),
+            raw_point_for_corner(CalibrationCorner::LowerRight),
+            raw_point_for_corner(CalibrationCorner::LowerLeft),
+            raw_point_for_verify_target(),
+        ])
     }
 
     fn raw_point_for_corner(calibration_corner: CalibrationCorner) -> RawPoint {
@@ -1292,25 +1513,126 @@ mod tests {
         distort_demo_screen_to_raw(screen_point.x as f32, screen_point.y as f32)
     }
 
-    fn tap_frame(raw_point: RawPoint) -> Vec<RawTouchEvent> {
+    fn tap_events(raw_point: RawPoint) -> Vec<RawTouchEvent> {
+        super::tap_events(raw_point)
+    }
+
+    fn dropout_tap_events(raw_point: RawPoint) -> Vec<RawTouchEvent> {
+        let mut raw_touch_events = tap_events(raw_point);
+        raw_touch_events.extend([
+            RawTouchEvent::Down {
+                raw_x: raw_point.x,
+                raw_y: raw_point.y,
+            },
+            RawTouchEvent::Move {
+                raw_x: raw_point.x,
+                raw_y: raw_point.y,
+            },
+            RawTouchEvent::Up,
+        ]);
+        raw_touch_events
+    }
+
+    fn long_press_with_lift_off_drift_frame(
+        stable_raw_point: RawPoint,
+        drifted_raw_point: RawPoint,
+    ) -> Vec<RawTouchEvent> {
         let mut raw_touch_events = Vec::new();
         raw_touch_events.push(RawTouchEvent::Down {
-            raw_x: raw_point.x,
-            raw_y: raw_point.y,
+            raw_x: stable_raw_point.x,
+            raw_y: stable_raw_point.y,
         });
-        for _discarded_sample_index in 0..4 {
+        for _stable_move_index in 0..2_004 {
             raw_touch_events.push(RawTouchEvent::Move {
-                raw_x: raw_point.x,
-                raw_y: raw_point.y,
+                raw_x: stable_raw_point.x,
+                raw_y: stable_raw_point.y,
             });
         }
-        for _usable_sample_index in 0..3 {
+        for _drifted_move_index in 0..3 {
             raw_touch_events.push(RawTouchEvent::Move {
-                raw_x: raw_point.x,
-                raw_y: raw_point.y,
+                raw_x: drifted_raw_point.x,
+                raw_y: drifted_raw_point.y,
             });
         }
         raw_touch_events.push(RawTouchEvent::Up);
         raw_touch_events
     }
+
+    fn calibration_attempt_frames(raw_points: &[RawPoint]) -> Vec<Vec<RawTouchEvent>> {
+        let mut frames = Vec::new();
+        for (tap_index, raw_point) in raw_points.iter().copied().enumerate() {
+            frames.push(tap_events(raw_point));
+            if tap_index + 2 < raw_points.len() {
+                append_idle_frames(&mut frames, capture_ack_extra_idle_frames());
+            }
+        }
+        frames
+    }
+
+    fn append_idle_frames(frames: &mut Vec<Vec<RawTouchEvent>>, idle_frame_count: usize) {
+        frames.extend((0..idle_frame_count).map(|_| Vec::new()));
+    }
+
+    fn raw_point_for_verify_target() -> RawPoint {
+        let verify_center = calibration_verify_target_center();
+        distort_demo_screen_to_raw(verify_center.x as f32, verify_center.y as f32)
+    }
+
+    fn assert_maps_near_corner(
+        calibration_config: CalibrationConfig,
+        raw_point: RawPoint,
+        calibration_corner: CalibrationCorner,
+    ) {
+        let expected_screen_point = calibration_corner_center(calibration_corner);
+        let (mapped_x, mapped_y) = calibration_config.map_raw_to_screen(raw_point.x, raw_point.y);
+        assert!(
+            (mapped_x - expected_screen_point.x as f32).abs() <= 1.0,
+            "mapped_x={mapped_x} expected_x={}",
+            expected_screen_point.x
+        );
+        assert!(
+            (mapped_y - expected_screen_point.y as f32).abs() <= 1.0,
+            "mapped_y={mapped_y} expected_y={}",
+            expected_screen_point.y
+        );
+    }
+
+    const fn capture_ack_extra_idle_frames() -> usize {
+        // The tap frame may end with an immediate `None`, but that idle pass only
+        // decrements the freshly-entered `ShowCaptured` state before drawing its
+        // first acknowledgment screen. Tests still need a full
+        // `CAPTURE_ACK_FRAME_COUNT` later idle frames before the next scripted tap
+        // is guaranteed to run after the ack window.
+        CAPTURE_ACK_FRAME_COUNT
+    }
+
+    const fn rejected_restart_idle_frames() -> usize {
+        REJECTED_FRAME_COUNT
+    }
+
+    const fn verify_timeout_extra_idle_frames() -> usize {
+        VERIFY_TIMEOUT_FRAMES.saturating_sub(1)
+    }
+}
+
+fn tap_events(raw_point: linkage_blaze_cyd_core::RawPoint) -> Vec<RawTouchEvent> {
+    let mut raw_touch_events = Vec::new();
+    raw_touch_events.push(RawTouchEvent::Down {
+        raw_x: raw_point.x,
+        raw_y: raw_point.y,
+    });
+    for _discarded_sample_index in 0..SAMPLES_DISCARDED_AFTER_DOWN {
+        raw_touch_events.push(RawTouchEvent::Move {
+            raw_x: raw_point.x,
+            raw_y: raw_point.y,
+        });
+    }
+    for _usable_sample_index in 0..MIN_SAMPLES_PER_POINT {
+        raw_touch_events.push(RawTouchEvent::Move {
+            raw_x: raw_point.x,
+            raw_y: raw_point.y,
+        });
+    }
+    raw_touch_events.push(RawTouchEvent::Up);
+    raw_touch_events
 }

@@ -134,11 +134,11 @@ where
     let background565 = rgb565_from_rgb888(BACKGROUND);
 
     loop {
-        let current_tick = Instant::now();
+        let current_tick = Instant::now(); //todo0x move?
         if recalibration_button.is_pressed() {
             return Ok(ArmatronExit::CalibrationRequested);
         }
-        let previous_tick_before_frame = previous_tick;
+        let previous_tick_before_frame = previous_tick; //todo0x what for?
         let dt_seconds = previous_tick_before_frame.map_or(0.0, |previous_tick| {
             current_tick
                 .saturating_duration_since(previous_tick)

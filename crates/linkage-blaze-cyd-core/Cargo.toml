@@ -19,6 +19,3 @@ heapless = "0.8"
 linkage-blaze-core.workspace = true
 micromath = "2.1"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-
-[dev-dependencies]
-futures-executor = "0.3"

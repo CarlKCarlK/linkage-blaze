@@ -15,14 +15,15 @@ use super::{
     validate_calibration_points,
 };
 
-const CAPTURE_ACK_FRAME_COUNT: usize = 8;
-const REJECTED_FRAME_COUNT: usize = 30;
-const MAX_RAW_EVENTS_PER_FRAME: usize = 64;
+pub const CAPTURE_ACK_FRAME_COUNT: usize = 8;
+pub const REJECTED_FRAME_COUNT: usize = 30;
+pub const MAX_RAW_EVENTS_PER_FRAME: usize = 64;
 const VERIFY_TIMEOUT_SECONDS: usize = 10;
 // The ESP classic CYD currently redraws the full calibration screen at about
 // 10 fps, so 100 drawn frames is roughly the intended 10-second timeout.
 const CALIBRATION_DRAW_FRAMES_PER_SECOND: usize = 10;
-const VERIFY_TIMEOUT_FRAMES: usize = VERIFY_TIMEOUT_SECONDS * CALIBRATION_DRAW_FRAMES_PER_SECOND;
+pub const VERIFY_TIMEOUT_FRAMES: usize =
+    VERIFY_TIMEOUT_SECONDS * CALIBRATION_DRAW_FRAMES_PER_SECOND;
 
 /// Result of ensuring calibration at startup.
 #[derive(Clone, Copy, Debug)]
