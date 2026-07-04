@@ -1,9 +1,9 @@
 //! Parked "controlled knob" highlighting code.
 //!
 //! This example's game loop used to paint two knobs green to show which
-//! params a joystick was driving (see `linkage-blaze-armatron-c6`'s
-//! `JoystickControlMode`). This crate has no joystick, so the highlighting
-//! was always static and never toggled — it was removed from
+//! params a joystick was driving in the retired standalone C6 app. This crate
+//! has no joystick, so the highlighting was always static and never toggled —
+//! it was removed from
 //! `armatron/main.rs` to stop the yellow-vs-green distinction from implying
 //! knobs are interactive/ignored based on joystick state that doesn't exist
 //! here. Kept in case a future input source (joystick, encoder, etc.) wants

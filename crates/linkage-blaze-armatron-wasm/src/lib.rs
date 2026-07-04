@@ -216,7 +216,7 @@ fn event_to_screen(canvas: &HtmlCanvasElement, event: &PointerEvent) -> (f32, f3
 // ---- Three.js viewer exports ----
 
 const VIEWER_LINKAGE: LinkageFixed<6, 1, 25> =
-    linkage_fixed!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
+    linkage_fixed!("../../linkage-blaze-example-core/src/armatron/armatron1.lb.rs");
 
 #[wasm_bindgen]
 pub fn dof() -> usize {

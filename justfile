@@ -1,7 +1,6 @@
 set shell := ["bash", "-cu"]
 
 _classic_args    := "--target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
-_c6_args         := "--target riscv32imac-unknown-none-elf --release --no-default-features --features esp32c6"
 # RUSTFLAGS for ESP targets: -D warnings PLUS the linker script that .cargo/config.toml provides
 # but that env RUSTFLAGS= would otherwise override.
 _esp_rustflags   := "-D warnings -C link-arg=-Tlinkall.x"
@@ -21,7 +20,6 @@ check-all:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example armatron {{_armatron_args}}
-    env RUSTFLAGS="{{_esp_rustflags}}" cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
@@ -71,12 +69,10 @@ _bundle-docs:
 
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-mocap --no-deps
-    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-armatron-core --no-deps
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-printer-wasm --no-deps
 
     cp -R target/doc/linkage_blaze_core "$rustdoc_dir/"
     cp -R target/doc/linkage_blaze_mocap "$rustdoc_dir/"
-    cp -R target/doc/linkage_blaze_armatron_core "$rustdoc_dir/"
     cp -R target/doc/linkage_blaze_printer_wasm "$rustdoc_dir/"
     cp target/doc/crates.js target/doc/help.html target/doc/search-index.js target/doc/settings.html target/doc/src-files.js "$rustdoc_dir/" 2>/dev/null || true
 
@@ -116,38 +112,6 @@ _bundle-docs:
 
 check-cyd:
     cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
-
-# ── linkage-blaze-armatron-classic (old standalone crate — to be deleted) ────
-#
-# _arm_classic_elf := "target/xtensa-esp32-none-elf/release/linkage-blaze-armatron-classic"
-#
-# size-arm-classic:
-#     just build-arm-classic
-#     source ~/export-esp.sh && python3 .tools/elf_size.py {{_arm_classic_elf}}
-#
-# check-arm-classic:
-#     cargo +esp check -p linkage-blaze-armatron-classic {{_classic_args}}
-#
-# build-arm-classic:
-#     source ~/export-esp.sh && cargo +esp build -p linkage-blaze-armatron-classic {{_classic_args}}
-#
-# run-arm-classic:
-#     just check-arm-classic
-#     just build-arm-classic
-#     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-armatron-classic {{_classic_args}}
-
-# ── linkage-blaze-armatron-c6 ───────────────────────────────────────────
-
-check-arm-c6:
-    cargo check -p linkage-blaze-armatron-c6 {{_c6_args}}
-
-build-arm-c6:
-    cargo build -p linkage-blaze-armatron-c6 {{_c6_args}}
-
-run-arm-c6:
-    just check-arm-c6
-    just build-arm-c6
-    cargo run -p linkage-blaze-armatron-c6 {{_c6_args}}
 
 # ── linkage-blaze-classic examples (dance, ballet) ──────────────────────
 #

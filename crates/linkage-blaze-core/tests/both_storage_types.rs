@@ -10,7 +10,7 @@ use common_linkage_tests::assert_linkages_equivalent;
 // Clock linkage (N=48 matches the clock-classic application)
 const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("linkages/clock.lb.rs");
 
-// Armatron application linkages — mirroring linkage-blaze-armatron-core consts
+// Armatron application linkages — mirroring the shared example-core linkage data
 const CAMERA_CONTROL: LinkageFixed<3, 1, 8> = linkage_fixed!("linkages/camera_control.lb.rs");
 const GRID_9X9: LinkageFixed<0, 1, 81> = linkage_fixed!("linkages/grid_9x9.lb.rs");
 const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);

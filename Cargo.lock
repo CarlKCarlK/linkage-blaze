@@ -1512,58 +1512,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "linkage-blaze-armatron-c6"
-version = "0.1.4"
-dependencies = [
- "device-envoy-esp",
- "embassy-time",
- "embedded-graphics",
- "esp-backtrace",
- "esp-bootloader-esp-idf",
- "esp-hal",
- "esp-println",
- "esp-rtos",
- "linkage-blaze-armatron-core",
- "linkage-blaze-core",
- "linkage-blaze-cyd",
- "log",
- "static_cell",
-]
-
-[[package]]
-name = "linkage-blaze-armatron-classic"
-version = "0.1.4"
-dependencies = [
- "device-envoy-esp",
- "embassy-executor",
- "embassy-time",
- "embedded-graphics",
- "esp-backtrace",
- "esp-bootloader-esp-idf",
- "esp-hal",
- "esp-println",
- "esp-rtos",
- "linkage-blaze-armatron-core",
- "linkage-blaze-core",
- "linkage-blaze-cyd",
- "linkage-blaze-cyd-core",
- "log",
- "static_cell",
-]
-
-[[package]]
-name = "linkage-blaze-armatron-core"
-version = "0.1.4"
-dependencies = [
- "embassy-time",
- "embedded-graphics",
- "libm",
- "linkage-blaze-core",
- "nanorand",
- "static_cell",
-]
-
-[[package]]
 name = "linkage-blaze-armatron-wasm"
 version = "0.1.4"
 dependencies = [
@@ -1660,7 +1608,6 @@ dependencies = [
  "embedded-hal-bus",
  "esp-hal",
  "heapless 0.8.0",
- "linkage-blaze-armatron-core",
  "linkage-blaze-core",
  "linkage-blaze-cyd-core",
  "micromath",

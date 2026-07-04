@@ -9,24 +9,19 @@ mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
-use core::convert::Infallible;
-
 use device_envoy_core::button::Button;
 use embassy_time::Instant;
 use embedded_graphics::{
-    draw_target::DrawTarget,
-    geometry::{OriginDimensions, Point, Size},
-    pixelcolor::{IntoStorage, Rgb565, WebColors},
-    prelude::*,
+    geometry::Point,
+    pixelcolor::WebColors,
 };
 use linkage_blaze_core::{
     LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed, rgb565_from_rgb888,
 };
 use linkage_blaze_cyd_core::{
-    Cyd, CydDisplay, CydFrame, CydTouch, DrawItem3dExt, SCREEN_HEIGHT, SCREEN_PIXELS, SCREEN_WIDTH,
+    Cyd, CydDisplay, CydFrame, CydTouch, DrawItem3dExt, SCREEN_HEIGHT, SCREEN_WIDTH,
 };
 use nanorand::{Rng, WyRand};
-use static_cell::StaticCell;
 
 use crate::ui::{Ui, UiError};
 use controls::{
@@ -51,12 +46,12 @@ pub const FOREGROUND: Rgb888 = Rgb888::CSS_WHITE;
 //       The arm linkage ends with an invisible tip in the center of the hand.
 // - `LINKAGE_FIXED` appends a red ghost arm that shows the current target pose.
 const CAMERA_CONTROL: LinkageFixed<3, 1, 8> =
-    linkage_fixed!("../../../linkage-blaze-armatron-core/src/camera_control.lb.rs");
+    linkage_fixed!("camera_control.lb.rs");
 const GRID_9X9: LinkageFixed<0, 1, 81> =
-    linkage_fixed!("../../../linkage-blaze-armatron-core/src/grid_9x9.lb.rs");
+    linkage_fixed!("grid_9x9.lb.rs");
 const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);
 const ARMATRON1: LinkageFixed<6, 1, 25> =
-    linkage_fixed!("../../../linkage-blaze-armatron-core/src/armatron1.lb.rs");
+    linkage_fixed!("armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
 const SCENE_WITH_ARM: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM
@@ -134,19 +129,11 @@ where
     let background565 = rgb565_from_rgb888(BACKGROUND);
 
     loop {
-        let current_tick = Instant::now(); //todo0x move?
         if recalibration_button.is_pressed() {
             return Ok(ArmatronExit::CalibrationRequested);
         }
-        let previous_tick_before_frame = previous_tick; //todo0x what for?
-        let dt_seconds = previous_tick_before_frame.map_or(0.0, |previous_tick| {
-            current_tick
-                .saturating_duration_since(previous_tick)
-                .as_micros() as f32
-                / 1_000_000.0
-        });
-        previous_tick = Some(current_tick);
 
+        let current_tick = Instant::now();
         // todo000 review CydFrame::clear; its name collision with DrawTarget::clear(color) makes
         // generic frame code use fill(...) instead, which makes the clear helper much less useful.
         frame.fill(background565);
@@ -189,12 +176,19 @@ where
             reverse_kinematics.toggle(&params);
         }
         let hold_button_state = ui.hold_button(&mut frame, &RK_STEP_BUTTON)?;
-        reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds);
+
         if ui.button(&mut frame, &CALIBRATE_BUTTON)? {
             return Ok(ArmatronExit::CalibrationRequested);
         }
 
         // Explicit per-frame solver schedule slot.
+        let dt_seconds = previous_tick.map_or(0.0, |previous_tick| {
+            current_tick
+                .saturating_duration_since(previous_tick)
+                .as_micros() as f32
+                / 1_000_000.0
+        });
+        reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds);
         reverse_kinematics.tick(&mut params, dt_seconds);
 
         ui.label(
@@ -212,9 +206,7 @@ where
                 distance_hundredths % 100
             ),
         )?;
-        if let Some((fps_whole, fps_fraction)) =
-            next_fps_label(previous_tick_before_frame, current_tick)
-        {
+        if let Some((fps_whole, fps_fraction)) = next_fps_label(previous_tick, current_tick) {
             ui.label(
                 &mut frame,
                 &FPS_LABEL,
@@ -226,6 +218,7 @@ where
         ui.end(&mut frame)?;
 
         frame.flush().await.map_err(Error::Cyd)?;
+        previous_tick = Some(current_tick);
     }
 }
 
@@ -277,84 +270,11 @@ mod tests {
 /// coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
-    /// A UI widget failed (text formatting; draw is [`Infallible`] here).
-    Ui(UiError<Infallible>),
+    /// A UI widget failed (text formatting; draw is infallible here).
+    Ui(UiError<core::convert::Infallible>),
     /// Reading touch events or flushing a frame failed.
     #[from(ignore)]
     Cyd(F),
-}
-
-// ── FrameBuffer ────────────────────────────────────────────────────────────────
-//todo00000000 understand why this is needed here.
-pub struct FrameBuffer {
-    pixels: [u16; SCREEN_PIXELS],
-}
-
-impl FrameBuffer {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            pixels: [0; SCREEN_PIXELS],
-        }
-    }
-
-    pub fn static_new() -> &'static mut Self {
-        static FRAME_BUFFER: StaticCell<FrameBuffer> = StaticCell::new();
-        FRAME_BUFFER.init_with(FrameBuffer::new)
-    }
-
-    pub fn clear(&mut self, color: Rgb565) {
-        self.pixels.fill(color.into_storage());
-    }
-
-    pub fn raw_pixels_mut(&mut self) -> &mut [u16; SCREEN_PIXELS] {
-        &mut self.pixels
-    }
-
-    #[must_use]
-    pub fn raw_pixels(&self) -> &[u16; SCREEN_PIXELS] {
-        &self.pixels
-    }
-}
-
-impl DrawTarget for FrameBuffer {
-    type Color = Rgb565;
-    type Error = Infallible;
-
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        self.clear(color);
-        Ok(())
-    }
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
-    {
-        for Pixel(point, color) in pixels {
-            if point.x < 0 || point.y < 0 {
-                continue;
-            }
-            let x = point.x as usize;
-            let y = point.y as usize;
-            if x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT {
-                continue;
-            }
-            self.pixels[y * SCREEN_WIDTH + x] = color.into_storage();
-        }
-        Ok(())
-    }
-}
-
-impl OriginDimensions for FrameBuffer {
-    fn size(&self) -> Size {
-        Size::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32)
-    }
-}
-
-impl Default for FrameBuffer {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 // ── Private helper functions ───────────────────────────────────────────────────

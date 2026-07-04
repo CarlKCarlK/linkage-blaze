@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 #[wasm_bindgen]
 pub fn default_program() -> String {
-    include_str!("../../linkage-blaze-armatron-core/src/armatron1.lb.rs").into()
+    include_str!("../../linkage-blaze-example-core/src/armatron/armatron1.lb.rs").into()
 }
 
 #[wasm_bindgen]
