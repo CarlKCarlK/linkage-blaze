@@ -252,8 +252,7 @@ mod tests {
                 touch_rectangle.size.height as i32 / 2,
             );
         memory_cyd.push_touch_event(TouchEvent::Down {
-            x: touch_center.x as f32,
-            y: touch_center.y as f32,
+            point: touch_center,
         });
         let mut memory_button = memory_cyd.memory_button();
 

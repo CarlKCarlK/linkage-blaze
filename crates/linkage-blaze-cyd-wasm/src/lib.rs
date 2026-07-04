@@ -580,11 +580,15 @@ impl CydTouch for CydTouchWasmPart {
             .map(|raw_touch_event| match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
                     let (x, y) = calibration_config.map_raw_to_screen(raw_x, raw_y);
-                    TouchEvent::Down { x, y }
+                    TouchEvent::Down {
+                        point: Point::new(x as i32, y as i32),
+                    }
                 }
                 RawTouchEvent::Move { raw_x, raw_y } => {
                     let (x, y) = calibration_config.map_raw_to_screen(raw_x, raw_y);
-                    TouchEvent::Move { x, y }
+                    TouchEvent::Move {
+                        point: Point::new(x as i32, y as i32),
+                    }
                 }
                 RawTouchEvent::Up => TouchEvent::Up,
             }))

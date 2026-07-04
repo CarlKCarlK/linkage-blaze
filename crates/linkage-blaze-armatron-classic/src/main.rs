@@ -224,8 +224,14 @@ fn draw_calibration_screen(
 
 fn read_touch(cyd: &mut CalibratedCydEsp<'_>) -> Result<Option<TouchEvent>, MainError> {
     Ok(cyd.read()?.map(|touch_event| match touch_event {
-        CydTouchEvent::Down { x, y } => TouchEvent::Down { x, y },
-        CydTouchEvent::Move { x, y } => TouchEvent::Move { x, y },
+        CydTouchEvent::Down { point } => TouchEvent::Down {
+            x: point.x as f32,
+            y: point.y as f32,
+        },
+        CydTouchEvent::Move { point } => TouchEvent::Move {
+            x: point.x as f32,
+            y: point.y as f32,
+        },
         CydTouchEvent::Up => TouchEvent::Up,
     }))
 }

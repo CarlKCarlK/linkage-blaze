@@ -41,7 +41,9 @@
 //! let mut ui = Ui::new();
 //! let mut tilt = 0.5;
 //!
-//! ui.begin(Some(TouchEvent::Down { x: 16.0, y: 124.0 }));
+//! ui.begin(Some(TouchEvent::Down {
+//!     point: Point::new(16, 124),
+//! }));
 //! ui.slider(&mut display, &TILT_SLIDER, &mut tilt)?;
 //! ui.end(&mut display)?;
 //! # Ok::<(), linkage_blaze_example_core::ui::UiError<Infallible>>(())
@@ -67,7 +69,7 @@ const SLIDER_TOUCH_PAD: i32 = 14;
 /// Immediate-mode UI state for one touch pointer.
 #[derive(Default)]
 pub struct Ui {
-    touch_cursor: Option<(f32, f32)>,
+    touch_cursor: Option<Point>,
     touch_event: Option<TouchEvent>,
     active_slider: Option<&'static Slider>,
     active_hold_button: Option<&'static IconButton>,
@@ -94,8 +96,8 @@ impl Ui {
         self.down_consumed = false;
 
         match touch_event {
-            Some(TouchEvent::Down { x, y }) | Some(TouchEvent::Move { x, y }) => {
-                self.touch_cursor = Some((x, y));
+            Some(TouchEvent::Down { point }) | Some(TouchEvent::Move { point }) => {
+                self.touch_cursor = Some(point);
             }
             Some(TouchEvent::Up) => {
                 self.touch_cursor = None;
@@ -119,10 +121,8 @@ impl Ui {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        //todo0x should down etc contain a point?
-        if let Some(TouchEvent::Down { x, y }) = self.touch_event {
-            let touch_point = Point::new(x as i32, y as i32);
-            if !self.down_consumed && slider.touch_rectangle.contains(touch_point) {
+        if let Some(TouchEvent::Down { point }) = self.touch_event {
+            if !self.down_consumed && slider.touch_rectangle.contains(point) {
                 self.active_slider = Some(slider);
                 self.down_consumed = true;
             }
@@ -131,8 +131,8 @@ impl Ui {
             .active_slider
             .is_some_and(|active_slider| ptr::eq(active_slider, slider));
         if is_active {
-            if let Some((position_x, position_y)) = self.touch_cursor {
-                *value = slider.value_from_touch(position_x, position_y);
+            if let Some(touch_point) = self.touch_cursor {
+                *value = slider.value_from_touch(touch_point.x as f32, touch_point.y as f32);
             }
         }
 
@@ -181,9 +181,8 @@ impl Ui {
     {
         let mut hold_button_state = HoldButtonState::Idle;
 
-        if let Some(TouchEvent::Down { x, y }) = self.touch_event {
-            let touch_point = Point::new(x as i32, y as i32);
-            if !self.down_consumed && icon_button.touch_rectangle.contains(touch_point) {
+        if let Some(TouchEvent::Down { point }) = self.touch_event {
+            if !self.down_consumed && icon_button.touch_rectangle.contains(point) {
                 self.active_hold_button = Some(icon_button);
                 self.down_consumed = true;
                 hold_button_state = HoldButtonState::Pressed;
@@ -223,11 +222,11 @@ impl Ui {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        let Some((position_x, position_y)) = self.touch_cursor else {
+        let Some(touch_point) = self.touch_cursor else {
             return Ok(());
         };
-        let center_x = position_x as i32;
-        let center_y = position_y as i32;
+        let center_x = touch_point.x;
+        let center_y = touch_point.y;
         let radius = 5;
         Circle::new(
             Point::new(center_x - radius, center_y - radius),
@@ -240,15 +239,14 @@ impl Ui {
     }
 
     fn consume_down(&mut self, touch_rectangle: Rectangle) -> bool {
-        let Some(TouchEvent::Down { x, y }) = self.touch_event else {
+        let Some(TouchEvent::Down { point }) = self.touch_event else {
             return false;
         };
         if self.down_consumed {
             return false;
         }
 
-        let touch_point = Point::new(x as i32, y as i32);
-        if !touch_rectangle.contains(touch_point) {
+        if !touch_rectangle.contains(point) {
             return false;
         }
 
