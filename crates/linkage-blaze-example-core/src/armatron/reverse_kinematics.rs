@@ -35,8 +35,6 @@ pub(super) struct ReverseKinematics {
     hold_step_budget: f32,
 }
 
-const _: fn(&mut ReverseKinematics, &[f32; super::DOF]) = ReverseKinematics::toggle;
-
 impl ReverseKinematics {
     /// Idle controller: no run state, not playing.
     pub(super) const fn new() -> Self {
