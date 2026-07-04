@@ -55,6 +55,30 @@ pub enum EnsureCalibrationError<DeviceError, FlashError> {
     Flash(FlashError),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct EnsureCalibrationSettings {
+    verify_timeout_frames: usize,
+}
+
+impl EnsureCalibrationSettings {
+    pub const DEFAULT: Self = Self {
+        verify_timeout_frames: VERIFY_TIMEOUT_FRAMES,
+    };
+
+    #[must_use]
+    pub const fn new(verify_timeout_frames: usize) -> Self {
+        assert!(verify_timeout_frames > 0, "verify timeout must be non-zero");
+        Self {
+            verify_timeout_frames,
+        }
+    }
+
+    #[must_use]
+    pub const fn verify_timeout_frames(self) -> usize {
+        self.verify_timeout_frames
+    }
+}
+
 enum CalibrationDriverState {
     Capturing,
     ShowCaptured {
@@ -85,6 +109,32 @@ pub async fn ensure_calibration<C, F, R, E>(
     calibration_flash_block: &mut F,
     recalibration_button: &mut R,
     confirmed_message: Option<&str>,
+) -> Result<EnsureCalibrationOutcome, EnsureCalibrationError<E, F::Error>>
+where
+    C: Cyd<Error = E> + CydRawTouch<Error = E>,
+    F: FlashBlock,
+    R: Button,
+{
+    ensure_calibration_with_settings(
+        cyd,
+        calibration_flash_block,
+        recalibration_button,
+        confirmed_message,
+        EnsureCalibrationSettings::DEFAULT,
+    )
+    .await
+}
+
+/// Like [`ensure_calibration`], but lets callers tune shared flow timings for
+/// their frame pacing. Browser builds redraw much faster than the classic CYD,
+/// so they need a larger verify-frame budget to preserve the intended real-time
+/// grace period before the center confirmation tap.
+pub async fn ensure_calibration_with_settings<C, F, R, E>(
+    cyd: &mut C,
+    calibration_flash_block: &mut F,
+    recalibration_button: &mut R,
+    confirmed_message: Option<&str>,
+    ensure_calibration_settings: EnsureCalibrationSettings,
 ) -> Result<EnsureCalibrationOutcome, EnsureCalibrationError<E, F::Error>>
 where
     C: Cyd<Error = E> + CydRawTouch<Error = E>,
@@ -144,7 +194,8 @@ where
                                         candidate_config: calibration_validation
                                             .calibration_config(),
                                         release_touch_capture: ReleaseTouchCapture::new(),
-                                        polls_remaining: VERIFY_TIMEOUT_FRAMES,
+                                        polls_remaining: ensure_calibration_settings
+                                            .verify_timeout_frames(),
                                     };
                                 }
                                 Err(CalibrationSolveError::ResidualTooLarge {

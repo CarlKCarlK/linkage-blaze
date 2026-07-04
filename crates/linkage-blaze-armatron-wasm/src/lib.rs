@@ -3,7 +3,9 @@
 use device_envoy_core::flash_block::FlashBlock as _;
 use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
 use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
-use linkage_blaze_cyd_core::{Orientation, ensure_calibration};
+use linkage_blaze_cyd_core::{
+    EnsureCalibrationSettings, Orientation, ensure_calibration_with_settings,
+};
 use linkage_blaze_cyd_wasm::{ButtonWasmSource, CydTouchWasmSource, CydWasm, FlashBlockWasm};
 use linkage_blaze_example_core::armatron::{ArmatronExit, BACKGROUND, FOREGROUND, armatron};
 use wasm_bindgen::{JsCast, closure::Closure, prelude::wasm_bindgen};
@@ -11,6 +13,7 @@ use web_sys::{CanvasRenderingContext2d, Element, HtmlCanvasElement, PointerEvent
 
 const ORIENTATION: Orientation = Orientation::Landscape;
 const CALIBRATION_STORAGE_KEY: &str = "linkage-blaze.armatron.calibration";
+const BROWSER_VERIFY_TIMEOUT_FRAMES: usize = 10 * 60;
 
 #[wasm_bindgen]
 pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
@@ -56,11 +59,12 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             );
 
             let mut recalibration_button = button_source.button();
-            match ensure_calibration(
+            match ensure_calibration_with_settings(
                 &mut cyd,
                 &mut calibration_flash_block,
                 &mut recalibration_button,
                 None,
+                EnsureCalibrationSettings::new(BROWSER_VERIFY_TIMEOUT_FRAMES),
             )
             .await
             {

@@ -21,7 +21,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
-pub use driver::{EnsureCalibrationError, EnsureCalibrationOutcome, ensure_calibration};
+pub use driver::{
+    EnsureCalibrationError, EnsureCalibrationOutcome, EnsureCalibrationSettings,
+    ensure_calibration, ensure_calibration_with_settings,
+};
 pub use flow::CalibrationFlow;
 
 pub const CALIBRATION_POINT_COUNT: usize = 4;
