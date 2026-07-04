@@ -104,7 +104,7 @@ pub struct CydFrameEsp<'a> {
     view: RegionView<'a>,
     // Where this frame presents and how large it is: set from the `Rectangle`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
-    region: Rectangle,
+    rectangle: Rectangle,
     // Tile top-left in screen coordinates. Drawing coordinates are translated
     // by this point before reaching the local frame buffer.
     tile_top_left: Point,
@@ -139,11 +139,12 @@ impl<'a> CydFrameEsp<'a> {
         self.view.raw_pixels_mut()
     }
 
-    /// Present this frame's pixels at its region's top-left (set by [`CydDisplayTrait::frame_mut`]).
+    /// Present this frame's pixels at its rectangle's top-left (set by
+    /// [`CydDisplayTrait::frame_mut`]).
     pub fn flush(&mut self) -> Result<(), CydError> {
         Ok(self
             .display
-            .flush_buffer(&self.view, self.region.top_left)?)
+            .flush_buffer(&self.view, self.rectangle.top_left)?)
     }
 
     fn local_x(&self, x: i32) -> Option<usize> {
@@ -544,13 +545,14 @@ impl CydDisplay for CydDisplayEspPart<'_> {
 
     fn frame_mut_with_tile_top_left(
         &mut self,
-        region: Rectangle,
+        rectangle: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameEsp<'_> {
         self.display.make_frame_with_tile_top_left(
             self.pixel_buffer,
-            region,
+            rectangle,
             tile_top_left,
+            self.background565,
             self.foreground565,
             self.font,
         )
@@ -644,8 +646,8 @@ impl CydFrame for CydFrameEsp<'_> {
         self.tile_top_left
     }
 
-    fn region(&self) -> Rectangle {
-        self.region
+    fn rectangle(&self) -> Rectangle {
+        self.rectangle
     }
 
     fn fill(&mut self, color: Rgb565) -> &mut Self {

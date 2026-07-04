@@ -60,7 +60,7 @@ pub struct MemoryCyd {
     foreground565: Rgb565,
     framebuffer: Vec<u16>,
     flush_count: usize,
-    last_flush_region: Option<Rectangle>,
+    last_flush_rectangle: Option<Rectangle>,
     frame_budget: usize,
     raw_touch_script: RefCell<FrameScript<RawTouchEvent>>,
     touch_script: RefCell<FrameScript<TouchEvent>>,
@@ -75,7 +75,7 @@ pub struct MemoryDisplayPart<'a> {
     foreground565: Rgb565,
     framebuffer: &'a mut Vec<u16>,
     flush_count: &'a mut usize,
-    last_flush_region: &'a mut Option<Rectangle>,
+    last_flush_rectangle: &'a mut Option<Rectangle>,
     frame_budget: usize,
     raw_touch_script: &'a RefCell<FrameScript<RawTouchEvent>>,
     touch_script: &'a RefCell<FrameScript<TouchEvent>>,
@@ -89,13 +89,13 @@ pub struct MemoryTouchPart<'a> {
 pub struct MemoryFrame<'a> {
     framebuffer: &'a mut Vec<u16>,
     flush_count: &'a mut usize,
-    last_flush_region: &'a mut Option<Rectangle>,
+    last_flush_rectangle: &'a mut Option<Rectangle>,
     frame_budget: usize,
     raw_touch_script: &'a RefCell<FrameScript<RawTouchEvent>>,
     touch_script: &'a RefCell<FrameScript<TouchEvent>>,
     frame_clock: MemoryFrameClock,
     screen_size: Size,
-    region: Rectangle,
+    rectangle: Rectangle,
     tile_top_left: Point,
     foreground565: Rgb565,
     pixels: Vec<u16>,
@@ -135,7 +135,7 @@ impl MemoryCyd {
             foreground565: Rgb565::from(foreground),
             framebuffer: vec![background565.into_storage(); pixel_count],
             flush_count: 0,
-            last_flush_region: None,
+            last_flush_rectangle: None,
             frame_budget: DEFAULT_FRAME_BUDGET,
             raw_touch_script: RefCell::new(FrameScript::default()),
             touch_script: RefCell::new(FrameScript::default()),
@@ -219,8 +219,8 @@ impl MemoryCyd {
     }
 
     #[must_use]
-    pub fn last_flush_region(&self) -> Option<Rectangle> {
-        self.last_flush_region
+    pub fn last_flush_rectangle(&self) -> Option<Rectangle> {
+        self.last_flush_rectangle
     }
 
     #[must_use]
@@ -290,7 +290,7 @@ impl Cyd for MemoryCyd {
                 foreground565: self.foreground565,
                 framebuffer: &mut self.framebuffer,
                 flush_count: &mut self.flush_count,
-                last_flush_region: &mut self.last_flush_region,
+                last_flush_rectangle: &mut self.last_flush_rectangle,
                 frame_budget: self.frame_budget,
                 raw_touch_script: &self.raw_touch_script,
                 touch_script: &self.touch_script,
@@ -340,20 +340,20 @@ impl CydDisplay for MemoryDisplayPart<'_> {
 
     fn frame_mut_with_tile_top_left(
         &mut self,
-        region: Rectangle,
+        rectangle: Rectangle,
         tile_top_left: Point,
     ) -> Self::Frame<'_> {
-        let pixel_count = region.size.width as usize * region.size.height as usize;
+        let pixel_count = rectangle.size.width as usize * rectangle.size.height as usize;
         MemoryFrame {
             framebuffer: self.framebuffer,
             flush_count: self.flush_count,
-            last_flush_region: self.last_flush_region,
+            last_flush_rectangle: self.last_flush_rectangle,
             frame_budget: self.frame_budget,
             raw_touch_script: self.raw_touch_script,
             touch_script: self.touch_script,
             frame_clock: self.frame_clock.clone(),
             screen_size: self.size,
-            region,
+            rectangle,
             tile_top_left,
             foreground565: self.foreground565,
             pixels: vec![self.background565.into_storage(); pixel_count],
@@ -389,11 +389,11 @@ impl CydTouch for MemoryTouchPart<'_> {
 
 impl MemoryFrame<'_> {
     fn width(&self) -> usize {
-        self.region.size.width as usize
+        self.rectangle.size.width as usize
     }
 
     fn height(&self) -> usize {
-        self.region.size.height as usize
+        self.rectangle.size.height as usize
     }
 
     fn local_x(&self, position_x: i32) -> Option<usize> {
@@ -412,10 +412,10 @@ impl MemoryFrame<'_> {
         blit_frame_to_screen(
             self.framebuffer,
             self.screen_size,
-            self.region,
+            self.rectangle,
             &self.pixels,
         );
-        *self.last_flush_region = Some(self.region);
+        *self.last_flush_rectangle = Some(self.rectangle);
         *self.flush_count += 1;
         self.raw_touch_script.borrow_mut().advance_frame();
         self.touch_script.borrow_mut().advance_frame();
@@ -458,7 +458,7 @@ impl DrawTarget for MemoryFrame<'_> {
 
 impl Dimensions for MemoryFrame<'_> {
     fn bounding_box(&self) -> Rectangle {
-        Rectangle::new(self.tile_top_left, self.region.size)
+        Rectangle::new(self.tile_top_left, self.rectangle.size)
     }
 }
 
@@ -517,8 +517,8 @@ impl CydFrame for MemoryFrame<'_> {
         self.tile_top_left
     }
 
-    fn region(&self) -> Rectangle {
-        self.region
+    fn rectangle(&self) -> Rectangle {
+        self.rectangle
     }
 
     fn fill(&mut self, color: Rgb565) -> &mut Self {
@@ -875,10 +875,10 @@ fn fill_contiguous_in_framebuffer<I>(
 fn blit_frame_to_screen(
     framebuffer: &mut [u16],
     screen_size: Size,
-    region: Rectangle,
+    rectangle: Rectangle,
     pixels: &[u16],
 ) {
-    fill_contiguous_in_framebuffer(framebuffer, screen_size, region, pixels.iter().copied());
+    fill_contiguous_in_framebuffer(framebuffer, screen_size, rectangle, pixels.iter().copied());
 }
 
 #[cfg(test)]
@@ -933,7 +933,7 @@ mod tests {
         }
         assert_eq!(memory_cyd.pixel(11, 21), Rgb565::CSS_RED);
         assert_eq!(
-            memory_cyd.last_flush_region(),
+            memory_cyd.last_flush_rectangle(),
             Some(Rectangle::new(Point::new(10, 20), Size::new(4, 3)))
         );
     }
@@ -1104,7 +1104,7 @@ mod tests {
         }
         assert!(memory_cyd.flush_count() > 0);
         assert_eq!(
-            memory_cyd.last_flush_region(),
+            memory_cyd.last_flush_rectangle(),
             Some(Rectangle::new(Point::zero(), Size::new(320, 240)))
         );
     }

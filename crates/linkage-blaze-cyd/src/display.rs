@@ -165,12 +165,13 @@ impl CydDisplayEsp {
     pub(crate) fn make_frame_with_tile_top_left<'a>(
         &'a mut self,
         pixel_buffer: &'a mut dyn DynPixelBuffer,
-        region: Rectangle,
+        rectangle: Rectangle,
         tile_top_left: Point,
+        background565: Rgb565,
         foreground565: Rgb565,
         font: &'static MonoFont<'static>,
     ) -> CydFrameEsp<'a> {
-        let size = region.size;
+        let size = rectangle.size;
         let mut view = pixel_buffer.view_mut(size.width as usize, size.height as usize);
         // Every new frame starts cleared to the device background so callers
         // never have to clear it themselves.
@@ -178,7 +179,7 @@ impl CydDisplayEsp {
         CydFrameEsp {
             display: self,
             view,
-            region,
+            rectangle,
             tile_top_left,
             foreground565,
             font,

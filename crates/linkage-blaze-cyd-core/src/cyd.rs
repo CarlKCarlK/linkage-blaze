@@ -6,7 +6,7 @@
 //! — as separate parts. Generic example logic can borrow those parts independently
 //! while still accepting one device value at the entry point.
 //!
-//! A [`CydDisplay`] hands out per-region [frames](CydFrame); each frame starts
+//! A [`CydDisplay`] hands out per-rectangle [frames](CydFrame); each frame starts
 //! cleared to the device background, can have a line of default-style text
 //! written into it, and is flushed to a screen position. [`CydTouch`] reads
 //! calibrated, screen-space [`TouchEvent`]s (or `None` when there is no
@@ -60,12 +60,12 @@ pub trait Cyd {
     fn parts(&mut self) -> (Self::Display<'_>, Self::Touch<'_>);
 }
 
-/// A CYD display: hands out cleared, region-sized frames.
+/// A CYD display: hands out cleared, rectangle-sized frames.
 pub trait CydDisplay {
     /// Error returned when flushing a frame fails.
     type Error: CydFlushError;
 
-    /// The per-region frame type this device produces.
+    /// The per-rectangle frame type this device produces.
     ///
     /// Its [`CydFrame::Error`] is pinned to this display's [`CydDisplay::Error`], so
     /// `frame.flush().await?` in generic code propagates a single
@@ -94,7 +94,7 @@ pub trait CydDisplay {
         rgb565_from_rgb888(color)
     }
 
-    /// Borrow a frame covering `region`, cleared to the device background color.
+    /// Borrow a frame covering `rectangle`, cleared to the device background color.
     ///
     /// Drawing commands are interpreted in screen coordinates:
     /// `tile_top_left` is subtracted before pixels are written into the
@@ -102,17 +102,18 @@ pub trait CydDisplay {
     /// draw in frame-local coordinates.
     fn frame_mut_with_tile_top_left(
         &mut self,
-        region: Rectangle,
+        rectangle: Rectangle,
         tile_top_left: Point,
     ) -> Self::Frame<'_>;
 
-    //todo0000000000 region should be "rectangle" and these zero's and almost empty functions don't make sense to me.
-    /// Borrow a frame covering `region`, cleared to the device background color.
+    // TODO0000000000 This was previously named `region`; keep reviewing these
+    // `Rectangle`-typed APIs so the naming stays consistent.
+    /// Borrow a frame covering `rectangle`, cleared to the device background color.
     ///
-    /// The frame remembers its `region`, so [`CydFrame::flush`] presents it at
-    /// the region's top-left with no separate position argument.
-    fn frame_mut(&mut self, region: Rectangle) -> Self::Frame<'_> {
-        self.frame_mut_with_tile_top_left(region, Point::zero())
+    /// The frame remembers its `rectangle`, so [`CydFrame::flush`] presents it
+    /// at the rectangle's top-left with no separate position argument.
+    fn frame_mut(&mut self, rectangle: Rectangle) -> Self::Frame<'_> {
+        self.frame_mut_with_tile_top_left(rectangle, Point::zero())
     }
 
     /// Borrow a full-screen frame, cleared to the device background color.
@@ -134,7 +135,7 @@ pub trait CydDisplay {
     where
         I: IntoIterator<Item = Rgb565>;
 
-    /// Present a native-color region buffer at `top_left`.
+    /// Present a native-color rectangle buffer at `top_left`.
     fn flush_at(&mut self, buffer: &impl RegionPixels, top_left: Point) -> Result<(), Self::Error> {
         let rectangle = Rectangle::new(
             top_left,
@@ -292,7 +293,7 @@ impl<C: CydDisplay> Tiles<'_, C> {
     /// color, or `None` once every tile has been yielded.
     ///
     /// Tiles are visited in row-major order (each row left-to-right), skipping
-    /// any `(column, row)` that falls entirely outside the region.
+    /// any `(column, row)` that falls entirely outside the grid rectangle.
     // This is a lending iterator: each yielded frame borrows the device's single
     // reusable frame buffer, so it cannot implement `Iterator` (whose `next`
     // returns an item that outlives the `&mut self` borrow). The `next` name is
@@ -304,15 +305,18 @@ impl<C: CydDisplay> Tiles<'_, C> {
             if self.row >= rows {
                 return None;
             }
-            let region = self.grid.tile(self.column, self.row);
+            let rectangle = self.grid.tile(self.column, self.row);
             self.column += 1;
             if self.column >= columns {
                 self.column = 0;
                 self.row += 1;
             }
-            if let Some(region) = region {
-                let tile_top_left = region.top_left;
-                return Some(self.cyd.frame_mut_with_tile_top_left(region, tile_top_left));
+            if let Some(rectangle) = rectangle {
+                let tile_top_left = rectangle.top_left;
+                return Some(
+                    self.cyd
+                        .frame_mut_with_tile_top_left(rectangle, tile_top_left),
+                );
             }
         }
     }
@@ -334,9 +338,9 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
         Point::zero()
     }
 
-    //todo0x Arg! "region"
-    /// This frame's region (top-left and size) in physical-screen coordinates.
-    fn region(&self) -> Rectangle;
+    // TODO0x Arg! "region" (may no longer apply)
+    /// This frame's rectangle (top-left and size) in physical-screen coordinates.
+    fn rectangle(&self) -> Rectangle;
 
     /// Fill this frame with an explicit color and return `self`.
     fn fill(&mut self, color: Rgb565) -> &mut Self;
@@ -356,7 +360,7 @@ pub trait CydFrame: DrawTarget<Color = Rgb565, Error = Infallible> + PixelTarget
     /// buffer.
     fn copy_from_565(&mut self, src: &[u16]) -> Result<(), CopySizeError>;
 
-    /// Present the frame's pixels at its region's top-left (screen coordinates).
+    /// Present the frame's pixels at its rectangle's top-left (screen coordinates).
     ///
     /// The frame was created over a [`Rectangle`] by [`CydDisplay::frame_mut`],
     /// so it already knows where it lives and needs no position argument.
@@ -395,7 +399,7 @@ mod tests {
     struct TestCyd;
 
     struct TestFrame {
-        region: Rectangle,
+        rectangle: Rectangle,
         tile_top_left: Point,
     }
 
@@ -425,11 +429,11 @@ mod tests {
 
         fn frame_mut_with_tile_top_left(
             &mut self,
-            region: Rectangle,
+            rectangle: Rectangle,
             tile_top_left: Point,
         ) -> TestFrame {
             TestFrame {
-                region,
+                rectangle,
                 tile_top_left,
             }
         }
@@ -468,17 +472,17 @@ mod tests {
 
     impl OriginDimensions for TestFrame {
         fn size(&self) -> Size {
-            self.region.size
+            self.rectangle.size
         }
     }
 
     impl PixelTarget for TestFrame {
         fn width(&self) -> usize {
-            self.region.size.width as usize
+            self.rectangle.size.width as usize
         }
 
         fn height(&self) -> usize {
-            self.region.size.height as usize
+            self.rectangle.size.height as usize
         }
 
         fn put_pixel(&mut self, _x: usize, _y: usize, _color: linkage_blaze_core::Rgb888) {}
@@ -491,8 +495,8 @@ mod tests {
             self.tile_top_left
         }
 
-        fn region(&self) -> Rectangle {
-            self.region
+        fn rectangle(&self) -> Rectangle {
+            self.rectangle
         }
 
         fn fill(&mut self, _color: Rgb565) -> &mut Self {
@@ -520,7 +524,7 @@ mod tests {
 
         let first = tiles.next().expect("first tile exists");
         assert_eq!(
-            first.region(),
+            first.rectangle(),
             Rectangle::new(Point::new(10, 20), Size::new(4, 3))
         );
         assert_eq!(first.tile_top_left(), Point::new(10, 20));
@@ -528,7 +532,7 @@ mod tests {
 
         let second = tiles.next().expect("second tile exists");
         assert_eq!(
-            second.region(),
+            second.rectangle(),
             Rectangle::new(Point::new(14, 20), Size::new(4, 3))
         );
         assert_eq!(second.tile_top_left(), Point::new(14, 20));
@@ -536,7 +540,7 @@ mod tests {
 
         let third = tiles.next().expect("third tile exists");
         assert_eq!(
-            third.region(),
+            third.rectangle(),
             Rectangle::new(Point::new(10, 23), Size::new(4, 3))
         );
         assert_eq!(third.tile_top_left(), Point::new(10, 23));

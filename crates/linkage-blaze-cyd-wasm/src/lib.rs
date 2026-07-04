@@ -497,16 +497,16 @@ impl CydDisplay for CydDisplayWasmPart<'_> {
         self.foreground565
     }
 
-    fn frame_mut(&mut self, region: Rectangle) -> CydFrameWasm<'_> {
-        self.frame_mut_with_tile_top_left(region, Point::zero())
+    fn frame_mut(&mut self, rectangle: Rectangle) -> CydFrameWasm<'_> {
+        self.frame_mut_with_tile_top_left(rectangle, Point::zero())
     }
 
     fn frame_mut_with_tile_top_left(
         &mut self,
-        region: Rectangle,
+        rectangle: Rectangle,
         tile_top_left: Point,
     ) -> CydFrameWasm<'_> {
-        let size = region.size;
+        let size = rectangle.size;
         let pixel_count = size.width as usize * size.height as usize;
         // Every new frame starts cleared to the device background so callers
         // never have to clear it themselves.
@@ -514,7 +514,7 @@ impl CydDisplay for CydDisplayWasmPart<'_> {
         CydFrameWasm {
             context: &self.context,
             pixels,
-            region,
+            rectangle,
             tile_top_left,
             foreground565: self.foreground565,
             font: self.font,
@@ -647,7 +647,7 @@ pub struct CydFrameWasm<'a> {
     pixels: Vec<u16>,
     // Where this frame presents and how large it is: set from the `Rectangle`
     // passed to `frame_mut`, so `flush` needs no separate position argument.
-    region: Rectangle,
+    rectangle: Rectangle,
     // Tile top-left in screen coordinates. Drawing coordinates are translated
     // by this point before reaching the local frame buffer.
     tile_top_left: Point,
@@ -657,11 +657,11 @@ pub struct CydFrameWasm<'a> {
 
 impl CydFrameWasm<'_> {
     fn width(&self) -> usize {
-        self.region.size.width as usize
+        self.rectangle.size.width as usize
     }
 
     fn height(&self) -> usize {
-        self.region.size.height as usize
+        self.rectangle.size.height as usize
     }
 
     fn local_x(&self, x: i32) -> Option<usize> {
@@ -689,15 +689,15 @@ impl CydFrameWasm<'_> {
         }
         let image_data = ImageData::new_with_u8_clamped_array_and_sh(
             Clamped(&bytes),
-            self.region.size.width,
-            self.region.size.height,
+            self.rectangle.size.width,
+            self.rectangle.size.height,
         )
         .expect("ImageData dimensions match the pixel buffer");
         self.context
             .put_image_data(
                 &image_data,
-                f64::from(self.region.top_left.x),
-                f64::from(self.region.top_left.y),
+                f64::from(self.rectangle.top_left.x),
+                f64::from(self.rectangle.top_left.y),
             )
             .expect("put_image_data with in-bounds coordinates cannot fail");
     }
@@ -734,7 +734,7 @@ impl DrawTarget for CydFrameWasm<'_> {
 
 impl Dimensions for CydFrameWasm<'_> {
     fn bounding_box(&self) -> Rectangle {
-        Rectangle::new(self.tile_top_left, self.region.size)
+        Rectangle::new(self.tile_top_left, self.rectangle.size)
     }
 }
 
@@ -791,8 +791,8 @@ impl CydFrame for CydFrameWasm<'_> {
         self.tile_top_left
     }
 
-    fn region(&self) -> Rectangle {
-        self.region
+    fn rectangle(&self) -> Rectangle {
+        self.rectangle
     }
 
     fn fill(&mut self, color: Rgb565) -> &mut Self {

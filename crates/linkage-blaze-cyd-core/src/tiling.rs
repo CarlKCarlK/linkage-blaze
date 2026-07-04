@@ -5,9 +5,9 @@
 //! coordinates and *how big* the shared buffer must be, without knowing anything
 //! about what an app draws into them.
 //!
-//! The primary type is [`TileGrid`]: callers give it a rectangular body region
+//! The primary type is [`TileGrid`]: callers give it a rectangular body area
 //! and the number of tile columns and rows; it derives the per-tile size with
-//! ceiling division and clips the final column/row to the region edges.
+//! ceiling division and clips the final column/row to the rectangle edges.
 //! [`Rectangle`] describes a single rectangle (for example a full-width text
 //! band), and [`max_rectangle_pixel_count`] sizes a shared buffer as the max of
 //! two rectangles an app flushes.
@@ -50,21 +50,21 @@ pub const fn max_u32(first: u32, second: u32) -> u32 {
 
 /// `const fn` ceiling division of two `usize` values.
 ///
-/// Used to derive a per-tile size that covers a region given a tile count:
-/// `tile_width = div_ceil_usize(region_width, columns)`. Panics if `d == 0`.
+/// Used to derive a per-tile size that covers a rectangle given a tile count:
+/// `tile_width = div_ceil_usize(rectangle_width, columns)`. Panics if `d == 0`.
 #[must_use]
 pub const fn div_ceil_usize(n: usize, d: usize) -> usize {
     assert!(d > 0, "divisor must be non-zero");
     n / d + if n % d == 0 { 0 } else { 1 }
 }
 
-/// A rectangular body region split into a grid of `columns` × `rows` tiles.
+/// A rectangular body area split into a grid of `columns` × `rows` tiles.
 ///
-/// `top_left` and `size` describe the region in screen coordinates; callers
+/// `top_left` and `size` describe the rectangle in screen coordinates; callers
 /// specify how many tile columns and rows to split it into, and the per-tile
 /// size is derived with ceiling division ([`tile_width`](Self::tile_width) /
 /// [`tile_height`](Self::tile_height)). The final column and row are clipped to
-/// the region's right and bottom edges.
+/// the rectangle's right and bottom edges.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TileGrid {
     pub top_left: Point,
@@ -76,7 +76,7 @@ pub struct TileGrid {
 impl TileGrid {
     /// Build a grid splitting `size` into `columns` × `rows` tiles.
     ///
-    /// Const-asserts that the counts are positive and do not exceed the region's
+    /// Const-asserts that the counts are positive and do not exceed the rectangle's
     /// pixel dimensions, so an over-fine grid fails to compile.
     #[must_use]
     pub const fn new(top_left: Point, size: Size, columns: usize, rows: usize) -> Self {
@@ -84,11 +84,11 @@ impl TileGrid {
         assert!(rows > 0, "rows must be greater than zero");
         assert!(
             columns <= size.width as usize,
-            "columns must not exceed region width in pixels"
+            "columns must not exceed rectangle width in pixels"
         );
         assert!(
             rows <= size.height as usize,
-            "rows must not exceed region height in pixels"
+            "rows must not exceed rectangle height in pixels"
         );
         Self {
             top_left,
@@ -98,25 +98,25 @@ impl TileGrid {
         }
     }
 
-    /// Number of tile columns the region is split into.
+    /// Number of tile columns the rectangle is split into.
     #[must_use]
     pub const fn columns(&self) -> usize {
         self.columns
     }
 
-    /// Number of tile rows the region is split into.
+    /// Number of tile rows the rectangle is split into.
     #[must_use]
     pub const fn rows(&self) -> usize {
         self.rows
     }
 
-    /// Nominal tile width: the region width divided by the column count, rounded up.
+    /// Nominal tile width: the rectangle width divided by the column count, rounded up.
     #[must_use]
     pub const fn tile_width(&self) -> usize {
         div_ceil_usize(self.size.width as usize, self.columns)
     }
 
-    /// Nominal tile height: the region height divided by the row count, rounded up.
+    /// Nominal tile height: the rectangle height divided by the row count, rounded up.
     #[must_use]
     pub const fn tile_height(&self) -> usize {
         div_ceil_usize(self.size.height as usize, self.rows)
@@ -125,7 +125,7 @@ impl TileGrid {
     /// Largest pixel count any single tile can have.
     ///
     /// The biggest tile is the top-left one, whose dimensions are the derived tile
-    /// size clipped to the region (in case the region is smaller than one tile).
+    /// size clipped to the rectangle (in case the rectangle is smaller than one tile).
     #[must_use]
     pub const fn max_tile_pixel_count(&self) -> usize {
         let widest = min_usize(self.tile_width(), self.size.width as usize);
@@ -134,11 +134,11 @@ impl TileGrid {
     }
 
     /// The tile at `(column, row)` as a [`Rectangle`] in physical-screen
-    /// coordinates, or `None` if it lies outside the region.
+    /// coordinates, or `None` if it lies outside the rectangle.
     ///
     /// The final column/row of a grid may be narrower/shorter than the nominal
-    /// tile size when the region does not divide evenly by the tile counts, so
-    /// always use the returned region's `size` rather than the grid's derived
+    /// tile size when the rectangle does not divide evenly by the tile counts, so
+    /// always use the returned rectangle's `size` rather than the grid's derived
     /// tile size when allocating a frame.
     #[must_use]
     pub(crate) fn tile(&self, column: usize, row: usize) -> Option<Rectangle> {
@@ -172,7 +172,7 @@ const fn min_usize(first: usize, second: usize) -> usize {
 mod tests {
     use super::*;
 
-    // Body region used by the dance app: 240×286 starting just below a 34 px
+    // Body rectangle used by the dance app: 240×286 starting just below a 34 px
     // text band, split into a 3×3 tile grid (derived tile size 80×96).
     const BODY_GRID: TileGrid = TileGrid::new(Point::new(0, 34), Size::new(240, 286), 3, 3);
 
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn final_row_is_clipped() {
-        // Origin y = 34, region height 286 → last row (row 2) starts at offset
+        // Origin y = 34, rectangle height 286 → last row (row 2) starts at offset
         // 192 and is clipped from 96 to 94 px high.
         let tile = BODY_GRID.tile(0, 2).expect("tile (0, 2) is in range");
         assert_eq!(tile.top_left, Point::new(0, 34 + 192));
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn exact_division_has_no_clipping() {
-        // 240×288 region in a 3×3 grid divides evenly into 80×96 tiles.
+        // 240×288 rectangle in a 3×3 grid divides evenly into 80×96 tiles.
         let grid = TileGrid::new(Point::new(0, 0), Size::new(240, 288), 3, 3);
         assert_eq!(grid.tile_width(), 80);
         assert_eq!(grid.tile_height(), 96);
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn final_column_and_row_clipping_for_uneven_dimensions() {
-        // 250×290 region in a 4×4 grid: tile size ceil(250/4)=63, ceil(290/4)=73.
+        // 250×290 rectangle in a 4×4 grid: tile size ceil(250/4)=63, ceil(290/4)=73.
         // Last column clips to 250 - 3*63 = 61 px, last row to 290 - 3*73 = 71 px.
         let grid = TileGrid::new(Point::new(5, 7), Size::new(250, 290), 4, 4);
         assert_eq!(grid.columns(), 4);
@@ -235,7 +235,7 @@ mod tests {
     fn max_tile_pixel_count_is_full_tile() {
         assert_eq!(BODY_GRID.max_tile_pixel_count(), 80 * 96);
 
-        // Region smaller in one axis than its single tile still reports the
+        // Rectangle smaller in one axis than its single tile still reports the
         // clipped max: a 1×1 grid over 40×50 has a 40×50 tile.
         let small = TileGrid::new(Point::new(0, 0), Size::new(40, 50), 1, 1);
         assert_eq!(small.max_tile_pixel_count(), 40 * 50);
@@ -262,13 +262,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "columns must not exceed region width")]
+    #[should_panic(expected = "columns must not exceed rectangle width")]
     fn too_many_columns_panics() {
         let _ = TileGrid::new(Point::new(0, 0), Size::new(4, 286), 5, 3);
     }
 
     #[test]
-    #[should_panic(expected = "rows must not exceed region height")]
+    #[should_panic(expected = "rows must not exceed rectangle height")]
     fn too_many_rows_panics() {
         let _ = TileGrid::new(Point::new(0, 0), Size::new(240, 4), 3, 5);
     }
