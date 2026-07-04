@@ -389,6 +389,11 @@ mod tests {
     use embedded_graphics::{Pixel, prelude::OriginDimensions};
     use linkage_blaze_core::WebColors;
 
+    // TODO The shared `linkage-blaze-cyd-memory` fake cannot replace this unit-test
+    // double directly because a cyd-core <-> cyd-memory dev-dependency cycle gives
+    // cyd-core's unit tests a second trait instance, so `MemoryCyd` no longer
+    // implements *this* module's `Cyd`/`CydDisplay` traits. Keep this tiny local
+    // test double until the trait crate/test layout is refactored to break that cycle.
     struct TestCyd;
 
     struct TestFrame {

@@ -236,6 +236,7 @@ mod tests {
                 (103, 203),
                 (104, 204),
                 (105, 205),
+                (106, 206),
             ],
         );
         assert_point_captured(
@@ -254,6 +255,7 @@ mod tests {
                 (903, 213),
                 (904, 214),
                 (905, 215),
+                (906, 216),
             ],
         );
         assert_point_captured(
@@ -272,6 +274,7 @@ mod tests {
                 (913, 803),
                 (914, 804),
                 (915, 805),
+                (916, 806),
             ],
         );
         assert_point_captured(
@@ -290,6 +293,7 @@ mod tests {
                 (123, 793),
                 (124, 794),
                 (125, 795),
+                (126, 796),
             ],
         );
         let CalibrationFlowEvent::Completed {
@@ -327,6 +331,7 @@ mod tests {
                 (103, 203),
                 (104, 204),
                 (105, 205),
+                (106, 206),
             ],
         );
         assert_point_captured(
@@ -345,6 +350,7 @@ mod tests {
                 (903, 213),
                 (904, 214),
                 (905, 215),
+                (906, 216),
             ],
         );
         assert_point_captured(
@@ -392,6 +398,7 @@ mod tests {
                 (913, 803),
                 (914, 804),
                 (915, 805),
+                (916, 806),
             ],
         );
         assert_point_captured(

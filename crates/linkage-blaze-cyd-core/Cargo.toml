@@ -21,3 +21,4 @@ micromath = "2.1"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
+futures-executor = "0.3"
