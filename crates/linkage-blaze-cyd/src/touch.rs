@@ -6,18 +6,12 @@ use esp_hal::{
     },
     spi,
 };
+use linkage_blaze_cyd_core::RawTouchEvent;
 
 pub const TOUCH_SPI_HZ: u32 = 2_500_000;
 
 type CydTouchSpiBus = spi::master::Spi<'static, esp_hal::Blocking>;
 type CydTouchSpiDevice = ExclusiveDevice<CydTouchSpiBus, Output<'static>, NoDelay>;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RawTouchEvent {
-    Down { raw_x: u16, raw_y: u16 },
-    Move { raw_x: u16, raw_y: u16 },
-    Up,
-}
 
 #[derive(Clone, Copy, Debug)]
 pub enum CydTouchEspInitError {

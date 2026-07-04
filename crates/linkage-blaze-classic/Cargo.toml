@@ -54,6 +54,7 @@ linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
 linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
+linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
 embassy-time = "0.5.1"
 derive_more = { version = "2.1.1", default-features = false, features = [

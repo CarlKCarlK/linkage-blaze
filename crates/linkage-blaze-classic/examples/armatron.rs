@@ -17,11 +17,11 @@ use esp_hal::delay::Delay;
 
 use linkage_blaze_cyd::{
     CalibrationConfig, CydDevice as _, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp,
-    DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, SCREEN_HEIGHT, SCREEN_WIDTH,
+    DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent,
 };
+use linkage_blaze_cyd_core::{calibration_corner_for_index, draw_calibration_cross};
 use linkage_blaze_example_core::armatron::{
     BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
-    calibration::{calibration_corner_for_index, draw_calibration_cross},
 };
 use log::info;
 
@@ -193,8 +193,6 @@ fn draw_calibration_screen(cyd: &mut CydEsp, calibration_index: usize) -> Result
         draw_calibration_cross(
             &mut frame,
             calibration_corner,
-            SCREEN_WIDTH as u16,
-            SCREEN_HEIGHT as u16,
         )
         .map_err(|_| MainError::DrawCalibrationCross)?;
     }

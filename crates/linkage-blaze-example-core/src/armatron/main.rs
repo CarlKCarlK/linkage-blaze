@@ -5,7 +5,6 @@
 //! The generic loop redraws every frame, updates immediate-mode controls, and
 //! flushes frames through the [`Cyd`](linkage_blaze_cyd_core::Cyd) boundary.
 
-pub mod calibration;
 mod controlled;
 mod controls;
 pub mod reverse_kinematics;
@@ -111,10 +110,9 @@ const PROJECTION: Projection = Projection::front_perspective(
 /// 4. Presents a full-screen CYD frame.
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
-/// provide calibrated touch before calling [`armatron`]. The temporary
-/// [`calibration`] module exists only so current platform examples can share
-/// calibration UI helpers until that responsibility moves into the CYD device
-/// layer.
+/// provide calibrated touch before calling [`armatron`]. Shared calibration
+/// UI helpers now live in [`linkage_blaze_cyd_core::calibration`], alongside
+/// the rest of the CYD touch-calibration flow.
 pub async fn armatron<C>(cyd: &mut C) -> Result<Infallible, Error<C::Error>>
 where
     C: Cyd,

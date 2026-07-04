@@ -12,10 +12,9 @@ use device_envoy_esp::{
 };
 use embassy_time::Instant;
 use embedded_graphics::{
-    Drawable,
+    draw_target::DrawTarget,
     pixelcolor::{Rgb565, Rgb888, WebColors},
-    prelude::{DrawTarget, Point, Primitive},
-    primitives::{Circle, Line, PrimitiveStyle},
+    prelude::Point,
 };
 use esp_backtrace as _;
 use esp_hal::{Config, delay::Delay};
@@ -27,23 +26,11 @@ use linkage_blaze_cyd::{
     CydStaticEsp, DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent, RegionBuffer, SCREEN_HEIGHT,
     SCREEN_WIDTH, TouchEvent as CydTouchEvent,
 };
+use linkage_blaze_cyd_core::{calibration_corner_for_index, draw_calibration_cross};
 
 esp_bootloader_esp_idf::esp_app_desc!();
-
-#[derive(Clone, Copy)]
-enum CalibrationCorner {
-    UpperLeft,
-    UpperRight,
-    LowerRight,
-    LowerLeft,
-}
-
-const CALIBRATION_CROSS_MARGIN: i32 = 28;
-const CALIBRATION_CROSS_HALF_SIZE: i32 = 18;
-const CALIBRATION_CENTER_DOT_RADIUS: i32 = 3;
 const BLACK: Rgb888 = Rgb888::CSS_BLACK;
 const WHITE: Rgb888 = Rgb888::CSS_WHITE;
-const YELLOW: Rgb888 = Rgb888::CSS_YELLOW;
 const SCREEN_PIXELS: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
 
 type ScreenBuffer = RegionBuffer<SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_PIXELS>;
@@ -57,7 +44,6 @@ enum MainError {
     CreateTouchSpiDevice,
     InitDisplay,
     DrawCalibrationCross,
-    DrawCalibrationCenterDot,
     FlushFrameBuffer,
     TouchUnavailable,
     CalibrationUnavailable,
@@ -229,12 +215,8 @@ fn draw_calibration_screen(
 ) -> Result<(), MainError> {
     screen_buffer.clear(CydEsp::rgb565(BLACK));
     if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
-        draw_calibration_cross(
-            screen_buffer,
-            calibration_corner,
-            CydSim::WIDTH_U16,
-            CydSim::HEIGHT_U16,
-        )?;
+        draw_calibration_cross(screen_buffer, calibration_corner)
+            .map_err(|_| MainError::DrawCalibrationCross)?;
     }
     let (mut display, _touch) = cyd.parts();
     Ok(display.flush_at(screen_buffer, Point::new(0, 0))?)
@@ -256,75 +238,4 @@ fn draw(
         Ok(()) => {}
         Err(infallible) => match infallible {},
     }
-}
-
-fn calibration_corner_for_index(calibration_index: usize) -> Option<CalibrationCorner> {
-    match calibration_index {
-        0 => Some(CalibrationCorner::UpperLeft),
-        1 => Some(CalibrationCorner::UpperRight),
-        2 => Some(CalibrationCorner::LowerRight),
-        3 => Some(CalibrationCorner::LowerLeft),
-        _ => None,
-    }
-}
-
-fn calibration_corner_center(
-    calibration_corner: CalibrationCorner,
-    width: u16,
-    height: u16,
-) -> Point {
-    let width = width as i32;
-    let height = height as i32;
-    match calibration_corner {
-        CalibrationCorner::UpperLeft => {
-            Point::new(CALIBRATION_CROSS_MARGIN, CALIBRATION_CROSS_MARGIN)
-        }
-        CalibrationCorner::UpperRight => Point::new(
-            width - 1 - CALIBRATION_CROSS_MARGIN,
-            CALIBRATION_CROSS_MARGIN,
-        ),
-        CalibrationCorner::LowerRight => Point::new(
-            width - 1 - CALIBRATION_CROSS_MARGIN,
-            height - 1 - CALIBRATION_CROSS_MARGIN,
-        ),
-        CalibrationCorner::LowerLeft => Point::new(
-            CALIBRATION_CROSS_MARGIN,
-            height - 1 - CALIBRATION_CROSS_MARGIN,
-        ),
-    }
-}
-
-fn draw_calibration_cross(
-    target: &mut impl DrawTarget<Color = Rgb565>,
-    calibration_corner: CalibrationCorner,
-    width: u16,
-    height: u16,
-) -> Result<(), MainError> {
-    let center = calibration_corner_center(calibration_corner, width, height);
-    let left = Point::new(center.x - CALIBRATION_CROSS_HALF_SIZE, center.y);
-    let right = Point::new(center.x + CALIBRATION_CROSS_HALF_SIZE, center.y);
-    let top = Point::new(center.x, center.y - CALIBRATION_CROSS_HALF_SIZE);
-    let bottom = Point::new(center.x, center.y + CALIBRATION_CROSS_HALF_SIZE);
-
-    Line::new(left, right)
-        .into_styled(PrimitiveStyle::with_stroke(CydEsp::rgb565(YELLOW), 4))
-        .draw(target)
-        .map_err(|_| MainError::DrawCalibrationCross)?;
-    Line::new(top, bottom)
-        .into_styled(PrimitiveStyle::with_stroke(CydEsp::rgb565(YELLOW), 4))
-        .draw(target)
-        .map_err(|_| MainError::DrawCalibrationCross)?;
-
-    Circle::new(
-        Point::new(
-            center.x - CALIBRATION_CENTER_DOT_RADIUS,
-            center.y - CALIBRATION_CENTER_DOT_RADIUS,
-        ),
-        (CALIBRATION_CENTER_DOT_RADIUS * 2 + 1) as u32,
-    )
-    .into_styled(PrimitiveStyle::with_fill(CydEsp::rgb565(WHITE)))
-    .draw(target)
-    .map_err(|_| MainError::DrawCalibrationCenterDot)?;
-
-    Ok(())
 }

@@ -6,6 +6,7 @@
 //! parts, and [`CydFrame`].
 
 mod contiguous_pixels;
+pub mod calibration;
 mod cyd;
 mod draw_item_2d;
 mod orientation;
@@ -14,6 +15,12 @@ pub mod tiling;
 mod touch_event;
 
 pub use contiguous_pixels::ContiguousPixels;
+pub use calibration::{
+    CALIBRATION_CENTER_DOT_RADIUS, CALIBRATION_CROSS_HALF_SIZE, CALIBRATION_CROSS_MARGIN,
+    CALIBRATION_POINT_COUNT, CalibrationConfig, CalibrationCorner, CalibrationFlow, RawPoint,
+    RawTouchEvent, calibration_corner_center, calibration_corner_for_index,
+    distort_demo_screen_to_raw, draw_calibration_cross,
+};
 pub use cyd::{
     CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydInfallibleError, CydTouch,
     RegionPixels, Tiles,

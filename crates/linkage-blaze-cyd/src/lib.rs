@@ -1,7 +1,6 @@
 #![no_std]
 
 mod buffer;
-mod calibration;
 mod display;
 mod text;
 mod touch;
@@ -24,18 +23,19 @@ use static_cell::StaticCell;
 
 use buffer::DynPixelBuffer;
 pub use buffer::{PixelBuffer, RegionBuffer, RegionView};
-pub use calibration::{CalibrationConfig, RawPoint, map_raw_to_screen};
 pub use display::{CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ};
-use linkage_blaze_cyd_core::{CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydTouch};
+use linkage_blaze_cyd_core::{
+    CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydTouch,
+};
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
 pub use linkage_blaze_cyd_core::{
-    Cyd as CydDevice, CydDisplay as CydDisplayTrait, CydFrame as CydFrameTrait,
-    CydTouch as CydTouchTrait, Orientation, RegionPixels, SCREEN_HEIGHT, SCREEN_PIXELS,
-    SCREEN_WIDTH, TouchEvent, tiling,
+    CalibrationConfig, Cyd as CydDevice, CydDisplay as CydDisplayTrait, CydFrame as CydFrameTrait,
+    CydTouch as CydTouchTrait, Orientation, RawPoint, RawTouchEvent, RegionPixels, SCREEN_HEIGHT,
+    SCREEN_PIXELS, SCREEN_WIDTH, TouchEvent, tiling,
 };
 pub use text::DEFAULT_FONT;
-pub use touch::{CydTouchEspInitError, RawTouchEvent, TOUCH_SPI_HZ};
+pub use touch::{CydTouchEspInitError, TOUCH_SPI_HZ};
 
 use display::CydDisplayEsp;
 use touch::CydTouchEsp;
@@ -514,11 +514,11 @@ impl CalibratedCydEsp<'_> {
         Ok(
             raw_touch_event.map(|raw_touch_event| match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
-                    let (x, y) = map_raw_to_screen(raw_x, raw_y, self.calibration_config);
+                    let (x, y) = self.calibration_config.map_raw_to_screen(raw_x, raw_y);
                     TouchEvent::Down { x, y }
                 }
                 RawTouchEvent::Move { raw_x, raw_y } => {
-                    let (x, y) = map_raw_to_screen(raw_x, raw_y, self.calibration_config);
+                    let (x, y) = self.calibration_config.map_raw_to_screen(raw_x, raw_y);
                     TouchEvent::Move { x, y }
                 }
                 RawTouchEvent::Up => TouchEvent::Up,
@@ -672,11 +672,11 @@ impl CydTouch for CydTouchEspPart<'_> {
             .read_raw_touch_event()
             .map(|raw_touch_event| match raw_touch_event {
                 RawTouchEvent::Down { raw_x, raw_y } => {
-                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
+                    let (x, y) = calibration_config.map_raw_to_screen(raw_x, raw_y);
                     TouchEvent::Down { x, y }
                 }
                 RawTouchEvent::Move { raw_x, raw_y } => {
-                    let (x, y) = map_raw_to_screen(raw_x, raw_y, calibration_config);
+                    let (x, y) = calibration_config.map_raw_to_screen(raw_x, raw_y);
                     TouchEvent::Move { x, y }
                 }
                 RawTouchEvent::Up => TouchEvent::Up,
