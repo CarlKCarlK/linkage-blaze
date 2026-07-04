@@ -2,24 +2,21 @@
 #![no_main]
 
 // todo00 can/should there be a mode to share spi and cs pins?
-// todo00 do we need/want any of these "Delay::new().delay_millis(1);"
 
 use core::convert::Infallible;
 
 use device_envoy_esp::{
-    button::{ButtonEsp, PressedTo},
+    button::{Button as _, ButtonEsp, PressedTo},
     flash_block::FlashBlockEsp,
     init_and_start,
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use esp_hal::delay::Delay;
 
 use linkage_blaze_cyd::{
-    CalibrationConfig, CydDevice as _, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp,
-    DEFAULT_FONT, Orientation, RawPoint, RawTouchEvent,
+    CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation,
 };
-use linkage_blaze_cyd_core::{calibration_corner_for_index, draw_calibration_cross};
+use linkage_blaze_cyd_core::{EnsureCalibrationError, ensure_calibration};
 use linkage_blaze_example_core::armatron::{
     BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
 };
@@ -35,9 +32,9 @@ enum MainError {
     ConfigureTouchSpi,
     CreateTouchSpiDevice,
     InitDisplay,
-    DrawCalibrationCross,
     FlushFrameBuffer,
     FormatText,
+    CalibrationDriverFlash,
 }
 
 impl From<device_envoy_esp::Error> for MainError {
@@ -85,6 +82,15 @@ impl From<ArmatronError<CydError>> for MainError {
     }
 }
 
+impl From<EnsureCalibrationError<CydError, device_envoy_esp::Error>> for MainError {
+    fn from(error: EnsureCalibrationError<CydError, device_envoy_esp::Error>) -> Self {
+        match error {
+            EnsureCalibrationError::Device(error) => error.into(),
+            EnsureCalibrationError::Flash(_error) => MainError::CalibrationDriverFlash,
+        }
+    }
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -96,7 +102,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD armatron loop");
 
-    let [calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
+    let [mut calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
     let calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
@@ -120,81 +126,19 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO39,                // touch MISO
         p.GPIO33,                // touch CS
         p.GPIO36,                // touch IRQ
-        calibration_flash_block, // calibration flash block
-        calibration_button,      // calibration button
     )?;
     info!("CYD display and touch initialized");
 
-    ensure_calibration(&mut cyd)?;
+    let calibration_outcome = ensure_calibration(&mut cyd, &mut calibration_flash_block, || {
+        calibration_button.is_pressed()
+    })
+    .await?;
+    let calibration_config = calibration_outcome.calibration_config();
+    cyd.set_calibration(calibration_config);
+    if calibration_outcome.was_saved() {
+        info!("Calibration saved; restarting");
+        esp_hal::system::software_reset();
+    }
+
     Ok(armatron(&mut cyd).await?)
-}
-
-fn ensure_calibration(cyd: &mut CydEsp) -> Result<(), MainError> {
-    if cyd.recalibration_requested() {
-        cyd.remove_calibration();
-    }
-    if cyd.calibration_config().is_none() {
-        calibrate(cyd)?;
-    }
-    Ok(())
-}
-
-fn calibrate(cyd: &mut CydEsp) -> Result<(), MainError> {
-    let mut calibration_index = 0;
-    let mut calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-
-    esp_println::println!("cal: tap corners in order UL -> UR -> LR -> LL");
-    esp_println::println!("cal: next tap UL");
-    draw_calibration_screen(cyd, calibration_index)?;
-
-    loop {
-        if cyd.recalibration_requested() {
-            calibration_index = 0;
-            calibration_points = [RawPoint { x: 0, y: 0 }; 4];
-            esp_println::println!("cal: calibration button pressed, restarting calibration");
-            esp_println::println!("cal: next tap UL");
-            draw_calibration_screen(cyd, calibration_index)?;
-            continue;
-        }
-
-        if let Some(RawTouchEvent::Down { raw_x, raw_y }) = cyd.read_raw_touch_event() {
-            if calibration_index < 4 {
-                calibration_points[calibration_index] = RawPoint { x: raw_x, y: raw_y };
-                calibration_index += 1;
-                esp_println::println!(
-                    "cal: point{} raw_x={} raw_y={}",
-                    calibration_index,
-                    raw_x,
-                    raw_y
-                );
-                if calibration_index < 4 {
-                    let corner_label = ["UL", "UR", "LR", "LL"][calibration_index];
-                    esp_println::println!("cal: next tap {}", corner_label);
-                    draw_calibration_screen(cyd, calibration_index)?;
-                    continue;
-                }
-
-                let calibration_config = CalibrationConfig::from_four_points(calibration_points);
-                cyd.save_calibration(calibration_config)?;
-                esp_println::println!("cal: controls enabled with computed calibration");
-                return Ok(());
-            }
-        }
-
-        Delay::new().delay_millis(1);
-    }
-}
-
-fn draw_calibration_screen(cyd: &mut CydEsp, calibration_index: usize) -> Result<(), MainError> {
-    let (mut display, _touch) = cyd.parts();
-    let mut frame = display.full_frame_mut();
-    frame.fill(CydEsp::rgb565(BACKGROUND));
-    if let Some(calibration_corner) = calibration_corner_for_index(calibration_index) {
-        draw_calibration_cross(
-            &mut frame,
-            calibration_corner,
-        )
-        .map_err(|_| MainError::DrawCalibrationCross)?;
-    }
-    Ok(frame.flush()?)
 }

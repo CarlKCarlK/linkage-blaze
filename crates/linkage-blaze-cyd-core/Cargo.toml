@@ -13,6 +13,8 @@ license.workspace = true
 # (`CydWasm`) — implement these traits; this crate never depends on a platform.
 
 [dependencies]
+device-envoy-core = { version = "0.1.0", default-features = false }
+embassy-futures = "0.1.2"
 embedded-graphics = { version = "0.8", default-features = false }
 heapless = "0.8"
 linkage-blaze-core.workspace = true

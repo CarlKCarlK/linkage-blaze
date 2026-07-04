@@ -21,7 +21,7 @@ use embedded_graphics::{
 };
 use linkage_blaze_core::{DrawItem3d, PixelTarget, Projection, Rgb888, rgb565_from_rgb888};
 
-use crate::{ContiguousPixels, DrawItem2d, TouchEvent, tiling::TileGrid};
+use crate::{ContiguousPixels, DrawItem2d, RawTouchEvent, TouchEvent, tiling::TileGrid};
 
 pub trait RegionPixels {
     fn width(&self) -> usize;
@@ -260,6 +260,18 @@ pub trait CydTouch {
     /// Returns `Ok(None)` when there is no pending touch (including devices
     /// constructed without touch). Errors only on a hardware/read failure.
     fn read(&mut self) -> Result<Option<TouchEvent>, Self::Error>;
+}
+
+/// A CYD raw-touch source for calibration flows.
+pub trait CydRawTouch {
+    /// Error returned when reading raw touch fails.
+    type Error: CydFlushError;
+
+    /// Read the next raw touch event, if any.
+    ///
+    /// This bypasses any active [`TouchEvent`] calibration mapping and exists
+    /// specifically for the shared calibration driver.
+    fn read_raw_touch_event(&mut self) -> Result<Option<RawTouchEvent>, Self::Error>;
 }
 
 /// A lending/streaming iterator over a [`TileGrid`]'s tiles.

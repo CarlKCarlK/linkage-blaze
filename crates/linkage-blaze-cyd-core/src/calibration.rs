@@ -5,6 +5,7 @@
 //! four-tap flow that platform binaries drive with their own touch, logging,
 //! persistence, and reset wiring.
 
+pub mod driver;
 pub mod flow;
 
 use embedded_graphics::{
@@ -19,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
 pub use flow::CalibrationFlow;
+pub use driver::{EnsureCalibrationError, EnsureCalibrationOutcome, ensure_calibration};
 
 pub const CALIBRATION_POINT_COUNT: usize = 4;
 pub const CALIBRATION_CROSS_MARGIN: i32 = 28;

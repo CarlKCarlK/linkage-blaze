@@ -7,10 +7,6 @@ mod touch;
 
 use core::{convert::Infallible, fmt};
 
-use device_envoy_esp::{
-    button::Button,
-    flash_block::{FlashBlock, FlashBlockEsp},
-};
 use embedded_graphics::{
     Pixel,
     mono_font::MonoFont,
@@ -25,7 +21,7 @@ use buffer::DynPixelBuffer;
 pub use buffer::{PixelBuffer, RegionBuffer, RegionView};
 pub use display::{CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ};
 use linkage_blaze_cyd_core::{
-    CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydTouch,
+    CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydRawTouch, CydTouch,
 };
 // The device abstraction and its neutral support types live in
 // `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
@@ -44,8 +40,6 @@ pub struct CydEsp {
     display: CydDisplayEsp,
     touch: Option<CydTouchEsp>,
     calibration_config: Option<CalibrationConfig>,
-    calibration_flash_block: Option<FlashBlockEsp>,
-    calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
     // Every CydEsp owns exactly one draw buffer. Apps that don't draw through it
     // pass a zero-sized buffer (e.g. `CydStaticEsp<0>`).
     pixel_buffer: &'static mut dyn DynPixelBuffer,
@@ -320,13 +314,11 @@ impl CydEsp {
             foreground,
             font,
             None,
-            None,
-            None,
             pixel_buffer,
         )
     }
 
-    /// Construct a full `CydEsp` with touch + calibration that owns its draw buffer.
+    /// Construct a full `CydEsp` with touch that owns its draw buffer.
     pub fn new<const PIXEL_COUNT: usize>(
         statics: &'static CydStaticEsp<PIXEL_COUNT>,
         display_spi: impl esp_hal::spi::master::Instance + 'static,
@@ -347,8 +339,6 @@ impl CydEsp {
         touch_miso_pin: impl esp_hal::gpio::interconnect::PeripheralInput<'static>,
         touch_cs_pin: impl esp_hal::gpio::OutputPin + 'static,
         touch_irq_pin: impl esp_hal::gpio::InputPin + 'static,
-        calibration_flash_block: FlashBlockEsp,
-        calibration_button: device_envoy_esp::button::ButtonEsp<'static>,
     ) -> Result<Self, CydError> {
         let touch = CydTouchEsp::new(
             touch_spi,
@@ -374,8 +364,6 @@ impl CydEsp {
             foreground,
             font,
             Some(touch),
-            Some(calibration_flash_block),
-            Some(calibration_button),
             pixel_buffer,
         )
     }
@@ -394,20 +382,8 @@ impl CydEsp {
         foreground: Rgb888,
         font: &'static MonoFont<'static>,
         touch: Option<CydTouchEsp>,
-        calibration_flash_block: Option<FlashBlockEsp>,
-        calibration_button: Option<device_envoy_esp::button::ButtonEsp<'static>>,
         pixel_buffer: &'static mut dyn DynPixelBuffer,
     ) -> Result<Self, CydError> {
-        let mut calibration_flash_block = calibration_flash_block;
-        let calibration_config = match (&mut calibration_flash_block, &calibration_button) {
-            (Some(calibration_flash_block), Some(calibration_button))
-                if !calibration_button.is_pressed() =>
-            {
-                calibration_flash_block.load::<CalibrationConfig>()?
-            }
-            _ => None,
-        };
-
         let mut display = CydDisplayEsp::new(
             display_spi,
             display_sck_pin,
@@ -427,9 +403,7 @@ impl CydEsp {
         Ok(Self {
             display,
             touch,
-            calibration_config,
-            calibration_flash_block,
-            calibration_button,
+            calibration_config: None,
             pixel_buffer,
             background,
             foreground,
@@ -444,45 +418,15 @@ impl CydEsp {
         self.calibration_config
     }
 
-    #[must_use]
-    pub fn recalibration_requested(&self) -> bool {
-        self.calibration_button
-            .as_ref()
-            .is_some_and(Button::is_pressed)
-    }
-
-    pub fn remove_calibration(&mut self) {
+    pub fn clear_calibration(&mut self) {
         self.calibration_config = None;
     }
 
-    pub fn save_calibration(
-        &mut self,
-        calibration_config: CalibrationConfig,
-    ) -> Result<(), CydError> {
-        let calibration_flash_block = self
-            .calibration_flash_block
-            .as_mut()
-            .ok_or(CydError::CalibrationUnavailable)?;
-        calibration_flash_block.save(&calibration_config)?;
+    pub fn set_calibration(&mut self, calibration_config: CalibrationConfig) {
         self.calibration_config = Some(calibration_config);
-        Ok(())
-    }
-
-    pub fn clear_saved_calibration(&mut self) -> Result<(), CydError> {
-        let calibration_flash_block = self
-            .calibration_flash_block
-            .as_mut()
-            .ok_or(CydError::CalibrationUnavailable)?;
-        calibration_flash_block.clear()?;
-        self.calibration_config = None;
-        Ok(())
     }
 
     pub fn ensure_calibration(&mut self) -> Result<CalibratedCydEsp<'_>, CydError> {
-        if self.recalibration_requested() {
-            self.calibration_config = None;
-        }
-
         let calibration_config = self
             .calibration_config
             .ok_or(CydError::CalibrationUnavailable)?;
@@ -493,14 +437,15 @@ impl CydEsp {
         })
     }
 
-    pub fn read_raw_touch_event(&mut self) -> Option<RawTouchEvent> {
-        self.touch.as_mut()?.read_raw_touch_event()
+    pub fn read_raw_touch_event(&mut self) -> Result<Option<RawTouchEvent>, CydError> {
+        let touch = self.touch.as_mut().ok_or(CydError::TouchUnavailable)?;
+        Ok(touch.read_raw_touch_event())
     }
 }
 
 impl CalibratedCydEsp<'_> {
-    pub fn remove_calibration(&mut self) {
-        self.cyd.remove_calibration();
+    pub fn clear_calibration(&mut self) {
+        self.cyd.clear_calibration();
     }
 
     pub fn read(&mut self) -> Result<Option<TouchEvent>, CydError> {
@@ -524,6 +469,14 @@ impl CalibratedCydEsp<'_> {
                 RawTouchEvent::Up => TouchEvent::Up,
             }),
         )
+    }
+}
+
+impl CydRawTouch for CydEsp {
+    type Error = CydError;
+
+    fn read_raw_touch_event(&mut self) -> Result<Option<RawTouchEvent>, CydError> {
+        CydEsp::read_raw_touch_event(self)
     }
 }
 
