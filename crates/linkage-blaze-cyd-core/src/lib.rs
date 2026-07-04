@@ -17,9 +17,12 @@ mod touch_event;
 pub use calibration::{
     CALIBRATION_CENTER_DOT_RADIUS, CALIBRATION_CROSS_HALF_SIZE, CALIBRATION_CROSS_MARGIN,
     CALIBRATION_POINT_COUNT, CalibrationConfig, CalibrationCorner, CalibrationFlow,
-    EnsureCalibrationError, EnsureCalibrationOutcome, RawPoint, RawTouchEvent,
-    calibration_corner_center, calibration_corner_for_index, distort_demo_screen_to_raw,
-    draw_calibration_cross, ensure_calibration,
+    CalibrationSolveError, CalibrationValidation, EnsureCalibrationError, EnsureCalibrationOutcome,
+    MAX_RESIDUAL_PIXELS, RawPoint, RawTouchEvent, VERIFY_HIT_RADIUS_PIXELS,
+    calibration_corner_center, calibration_corner_for_index, calibration_verify_target_center,
+    distort_demo_screen_to_raw, draw_calibration_captured_cross, draw_calibration_cross,
+    draw_calibration_instruction, draw_calibration_rejected_cross, draw_calibration_verify_target,
+    ensure_calibration, validate_calibration_points,
 };
 pub use contiguous_pixels::ContiguousPixels;
 pub use cyd::{

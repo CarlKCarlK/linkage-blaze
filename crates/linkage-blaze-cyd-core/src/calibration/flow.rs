@@ -1,5 +1,5 @@
 use super::{
-    CALIBRATION_POINT_COUNT, CalibrationConfig, CalibrationCorner, RawPoint, RawTouchEvent,
+    CALIBRATION_POINT_COUNT, CalibrationCorner, RawPoint, RawTouchEvent,
     calibration_corner_for_index,
 };
 
@@ -10,17 +10,17 @@ const MIN_SAMPLES_PER_POINT: usize = 1;
 /// Sans-io state machine for the four-tap calibration flow.
 ///
 /// Callers own I/O: they draw [`CalibrationCorner`] crosses, log progress, and
-/// persist the finished [`CalibrationConfig`]. This flow tracks which corner is
-/// next, accumulates per-touch raw samples, and computes the affine map once
-/// all four corners have been captured on release.
+/// persist the finished solve. This flow tracks which corner is next and
+/// accumulates per-touch raw samples until all four corners have been captured
+/// on release.
 pub struct CalibrationFlow {
     calibration_index: usize,
     calibration_points: [RawPoint; CALIBRATION_POINT_COUNT],
-    calibration_capture_state: CalibrationCaptureState,
+    release_touch_capture: ReleaseTouchCapture,
 }
 
 #[derive(Clone, Copy)]
-enum CalibrationCaptureState {
+enum ReleaseTouchCaptureState {
     Armed,
     Sampling {
         discarded_sample_count: usize,
@@ -30,20 +30,24 @@ enum CalibrationCaptureState {
     WaitForIdle,
 }
 
+pub(super) struct ReleaseTouchCapture {
+    release_touch_capture_state: ReleaseTouchCaptureState,
+}
+
 impl CalibrationFlow {
     #[must_use]
     pub const fn new() -> Self {
         Self {
             calibration_index: 0,
             calibration_points: [RawPoint { x: 0, y: 0 }; CALIBRATION_POINT_COUNT],
-            calibration_capture_state: CalibrationCaptureState::Armed,
+            release_touch_capture: ReleaseTouchCapture::new(),
         }
     }
 
     pub fn restart(&mut self) {
         self.calibration_index = 0;
         self.calibration_points = [RawPoint { x: 0, y: 0 }; CALIBRATION_POINT_COUNT];
-        self.calibration_capture_state = CalibrationCaptureState::Armed;
+        self.release_touch_capture.restart();
     }
 
     #[must_use]
@@ -64,22 +68,69 @@ impl CalibrationFlow {
             return None;
         };
 
-        match self.calibration_capture_state {
-            CalibrationCaptureState::Armed => {
+        let Some(release_touch_capture_event) = self
+            .release_touch_capture
+            .handle_raw_touch_event(raw_touch_event)
+        else {
+            return None;
+        };
+
+        let ReleaseTouchCaptureEvent::Captured {
+            raw_point,
+            usable_sample_count,
+        } = release_touch_capture_event;
+        self.calibration_points[self.calibration_index] = raw_point;
+        self.calibration_index += 1;
+
+        if self.calibration_index == CALIBRATION_POINT_COUNT {
+            return Some(CalibrationFlowEvent::Completed {
+                raw_points: self.calibration_points,
+                calibration_corner,
+                usable_sample_count,
+            });
+        }
+
+        Some(CalibrationFlowEvent::PointCaptured {
+            calibration_corner,
+            raw_point,
+            next_corner: self
+                .next_corner()
+                .expect("next corner exists until calibration completes"),
+            usable_sample_count,
+        })
+    }
+}
+
+impl ReleaseTouchCapture {
+    pub const fn new() -> Self {
+        Self {
+            release_touch_capture_state: ReleaseTouchCaptureState::Armed,
+        }
+    }
+
+    pub fn restart(&mut self) {
+        self.release_touch_capture_state = ReleaseTouchCaptureState::Armed;
+    }
+
+    pub fn handle_raw_touch_event(
+        &mut self,
+        raw_touch_event: Option<RawTouchEvent>,
+    ) -> Option<ReleaseTouchCaptureEvent> {
+        match self.release_touch_capture_state {
+            ReleaseTouchCaptureState::Armed => {
                 let Some(RawTouchEvent::Down { raw_x, raw_y }) = raw_touch_event else {
                     return None;
                 };
                 let mut usable_samples = [RawPoint { x: 0, y: 0 }; SAMPLE_CAPACITY];
-                let raw_point = RawPoint { x: raw_x, y: raw_y };
-                usable_samples[0] = raw_point;
-                self.calibration_capture_state = CalibrationCaptureState::Sampling {
+                usable_samples[0] = RawPoint { x: raw_x, y: raw_y };
+                self.release_touch_capture_state = ReleaseTouchCaptureState::Sampling {
                     discarded_sample_count: 0,
                     usable_sample_count: 1,
                     usable_samples,
                 };
                 None
             }
-            CalibrationCaptureState::Sampling {
+            ReleaseTouchCaptureState::Sampling {
                 discarded_sample_count,
                 usable_sample_count,
                 mut usable_samples,
@@ -87,7 +138,7 @@ impl CalibrationFlow {
                 Some(RawTouchEvent::Down { raw_x, raw_y })
                 | Some(RawTouchEvent::Move { raw_x, raw_y }) => {
                     if discarded_sample_count < SAMPLES_DISCARDED_AFTER_DOWN {
-                        self.calibration_capture_state = CalibrationCaptureState::Sampling {
+                        self.release_touch_capture_state = ReleaseTouchCaptureState::Sampling {
                             discarded_sample_count: discarded_sample_count + 1,
                             usable_sample_count,
                             usable_samples,
@@ -95,10 +146,12 @@ impl CalibrationFlow {
                         return None;
                     }
 
-                    let raw_point = RawPoint { x: raw_x, y: raw_y };
-                    let usable_sample_count =
-                        store_usable_sample(&mut usable_samples, usable_sample_count, raw_point);
-                    self.calibration_capture_state = CalibrationCaptureState::Sampling {
+                    let usable_sample_count = store_usable_sample(
+                        &mut usable_samples,
+                        usable_sample_count,
+                        RawPoint { x: raw_x, y: raw_y },
+                    );
+                    self.release_touch_capture_state = ReleaseTouchCaptureState::Sampling {
                         discarded_sample_count,
                         usable_sample_count,
                         usable_samples,
@@ -106,40 +159,21 @@ impl CalibrationFlow {
                     None
                 }
                 Some(RawTouchEvent::Up) => {
-                    self.calibration_capture_state = CalibrationCaptureState::WaitForIdle;
+                    self.release_touch_capture_state = ReleaseTouchCaptureState::WaitForIdle;
                     if usable_sample_count < MIN_SAMPLES_PER_POINT {
                         return None;
                     }
 
-                    let averaged_raw_point = average_samples(&usable_samples, usable_sample_count);
-                    self.calibration_points[self.calibration_index] = averaged_raw_point;
-                    self.calibration_index += 1;
-
-                    if self.calibration_index == CALIBRATION_POINT_COUNT {
-                        let raw_points = self.calibration_points;
-                        let calibration_config = CalibrationConfig::from_four_points(raw_points);
-                        return Some(CalibrationFlowEvent::Completed {
-                            calibration_config,
-                            raw_points,
-                            calibration_corner,
-                            usable_sample_count,
-                        });
-                    }
-
-                    Some(CalibrationFlowEvent::PointCaptured {
-                        calibration_corner,
-                        raw_point: averaged_raw_point,
-                        next_corner: self
-                            .next_corner()
-                            .expect("next corner exists until calibration completes"),
+                    Some(ReleaseTouchCaptureEvent::Captured {
+                        raw_point: average_samples(&usable_samples, usable_sample_count),
                         usable_sample_count,
                     })
                 }
                 None => None,
             },
-            CalibrationCaptureState::WaitForIdle => {
+            ReleaseTouchCaptureState::WaitForIdle => {
                 if raw_touch_event.is_none() {
-                    self.calibration_capture_state = CalibrationCaptureState::Armed;
+                    self.release_touch_capture_state = ReleaseTouchCaptureState::Armed;
                 }
                 None
             }
@@ -161,9 +195,15 @@ pub enum CalibrationFlowEvent {
         usable_sample_count: usize,
     },
     Completed {
-        calibration_config: CalibrationConfig,
         raw_points: [RawPoint; CALIBRATION_POINT_COUNT],
         calibration_corner: CalibrationCorner,
+        usable_sample_count: usize,
+    },
+}
+
+pub(super) enum ReleaseTouchCaptureEvent {
+    Captured {
+        raw_point: RawPoint,
         usable_sample_count: usize,
     },
 }
