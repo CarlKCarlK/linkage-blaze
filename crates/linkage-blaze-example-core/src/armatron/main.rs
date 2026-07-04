@@ -41,10 +41,6 @@ use reverse_kinematics::ReverseKinematics;
 pub const BACKGROUND: Rgb888 = Rgb888::CSS_BLACK;
 pub const FOREGROUND: Rgb888 = Rgb888::CSS_WHITE;
 
-// ── Armatron state constants ─────────────────────────────────────────────────
-
-const FPS_TEXT_MAX_TENTHS: u32 = 990;
-
 // ---- linkages ----
 //
 // Build the displayed scene in layers:
@@ -88,16 +84,15 @@ pub(super) const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = {
     }
     indexes
 };
-
 pub const DOF: usize = LINKAGE.dof();
-
-const SHOW_FPS_TEXT: bool = true;
 
 const PROJECTION: Projection = Projection::front_perspective(
     Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
     SCREEN_WIDTH as f32 / 16.0, // 16 world units span the screen width
     30.0,
 );
+
+const SHOW_FPS_TEXT: bool = true;
 
 // ── Generic armatron loop ─────────────────────────────────────────────────────
 
@@ -117,7 +112,7 @@ const PROJECTION: Projection = Projection::front_perspective(
 pub async fn armatron<C, R>(
     cyd: &mut C,
     recalibration_button: &mut R,
-) -> Result<ArmatronOutcome, Error<C::Error>>
+) -> Result<ArmatronExit, Error<C::Error>>
 where
     C: Cyd,
     R: Button,
@@ -141,7 +136,7 @@ where
     loop {
         let current_tick = Instant::now();
         if recalibration_button.is_pressed() {
-            return Ok(ArmatronOutcome::RecalibrateRequested);
+            return Ok(ArmatronExit::CalibrationRequested);
         }
         let previous_tick_before_frame = previous_tick;
         let dt_seconds = previous_tick_before_frame.map_or(0.0, |previous_tick| {
@@ -196,7 +191,7 @@ where
         let hold_button_state = ui.hold_button(&mut frame, &RK_STEP_BUTTON)?;
         reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds);
         if ui.button(&mut frame, &CALIBRATE_BUTTON)? {
-            return Ok(ArmatronOutcome::CalibrateRequested);
+            return Ok(ArmatronExit::CalibrationRequested);
         }
 
         // Explicit per-frame solver schedule slot.
@@ -233,10 +228,9 @@ where
         frame.flush().await.map_err(Error::Cyd)?;
     }
 }
-// todo000000 how evil would it be to return the calibration request as an Error?
-pub enum ArmatronOutcome {
-    CalibrateRequested,
-    RecalibrateRequested,
+
+pub enum ArmatronExit {
+    CalibrationRequested,
 }
 
 /// Error from the generic armatron loop, generic over the CYD device error `F`.
@@ -364,7 +358,7 @@ fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u
     (elapsed_micros != 0).then(|| {
         // Convert microseconds/frame to tenths of frames/second, rounded.
         let fps_tenths = 10_000_000_u64.saturating_add(elapsed_micros / 2) / elapsed_micros;
-        let fps_tenths = fps_tenths.min(u64::from(FPS_TEXT_MAX_TENTHS)) as u32;
+        let fps_tenths = fps_tenths.min(990_u64) as u32;
         (fps_tenths / 10, fps_tenths % 10)
     })
 }

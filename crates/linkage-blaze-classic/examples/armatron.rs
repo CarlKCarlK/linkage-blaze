@@ -18,7 +18,7 @@ use linkage_blaze_cyd_core::{
     Cyd, CydDisplay, CydFrame, EnsureCalibrationError, ensure_calibration,
 };
 use linkage_blaze_example_core::armatron::{
-    ArmatronOutcome, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
+    ArmatronExit, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
 };
 use log::info;
 
@@ -144,10 +144,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     }
 
     match armatron(&mut cyd, &mut calibration_button).await? {
-        ArmatronOutcome::CalibrateRequested => {
-            clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
-        }
-        ArmatronOutcome::RecalibrateRequested => {
+        ArmatronExit::CalibrationRequested => {
             clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
         }
     }

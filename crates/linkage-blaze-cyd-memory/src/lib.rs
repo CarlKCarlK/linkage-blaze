@@ -165,7 +165,9 @@ impl MemoryCyd {
     }
 
     pub fn script_raw_frames(&mut self, raw_touch_frames: &[&[RawTouchEvent]]) {
-        self.raw_touch_script.borrow_mut().replace_frames(raw_touch_frames);
+        self.raw_touch_script
+            .borrow_mut()
+            .replace_frames(raw_touch_frames);
     }
 
     pub fn script_raw_frames_owned(&mut self, raw_touch_frames: Vec<Vec<RawTouchEvent>>) {
@@ -237,8 +239,14 @@ impl MemoryCyd {
 
     #[must_use]
     pub fn pixel(&self, x: usize, y: usize) -> Rgb565 {
-        assert!(x < self.size.width as usize, "x must stay within the screen");
-        assert!(y < self.size.height as usize, "y must stay within the screen");
+        assert!(
+            x < self.size.width as usize,
+            "x must stay within the screen"
+        );
+        assert!(
+            y < self.size.height as usize,
+            "y must stay within the screen"
+        );
         let stride = self.size.width as usize;
         Rgb565::from(RawU16::new(self.framebuffer[y * stride + x]))
     }
@@ -270,7 +278,6 @@ impl MemoryCyd {
         }
         fs::write(path, bytes)
     }
-
 }
 
 impl Default for MemoryCyd {
@@ -415,7 +422,12 @@ impl MemoryFrame<'_> {
             return Err(MemoryCydError::OutOfFrames);
         }
 
-        blit_frame_to_screen(self.framebuffer, self.screen_size, self.region, &self.pixels);
+        blit_frame_to_screen(
+            self.framebuffer,
+            self.screen_size,
+            self.region,
+            &self.pixels,
+        );
         *self.last_flush_region = Some(self.region);
         *self.flush_count += 1;
         self.raw_touch_script.borrow_mut().advance_frame();
@@ -654,7 +666,9 @@ impl MemoryFlashBlock {
     #[must_use]
     pub fn with_raw_bytes(bytes: &[u8]) -> Self {
         let mut memory_flash_block = Self::new();
-        memory_flash_block.memory_flash_device.write_raw_bytes(bytes);
+        memory_flash_block
+            .memory_flash_device
+            .write_raw_bytes(bytes);
         memory_flash_block
     }
 
@@ -677,8 +691,10 @@ impl FlashBlock for MemoryFlashBlock {
     where
         T: Serialize + for<'de> Deserialize<'de>,
     {
-        match load_block::<FLASH_BLOCK_SIZE, T, _>(&mut self.memory_flash_device, FLASH_BLOCK_OFFSET)
-        {
+        match load_block::<FLASH_BLOCK_SIZE, T, _>(
+            &mut self.memory_flash_device,
+            FLASH_BLOCK_OFFSET,
+        ) {
             Ok(value) => Ok(value),
             Err(FlashBlockError::StorageCorrupted | FlashBlockError::FormatError) => Ok(None),
             Err(FlashBlockError::Io(infallible)) => match infallible {},
@@ -689,7 +705,11 @@ impl FlashBlock for MemoryFlashBlock {
     where
         T: Serialize + for<'de> Deserialize<'de>,
     {
-        save_block::<FLASH_BLOCK_SIZE, _, _>(&mut self.memory_flash_device, FLASH_BLOCK_OFFSET, value)?;
+        save_block::<FLASH_BLOCK_SIZE, _, _>(
+            &mut self.memory_flash_device,
+            FLASH_BLOCK_OFFSET,
+            value,
+        )?;
         self.save_count += 1;
         Ok(())
     }
@@ -711,7 +731,10 @@ impl MemoryFlashDevice {
         let end = start
             .checked_add(len)
             .expect("flash range must fit in usize");
-        assert!(end <= FLASH_BLOCK_SIZE, "flash range must stay in the block");
+        assert!(
+            end <= FLASH_BLOCK_SIZE,
+            "flash range must stay in the block"
+        );
         start..end
     }
 
@@ -821,7 +844,8 @@ fn fill_rectangle_in_framebuffer(
         return;
     }
     let stride = screen_size.width as usize;
-    for y in clipped_rectangle.top_left.y..clipped_rectangle.top_left.y + clipped_rectangle.size.height as i32
+    for y in clipped_rectangle.top_left.y
+        ..clipped_rectangle.top_left.y + clipped_rectangle.size.height as i32
     {
         for x in clipped_rectangle.top_left.x
             ..clipped_rectangle.top_left.x + clipped_rectangle.size.width as i32
@@ -909,8 +933,10 @@ mod tests {
         let mut memory_cyd = MemoryCyd::classic();
         {
             let (mut display, _touch) = memory_cyd.parts();
-            let mut frame =
-                display.frame_mut_with_tile_top_left(Rectangle::new(Point::new(10, 20), Size::new(4, 3)), Point::new(10, 20));
+            let mut frame = display.frame_mut_with_tile_top_left(
+                Rectangle::new(Point::new(10, 20), Size::new(4, 3)),
+                Point::new(10, 20),
+            );
             frame
                 .draw_iter([Pixel(Point::new(11, 21), Rgb565::CSS_RED)])
                 .expect("drawing into memory frame should succeed");
@@ -925,14 +951,24 @@ mod tests {
 
     #[test]
     fn fill_rectangle_clips_to_screen_edges() {
-        let mut memory_cyd = MemoryCyd::new(Size::new(4, 4), linkage_blaze_core::Rgb888::CSS_BLACK, linkage_blaze_core::Rgb888::CSS_WHITE);
+        let mut memory_cyd = MemoryCyd::new(
+            Size::new(4, 4),
+            linkage_blaze_core::Rgb888::CSS_BLACK,
+            linkage_blaze_core::Rgb888::CSS_WHITE,
+        );
         {
             let (mut display, _touch) = memory_cyd.parts();
             display
-                .fill_rectangle(Rectangle::new(Point::new(-1, -1), Size::new(3, 3)), Rgb565::CSS_GREEN)
+                .fill_rectangle(
+                    Rectangle::new(Point::new(-1, -1), Size::new(3, 3)),
+                    Rgb565::CSS_GREEN,
+                )
                 .expect("fill_rectangle should succeed");
             display
-                .fill_rectangle(Rectangle::new(Point::new(10, 10), Size::new(2, 2)), Rgb565::CSS_RED)
+                .fill_rectangle(
+                    Rectangle::new(Point::new(10, 10), Size::new(2, 2)),
+                    Rgb565::CSS_RED,
+                )
                 .expect("off-screen fill_rectangle should stay a no-op");
         }
         assert_eq!(memory_cyd.pixel(0, 0), Rgb565::CSS_GREEN);
@@ -951,15 +987,21 @@ mod tests {
         memory_cyd.script_raw_frames(&[&first_frame, &second_frame]);
 
         assert_eq!(
-            memory_cyd.read_raw_touch_event().expect("read should succeed"),
+            memory_cyd
+                .read_raw_touch_event()
+                .expect("read should succeed"),
             Some(RawTouchEvent::Down { raw_x: 1, raw_y: 2 })
         );
         assert_eq!(
-            memory_cyd.read_raw_touch_event().expect("read should succeed"),
+            memory_cyd
+                .read_raw_touch_event()
+                .expect("read should succeed"),
             Some(RawTouchEvent::Up)
         );
         assert_eq!(
-            memory_cyd.read_raw_touch_event().expect("read should succeed"),
+            memory_cyd
+                .read_raw_touch_event()
+                .expect("read should succeed"),
             None
         );
 
@@ -971,7 +1013,9 @@ mod tests {
 
         assert_eq!(memory_cyd.flush_count(), 1);
         assert_eq!(
-            memory_cyd.read_raw_touch_event().expect("read should succeed"),
+            memory_cyd
+                .read_raw_touch_event()
+                .expect("read should succeed"),
             Some(RawTouchEvent::Down { raw_x: 3, raw_y: 4 })
         );
     }
@@ -1001,7 +1045,9 @@ mod tests {
             .save(&DemoValue { count: 7 })
             .expect("save should succeed");
         assert_eq!(
-            memory_flash_block.load::<DemoValue>().expect("load should succeed"),
+            memory_flash_block
+                .load::<DemoValue>()
+                .expect("load should succeed"),
             Some(DemoValue { count: 7 })
         );
 
@@ -1015,7 +1061,9 @@ mod tests {
 
         memory_flash_block.clear().expect("clear should succeed");
         assert_eq!(
-            memory_flash_block.load::<DemoValue>().expect("load should succeed"),
+            memory_flash_block
+                .load::<DemoValue>()
+                .expect("load should succeed"),
             None
         );
     }
@@ -1053,8 +1101,7 @@ mod tests {
             CalibrationCorner::LowerLeft,
         ]) {
             let expected_screen_point = calibration_corner_center(calibration_corner);
-            let (mapped_x, mapped_y) =
-                saved_config.map_raw_to_screen(raw_point.x, raw_point.y);
+            let (mapped_x, mapped_y) = saved_config.map_raw_to_screen(raw_point.x, raw_point.y);
             assert!(
                 (mapped_x - expected_screen_point.x as f32).abs() <= 1.0,
                 "mapped_x={mapped_x} expected_x={}",
@@ -1095,7 +1142,9 @@ mod tests {
         assert_eq!(loaded_config, saved_config);
         assert_eq!(memory_cyd.flush_count(), 0);
         assert_eq!(
-            memory_cyd.read_raw_touch_event().expect("touch read should succeed"),
+            memory_cyd
+                .read_raw_touch_event()
+                .expect("touch read should succeed"),
             Some(RawTouchEvent::Down { raw_x: 7, raw_y: 9 })
         );
     }
@@ -1178,10 +1227,7 @@ mod tests {
             memory_cyd.pixel(upper_right_center.x as usize, upper_right_center.y as usize),
             Rgb565::CSS_WHITE
         );
-        assert_eq!(
-            memory_cyd.pixel(160, 120),
-            Rgb565::CSS_BLACK
-        );
+        assert_eq!(memory_cyd.pixel(160, 120), Rgb565::CSS_BLACK);
     }
 
     #[test]

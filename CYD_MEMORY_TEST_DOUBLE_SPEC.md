@@ -60,9 +60,12 @@ spec's snapshot, not a contract.
   `rust,no_run` doctest fences.
 - `linkage-blaze-cyd-core` stays `no_std` and allocation-free. The new
   memory crate is **std** and may allocate freely — it never ships to a
-  device. It is consumed only as a `dev-dependency` (Cargo permits
-  dev-dependency cycles, so `cyd-core` dev-depending on `cyd-memory` while
-  `cyd-memory` depends on `cyd-core` is fine).
+  device. It is consumed only as a `dev-dependency`. Note: although Cargo
+  *permits* a `cyd-core` dev-dependency on `cyd-memory`, in practice the
+  cycle compiles `cyd-core` twice, so `MemoryCyd` implements a different
+  trait instance than the one `cyd-core`'s own `#[cfg(test)]` modules see —
+  it cannot be used inside cyd-core's unit tests (see the TODO on `TestCyd`
+  in `cyd.rs`). Driver tests therefore live in `cyd-memory` instead.
 
 ## Design
 

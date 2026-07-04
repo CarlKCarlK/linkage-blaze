@@ -5,7 +5,7 @@ use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
 use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{Orientation, ensure_calibration};
 use linkage_blaze_cyd_wasm::{ButtonWasmSource, CydTouchWasmSource, CydWasm, FlashBlockWasm};
-use linkage_blaze_example_core::armatron::{ArmatronOutcome, BACKGROUND, FOREGROUND, armatron};
+use linkage_blaze_example_core::armatron::{ArmatronExit, BACKGROUND, FOREGROUND, armatron};
 use wasm_bindgen::{JsCast, closure::Closure, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, Element, HtmlCanvasElement, PointerEvent};
 
@@ -80,17 +80,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             }
 
             match armatron(&mut cyd, &mut recalibration_button).await {
-                Ok(ArmatronOutcome::CalibrateRequested) => {
-                    cyd.clear_calibration();
-                    if let Err(error) = calibration_flash_block.clear() {
-                        web_sys::console::error_1(
-                            &format!("failed to clear calibration flash: {error:?}").into(),
-                        );
-                        break;
-                    }
-                    touch_source.wait_for_fresh_press();
-                }
-                Ok(ArmatronOutcome::RecalibrateRequested) => {
+                Ok(ArmatronExit::CalibrationRequested) => {
                     cyd.clear_calibration();
                     if let Err(error) = calibration_flash_block.clear() {
                         web_sys::console::error_1(
