@@ -196,7 +196,9 @@ impl CydTouchWasmSource {
     }
 
     fn push(&self, raw_touch_event: RawTouchEvent) {
-        self.raw_touch_events.borrow_mut().push_back(raw_touch_event);
+        self.raw_touch_events
+            .borrow_mut()
+            .push_back(raw_touch_event);
     }
 }
 

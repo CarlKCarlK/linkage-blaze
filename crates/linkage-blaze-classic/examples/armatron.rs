@@ -13,9 +13,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 
-use linkage_blaze_cyd::{
-    CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation,
-};
+use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation};
 use linkage_blaze_cyd_core::{EnsureCalibrationError, ensure_calibration};
 use linkage_blaze_example_core::armatron::{
     ArmatronOutcome, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
@@ -117,15 +115,15 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO4,  // display reset
         p.GPIO21, // display backlight
         Orientation::Landscape,
-        BACKGROUND,              // default background
-        FOREGROUND,              // default foreground
-        &DEFAULT_FONT,           // default font
-        p.SPI3,                  // touch SPI
-        p.GPIO25,                // touch SCK
-        p.GPIO32,                // touch MOSI
-        p.GPIO39,                // touch MISO
-        p.GPIO33,                // touch CS
-        p.GPIO36,                // touch IRQ
+        BACKGROUND,    // default background
+        FOREGROUND,    // default foreground
+        &DEFAULT_FONT, // default font
+        p.SPI3,        // touch SPI
+        p.GPIO25,      // touch SCK
+        p.GPIO32,      // touch MOSI
+        p.GPIO39,      // touch MISO
+        p.GPIO33,      // touch CS
+        p.GPIO36,      // touch IRQ
     )?;
     info!("CYD display and touch initialized");
 

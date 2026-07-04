@@ -111,6 +111,9 @@ where
         touch_spi_device: &mut impl embedded_hal::spi::SpiDevice<u8>,
     ) -> Option<(u16, u16)> {
         const SAMPLES: u32 = 3;
+        // TODO probe-level median-of-N may reject raw ADC outliers better than
+        // this plain average, but calibration-flow release averaging is the
+        // current fix of record.
         let mut sum_x: u32 = 0;
         let mut sum_y: u32 = 0;
         let mut count: u32 = 0;

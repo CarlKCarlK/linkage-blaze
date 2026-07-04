@@ -5,8 +5,8 @@
 //! See [`cyd`] for the [`Cyd`] device trait, its [`CydDisplay`] and [`CydTouch`]
 //! parts, and [`CydFrame`].
 
-mod contiguous_pixels;
 pub mod calibration;
+mod contiguous_pixels;
 mod cyd;
 mod draw_item_2d;
 mod orientation;
@@ -14,18 +14,17 @@ mod tga;
 pub mod tiling;
 mod touch_event;
 
-pub use contiguous_pixels::ContiguousPixels;
 pub use calibration::{
     CALIBRATION_CENTER_DOT_RADIUS, CALIBRATION_CROSS_HALF_SIZE, CALIBRATION_CROSS_MARGIN,
-    CALIBRATION_POINT_COUNT, CalibrationConfig, CalibrationCorner, CalibrationFlow, RawPoint,
-    RawTouchEvent, EnsureCalibrationError, EnsureCalibrationOutcome,
+    CALIBRATION_POINT_COUNT, CalibrationConfig, CalibrationCorner, CalibrationFlow,
+    EnsureCalibrationError, EnsureCalibrationOutcome, RawPoint, RawTouchEvent,
     calibration_corner_center, calibration_corner_for_index, distort_demo_screen_to_raw,
     draw_calibration_cross, ensure_calibration,
 };
+pub use contiguous_pixels::ContiguousPixels;
 pub use cyd::{
     CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydInfallibleError, CydRawTouch,
-    CydTouch,
-    RegionPixels, Tiles,
+    CydTouch, RegionPixels, Tiles,
 };
 pub use draw_item_2d::{DrawItem2d, DrawItem3dExt, Image565View};
 pub use orientation::Orientation;

@@ -175,9 +175,18 @@ struct Run {
 #[derive(Clone, Copy)]
 enum Phase {
     BeginCandidate,
-    EvaluateSingleHigh { index: usize, original: f32 },
-    EvaluateSingleLow { index: usize, original: f32 },
-    EvaluatePair { bend_original: f32, spin_original: f32 },
+    EvaluateSingleHigh {
+        index: usize,
+        original: f32,
+    },
+    EvaluateSingleLow {
+        index: usize,
+        original: f32,
+    },
+    EvaluatePair {
+        bend_original: f32,
+        spin_original: f32,
+    },
 }
 
 impl Run {
@@ -209,7 +218,8 @@ impl Run {
             }
 
             searched = true;
-            if matches!(self.phase, Phase::BeginCandidate) && self.candidate_index != candidate_index
+            if matches!(self.phase, Phase::BeginCandidate)
+                && self.candidate_index != candidate_index
             {
                 return true;
             }
@@ -349,11 +359,7 @@ fn move_params_toward(
     moved
 }
 
-fn apply_paired_candidate(
-    params: &mut [f32; super::DOF],
-    pair_index: usize,
-    step: f32,
-) -> bool {
+fn apply_paired_candidate(params: &mut [f32; super::DOF], pair_index: usize, step: f32) -> bool {
     let (bend_direction, spin_direction) = PAIRED_CANDIDATES[pair_index];
     let bend_original = params[BEND_ELBOW_PARAM_INDEX];
     let spin_original = params[SPIN_WHOLE_ARM_PARAM_INDEX];

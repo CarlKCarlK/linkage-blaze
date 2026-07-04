@@ -336,10 +336,7 @@ fn target_distance_hundredths(params: &[f32; DOF]) -> u32 {
     libm::roundf(target_distance(params).clamp(0.0, 99.99) * 100.0) as u32
 }
 
-fn next_fps_label(
-    previous_tick: Option<Instant>,
-    current_tick: Instant,
-) -> Option<(u32, u32)> {
+fn next_fps_label(previous_tick: Option<Instant>, current_tick: Instant) -> Option<(u32, u32)> {
     if SHOW_FPS_TEXT
         && let Some(previous_tick) = previous_tick
         && let Some((fps_whole, fps_fraction)) = display_fps_since(previous_tick, current_tick)

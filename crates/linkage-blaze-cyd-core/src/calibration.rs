@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
-pub use flow::CalibrationFlow;
 pub use driver::{EnsureCalibrationError, EnsureCalibrationOutcome, ensure_calibration};
+pub use flow::CalibrationFlow;
 
 pub const CALIBRATION_POINT_COUNT: usize = 4;
 pub const CALIBRATION_CROSS_MARGIN: i32 = 28;
@@ -187,10 +187,8 @@ pub fn draw_calibration_cross<E>(
 
 #[must_use]
 pub fn distort_demo_screen_to_raw(screen_x: f32, screen_y: f32) -> RawPoint {
-    let raw_x =
-        DEMO_RAW_SCALE_X * screen_x + DEMO_RAW_SKEW_X_FROM_Y * screen_y + DEMO_RAW_OFFSET_X;
-    let raw_y =
-        DEMO_RAW_SKEW_Y_FROM_X * screen_x + DEMO_RAW_SCALE_Y * screen_y + DEMO_RAW_OFFSET_Y;
+    let raw_x = DEMO_RAW_SCALE_X * screen_x + DEMO_RAW_SKEW_X_FROM_Y * screen_y + DEMO_RAW_OFFSET_X;
+    let raw_y = DEMO_RAW_SKEW_Y_FROM_X * screen_x + DEMO_RAW_SCALE_Y * screen_y + DEMO_RAW_OFFSET_Y;
 
     assert!(raw_x >= 0.0, "demo raw x must stay non-negative");
     assert!(raw_y >= 0.0, "demo raw y must stay non-negative");
@@ -320,7 +318,8 @@ mod tests {
         for (point_index, calibration_corner) in calibration_corners.into_iter().enumerate() {
             let expected = calibration_corner_center(calibration_corner);
             let raw_point = raw_points[point_index];
-            let (mapped_x, mapped_y) = calibration_config.map_raw_to_screen(raw_point.x, raw_point.y);
+            let (mapped_x, mapped_y) =
+                calibration_config.map_raw_to_screen(raw_point.x, raw_point.y);
 
             assert!(
                 (mapped_x - expected.x as f32).abs() <= MAP_EPSILON,

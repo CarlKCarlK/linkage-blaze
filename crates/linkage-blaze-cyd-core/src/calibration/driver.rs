@@ -2,7 +2,9 @@ use device_envoy_core::flash_block::FlashBlock;
 
 use crate::{Cyd, CydDisplay, CydFrame, CydRawTouch};
 
-use super::{CalibrationConfig, CalibrationFlow, draw_calibration_cross, flow::CalibrationFlowEvent};
+use super::{
+    CalibrationConfig, CalibrationFlow, draw_calibration_cross, flow::CalibrationFlowEvent,
+};
 
 /// Result of ensuring calibration at startup.
 #[derive(Clone, Copy, Debug)]
