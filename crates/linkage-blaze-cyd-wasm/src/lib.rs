@@ -34,7 +34,7 @@ use embedded_graphics::{
 use linkage_blaze_core::{PixelTarget, RgbColor, rgb888_from_rgb565};
 use linkage_blaze_cyd_core::{
     CalibrationConfig, Cyd, CydDisplay, CydFrame, CydInfallibleError, CydRawTouch, CydTouch,
-    Orientation, RawTouchEvent, TouchEvent, distort_demo_screen_to_raw,
+    Orientation, RawPoint, RawTouchEvent, TouchEvent, distort_demo_screen_to_raw,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::Clamped;
@@ -57,6 +57,7 @@ pub struct CydWasm {
     font: &'static MonoFont<'static>,
     raw_touch_events: RawTouchEvents,
     interaction_state: Rc<Cell<InteractionState>>,
+    latest_raw_point: Rc<Cell<Option<RawPoint>>>,
     calibration_config: Option<CalibrationConfig>,
 }
 
@@ -79,6 +80,7 @@ pub struct CydTouchWasmPart {
 pub struct CydTouchWasmSource {
     raw_touch_events: RawTouchEvents,
     interaction_state: Rc<Cell<InteractionState>>,
+    latest_raw_point: Rc<Cell<Option<RawPoint>>>,
 }
 
 pub struct ButtonWasm {
@@ -154,6 +156,7 @@ impl CydWasm {
             font,
             raw_touch_events: touch_source.raw_touch_events,
             interaction_state: touch_source.interaction_state,
+            latest_raw_point: touch_source.latest_raw_point,
             calibration_config: None,
         }
     }
@@ -163,6 +166,7 @@ impl CydWasm {
         CydTouchWasmSource {
             raw_touch_events: self.raw_touch_events.clone(),
             interaction_state: self.interaction_state.clone(),
+            latest_raw_point: self.latest_raw_point.clone(),
         }
     }
 
@@ -181,6 +185,7 @@ impl CydTouchWasmSource {
         Self {
             raw_touch_events: Rc::new(RefCell::new(VecDeque::new())),
             interaction_state: Rc::new(Cell::new(InteractionState::Ready)),
+            latest_raw_point: Rc::new(Cell::new(None)),
         }
     }
 
@@ -192,6 +197,7 @@ impl CydTouchWasmSource {
             }
         }
         let raw_point = distort_demo_screen_to_raw(x, y);
+        self.latest_raw_point.set(Some(raw_point));
         self.push(RawTouchEvent::Down {
             raw_x: raw_point.x,
             raw_y: raw_point.y,
@@ -203,6 +209,7 @@ impl CydTouchWasmSource {
             return;
         }
         let raw_point = distort_demo_screen_to_raw(x, y);
+        self.latest_raw_point.set(Some(raw_point));
         self.push(RawTouchEvent::Move {
             raw_x: raw_point.x,
             raw_y: raw_point.y,
@@ -212,6 +219,7 @@ impl CydTouchWasmSource {
     pub fn touch_up(&self) {
         let interaction_state = self.interaction_state.get();
         self.interaction_state.set(InteractionState::Ready);
+        self.latest_raw_point.set(None);
         if interaction_state == InteractionState::WaitingForFreshPress {
             return;
         }
@@ -220,6 +228,7 @@ impl CydTouchWasmSource {
 
     pub fn wait_for_fresh_press(&self) {
         self.raw_touch_events.borrow_mut().clear();
+        self.latest_raw_point.set(None);
         self.interaction_state
             .set(InteractionState::WaitingForFreshPress);
     }
@@ -586,7 +595,22 @@ impl CydRawTouch for CydWasm {
     type Error = CydInfallibleError;
 
     fn read_raw_touch_event(&mut self) -> Result<Option<RawTouchEvent>, CydInfallibleError> {
-        Ok(self.raw_touch_events.borrow_mut().pop_front())
+        if let Some(raw_touch_event) = self.raw_touch_events.borrow_mut().pop_front() {
+            return Ok(Some(raw_touch_event));
+        }
+
+        if self.interaction_state.get() != InteractionState::PointerDown {
+            return Ok(None);
+        }
+
+        let Some(raw_point) = self.latest_raw_point.get() else {
+            return Ok(None);
+        };
+
+        Ok(Some(RawTouchEvent::Move {
+            raw_x: raw_point.x,
+            raw_y: raw_point.y,
+        }))
     }
 }
 

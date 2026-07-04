@@ -23,14 +23,29 @@ which interleaves `read_raw_touch_event` with `flush()`. Only a fake device
 can exercise that loop on the host. The fake also lets shared example logic
 in `linkage-blaze-example-core` get smoke tests.
 
-## Relationship to the robustness spec
+## Relationship to the calibration specs
 
-This spec is written to land **after Phase 1** of
-`TOUCH_CALIBRATION_ROBUSTNESS_SPEC.md` (flush-per-iteration pacing). The
-frame-scripted input model below assumes the driver draws + flushes every
-loop iteration. Tests below that additionally require robustness Phase 2 or
-Phase 3 behavior are marked; implement them together with (or immediately
-after) those phases, and skip-with-a-`TODO` if this spec lands first.
+`TOUCH_CALIBRATION_ROBUSTNESS_SPEC.md`, `WASM_FIDELITY_BOOT_BUTTON_SPEC.md`,
+and `CALIBRATION_SAMPLING_FIX_SPEC.md` are all implemented. The driver as it
+stands today (`crates/linkage-blaze-cyd-core/src/calibration/driver.rs`):
+
+- paces itself with one full-frame flush per loop iteration;
+- drains at most `MAX_RAW_EVENTS_PER_FRAME` (64) raw events per frame, and
+  runs idle bookkeeping (`advance_driver_state_after_idle`) **only** on
+  iterations where the raw source reported `None`;
+- captures corners on release via `ReleaseTouchCapture` with a whole-press
+  running mean, discarding `SAMPLES_DISCARDED_AFTER_DOWN` (4) samples after
+  `Down` and requiring `MIN_SAMPLES_PER_POINT` (3) usable samples;
+- validates the solve (`validate_calibration_points`) and runs a
+  `Verifying` state with a center target, `VERIFY_TIMEOUT_FRAMES` idle-frame
+  timeout, and `ShowCaptured`/`ShowRejected` acknowledgment states;
+- takes a `device_envoy_core::button::Button` for recalibration and an
+  optional `confirmed_message` drawn and flushed before save/return.
+
+Every driver behavior listed in Phase 2 below therefore exists today and is
+testable immediately — there are no conditional/deferred items. Re-check the
+driver source before writing tests; these consts and state names are the
+spec's snapshot, not a contract.
 
 ## How to use this document
 
@@ -55,7 +70,8 @@ after) those phases, and skip-with-a-`TODO` if this spec lands first.
 
 - Crate: `crates/linkage-blaze-cyd-memory`, added to the workspace
   `members` list in the root `Cargo.toml`.
-- Types: `MemoryCyd`, `MemoryFrame`, `MemoryFlashBlock`, `MemoryCydError`.
+- Types: `MemoryCyd`, `MemoryFrame`, `MemoryFlashBlock`, `MemoryButton`,
+  `MemoryCydError`.
 - Dependencies: `linkage-blaze-cyd-core`, `linkage-blaze-core`,
   `device-envoy-core` (for the `FlashBlock` trait), `embedded-graphics`.
   For awaiting `flush()` in tests, use `futures` (or `futures-executor`)
@@ -104,11 +120,38 @@ On real hardware, `flush()` is the pacing point (SPI present on ESP,
   load per-frame event batches. `read_raw_touch_event` / `read` pop events
   from the **current** frame's batch only, returning `Ok(None)` when the
   batch is drained; each `flush` advances to the next batch.
-- This makes robustness-spec Phase 1's "drain, don't sip" property directly
-  expressible: put a full `Down`+`Up` pair in one frame batch and assert it
-  registers within that iteration.
+- This makes the "drain, don't sip" property directly expressible: put a
+  full `Down`+`Up` pair in one frame batch and assert it registers within
+  that iteration.
+- An **empty** batch is an idle frame: the driver sees `None` and runs its
+  idle bookkeeping. Scripts must include idle frames wherever the driver's
+  frame counters need to tick — the `ShowCaptured` acknowledgment
+  (`CAPTURE_ACK_FRAME_COUNT`), `ShowRejected` (`REJECTED_FRAME_COUNT`), and
+  the verify timeout (`VERIFY_TIMEOUT_FRAMES`) all decrement only on idle
+  frames. A helper like `script_idle_frames(count)` keeps tests readable.
+- A batch **larger** than `MAX_RAW_EVENTS_PER_FRAME` emulates the ESP's
+  direct-sampling probe, which returns an event on every call while
+  pressed: the driver hits its per-frame cap, flushes anyway, and must
+  *not* run idle bookkeeping. Events beyond the cap must remain queued for
+  the next frame (do not drop the remainder on flush).
 - Also offer plain `push_raw_touch_event(...)` / `push_touch_event(...)`
   appenders onto the current frame for simple tests.
+- Because `MIN_SAMPLES_PER_POINT` and `SAMPLES_DISCARDED_AFTER_DOWN` gate
+  capture, a "tap" helper that scripts `Down` + enough `Move` samples + `Up`
+  at a point (`script_tap(raw_point)`) avoids every test hand-counting
+  samples against the flow's thresholds.
+
+### `MemoryButton`
+
+The driver takes `recalibration_button: &mut impl Button`
+(`device_envoy_core::button::Button`). Provide a `MemoryButton` whose
+pressed state a test sets directly (or schedules by frame index, sharing the
+flush clock, if a test needs a mid-flow press). Implementing the trait means
+implementing the `__ButtonMonitor` supertrait: `is_pressed_raw` returns the
+scripted state and `wait_until_pressed_state` can resolve immediately — the
+calibration driver only ever calls the synchronous `is_pressed()`. There is
+a `ButtonMock` doctest in device-envoy's `button.rs` showing the minimal
+shape.
 
 ### Fuel: `frame_budget`
 
@@ -142,7 +185,8 @@ fancier belongs in the test, not the fake.
 Implements `device_envoy_core::flash_block::FlashBlock` over an in-memory
 byte store: `load` returns `Ok(None)` when empty or when the stored bytes
 do not deserialize as the requested type (matching the trait contract),
-`save` overwrites, `clear` empties. Constructors: `MemoryFlashBlock::new()`
+`save` overwrites, `clear` empties. Spy accessor: `save_count() -> usize`.
+Constructors: `MemoryFlashBlock::new()`
 (empty), `::with_value(&T)` (pre-loaded), and a way to preload **corrupt
 bytes** for the bad-flash test. Note: `device-envoy-core` already has a
 test-private `MemoryFlashDevice` in its `flash_block.rs` tests — if the
@@ -184,14 +228,23 @@ and leave a `TODO` pointing at the possible consolidation.
 
 ## Phase 2 — Calibration driver tests
 
-All in `crates/linkage-blaze-cyd-core` as integration or unit tests using
-`MemoryCyd` + `MemoryFlashBlock` as dev-dependencies, driving the real
-`ensure_calibration`. These are the point of the whole exercise.
+All in `crates/linkage-blaze-cyd-core`, driving the real
+`ensure_calibration` with `MemoryCyd` + `MemoryFlashBlock` + `MemoryButton`
+as dev-dependencies. Put them in `#[cfg(test)]` unit-test modules (per repo
+convention) rather than `tests/` integration tests, so they can reference
+the driver's private consts (`CAPTURE_ACK_FRAME_COUNT`,
+`VERIFY_TIMEOUT_FRAMES`, `MAX_RAW_EVENTS_PER_FRAME`, …) instead of
+duplicating their values. These tests are the point of the whole exercise.
 
 - [ ] impl / [ ] verify — **Happy path.** Script one clean tap-and-release
-  per corner → returns `Saved`; the flash block deserializes to a
-  `CalibrationConfig`; mapping each scripted raw corner point through the
-  config lands within a small tolerance of its target cross center.
+  per corner (each with enough usable samples to clear
+  `MIN_SAMPLES_PER_POINT` after the post-`Down` discards), idle frames
+  between corners so the `ShowCaptured` acknowledgment expires, then a
+  verify tap at the screen-center target → returns `Saved`; the flash block
+  deserializes to a `CalibrationConfig`; mapping each scripted raw corner
+  point through the config lands within a small tolerance of its target
+  cross center. Choose scripted raw points via a known synthetic mapping
+  (as the WASM distortion does) so the expected config is predictable.
 
 - [ ] impl / [ ] verify — **Preloaded flash.** A valid pre-saved config →
   returns `Loaded` with that config, `flush_count() == 0`, and no touch
@@ -207,20 +260,32 @@ All in `crates/linkage-blaze-cyd-core` as integration or unit tests using
   `flush_count` equals the budget — proving there is no non-flushing idle
   path left.
 
-- [ ] impl / [ ] verify — **Drain, don't sip** *(requires robustness
-  Phase 1)*. A complete `Down`/`Up` pair inside a single frame batch
-  registers the corner in that same iteration rather than one event per
-  frame.
+- [ ] impl / [ ] verify — **Drain, don't sip.** A complete tap
+  (`Down`/samples/`Up`) inside a single frame batch registers the corner in
+  that same iteration rather than one event per frame.
 
-- [ ] impl / [ ] verify — **Dropout regression, end-to-end** *(requires
-  robustness Phase 2)*. The field bug: hold on corner 2 with a mid-hold
-  spurious `Up` + `Down`, then release → corner 3 is **not** captured from
-  corner-2 coordinates. This duplicates a flow-level unit test on purpose:
-  it proves the *driver* wiring preserves the property.
+- [ ] impl / [ ] verify — **Drain cap under a held stylus.** A frame batch
+  larger than `MAX_RAW_EVENTS_PER_FRAME` (the ESP direct-sampling case:
+  events on every read while pressed) → the driver still flushes that
+  iteration (no frozen screen), the leftover events are consumed on later
+  frames, and — because the queue never reported idle — no `ShowCaptured` /
+  `ShowRejected` / verify-timeout counters ticked during the hold.
 
-- [ ] impl / [ ] verify — **Recalibration request.** A
-  `recalibration_requested` closure that fires once mid-flow → the flow
-  restarts from corner 1 and still completes correctly afterwards.
+- [ ] impl / [ ] verify — **Dropout regression, end-to-end.** The field bug
+  from `TOUCH_CALIBRATION_ROBUSTNESS_SPEC.md`: hold on corner 2 with a
+  mid-hold spurious `Up` + `Down`, then release → corner 3 is **not**
+  captured from corner-2 coordinates. This duplicates a flow-level unit
+  test on purpose: it proves the *driver* wiring preserves the property.
+
+- [ ] impl / [ ] verify — **Lift-off transient regression, end-to-end.**
+  The field bug from `CALIBRATION_SAMPLING_FIX_SPEC.md`: a long press of
+  many stable samples followed by a few heavily drifted lift-off samples →
+  the captured point stays within ~1 raw unit of the stable point (the
+  whole-press mean, not a last-N window).
+
+- [ ] impl / [ ] verify — **Recalibration button.** A `MemoryButton`
+  pressed for one frame mid-flow → the flow restarts from corner 1 and
+  still completes correctly afterwards.
 
 - [ ] impl / [ ] verify — **Rendering spot-checks.** After the first frame,
   the pixel at corner 1's cross center is the foreground color and a
@@ -228,18 +293,32 @@ All in `crates/linkage-blaze-cyd-core` as integration or unit tests using
   not full-buffer snapshots — snapshot-exact tests break on every cosmetic
   tweak and teach people to regenerate them blindly.
 
-- [ ] impl / [ ] verify — **Phase 3 behaviors** *(requires robustness
-  Phase 3; skip with a `TODO` until then)*: contradictory duplicate-corner
-  taps → rejected and restarted, nothing saved; verification-target
-  timeout (counted in frames via flushes) → candidate discarded; `save`
-  happens exactly once, only after the verify tap; the confirmation frame
-  is flushed **before** `ensure_calibration` returns.
+- [ ] impl / [ ] verify — **Rejected solve restarts.** Contradictory
+  duplicate-corner taps → the flow enters `ShowRejected` and restarts from
+  corner 1; nothing is saved; a subsequent honest script still completes.
+
+- [ ] impl / [ ] verify — **Verify miss restarts.** Four good corners, then
+  a verify tap outside `VERIFY_HIT_RADIUS_PIXELS` of the center → candidate
+  discarded, flow restarts, nothing saved.
+
+- [ ] impl / [ ] verify — **Verify timeout restarts.** Four good corners,
+  then `VERIFY_TIMEOUT_FRAMES` idle frames with no tap → candidate
+  discarded, flow restarts, nothing saved. (This is the test that makes
+  reading the private const worthwhile.)
+
+- [ ] impl / [ ] verify — **Save exactly once, confirmation first.** Across
+  any completing script, `MemoryFlashBlock` observes exactly one `save`,
+  and when `confirmed_message` is `Some`, the last flushed frame before
+  `ensure_calibration` returns shows the message (spot-check a pixel or,
+  simpler, assert `last_flush_region` is the full screen and the flush
+  count advanced after the verify tap).
 
 ### Phase 2 gate
 
-`just check-all` passes. Human reviews the test list against the robustness
-spec's field report and confirms each field bug has a corresponding red/green
-driver-level test (or a `TODO` naming the robustness phase it waits on).
+`just check-all` passes. Human reviews the test list against the field
+reports in `TOUCH_CALIBRATION_ROBUSTNESS_SPEC.md` and
+`CALIBRATION_SAMPLING_FIX_SPEC.md` and confirms each field bug has a
+corresponding driver-level test.
 
 ## Phase 3 — Shared example smoke tests
 
