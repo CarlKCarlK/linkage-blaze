@@ -104,6 +104,8 @@ const SHOW_FPS_TEXT: bool = true;
 /// provide calibrated touch before calling [`armatron`]. Shared calibration
 /// UI helpers now live in [`linkage_blaze_cyd_core::calibration`], alongside
 /// the rest of the CYD touch-calibration flow.
+// TODO0000 Revisit whether `armatron` should regain a type-state guarantee for
+// calibrated CYD touch instead of relying on this caller-side runtime precondition.
 pub async fn armatron<C, R>(
     cyd: &mut C,
     recalibration_button: &mut R,

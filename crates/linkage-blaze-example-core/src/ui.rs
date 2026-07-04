@@ -109,7 +109,6 @@ impl Ui {
     }
 
     /// Updates `value` from any captured drag, then draws the slider.
-    /// todo0x alternatives to static and eq?
     /// Slider identity uses pointer equality on `slider`, so callers must pass
     /// a `static` layout spec instead of a `const` one.
     pub fn slider<D>(
