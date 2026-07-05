@@ -23,9 +23,9 @@ It shows preview images of each demo and links to the live, interactive WASM ver
   <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze-example-core/tests/assets/ballet.png" alt="Ballet demo preview" width="150" />
 </p>
 
-## Example
+## Example Linkage
 
-This is the `armatron1.lb.rs` [(interactive editor)](crates/linkage-blaze-example-core/src/armatron/armatron1.lb.rs) linkage based on a [toy robot arm](https://en.wikipedia.org/wiki/Armatron). It defines six parameters for the shoulder, elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark so the claw can branch into two fingers.
+This is the `armatron1.lb.rs` [(interactive editor)](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/#armatron) linkage based on a toy robot arm. It defines six parameters for the shoulder, elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark so the claw can branch into two fingers.
 
 ```rust,no_run
 linkage![
