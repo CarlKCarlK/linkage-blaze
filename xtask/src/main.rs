@@ -384,6 +384,30 @@ struct DemoRecord {
 }
 
 impl DemoRecord {
+    fn core_code_url(&self) -> Result<&'static str> {
+        let core_code_url = match self.slug.as_str() {
+            "clock" => {
+                "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-example-core/src/clock.rs"
+            }
+            "armatron" => {
+                "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-example-core/src/armatron/main.rs"
+            }
+            "ballet" => {
+                "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-example-core/src/ballet.rs"
+            }
+            "skeleton-clock" => {
+                "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-example-core/src/skeleton_clock.rs"
+            }
+            _ => {
+                return Err(Error::message(format!(
+                    "missing core-code metadata for demo: {}",
+                    self.slug
+                )));
+            }
+        };
+        Ok(core_code_url)
+    }
+
     fn from_tsv_line(line: &str, line_number: usize) -> Result<Self> {
         let fields: Vec<_> = line.split('\t').collect();
         if fields.len() != 7 {
@@ -454,6 +478,7 @@ impl DemoRecord {
 
     fn demo_card_html(&self) -> Result<String> {
         let preview_spec = self.preview_spec()?;
+        let core_code_url = self.core_code_url()?;
         let latest_url = format!("./{}/{}/", self.slug, self.current_version);
         let versions: Vec<_> = self
             .versions
@@ -482,11 +507,15 @@ impl DemoRecord {
             alt=\"{title} preview\"\n\
             loading=\"lazy\"\n\
           />\n\
-        </a>\n",
+        </a>\n\
+        <div class=\"demo-card__meta\">\n\
+          <a class=\"demo-card__code\" href=\"{core_code_url}\" target=\"_blank\" rel=\"noopener\">Code</a>\n\
+        </div>\n",
             slug = self.slug,
             latest_url = latest_url,
             title = self.title,
             orientation = preview_spec.orientation.class_name(),
+            core_code_url = core_code_url,
         );
 
         if self.versions.len() > 1 {
@@ -670,6 +699,17 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       line-height: 1.55;
     }
 
+    .hero__links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+    }
+
+    .hero__links a {
+      color: var(--accent-deep);
+      font: 700 0.95rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+    }
+
     .demo-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -804,6 +844,18 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       filter: drop-shadow(0 16px 28px rgba(54, 34, 20, 0.18));
     }
 
+    .demo-card__meta {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .demo-card__code {
+      color: var(--accent-deep);
+      font: 700 0.82rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
     .demo-card__versions {
       display: inline-flex;
       align-items: center;
@@ -864,6 +916,10 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       <p class="hero__eyebrow">Interactive Demo Gallery</p>
       <h1>Linkage Blaze</h1>
       <p>Preview the current browser builds directly in the catalog, then jump into the latest version of each simulation. Version selectors list newer snapshots first so older builds stay available without dominating the page.</p>
+      <div class="hero__links">
+        <a href="https://github.com/CarlKCarlK/linkage-blaze" target="_blank" rel="noopener">GitHub: CarlKCarlK/linkage-blaze</a>
+        <a href="https://medium.com/@carlmkadie" target="_blank" rel="noopener">Articles: @carlmkadie on Medium</a>
+      </div>
     </section>
     <section class="demo-grid">
 $body

@@ -23,6 +23,14 @@ This file contains shared workspace rules for this repository.
 - Any time a color is defined with numeric components, add a nearby comment with its approximate color name.
 - Put primary entry points (`main`, `inner_main`, public run/game-loop functions) near the top of the file before helper types and functions. Do not bury them at the bottom.
 
+## Specs
+
+Put implementation specs (`*_SPEC.md` and similar planning documents) in the `specs/` directory, not the repo root. Every spec must include a `todo0` comment near the top reminding readers to consider deleting the spec once the work it describes is complete, for example:
+
+```markdown
+<!-- todo0 consider deleting this spec once the work below is implemented and released. -->
+```
+
 ## Local CI
 
 `just check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite.
