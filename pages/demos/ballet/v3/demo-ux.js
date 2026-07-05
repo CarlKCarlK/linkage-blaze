@@ -96,6 +96,7 @@ function buildSceneCard(config) {
     <span class="demo-ux-card-tag__kicker">CYD demo</span>
     <strong>${escapeHtml(config.title)}</strong>
     <span class="demo-ux-card-tag__preview">${escapeHtml(config.previewLine)}</span>
+    <span class="demo-ux-card-tag__hint">tap for details ›</span>
   `;
 
   const scrim = document.createElement("div");

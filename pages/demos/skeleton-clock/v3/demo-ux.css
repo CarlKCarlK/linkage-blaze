@@ -73,11 +73,20 @@
   box-shadow: 0 16px 30px rgba(40, 28, 20, 0.18);
   transform: rotate(3deg);
   font: 0.92rem/1.25 "Courier New", Georgia, serif;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.demo-ux-card-tag:hover,
+.demo-ux-card-tag:focus-visible {
+  transform: rotate(0deg) translateY(-2px);
+  box-shadow: 0 20px 34px rgba(40, 28, 20, 0.26);
 }
 
 .demo-ux-card-tag strong,
 .demo-ux-card-tag__kicker,
-.demo-ux-card-tag__preview {
+.demo-ux-card-tag__preview,
+.demo-ux-card-tag__hint {
   display: block;
 }
 
@@ -93,6 +102,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.demo-ux-card-tag__hint {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: rgba(120, 94, 68, 0.9); /* faded sepia ink */
 }
 
 .demo-ux-card-scrim {
