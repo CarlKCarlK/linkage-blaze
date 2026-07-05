@@ -105,6 +105,10 @@
   background: rgba(0, 0, 0, 0.35); /* translucent black scrim */
 }
 
+.demo-ux-card-scrim[hidden] {
+  display: none !important;
+}
+
 .demo-ux-card-dialog {
   position: relative;
   width: min(34rem, 90vw);
@@ -262,6 +266,10 @@
   color: rgb(51, 43, 33); /* dark sepia */
   transform: translateX(-50%);
   box-shadow: 0 16px 32px rgba(18, 12, 8, 0.24);
+}
+
+.demo-ux-time-dock[hidden] {
+  display: none !important;
 }
 
 .demo-ux-time-readout {
