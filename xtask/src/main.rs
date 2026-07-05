@@ -476,13 +476,13 @@ impl DemoRecord {
           </div>\n\
           <a class=\"demo-card__open\" href=\"{latest_url}\">Open latest</a>\n\
         </div>\n\
-        <div class=\"demo-card__preview demo-card__preview--{orientation}\">\n\
+        <a class=\"demo-card__preview demo-card__preview--{orientation}\" href=\"{latest_url}\">\n\
           <img\n\
             src=\"./{slug}/preview.png\"\n\
             alt=\"{title} preview\"\n\
             loading=\"lazy\"\n\
           />\n\
-        </div>\n\
+        </a>\n\
         <div class=\"demo-card__footer\">\n\
           <a class=\"demo-card__latest\" href=\"{latest_url}\">Latest: {current_version}</a>\n",
             slug = self.slug,
@@ -672,11 +672,11 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
 
     .demo-card {
       --preview-aspect-ratio: 4 / 3;
-      --preview-backdrop-start: rgb(243, 228, 206); /* oat beige */
-      --preview-backdrop-end: rgb(218, 188, 156); /* tan clay */
-      --preview-glow: rgba(163, 104, 56, 0.2); /* amber wash */
+      --preview-backdrop-start: rgb(250, 246, 239); /* warm off-white */
+      --preview-backdrop-end: rgb(240, 228, 212); /* pale apricot cream */
+      --preview-glow: rgba(196, 132, 78, 0.12); /* light amber wash */
       display: grid;
-      gap: 16px;
+      gap: 12px;
       padding: 18px;
       border: 1px solid rgba(66, 44, 31, 0.14);
       border-radius: 24px;
@@ -684,30 +684,12 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       box-shadow: 0 16px 38px rgba(83, 58, 38, 0.12);
     }
 
-    .demo-card--armatron {
-      --preview-backdrop-start: rgb(220, 232, 222); /* sage mist */
-      --preview-backdrop-end: rgb(157, 185, 171); /* muted jade */
-      --preview-glow: rgba(59, 95, 80, 0.2); /* evergreen wash */
-    }
-
     .demo-card--skeleton-clock {
       --preview-aspect-ratio: 3 / 4;
-      --preview-backdrop-start: rgb(232, 225, 205); /* antique straw */
-      --preview-backdrop-end: rgb(193, 173, 134); /* dry khaki */
-      --preview-glow: rgba(120, 92, 40, 0.2); /* brass wash */
     }
 
     .demo-card--ballet {
       --preview-aspect-ratio: 3 / 4;
-      --preview-backdrop-start: rgb(231, 214, 225); /* dusty rose */
-      --preview-backdrop-end: rgb(198, 162, 189); /* mauve blush */
-      --preview-glow: rgba(117, 60, 104, 0.2); /* plum wash */
-    }
-
-    .demo-card--clock {
-      --preview-backdrop-start: rgb(216, 229, 236); /* pale sky */
-      --preview-backdrop-end: rgb(156, 181, 198); /* storm blue */
-      --preview-glow: rgba(54, 92, 119, 0.2); /* steel blue wash */
     }
 
     .demo-card__header,
@@ -716,6 +698,18 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+    }
+
+    .demo-card__header {
+      min-height: 64px;
+      align-items: flex-start;
+    }
+
+    .demo-card__header > div {
+      min-height: 64px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
     }
 
     .demo-card__eyebrow {
@@ -763,15 +757,11 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
     }
 
     .demo-card__preview {
-      --preview-frame-padding-block: clamp(16px, 3vw, 24px);
-      --preview-frame-padding-inline: var(--preview-frame-padding-block);
-      --preview-image-width: 100%;
-      --preview-image-height: 100%;
       position: relative;
       overflow: hidden;
       display: grid;
       place-items: center;
-      padding: var(--preview-frame-padding-block) var(--preview-frame-padding-inline);
+      padding: clamp(16px, 3vw, 24px);
       border: 1px solid rgba(70, 48, 34, 0.16);
       border-radius: 20px;
       background:
@@ -783,15 +773,13 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
     }
 
     .demo-card__preview--portrait {
-      --preview-frame-padding-block: clamp(8px, 1.5vw, 12px);
-      --preview-frame-padding-inline: clamp(12px, 2.5vw, 17px);
-      --preview-image-width: calc(100% - clamp(24px, 5vw, 34px));
-      --preview-image-height: calc(100% - clamp(16px, 3vw, 24px));
+      width: 75%;
+      justify-self: center;
     }
 
     .demo-card__preview img {
-      width: var(--preview-image-width);
-      height: var(--preview-image-height);
+      width: 100%;
+      height: 100%;
       object-fit: contain;
       display: block;
       filter: drop-shadow(0 16px 28px rgba(54, 34, 20, 0.18));
