@@ -46,6 +46,10 @@ run-all-wasm port=_pages_port:
     just build-pages
     cd target/pages && python3 ../../.tools/no_cache_http_server.py {{port}} --next-free
 
+# Dispatch the GitHub Pages workflow on GitHub.
+publish-pages ref='main':
+    gh workflow run .github/workflows/pages.yml --ref "{{ref}}"
+
 # Freeze the current live web assets for one demo into a new immutable Pages version.
 bump-demo-version demo version='':
     cargo run --quiet -p linkage-blaze-xtask -- bump-demo-version "{{demo}}" "{{version}}"

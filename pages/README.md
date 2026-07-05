@@ -12,6 +12,12 @@ Build the full Pages site:
 just build-pages
 ```
 
+Dispatch the GitHub Pages workflow on `main`:
+
+```sh
+just publish-pages
+```
+
 Build one demo only:
 
 ```sh
@@ -47,6 +53,10 @@ just build-pages <demo>
 
 4. Review the generated snapshot under `pages/demos/<demo>/vN/` and the manifest change in `pages/demos.tsv`.
 5. Commit and push the changes.
-6. In GitHub Actions, run the `Deploy to GitHub Pages` workflow.
+6. Dispatch the Pages workflow:
+
+```sh
+just publish-pages
+```
 
 The workflow rebuilds the full Pages artifact from the checked-in snapshots, so publishing one demo at a time does not remove old versions of other demos.
