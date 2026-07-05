@@ -66,7 +66,7 @@ Carry the program in the URL fragment, not a query parameter:
 https://…/editor/v1/#code=<base64url of UTF-8 source>
 ```
 
-Reasons for the fragment: it is never sent to the server (no log leakage, works identically under `file://`, local `just run-editor`, and GitHub Pages), it has no practical length limit, and it survives reload so a shared link stays a shared link. Support exactly one parameter name (`code`) and one encoding — no `?code=` alias (avoid redundant API paths, per AGENTS.md).
+Reasons for the fragment: it is never sent to the server (no log leakage, works identically under `file://`, the local demo gallery, and GitHub Pages), it has no practical length limit, and it survives reload so a shared link stays a shared link. Support exactly one parameter name (`code`) and one encoding — no `?code=` alias (avoid redundant API paths, per AGENTS.md).
 
 Encoding is base64url without padding over the UTF-8 bytes of the source. In `main.js`:
 
@@ -125,7 +125,7 @@ Keyboard shortcut is not needed; the existing Ctrl+S/O/I handler stays untouched
 
 ## Verification
 
-1. `just run-editor`; confirm the editor still starts from localStorage/default with no fragment.
+1. `just build-pages editor`, serve `target/pages`, and confirm `/demos/editor` still starts from localStorage/default with no fragment.
 2. Click `Copy Link`, open the copied URL in a private window: the same program must appear. Type a character: the fragment must disappear from the address bar and the render must update.
 3. Corrupt the fragment by hand (`#code=%%%`): the editor must fall back to localStorage/default and show a decode message in `#error`.
 4. Round-trip a program containing non-ASCII characters (e.g. a `°` in a comment) through Copy Link.

@@ -304,7 +304,6 @@ run-arm-viewer-wasm port=_arm_viewer_port:
 
 _editor_crate := "crates/linkage-blaze-editor"
 _editor_www   := "crates/linkage-blaze-editor/www"
-_editor_port  := "8082"
 
 check-editor:
     cargo check -p linkage-blaze-editor --target wasm32-unknown-unknown
@@ -314,14 +313,6 @@ build-editor-deps:
 
 build-editor:
     wasm-pack build {{_editor_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_editor
-
-serve-editor port=_editor_port:
-    cd {{_editor_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
-
-run-editor port=_editor_port:
-    just check-editor
-    just build-editor
-    just serve-editor {{port}}
 
 # ── linkage-blaze-printer-wasm ────────────────────────────────────────────────
 

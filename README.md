@@ -25,7 +25,7 @@ It shows preview images of each demo and links to the live, interactive WASM ver
 
 ## Example
 
-This is the [armatron1.lb.rs](crates/linkage-blaze-example-core/src/armatron/armatron1.lb.rs) linkage based on a [toy robot](https://en.wikipedia.org/wiki/Armatron). It defines six parameters for the shoulder, elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark so the claw can branch into two fingers.
+This is the `armatron1.lb.rs` [(interactive editor)](crates/linkage-blaze-example-core/src/armatron/armatron1.lb.rs) linkage based on a [toy robot arm](https://en.wikipedia.org/wiki/Armatron). It defines six parameters for the shoulder, elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark so the claw can branch into two fingers.
 
 ```rust,no_run
 linkage![

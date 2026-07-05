@@ -4,7 +4,7 @@
 
 ## Problem
 
-`just run-editor` serves the page, but the editor is dead: nothing can be typed or pasted, and the toolbar appears broken.
+The gallery-served editor page is dead: nothing can be typed or pasted, and the toolbar appears broken.
 
 Diagnosis (reproduced headlessly with Playwright on 2026-07-05):
 
@@ -86,7 +86,7 @@ The duplicate-looking labels confused even with JS working. In `index.html`:
 
 ## Verification
 
-1. `just run-editor`, open the page, confirm: CodeMirror mounts with the default program, typing and pasting work, sliders render, three.js view draws.
+1. `just build-pages editor`, serve `target/pages`, open `/demos/editor`, confirm: CodeMirror mounts with the default program, typing and pasting work, sliders render, three.js view draws.
 2. Browser devtools network tab: zero requests to `esm.sh` or `cdn.jsdelivr.net`.
 3. Repeat with network access disabled (devtools "Offline" after first load, or firewall the CDNs) — the editor must still fully work.
 4. Optional: keep a headless Playwright probe (load page, assert `.cm-editor` mounts, type a sentinel string, assert it appears) as a scriptable regression check; a working probe script from this diagnosis exists and can be adapted into `.tools/`.
