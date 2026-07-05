@@ -104,7 +104,7 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
     write_demos_index_file(
         &pages_dir.join("demos/index.html"),
         &demos_index_body,
-        &gallery_versions_links_html(&gallery_versions),
+        &gallery_versions_section_html(&gallery_versions),
     )?;
     copy_gallery_versions(pages_dir, &gallery_versions)?;
 
@@ -337,15 +337,18 @@ fn capture_demo_preview(
     Ok(())
 }
 
-fn write_demos_index_file(path: &Path, body: &str, gallery_versions_links: &str) -> Result<()> {
-    fs::write(path, render_gallery_html_from_body(body, gallery_versions_links))?;
+fn write_demos_index_file(path: &Path, body: &str, gallery_versions_section: &str) -> Result<()> {
+    fs::write(
+        path,
+        render_gallery_html_from_body(body, gallery_versions_section),
+    )?;
     Ok(())
 }
 
 fn render_gallery_html(
     demos: &[DemoRecord],
     path_prefix: &str,
-    gallery_versions_links: &str,
+    gallery_versions_section: &str,
 ) -> Result<String> {
     let mut body = String::new();
     for demo_record in demos {
@@ -354,13 +357,13 @@ fn render_gallery_html(
     if body.is_empty() {
         return Err(Error::message("no demos in manifest"));
     }
-    Ok(render_gallery_html_from_body(&body, gallery_versions_links))
+    Ok(render_gallery_html_from_body(&body, gallery_versions_section))
 }
 
-fn render_gallery_html_from_body(body: &str, gallery_versions_links: &str) -> String {
+fn render_gallery_html_from_body(body: &str, gallery_versions_section: &str) -> String {
     DEMOS_INDEX_TEMPLATE
         .replace("$body", body)
-        .replace("$gallery_versions_links", gallery_versions_links)
+        .replace("$gallery_versions_section", gallery_versions_section)
 }
 
 /// Lists frozen gallery snapshots under `pages/gallery/`, oldest first, by the
@@ -399,11 +402,26 @@ fn infer_next_gallery_version(existing_versions: &[String]) -> String {
     }
 }
 
-fn gallery_versions_links_html(versions: &[String]) -> String {
-    versions
+/// Renders the "older gallery layouts" nav shown below the hero links, distinct
+/// from each demo card's own version selector: this one links to frozen
+/// snapshots of the whole gallery page itself (see `bump-gallery-version`),
+/// not to versions of an individual demo.
+fn gallery_versions_section_html(versions: &[String]) -> String {
+    if versions.is_empty() {
+        return String::new();
+    }
+
+    let links: String = versions
         .iter()
-        .map(|version| format!("        <a href=\"./{version}/\">Gallery {version}</a>\n"))
-        .collect()
+        .map(|version| format!("        <a href=\"./{version}/\">{version}</a>\n"))
+        .collect();
+
+    format!(
+        "      <div class=\"hero__gallery-versions\">\n\
+        <span class=\"hero__gallery-versions__label\">Older gallery layouts:</span>\n\
+{links}\
+      </div>\n"
+    )
 }
 
 /// Copies each frozen `pages/gallery/<version>/` snapshot into
@@ -817,6 +835,24 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       font: 700 0.95rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
     }
 
+    .hero__gallery-versions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 6px 10px;
+      margin-top: 10px;
+      font-size: 0.85rem;
+    }
+
+    .hero__gallery-versions__label {
+      color: var(--muted);
+    }
+
+    .hero__gallery-versions a {
+      color: var(--accent-deep);
+      font: 700 0.85rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+    }
+
     .demo-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1014,8 +1050,8 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       <div class="hero__links">
         <a href="https://github.com/CarlKCarlK/linkage-blaze" target="_blank" rel="noopener">GitHub: CarlKCarlK/linkage-blaze</a>
         <a href="https://medium.com/@carlmkadie" target="_blank" rel="noopener">Articles: @carlmkadie on Medium</a>
-$gallery_versions_links      </div>
-    </section>
+      </div>
+$gallery_versions_section    </section>
     <section class="demo-grid">
 $body
     </section>
@@ -1027,7 +1063,7 @@ $body
 #[cfg(test)]
 mod tests {
     use super::{
-        DemoRecord, PreviewOrientation, gallery_versions_links_html, infer_next_gallery_version,
+        DemoRecord, PreviewOrientation, gallery_versions_section_html, infer_next_gallery_version,
         infer_next_version, validate_version,
     };
 
@@ -1084,13 +1120,14 @@ mod tests {
     #[test]
     fn renders_gallery_version_links() {
         let versions = ["v1".to_owned(), "v2".to_owned()];
-        let html = gallery_versions_links_html(&versions);
+        let html = gallery_versions_section_html(&versions);
+        assert!(html.contains("Older gallery layouts:"));
         assert!(html.contains("href=\"./v1/\""));
         assert!(html.contains("href=\"./v2/\""));
     }
 
     #[test]
     fn renders_no_gallery_version_links_when_none_exist() {
-        assert_eq!(gallery_versions_links_html(&[]), "");
+        assert_eq!(gallery_versions_section_html(&[]), "");
     }
 }
