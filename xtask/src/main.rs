@@ -8,6 +8,7 @@ use std::process::Command;
 const PAGES_DIR: &str = "target/pages";
 const MANIFEST_PATH: &str = "pages/demos.tsv";
 const PREVIEW_EXAMPLE_CRATE: &str = "linkage-blaze-example-core";
+const GALLERY_VERSIONS_DIR: &str = "pages/gallery";
 
 fn main() {
     if let Err(error) = inner_main() {
@@ -50,12 +51,23 @@ fn inner_main() -> Result<()> {
             }
             bump_demo_version(&demo_slug, requested_version.as_deref())
         }
+        "bump-gallery-version" => {
+            let requested_version = arguments
+                .next()
+                .filter(|requested_version| !requested_version.is_empty());
+            if arguments.next().is_some() {
+                return Err(Error::message(
+                    "usage: cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]",
+                ));
+            }
+            bump_gallery_version(requested_version.as_deref())
+        }
         _ => Err(Error::message(usage())),
     }
 }
 
 fn usage() -> &'static str {
-    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]"
+    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]\n  cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]"
 }
 
 fn build_pages(selected_demo: Option<&str>) -> Result<()> {
@@ -87,9 +99,53 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
         "Linkage Blaze Demos",
         "./demos/",
     )?;
-    write_demos_index_file(&pages_dir.join("demos/index.html"), &demos_index_body)?;
+
+    let gallery_versions = list_gallery_versions(Path::new(GALLERY_VERSIONS_DIR))?;
+    write_demos_index_file(
+        &pages_dir.join("demos/index.html"),
+        &demos_index_body,
+        &gallery_versions_links_html(&gallery_versions),
+    )?;
+    copy_gallery_versions(pages_dir, &gallery_versions)?;
 
     println!("Wrote {}", pages_dir.display());
+    Ok(())
+}
+
+/// Freezes the gallery page (`/demos/`) exactly as `bump-demo-version` freezes
+/// a demo: renders the current template + manifest into a standalone
+/// `index.html` under `pages/gallery/<version>/`, so a botched edit to
+/// `DEMOS_INDEX_TEMPLATE` or `demos.tsv` can't erase the ability to see (and
+/// serve) how the gallery looked before. `build-pages` always regenerates the
+/// live `/demos/` page fresh from source; this only adds a way back to an
+/// older rendering, reachable at `/demos/<version>/` once served.
+fn bump_gallery_version(requested_version: Option<&str>) -> Result<()> {
+    let demos = load_manifest(Path::new(MANIFEST_PATH))?;
+    let html = render_gallery_html(&demos, "")?;
+
+    let gallery_dir = Path::new(GALLERY_VERSIONS_DIR);
+    fs::create_dir_all(gallery_dir)?;
+
+    let existing_versions = list_gallery_versions(gallery_dir)?;
+    let new_version = if let Some(requested_version) = requested_version {
+        requested_version.to_owned()
+    } else {
+        infer_next_gallery_version(&existing_versions)
+    };
+    validate_version(&new_version).map_err(Error::message)?;
+
+    let new_snapshot_dir = gallery_dir.join(&new_version);
+    if new_snapshot_dir.exists() {
+        return Err(Error::message(format!(
+            "version already exists: {}",
+            new_snapshot_dir.display()
+        )));
+    }
+
+    fs::create_dir_all(&new_snapshot_dir)?;
+    fs::write(new_snapshot_dir.join("index.html"), html)?;
+
+    println!("Created {}", new_snapshot_dir.display());
     Ok(())
 }
 
@@ -281,9 +337,82 @@ fn capture_demo_preview(
     Ok(())
 }
 
-fn write_demos_index_file(path: &Path, body: &str) -> Result<()> {
-    let html = DEMOS_INDEX_TEMPLATE.replace("$body", body);
-    fs::write(path, html)?;
+fn write_demos_index_file(path: &Path, body: &str, gallery_versions_links: &str) -> Result<()> {
+    fs::write(path, render_gallery_html_from_body(body, gallery_versions_links))?;
+    Ok(())
+}
+
+fn render_gallery_html(demos: &[DemoRecord], gallery_versions_links: &str) -> Result<String> {
+    let mut body = String::new();
+    for demo_record in demos {
+        body.push_str(&demo_record.demo_card_html()?);
+    }
+    if body.is_empty() {
+        return Err(Error::message("no demos in manifest"));
+    }
+    Ok(render_gallery_html_from_body(&body, gallery_versions_links))
+}
+
+fn render_gallery_html_from_body(body: &str, gallery_versions_links: &str) -> String {
+    DEMOS_INDEX_TEMPLATE
+        .replace("$body", body)
+        .replace("$gallery_versions_links", gallery_versions_links)
+}
+
+/// Lists frozen gallery snapshots under `pages/gallery/`, oldest first, by the
+/// same `vN` numbering `bump-demo-version` uses for demos.
+fn list_gallery_versions(gallery_dir: &Path) -> Result<Vec<String>> {
+    if !gallery_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let mut versions = Vec::new();
+    for entry in fs::read_dir(gallery_dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let Some(version) = entry.file_name().to_str().map(ToOwned::to_owned) else {
+            continue;
+        };
+        if validate_version(&version).is_ok() {
+            versions.push(version);
+        }
+    }
+    versions.sort_by_key(|version| {
+        version
+            .strip_prefix('v')
+            .and_then(|digits| digits.parse::<u32>().ok())
+            .unwrap_or(0)
+    });
+    Ok(versions)
+}
+
+fn infer_next_gallery_version(existing_versions: &[String]) -> String {
+    match existing_versions.last() {
+        Some(latest) => infer_next_version(latest).unwrap_or_else(|_| "v1".to_owned()),
+        None => "v1".to_owned(),
+    }
+}
+
+fn gallery_versions_links_html(versions: &[String]) -> String {
+    versions
+        .iter()
+        .map(|version| format!("        <a href=\"./{version}/\">Gallery {version}</a>\n"))
+        .collect()
+}
+
+/// Copies each frozen `pages/gallery/<version>/` snapshot into
+/// `target/pages/demos/<version>/`, so old gallery renderings stay reachable
+/// at `/demos/<version>/` alongside the ever-fresh `/demos/`.
+fn copy_gallery_versions(pages_dir: &Path, gallery_versions: &[String]) -> Result<()> {
+    let gallery_dir = Path::new(GALLERY_VERSIONS_DIR);
+    for version in gallery_versions {
+        let source_dir = gallery_dir.join(version);
+        let output_dir = pages_dir.join("demos").join(version);
+        fs::create_dir_all(&output_dir)?;
+        copy_directory_contents(&source_dir, &output_dir)?;
+    }
     Ok(())
 }
 
@@ -878,7 +1007,7 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       <div class="hero__links">
         <a href="https://github.com/CarlKCarlK/linkage-blaze" target="_blank" rel="noopener">GitHub: CarlKCarlK/linkage-blaze</a>
         <a href="https://medium.com/@carlmkadie" target="_blank" rel="noopener">Articles: @carlmkadie on Medium</a>
-      </div>
+$gallery_versions_links      </div>
     </section>
     <section class="demo-grid">
 $body
@@ -890,7 +1019,10 @@ $body
 
 #[cfg(test)]
 mod tests {
-    use super::{DemoRecord, PreviewOrientation, infer_next_version, validate_version};
+    use super::{
+        DemoRecord, PreviewOrientation, gallery_versions_links_html, infer_next_gallery_version,
+        infer_next_version, validate_version,
+    };
 
     #[test]
     fn parses_manifest_line() {
@@ -929,5 +1061,29 @@ mod tests {
                 .orientation,
             PreviewOrientation::Landscape
         );
+    }
+
+    #[test]
+    fn infers_next_gallery_version_from_existing() {
+        let existing = ["v1".to_owned(), "v2".to_owned()];
+        assert_eq!(infer_next_gallery_version(&existing), "v3");
+    }
+
+    #[test]
+    fn infers_first_gallery_version_when_none_exist() {
+        assert_eq!(infer_next_gallery_version(&[]), "v1");
+    }
+
+    #[test]
+    fn renders_gallery_version_links() {
+        let versions = ["v1".to_owned(), "v2".to_owned()];
+        let html = gallery_versions_links_html(&versions);
+        assert!(html.contains("href=\"./v1/\""));
+        assert!(html.contains("href=\"./v2/\""));
+    }
+
+    #[test]
+    fn renders_no_gallery_version_links_when_none_exist() {
+        assert_eq!(gallery_versions_links_html(&[]), "");
     }
 }

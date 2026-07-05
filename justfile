@@ -51,6 +51,10 @@ run-all-wasm port=_pages_port:
 bump-demo-version demo version='':
     cargo run --quiet -p linkage-blaze-xtask -- bump-demo-version "{{demo}}" "{{version}}"
 
+# Freeze the current gallery page (/demos/) into a new immutable Pages version.
+bump-gallery-version version='':
+    cargo run --quiet -p linkage-blaze-xtask -- bump-gallery-version "{{version}}"
+
 # Generate docs and open in browser
 docs:
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc --open

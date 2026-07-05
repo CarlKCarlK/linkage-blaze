@@ -26,31 +26,28 @@ body {
 
 .stage {
   /* The live display: crisp landscape 2x (320x240 panel -> 640x480).
-     Note: one CYD pixel is two browser pixels here. */
-  --screen-width: 640px;
-  --screen-height: 480px;
-  --stage-height: calc(var(--screen-height) / 0.44158);
-  --screen-center-x: calc(24.212% + 45.845% / 2);
-  --screen-center-y: calc(27.691% + 44.158% / 2);
-  --boot-button-left: 47.3%;
-  --boot-button-top: 78.3%;
+     Note: one CYD pixel is two browser pixels here. The stage box is the
+     screen itself (matching the other three demos); the case and cord below
+     overflow it using the same calibrated device-photo percentages, just
+     re-based from the old screen-inside-a-bigger-stage layout so the whole
+     .simulator's natural size is exactly 640x480 and never gets shrunk below
+     crisp double resolution by the shared auto-fit-scale. */
+  --stage-height: 480px;
+  --boot-button-left: 50.361%;
+  --boot-button-top: 114.609%;
   position: relative;
   z-index: 0;
   flex: 0 0 auto;
-  width: calc(var(--screen-width) / 0.45845);
+  width: 640px;
   height: var(--stage-height);
-  transform: translate(
-    calc(50% - var(--screen-center-x)),
-    calc(50% - var(--screen-center-y))
-  );
 }
 
 #screen {
   position: absolute;
-  left: 24.212%;
-  top: 27.691%;
-  width: 45.845%;
-  height: 44.158%;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
   image-rendering: pixelated;
   z-index: 2;
   touch-action: none;
@@ -59,10 +56,10 @@ body {
 .stage .case {
   position: absolute;
   z-index: 1;
-  width: 77.865%;
-  height: 128.427%;
-  left: 100%;
-  top: 0;
+  width: 169.844%;
+  height: 290.835%;
+  left: 165.314%;
+  top: -62.709%;
   transform-origin: top left;
   transform: rotate(90deg);
   filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
@@ -71,10 +68,10 @@ body {
 .stage .cord {
   position: absolute;
   z-index: 0;
-  left: 100%;
-  top: 47.93%;
-  width: max(100vw, 141.977%);
-  height: 3.22%;
+  left: 165.314%;
+  top: 45.833%;
+  width: 100vw;
+  height: 7.292%;
   /* dark gray cord with a slate blue sheen */
   background: linear-gradient(
     to bottom,
