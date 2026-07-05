@@ -275,6 +275,10 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         fs::create_dir_all(&output_dir)?;
         copy_directory_contents(&source_dir, &output_dir)?;
 
+        let out_name = find_pkg_out_name(&output_dir).map_err(|error| {
+            Error::message(format!("{} ({version}): {error}", output_dir.display()))
+        })?;
+
         let output_dir = repo_root.join(&output_dir);
         let mut command = Command::new("wasm-pack");
         command.env("RUSTFLAGS", "-D warnings");
@@ -285,7 +289,7 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         command.arg("--out-dir");
         command.arg(&output_dir.join("pkg"));
         command.arg("--out-name");
-        command.arg(&demo_record.out_name);
+        command.arg(&out_name);
         run_command(
             &mut command,
             &format!("wasm-pack build {}", demo_record.crate_dir),
@@ -293,6 +297,57 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
     }
 
     Ok(())
+}
+
+/// Finds the wasm-bindgen `pkg/<name>.js` import among a frozen snapshot's `.js`
+/// files, so each snapshot rebuilds under the artifact name it was originally
+/// published with (see `specs/RENAME_BALLET_WASM_SPEC.md`), even after
+/// `demos.tsv`'s `out_name` column moves on to a new name for future versions.
+/// The import may live in a top-level `app.js` (`./pkg/<name>.js`) or a nested
+/// page such as `viewer/app.js` (`../pkg/<name>.js`), so this walks every `.js`
+/// file under `snapshot_dir` rather than assuming a fixed location.
+fn find_pkg_out_name(snapshot_dir: &Path) -> Result<String> {
+    let mut js_files = Vec::new();
+    collect_js_files(snapshot_dir, &mut js_files)?;
+    js_files.sort();
+
+    for js_file in &js_files {
+        let contents = fs::read_to_string(js_file)?;
+        if let Some(out_name) = parse_pkg_out_name(&contents) {
+            return Ok(out_name);
+        }
+    }
+
+    Err(Error::message(format!(
+        "no \"pkg/<name>.js\" import found under {}",
+        snapshot_dir.display()
+    )))
+}
+
+fn collect_js_files(dir: &Path, js_files: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_js_files(&path, js_files)?;
+        } else if path.extension() == Some(OsStr::new("js")) {
+            js_files.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Parses the `pkg/<name>.js` wasm-bindgen import out of a single `.js` file's
+/// contents, matching both `./pkg/<name>.js` and `../pkg/<name>.js` forms.
+fn parse_pkg_out_name(js_contents: &str) -> Option<String> {
+    const PREFIX: &str = "pkg/";
+    const SUFFIX: &str = ".js";
+
+    let prefix_index = js_contents.find(PREFIX)?;
+    let after_prefix = &js_contents[prefix_index + PREFIX.len()..];
+    let suffix_index = after_prefix.find(SUFFIX)?;
+
+    Some(after_prefix[..suffix_index].to_owned())
 }
 
 fn capture_demo_preview(
@@ -1069,7 +1124,7 @@ $body
 mod tests {
     use super::{
         DemoRecord, PreviewOrientation, gallery_versions_section_html, infer_next_gallery_version,
-        infer_next_version, validate_version,
+        infer_next_version, parse_pkg_out_name, validate_version,
     };
 
     #[test]
@@ -1135,5 +1190,29 @@ mod tests {
     #[test]
     fn renders_no_gallery_version_links_when_none_exist() {
         assert_eq!(gallery_versions_section_html(&[]), "");
+    }
+
+    #[test]
+    fn parses_pkg_out_name_for_top_level_import() {
+        let app_js = "import init from \"./pkg/linkage_blaze_classic_wasm.js\";";
+        assert_eq!(
+            parse_pkg_out_name(app_js).expect("import should parse"),
+            "linkage_blaze_classic_wasm"
+        );
+    }
+
+    #[test]
+    fn parses_pkg_out_name_for_nested_page_import() {
+        let app_js = "import init from \"../pkg/linkage_blaze_armatron_wasm.js\";";
+        assert_eq!(
+            parse_pkg_out_name(app_js).expect("import should parse"),
+            "linkage_blaze_armatron_wasm"
+        );
+    }
+
+    #[test]
+    fn rejects_js_missing_pkg_import() {
+        let app_js = "import init from \"./other/thing.js\";";
+        assert!(parse_pkg_out_name(app_js).is_none());
     }
 }

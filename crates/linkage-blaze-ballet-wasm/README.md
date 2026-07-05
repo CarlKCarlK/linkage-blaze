@@ -1,4 +1,4 @@
-# linkage-blaze-classic-wasm
+# linkage-blaze-ballet-wasm
 
 Browser build of the "classic" CYD `ballet` example: the same motion-captured
 pirouette that runs on the esp32 CYD, rendered onto an HTML canvas.

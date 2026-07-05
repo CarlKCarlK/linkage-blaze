@@ -1,7 +1,7 @@
 import init, {
   start,
   show_case_alignment_controls,
-} from "./pkg/linkage_blaze_classic_wasm.js";
+} from "./pkg/linkage_blaze_ballet_wasm.js";
 import { setupDemoUx } from "./demo-ux.js";
 
 try {

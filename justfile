@@ -24,7 +24,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_clock_wasm
-    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build crates/linkage-blaze-classic-wasm --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
+    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build crates/linkage-blaze-ballet-wasm --target web --out-dir www/pkg --out-name linkage_blaze_ballet_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-skeleton-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
@@ -173,7 +173,7 @@ run-armatron-classic:
     just build-armatron-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example armatron {{_armatron_args}}
 
-# ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
+# ── linkage-blaze-clock-wasm (browser-simulated CYD `clock`) ─────────────────
 _clock_wasm_crate := "crates/linkage-blaze-clock-wasm"
 _clock_wasm_www   := "crates/linkage-blaze-clock-wasm/www"
 _clock_wasm_port  := "8084"
@@ -193,16 +193,16 @@ run-clock-wasm port=_clock_wasm_port:
     just build-clock-wasm
     just serve-clock-wasm {{port}}
 
-# ── linkage-blaze-classic-wasm (browser-simulated CYD `ballet`) ─────────────
-_ballet_wasm_crate := "crates/linkage-blaze-classic-wasm"
-_ballet_wasm_www   := "crates/linkage-blaze-classic-wasm/www"
+# ── linkage-blaze-ballet-wasm (browser-simulated CYD `ballet`) ──────────────
+_ballet_wasm_crate := "crates/linkage-blaze-ballet-wasm"
+_ballet_wasm_www   := "crates/linkage-blaze-ballet-wasm/www"
 _ballet_wasm_port  := "8085"
 
 check-ballet-wasm:
-    env RUSTFLAGS="{{_ballet_rustflags}}" cargo check -p linkage-blaze-classic-wasm --target wasm32-unknown-unknown
+    env RUSTFLAGS="{{_ballet_rustflags}}" cargo check -p linkage-blaze-ballet-wasm --target wasm32-unknown-unknown
 
 build-ballet-wasm:
-    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build {{_ballet_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_classic_wasm
+    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build {{_ballet_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_ballet_wasm
 
 serve-ballet-wasm port=_ballet_wasm_port:
     -lsof -ti:{{port}} | xargs -r kill

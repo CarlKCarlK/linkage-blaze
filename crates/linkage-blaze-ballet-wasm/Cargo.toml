@@ -1,5 +1,5 @@
 [package]
-name = "linkage-blaze-classic-wasm"
+name = "linkage-blaze-ballet-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
