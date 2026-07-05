@@ -48,7 +48,7 @@ run-all-wasm port=_pages_port:
 
 # Dispatch the GitHub Pages workflow on GitHub.
 publish-pages ref='main':
-    gh workflow run .github/workflows/pages.yml --ref "{{ref}}"
+    gh workflow run pages.yml --ref "{{ref}}"
 
 # Freeze the current live web assets for one demo into a new immutable Pages version.
 bump-demo-version demo version='':

@@ -12,7 +12,7 @@ Build the full Pages site:
 just build-pages
 ```
 
-Dispatch the GitHub Pages workflow on `main`:
+Dispatch the GitHub Pages workflow file (`pages.yml`) on `main`:
 
 ```sh
 just publish-pages
