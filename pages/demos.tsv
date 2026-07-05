@@ -1,4 +1,4 @@
-armatron	Armatron	v2	crates/linkage-blaze-armatron-wasm	crates/linkage-blaze-armatron-wasm/www	linkage_blaze_armatron_wasm	v1,v2
-skeleton-clock	Skeleton Clock	v2	crates/linkage-blaze-skeleton-clock-wasm	crates/linkage-blaze-skeleton-clock-wasm/www	linkage_blaze_skeleton_clock_wasm	v1,v2
-ballet	Ballet	v2	crates/linkage-blaze-classic-wasm	crates/linkage-blaze-classic-wasm/www	linkage_blaze_classic_wasm	v1,v2
 clock	Clock	v2	crates/linkage-blaze-clock-wasm	crates/linkage-blaze-clock-wasm/www	linkage_blaze_clock_wasm	v2
+armatron	Armatron	v2	crates/linkage-blaze-armatron-wasm	crates/linkage-blaze-armatron-wasm/www	linkage_blaze_armatron_wasm	v1,v2
+ballet	Ballet	v2	crates/linkage-blaze-classic-wasm	crates/linkage-blaze-classic-wasm/www	linkage_blaze_classic_wasm	v1,v2
+skeleton-clock	Skeleton Clock	v2	crates/linkage-blaze-skeleton-clock-wasm	crates/linkage-blaze-skeleton-clock-wasm/www	linkage_blaze_skeleton_clock_wasm	v1,v2

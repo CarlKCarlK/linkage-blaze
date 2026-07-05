@@ -482,19 +482,17 @@ impl DemoRecord {
             alt=\"{title} preview\"\n\
             loading=\"lazy\"\n\
           />\n\
-        </a>\n\
-        <div class=\"demo-card__footer\">\n\
-          <a class=\"demo-card__latest\" href=\"{latest_url}\">Latest: {current_version}</a>\n",
+        </a>\n",
             slug = self.slug,
             latest_url = latest_url,
             title = self.title,
             orientation = preview_spec.orientation.class_name(),
-            current_version = self.current_version,
         );
 
         if self.versions.len() > 1 {
             html.push_str(
-                "          <label class=\"demo-card__versions\">\n\
+                "        <div class=\"demo-card__footer\">\n\
+          <label class=\"demo-card__versions\">\n\
             <span>Versions</span>\n\
             <select onchange=\"if (this.value) window.location.href = this.value;\">\n",
             );
@@ -503,14 +501,22 @@ impl DemoRecord {
             }
             html.push_str(
                 "            </select>\n\
-          </label>\n",
+          </label>\n\
+        </div>\n",
+            );
+        } else {
+            html.push_str(
+                "        <div class=\"demo-card__footer\">\n\
+          <span class=\"demo-card__latest\">Latest: ",
+            );
+            html.push_str(&self.current_version);
+            html.push_str(
+                "</span>\n\
+        </div>\n",
             );
         }
 
-        html.push_str(
-            "        </div>\n\
-      </article>\n",
-        );
+        html.push_str("      </article>\n");
 
         Ok(html)
     }
@@ -761,20 +767,33 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       overflow: hidden;
       display: grid;
       place-items: center;
-      padding: clamp(16px, 3vw, 24px);
+      padding: clamp(8px, 1.8vw, 12px);
       border: 1px solid rgba(70, 48, 34, 0.16);
       border-radius: 20px;
       background:
-        radial-gradient(circle at top, rgba(255, 255, 255, 0.52), transparent 48%),
-        radial-gradient(circle at bottom, var(--preview-glow), transparent 56%),
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.42), transparent 42%),
+        radial-gradient(circle at bottom, var(--preview-glow), transparent 52%),
         linear-gradient(160deg, var(--preview-backdrop-start), var(--preview-backdrop-end));
       aspect-ratio: var(--preview-aspect-ratio);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.76),
+        inset 0 0 0 1px rgba(198, 154, 118, 0.16);
     }
 
     .demo-card__preview--portrait {
-      width: 75%;
+      width: 82%;
       justify-self: center;
+    }
+
+    .demo-card__preview::before {
+      content: "";
+      position: absolute;
+      inset: clamp(5px, 1vw, 7px);
+      border-radius: 15px;
+      box-shadow:
+        inset 0 0 0 1px rgba(68, 44, 28, 0.14),
+        inset 0 0 0 2px rgba(14, 10, 8, 0.05);
+      pointer-events: none;
     }
 
     .demo-card__preview img {
