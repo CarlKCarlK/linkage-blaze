@@ -68,7 +68,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
 
     wasm_bindgen_futures::spawn_local(async move {
         loop {
-            let mut cyd = CydWasm::new_with_touch_source(
+            let mut cyd = CydWasm::new(
                 context.clone(),
                 ORIENTATION,
                 BACKGROUND,

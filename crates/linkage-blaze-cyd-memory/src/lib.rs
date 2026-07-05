@@ -26,7 +26,7 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use linkage_blaze_core::{PixelTarget, Rgb888, RgbColor, WebColors, rgb888_from_rgb565};
+use linkage_blaze_core::{PixelTarget, Rgb888, RgbColor, rgb888_from_rgb565};
 use linkage_blaze_cyd_core::{
     CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydRawTouch, CydTouch, RawTouchEvent,
     RegionPixels, TouchEvent,
@@ -135,12 +135,7 @@ pub struct MemoryButton {
 
 impl MemoryCyd {
     #[must_use]
-    pub fn new(size: Size, background: Rgb888, foreground: Rgb888) -> Self {
-        Self::new_with_font(size, background, foreground, &FONT_9X15_BOLD)
-    }
-
-    #[must_use]
-    pub fn new_with_font(
+    pub fn new(
         size: Size,
         background: Rgb888,
         foreground: Rgb888,
@@ -165,11 +160,6 @@ impl MemoryCyd {
                 frame_index: Rc::new(Cell::new(0)),
             },
         }
-    }
-
-    #[must_use]
-    pub fn classic() -> Self {
-        Self::new(Size::new(320, 240), Rgb888::CSS_BLACK, Rgb888::CSS_WHITE)
     }
 
     pub fn set_frame_budget(&mut self, frame_budget: usize) {
@@ -389,7 +379,12 @@ pub fn assert_framebuffer_matches_expected_png(
 
 impl Default for MemoryCyd {
     fn default() -> Self {
-        Self::classic()
+        Self::new(
+            Size::new(320, 240),
+            Rgb888::BLACK,
+            Rgb888::WHITE,
+            &FONT_9X15_BOLD,
+        )
     }
 }
 
@@ -1006,6 +1001,7 @@ mod tests {
     use device_envoy_core::flash_block::FlashBlock;
     use embedded_graphics::{
         Pixel,
+        mono_font::ascii::FONT_9X15_BOLD,
         pixelcolor::{IntoStorage, Rgb565, WebColors},
         prelude::{DrawTarget, Point, Size},
         primitives::Rectangle,
@@ -1028,9 +1024,18 @@ mod tests {
         count: u16,
     }
 
+    fn test_memory_cyd() -> MemoryCyd {
+        MemoryCyd::new(
+            Size::new(320, 240),
+            linkage_blaze_core::Rgb888::CSS_BLACK,
+            linkage_blaze_core::Rgb888::CSS_WHITE,
+            &FONT_9X15_BOLD,
+        )
+    }
+
     #[test]
     fn fresh_frame_starts_cleared_to_background() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let (mut display, _touch) = memory_cyd.parts();
         let frame = display.frame_mut(Rectangle::new(Point::new(3, 4), Size::new(2, 2)));
         assert_eq!(frame.raw_pixels(), &[Rgb565::CSS_BLACK.into_storage(); 4]);
@@ -1038,7 +1043,7 @@ mod tests {
 
     #[test]
     fn draw_target_pixel_flushes_to_screen_coordinate() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         {
             let (mut display, _touch) = memory_cyd.parts();
             let mut frame = display.frame_mut_with_tile_top_left(
@@ -1063,6 +1068,7 @@ mod tests {
             Size::new(4, 4),
             linkage_blaze_core::Rgb888::CSS_BLACK,
             linkage_blaze_core::Rgb888::CSS_WHITE,
+            &FONT_9X15_BOLD,
         );
         {
             let (mut display, _touch) = memory_cyd.parts();
@@ -1086,7 +1092,7 @@ mod tests {
 
     #[test]
     fn raw_touch_frames_drain_then_advance_after_flush() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let first_frame = [
             RawTouchEvent::Down { raw_x: 1, raw_y: 2 },
             RawTouchEvent::Up,
@@ -1130,7 +1136,7 @@ mod tests {
 
     #[test]
     fn flush_budget_returns_out_of_frames() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(1);
         {
             let (mut display, _touch) = memory_cyd.parts();
@@ -1178,7 +1184,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_happy_path_saves_predictable_config() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let mut memory_flash_block = MemoryFlashBlock::new();
         let mut memory_button = memory_cyd.memory_button();
         let raw_points = script_happy_path(&mut memory_cyd);
@@ -1230,8 +1236,8 @@ mod tests {
 
     #[test]
     fn ensure_calibration_uses_preloaded_flash_without_flushing() {
+        let mut memory_cyd = test_memory_cyd();
         let saved_config = CalibrationConfig::new(1.0, 0.0, 2.0, 0.0, 1.0, 3.0);
-        let mut memory_cyd = MemoryCyd::classic();
         memory_cyd.push_raw_touch_event(RawTouchEvent::Down { raw_x: 7, raw_y: 9 });
         let mut memory_flash_block = MemoryFlashBlock::with_value(&saved_config);
         let mut memory_button = memory_cyd.memory_button();
@@ -1259,7 +1265,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_corrupt_flash_reruns_and_overwrites() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let mut memory_flash_block = MemoryFlashBlock::with_raw_bytes(&[1, 2, 3, 4]);
         let mut memory_button = memory_cyd.memory_button();
         script_happy_path(&mut memory_cyd);
@@ -1284,7 +1290,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_paces_with_one_flush_per_iteration() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(3);
         let mut memory_flash_block = MemoryFlashBlock::new();
         let mut memory_button = memory_cyd.memory_button();
@@ -1306,7 +1312,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_drains_a_full_tap_in_one_frame() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(1);
         let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
         memory_cyd.script_raw_frames_owned(vec![tap_events(upper_left_raw_point)]);
@@ -1340,7 +1346,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_verify_timeout_restarts_and_then_succeeds() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let mut frames = happy_path_frames();
         frames.truncate(frames.len() - 1);
         frames.extend((0..verify_timeout_extra_idle_frames()).map(|_| Vec::new()));
@@ -1365,7 +1371,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_dropout_does_not_leak_corner_two_into_corner_three() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
         let upper_right_raw_point = raw_point_for_corner(CalibrationCorner::UpperRight);
         let lower_right_raw_point = raw_point_for_corner(CalibrationCorner::LowerRight);
@@ -1403,7 +1409,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_lift_off_drift_keeps_captured_point_near_stable_raw_point() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
         let drifted_raw_point = RawPoint {
             x: upper_left_raw_point.x + 400,
@@ -1448,7 +1454,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_rejected_solve_restarts_and_then_saves_honest_script() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
         let lower_right_raw_point = raw_point_for_corner(CalibrationCorner::LowerRight);
         let lower_left_raw_point = raw_point_for_corner(CalibrationCorner::LowerLeft);
@@ -1486,7 +1492,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_verify_miss_restarts_without_saving_candidate() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let verify_target_center = calibration_verify_target_center();
         let verify_miss_screen_x =
             verify_target_center.x + VERIFY_HIT_RADIUS_PIXELS.ceil() as i32 + 10;
@@ -1519,7 +1525,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_recalibration_button_restarts_mid_flow() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let mut frames = vec![tap_events(raw_point_for_corner(
             CalibrationCorner::UpperLeft,
         ))];
@@ -1551,7 +1557,7 @@ mod tests {
 
     #[test]
     fn ensure_calibration_drain_cap_flushes_and_preserves_leftovers_during_hold() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(2);
         let upper_left_raw_point = raw_point_for_corner(CalibrationCorner::UpperLeft);
         let mut oversized_hold_frame = Vec::new();

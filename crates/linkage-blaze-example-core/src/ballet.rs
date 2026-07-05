@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn ballet_runs_bounded_frames_and_flushes_within_screen_bounds() {
         let mut memory_cyd =
-            MemoryCyd::new_with_font(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+            MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(SMOKE_TEST_FRAME_BUDGET);
 
         let ballet_result = {
@@ -176,7 +176,7 @@ mod tests {
         const GOLDEN_TEST_FRAME_BUDGET: usize = 225;
 
         let mut memory_cyd =
-            MemoryCyd::new_with_font(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+            MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
 
         let ballet_result = {

@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn clock_renders_expected_frame() {
         let mut memory_cyd =
-            MemoryCyd::new_with_font(ORIENTATION.size(), BACKGROUND, FOREGROUND, &WIFI_STATUS_FONT);
+            MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &WIFI_STATUS_FONT);
         memory_cyd.set_frame_budget(3);
         let clock_sync = FixedClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)

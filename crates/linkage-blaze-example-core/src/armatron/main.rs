@@ -226,16 +226,28 @@ pub enum ArmatronExit {
 
 #[cfg(test)]
 mod tests {
+    use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
     use futures_executor::block_on;
     use linkage_blaze_cyd_core::TouchEvent;
-    use linkage_blaze_cyd_memory::{MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png};
+    use linkage_blaze_cyd_memory::{
+        MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
+    };
 
     use super::controls::CALIBRATE_BUTTON;
     use super::{ArmatronExit, Error, armatron};
 
+    fn test_memory_cyd() -> MemoryCyd {
+        MemoryCyd::new(
+            embedded_graphics::geometry::Size::new(320, 240),
+            super::BACKGROUND,
+            super::FOREGROUND,
+            &FONT_9X15_BOLD,
+        )
+    }
+
     #[test]
     fn tapping_the_calibrate_button_requests_calibration() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         let touch_rectangle = CALIBRATE_BUTTON.touch_rectangle();
         let touch_center = touch_rectangle.top_left
             + embedded_graphics::geometry::Point::new(
@@ -260,7 +272,7 @@ mod tests {
 
     #[test]
     fn armatron_renders_expected_frame() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(1);
         let mut memory_button = memory_cyd.memory_button();
 

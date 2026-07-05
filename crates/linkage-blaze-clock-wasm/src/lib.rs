@@ -10,7 +10,7 @@ mod clock;
 
 use clock::WasmClockSync;
 use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame};
-use linkage_blaze_cyd_wasm::CydWasm;
+use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm};
 use linkage_blaze_example_core::clock::{
     BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
     clock_splash,
@@ -58,6 +58,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         BACKGROUND,
         FOREGROUND,
         &WIFI_STATUS_FONT,
+        CydTouchWasmSource::new(),
     );
 
     // `async move` owns `cyd` and the clock, making the spawned future `'static`

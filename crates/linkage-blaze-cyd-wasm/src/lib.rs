@@ -126,24 +126,6 @@ impl CydWasm {
         background: Rgb888,
         foreground: Rgb888,
         font: &'static MonoFont<'static>,
-    ) -> Self {
-        Self::new_with_touch_source(
-            context,
-            orientation,
-            background,
-            foreground,
-            font,
-            CydTouchWasmSource::new(),
-        )
-    }
-
-    #[must_use]
-    pub fn new_with_touch_source(
-        context: CanvasRenderingContext2d,
-        orientation: Orientation,
-        background: Rgb888,
-        foreground: Rgb888,
-        font: &'static MonoFont<'static>,
         touch_source: CydTouchWasmSource,
     ) -> Self {
         Self {
