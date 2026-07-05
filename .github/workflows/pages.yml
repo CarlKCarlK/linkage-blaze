@@ -21,6 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check out device-envoy
+        uses: actions/checkout@v4
+        with:
+          repository: CarlKCarlK/device-envoy
+          path: device-envoy-src
+
+      - name: Mirror local device-envoy patch path
+        run: |
+          mkdir -p ../mcu
+          ln -s "$GITHUB_WORKSPACE/device-envoy-src" ../mcu/device-envoy
+
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
