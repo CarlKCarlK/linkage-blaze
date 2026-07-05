@@ -411,16 +411,20 @@ fn gallery_versions_section_html(versions: &[String]) -> String {
         return String::new();
     }
 
-    let links: String = versions
+    let options: String = versions
         .iter()
-        .map(|version| format!("        <a href=\"./{version}/\">{version}</a>\n"))
+        .rev()
+        .map(|version| format!("            <option value=\"./{version}/\">{version}</option>\n"))
         .collect();
 
     format!(
-        "      <div class=\"hero__gallery-versions\">\n\
-        <span class=\"hero__gallery-versions__label\">Older gallery layouts:</span>\n\
-{links}\
-      </div>\n"
+        "      <label class=\"hero__gallery-versions\">\n\
+        <span>Older gallery layouts</span>\n\
+        <select onchange=\"if (this.value) window.location.href = this.value;\">\n\
+            <option value=\"./\">Live (current)</option>\n\
+{options}\
+        </select>\n\
+      </label>\n"
     )
 }
 
@@ -836,21 +840,22 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
     }
 
     .hero__gallery-versions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 6px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       margin-top: 10px;
-      font-size: 0.85rem;
-    }
-
-    .hero__gallery-versions__label {
       color: var(--muted);
+      font: 700 0.82rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+      white-space: nowrap;
     }
 
-    .hero__gallery-versions a {
-      color: var(--accent-deep);
-      font: 700 0.85rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+    .hero__gallery-versions select {
+      padding: 9px 32px 9px 12px;
+      border: 1px solid rgba(93, 64, 45, 0.18);
+      border-radius: 999px;
+      background: rgb(255, 251, 246);
+      color: var(--ink);
+      font: inherit;
     }
 
     .demo-grid {
@@ -1121,9 +1126,10 @@ mod tests {
     fn renders_gallery_version_links() {
         let versions = ["v1".to_owned(), "v2".to_owned()];
         let html = gallery_versions_section_html(&versions);
-        assert!(html.contains("Older gallery layouts:"));
-        assert!(html.contains("href=\"./v1/\""));
-        assert!(html.contains("href=\"./v2/\""));
+        assert!(html.contains("Older gallery layouts"));
+        assert!(html.contains("value=\"./\">Live (current)"));
+        assert!(html.contains("value=\"./v1/\""));
+        assert!(html.contains("value=\"./v2/\""));
     }
 
     #[test]
