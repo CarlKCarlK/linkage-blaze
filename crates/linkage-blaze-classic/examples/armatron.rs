@@ -15,7 +15,7 @@ use esp_backtrace as _;
 
 use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation};
 use linkage_blaze_cyd_core::{
-    Cyd, CydDisplay, CydFrame, EnsureCalibrationError, ensure_calibration,
+    Cyd, CydDisplay, EnsureCalibrationError, ensure_calibration,
 };
 use linkage_blaze_example_core::armatron::{
     ArmatronExit, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
@@ -162,9 +162,9 @@ async fn clear_calibration_and_reset(
 
 async fn reboot_with_message(cyd: &mut CydEsp, message: &str) -> Result<(), MainError> {
     let (mut display, _touch) = cyd.parts();
+    let background565 = display.background_565();
     let mut frame = display.full_frame_mut();
-    CydFrame::clear(&mut frame);
-    frame.write_text(message).flush()?;
+    frame.fill(background565).write_text(message).flush()?;
     info!("Restarting");
     esp_hal::system::software_reset();
 }
