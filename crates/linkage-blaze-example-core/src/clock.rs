@@ -171,3 +171,83 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
     let face_spin = (((second % 20) as f32) / 20.0 + 0.5) % 1.0;
     [hour, face_spin]
 }
+
+#[cfg(test)]
+mod tests {
+    use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
+    use futures_executor::block_on;
+    use linkage_blaze_cyd_core::{Cyd as _, CydDisplay, CydFrame};
+    use linkage_blaze_cyd_memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use time::OffsetDateTime;
+
+    use super::{BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_RECTANGLE, clock, clock_splash};
+
+    /// A `ClockSync` test double that ticks instantly with a fixed time,
+    /// rather than waiting on real NTP/timer infrastructure.
+    struct FixedClockSync {
+        local_time: OffsetDateTime,
+    }
+
+    impl ClockSync for FixedClockSync {
+        async fn wait_for_tick(&self) -> ClockSyncTick {
+            ClockSyncTick {
+                local_time: self.local_time,
+                since_last_sync: embassy_time::Duration::from_secs(0),
+            }
+        }
+
+        fn now_local(&self) -> OffsetDateTime {
+            self.local_time
+        }
+
+        fn set_offset_minutes(&self, _minutes: i32) {}
+
+        fn offset_minutes(&self) -> i32 {
+            0
+        }
+
+        fn set_tick_interval(&self, _interval: Option<embassy_time::Duration>) {}
+
+        fn set_speed(&self, _speed_multiplier: f32) {}
+
+        fn set_utc_time(&self, _unix_seconds: UnixSeconds) {}
+    }
+
+    #[test]
+    fn clock_renders_expected_frame() {
+        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND);
+        memory_cyd.set_frame_budget(3);
+        let clock_sync = FixedClockSync {
+            local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
+                .expect("valid fixed timestamp"),
+        };
+
+        {
+            let (mut display, _touch) = memory_cyd.parts();
+            block_on(clock_splash(&mut display))
+                .expect("clock splash should draw the static background");
+            let background565 = display.background_565();
+            block_on(
+                display
+                    .frame_mut(WIFI_STATUS_RECTANGLE)
+                    .fill(background565)
+                    .write_text("WiFi: OK")
+                    .flush(),
+            )
+            .expect("wifi status frame should flush during setup");
+        }
+
+        let clock_result = {
+            let (mut display, _touch) = memory_cyd.parts();
+            block_on(clock(&mut display, &clock_sync))
+        };
+        clock_result.expect_err("the free-running loop should stop at the frame budget");
+
+        assert_framebuffer_matches_expected_png(
+            &memory_cyd,
+            env!("CARGO_MANIFEST_DIR"),
+            "clock.png",
+        )
+        .expect("rendered frame should match the golden image");
+    }
+}

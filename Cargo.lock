@@ -1637,6 +1637,7 @@ dependencies = [
  "futures-executor",
  "linkage-blaze-core",
  "linkage-blaze-cyd-core",
+ "png",
  "serde",
 ]
 
@@ -1728,6 +1729,10 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
 ]
+
+[[package]]
+name = "linkage-blaze-xtask"
+version = "0.1.4"
 
 [[package]]
 name = "linked_list_allocator"

@@ -9,6 +9,7 @@ device-envoy-core = { version = "0.1.0", default-features = false }
 embedded-graphics = { version = "0.8", default-features = false }
 linkage-blaze-core.workspace = true
 linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
+png = "0.18"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]

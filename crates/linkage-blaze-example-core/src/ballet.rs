@@ -125,19 +125,19 @@ fn status_text(
 
 #[cfg(test)]
 mod tests {
-    use embedded_graphics::geometry::{Point, Size};
+    use embedded_graphics::geometry::Point;
     use embedded_graphics::primitives::Rectangle;
     use futures_executor::block_on;
     use linkage_blaze_cyd_core::Cyd as _;
-    use linkage_blaze_cyd_memory::{MemoryCyd, MemoryCydError};
+    use linkage_blaze_cyd_memory::{MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png};
 
-    use super::{Error, ballet};
+    use super::{BACKGROUND, FOREGROUND, ORIENTATION, Error, ballet};
 
     const SMOKE_TEST_FRAME_BUDGET: usize = 5;
 
     #[test]
     fn ballet_runs_bounded_frames_and_flushes_within_screen_bounds() {
-        let mut memory_cyd = MemoryCyd::classic();
+        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND);
         memory_cyd.set_frame_budget(SMOKE_TEST_FRAME_BUDGET);
 
         let ballet_result = {
@@ -153,9 +153,31 @@ mod tests {
         ));
         assert_eq!(memory_cyd.flush_count(), SMOKE_TEST_FRAME_BUDGET);
         assert_eq!(
-            memory_cyd.last_flush_region(),
-            Some(Rectangle::new(Point::zero(), Size::new(320, 240)))
+            memory_cyd.last_flush_rectangle(),
+            Some(Rectangle::new(Point::zero(), ORIENTATION.size()))
         );
+    }
+
+    #[test]
+    fn ballet_renders_expected_frame() {
+        const GOLDEN_TEST_FRAME_BUDGET: usize = 200;
+
+        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND);
+        memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
+
+        let ballet_result = {
+            let (mut display, _touch) = memory_cyd.parts();
+            block_on(ballet(&mut display))
+        };
+        ballet_result.expect_err("the free-running loop should stop at the frame budget");
+        assert_eq!(memory_cyd.flush_count(), GOLDEN_TEST_FRAME_BUDGET);
+
+        assert_framebuffer_matches_expected_png(
+            &memory_cyd,
+            env!("CARGO_MANIFEST_DIR"),
+            "ballet.png",
+        )
+        .expect("rendered frame should match the golden image");
     }
 }
 

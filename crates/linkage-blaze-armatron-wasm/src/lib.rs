@@ -4,7 +4,7 @@ use device_envoy_core::flash_block::FlashBlock as _;
 use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
 use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};
 use linkage_blaze_cyd_core::{
-    EnsureCalibrationSettings, Orientation, ensure_calibration_with_settings,
+    CalibrationConfig, EnsureCalibrationSettings, Orientation, ensure_calibration_with_settings,
 };
 use linkage_blaze_cyd_wasm::{ButtonWasmSource, CydTouchWasmSource, CydWasm, FlashBlockWasm};
 use linkage_blaze_example_core::armatron::{ArmatronExit, BACKGROUND, FOREGROUND, armatron};
@@ -14,6 +14,14 @@ use web_sys::{CanvasRenderingContext2d, Element, HtmlCanvasElement, PointerEvent
 const ORIENTATION: Orientation = Orientation::Landscape;
 const CALIBRATION_STORAGE_KEY: &str = "linkage-blaze.armatron.calibration";
 const BROWSER_VERIFY_TIMEOUT_FRAMES: usize = 10 * 60;
+
+/// Exact inverse of `distort_demo_screen_to_raw`'s affine distortion, so a
+/// fresh browser session starts already calibrated instead of forcing every
+/// first-time visitor through the four-tap flow. Tapping the on-screen "cal"
+/// button still clears this and re-runs the real calibration flow.
+const PREVIEW_DEFAULT_CALIBRATION: CalibrationConfig = CalibrationConfig::new(
+    0.891_909, -0.039_321, -160.036_33, 0.025_894, 1.074_127, -164.861_27,
+);
 
 #[wasm_bindgen]
 pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
@@ -46,6 +54,17 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
     install_boot_button_handlers(&boot_button, button_source.clone())?;
     let mut calibration_flash_block = FlashBlockWasm::new(CALIBRATION_STORAGE_KEY)
         .map_err(|error| wasm_bindgen::JsValue::from_str(&format!("{error:?}")))?;
+
+    if calibration_flash_block
+        .load::<CalibrationConfig>()
+        .unwrap_or(None)
+        .is_none()
+        && let Err(error) = calibration_flash_block.save(&PREVIEW_DEFAULT_CALIBRATION)
+    {
+        web_sys::console::error_1(
+            &format!("failed to seed default calibration: {error:?}").into(),
+        );
+    }
 
     wasm_bindgen_futures::spawn_local(async move {
         loop {

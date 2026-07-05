@@ -37,11 +37,19 @@ build:
 
 # Build the static GitHub Pages artifact with immutable demo version URLs.
 build-pages demo='':
-    bash .tools/build_pages.sh "{{demo}}"
+    cargo run --quiet -p linkage-blaze-xtask -- build-pages "{{demo}}"
+
+_pages_port := "8090"
+
+# Build and serve the local Pages gallery for browser review.
+run-all-wasm port=_pages_port:
+    just build-pages
+    -lsof -ti:{{port}} | xargs -r kill
+    cd target/pages && python3 ../../.tools/no_cache_http_server.py {{port}}
 
 # Freeze the current live web assets for one demo into a new immutable Pages version.
 bump-demo-version demo version='':
-    bash .tools/bump_demo_version.sh "{{demo}}" "{{version}}"
+    cargo run --quiet -p linkage-blaze-xtask -- bump-demo-version "{{demo}}" "{{version}}"
 
 # Generate docs and open in browser
 docs:

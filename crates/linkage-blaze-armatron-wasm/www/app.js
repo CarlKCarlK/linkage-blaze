@@ -16,6 +16,7 @@ const context = canvas.getContext("2d");
 try {
   await init();
   start("screen");
+  maybeAutoBootPreview();
 } catch (e) {
   console.error(e);
   context.fillStyle = "#111418";
@@ -58,4 +59,36 @@ function ensureFramedLayout() {
   }
 
   return { canvas };
+}
+
+function maybeAutoBootPreview() {
+  const searchParams = new URLSearchParams(window.location.search);
+  if (searchParams.get("preview") !== "1") {
+    return;
+  }
+
+  const bootButton = document.querySelector("#boot-button");
+  if (!(bootButton instanceof HTMLElement)) {
+    return;
+  }
+
+  const dispatchPointer = (type) => {
+    bootButton.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+      }),
+    );
+  };
+
+  window.setTimeout(() => {
+    dispatchPointer("pointerdown");
+    window.setTimeout(() => {
+      dispatchPointer("pointerup");
+    }, 120);
+  }, 220);
 }

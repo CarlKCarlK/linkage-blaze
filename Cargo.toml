@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "xtask",
     "crates/linkage-blaze-core",
     "crates/linkage-blaze-cyd",
     "crates/linkage-blaze-cyd-core",

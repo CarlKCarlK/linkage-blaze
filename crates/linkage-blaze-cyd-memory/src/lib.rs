@@ -4,7 +4,15 @@ use core::{
     future::{Future, ready},
     ops::Range,
 };
-use std::{fs, path::Path, rc::Rc, vec::Vec};
+use std::{
+    fs,
+    io::BufWriter,
+    path::{Path, PathBuf},
+    process,
+    rc::Rc,
+    time::{SystemTime, UNIX_EPOCH},
+    vec::Vec,
+};
 
 use device_envoy_core::{
     button::{__ButtonMonitor, Button},
@@ -266,6 +274,103 @@ impl MemoryCyd {
         }
         fs::write(path, bytes)
     }
+
+    /// Write the framebuffer as an RGB PNG. Used both for gallery preview
+    /// images (see the Pages xtask `build-pages` command) and golden-image tests (see
+    /// [`assert_framebuffer_matches_expected_png`]) — the same deterministic,
+    /// browser-free render feeds both.
+    pub fn write_framebuffer_png(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let width = self.size.width;
+        let height = self.size.height;
+        let mut rgb_bytes = Vec::with_capacity(width as usize * height as usize * 3);
+        for pixel in &self.framebuffer {
+            let color = rgb888_from_rgb565(*pixel);
+            rgb_bytes.push(color.r());
+            rgb_bytes.push(color.g());
+            rgb_bytes.push(color.b());
+        }
+
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let file = fs::File::create(path)?;
+        let writer = BufWriter::new(file);
+        let mut encoder = png::Encoder::new(writer, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut png_writer = encoder.write_header()?;
+        png_writer.write_image_data(&rgb_bytes)?;
+        Ok(())
+    }
+}
+
+/// Golden-image assertion for a rendered [`MemoryCyd`] framebuffer.
+///
+/// `manifest_dir` is normally `env!("CARGO_MANIFEST_DIR")` from the calling
+/// crate, so the expected PNG lives at `<crate>/tests/assets/<relative_filename>`.
+/// Set `LINKAGE_BLAZE_UPDATE_CYD_PNGS=1` to (re)write the expected file
+/// instead of comparing against it, e.g. after an intentional visual change.
+pub fn assert_framebuffer_matches_expected_png(
+    memory_cyd: &MemoryCyd,
+    manifest_dir: &str,
+    relative_filename: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // The Pages xtask `build-pages` command reuses these exact tests to render gallery
+    // preview images: no browser needed, since this crate already renders
+    // the real example logic onto a native in-memory framebuffer. Set this
+    // env var to also copy the freshly rendered frame out to an arbitrary
+    // path, on top of (not instead of) the normal golden-image comparison
+    // below, so a preview build still catches a real rendering regression.
+    if let Some(preview_output_path) = std::env::var_os("LINKAGE_BLAZE_PREVIEW_OUTPUT_PATH") {
+        memory_cyd.write_framebuffer_png(preview_output_path)?;
+    }
+
+    let mut expected_path = PathBuf::from(manifest_dir);
+    expected_path.push("tests");
+    expected_path.push("assets");
+    expected_path.push(relative_filename);
+
+    if std::env::var_os("LINKAGE_BLAZE_UPDATE_CYD_PNGS").is_some() {
+        memory_cyd.write_framebuffer_png(&expected_path)?;
+        std::println!("updated PNG at {}", expected_path.display());
+        return Ok(());
+    }
+
+    if !expected_path.exists() {
+        return Err(std::format!(
+            "expected PNG is missing at {}; rerun with LINKAGE_BLAZE_UPDATE_CYD_PNGS=1 to create it",
+            expected_path.display()
+        )
+        .into());
+    }
+
+    let unix_nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let temp_path = std::env::temp_dir().join(std::format!(
+        "{}-{}-{unix_nanos}",
+        relative_filename.replace('/', "_"),
+        process::id()
+    ));
+    memory_cyd.write_framebuffer_png(&temp_path)?;
+
+    let expected_bytes = fs::read(&expected_path)?;
+    let actual_bytes = fs::read(&temp_path)?;
+    fs::remove_file(&temp_path).ok();
+
+    if expected_bytes != actual_bytes {
+        return Err(std::format!(
+            "PNG bytes differ from {}; rerun with LINKAGE_BLAZE_UPDATE_CYD_PNGS=1 to accept the new image",
+            expected_path.display()
+        )
+        .into());
+    }
+    Ok(())
 }
 
 impl Default for MemoryCyd {

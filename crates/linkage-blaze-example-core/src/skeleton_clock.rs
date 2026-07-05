@@ -444,3 +444,73 @@ pub enum Error<F> {
     #[from(ignore)]
     VecOverflow(DrawItem2d),
 }
+
+#[cfg(test)]
+mod tests {
+    use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
+    use futures_executor::block_on;
+    use linkage_blaze_cyd_core::Cyd as _;
+    use linkage_blaze_cyd_memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use time::OffsetDateTime;
+
+    use super::{BACKGROUND, FOREGROUND, ORIENTATION, skeleton_clock};
+
+    /// A `ClockSync` test double that ticks instantly with a fixed time,
+    /// rather than waiting on real NTP/timer infrastructure.
+    struct FixedClockSync {
+        local_time: OffsetDateTime,
+    }
+
+    impl ClockSync for FixedClockSync {
+        async fn wait_for_tick(&self) -> ClockSyncTick {
+            ClockSyncTick {
+                local_time: self.local_time,
+                since_last_sync: embassy_time::Duration::from_secs(0),
+            }
+        }
+
+        fn now_local(&self) -> OffsetDateTime {
+            self.local_time
+        }
+
+        fn set_offset_minutes(&self, _minutes: i32) {}
+
+        fn offset_minutes(&self) -> i32 {
+            0
+        }
+
+        fn set_tick_interval(&self, _interval: Option<embassy_time::Duration>) {}
+
+        fn set_speed(&self, _speed_multiplier: f32) {}
+
+        fn set_utc_time(&self, _unix_seconds: UnixSeconds) {}
+    }
+
+    // 1 flush for the digital time strip + 9 flushes for the 3x3 FIGURE_TILE_GRID
+    // = one complete rendered frame.
+    const ONE_COMPLETE_FRAME_BUDGET: usize = 10;
+
+    #[test]
+    fn skeleton_clock_renders_expected_frame() {
+        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND);
+        memory_cyd.set_frame_budget(ONE_COMPLETE_FRAME_BUDGET);
+        let clock_sync = FixedClockSync {
+            local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
+                .expect("valid fixed timestamp"),
+        };
+
+        let skeleton_clock_result = {
+            let (mut display, _touch) = memory_cyd.parts();
+            block_on(skeleton_clock(&mut display, &clock_sync))
+        };
+        skeleton_clock_result
+            .expect_err("the free-running loop should stop at the frame budget");
+
+        assert_framebuffer_matches_expected_png(
+            &memory_cyd,
+            env!("CARGO_MANIFEST_DIR"),
+            "skeleton_clock.png",
+        )
+        .expect("rendered frame should match the golden image");
+    }
+}

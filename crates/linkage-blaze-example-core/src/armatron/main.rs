@@ -219,6 +219,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub enum ArmatronExit {
     CalibrationRequested,
 }
@@ -227,10 +228,10 @@ pub enum ArmatronExit {
 mod tests {
     use futures_executor::block_on;
     use linkage_blaze_cyd_core::TouchEvent;
-    use linkage_blaze_cyd_memory::MemoryCyd;
+    use linkage_blaze_cyd_memory::{MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png};
 
-    use super::{ArmatronExit, armatron};
-    use controls::CALIBRATE_BUTTON;
+    use super::controls::CALIBRATE_BUTTON;
+    use super::{ArmatronExit, Error, armatron};
 
     #[test]
     fn tapping_the_calibrate_button_requests_calibration() {
@@ -255,6 +256,27 @@ mod tests {
             0,
             "the calibrate-button exit happens before the frame is flushed"
         );
+    }
+
+    #[test]
+    fn armatron_renders_expected_frame() {
+        let mut memory_cyd = MemoryCyd::classic();
+        memory_cyd.set_frame_budget(1);
+        let mut memory_button = memory_cyd.memory_button();
+
+        let armatron_error = block_on(armatron(&mut memory_cyd, &mut memory_button))
+            .expect_err("the free-running loop should stop at the frame budget");
+        assert!(matches!(
+            armatron_error,
+            Error::Cyd(MemoryCydError::OutOfFrames)
+        ));
+
+        assert_framebuffer_matches_expected_png(
+            &memory_cyd,
+            env!("CARGO_MANIFEST_DIR"),
+            "armatron.png",
+        )
+        .expect("rendered frame should match the golden image");
     }
 }
 
