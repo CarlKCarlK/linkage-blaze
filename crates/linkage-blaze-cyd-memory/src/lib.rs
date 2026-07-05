@@ -20,7 +20,7 @@ use device_envoy_core::{
 };
 use embedded_graphics::{
     Drawable, Pixel,
-    mono_font::{MonoTextStyle, ascii::FONT_9X15_BOLD},
+    mono_font::{MonoFont, MonoTextStyle, ascii::FONT_9X15_BOLD},
     pixelcolor::{IntoStorage, Rgb565, raw::RawU16},
     prelude::{Dimensions, DrawTarget, Point, Size},
     primitives::Rectangle,
@@ -66,6 +66,7 @@ pub struct MemoryCyd {
     foreground: Rgb888,
     background565: Rgb565,
     foreground565: Rgb565,
+    font: &'static MonoFont<'static>,
     framebuffer: Vec<u16>,
     flush_count: usize,
     last_flush_rectangle: Option<Rectangle>,
@@ -81,6 +82,7 @@ pub struct MemoryDisplayPart<'a> {
     foreground: Rgb888,
     background565: Rgb565,
     foreground565: Rgb565,
+    font: &'static MonoFont<'static>,
     framebuffer: &'a mut Vec<u16>,
     flush_count: &'a mut usize,
     last_flush_rectangle: &'a mut Option<Rectangle>,
@@ -106,6 +108,7 @@ pub struct MemoryFrame<'a> {
     rectangle: Rectangle,
     tile_top_left: Point,
     foreground565: Rgb565,
+    font: &'static MonoFont<'static>,
     pixels: Vec<u16>,
 }
 
@@ -133,6 +136,16 @@ pub struct MemoryButton {
 impl MemoryCyd {
     #[must_use]
     pub fn new(size: Size, background: Rgb888, foreground: Rgb888) -> Self {
+        Self::new_with_font(size, background, foreground, &FONT_9X15_BOLD)
+    }
+
+    #[must_use]
+    pub fn new_with_font(
+        size: Size,
+        background: Rgb888,
+        foreground: Rgb888,
+        font: &'static MonoFont<'static>,
+    ) -> Self {
         let background565 = Rgb565::from(background);
         let pixel_count = size.width as usize * size.height as usize;
         Self {
@@ -141,6 +154,7 @@ impl MemoryCyd {
             foreground,
             background565,
             foreground565: Rgb565::from(foreground),
+            font,
             framebuffer: vec![background565.into_storage(); pixel_count],
             flush_count: 0,
             last_flush_rectangle: None,
@@ -393,6 +407,7 @@ impl Cyd for MemoryCyd {
                 foreground: self.foreground,
                 background565: self.background565,
                 foreground565: self.foreground565,
+                font: self.font,
                 framebuffer: &mut self.framebuffer,
                 flush_count: &mut self.flush_count,
                 last_flush_rectangle: &mut self.last_flush_rectangle,
@@ -461,6 +476,7 @@ impl CydDisplay for MemoryDisplayPart<'_> {
             rectangle,
             tile_top_left,
             foreground565: self.foreground565,
+            font: self.font,
             pixels: vec![self.background565.into_storage(); pixel_count],
         }
     }
@@ -635,7 +651,7 @@ impl CydFrame for MemoryFrame<'_> {
         Text::with_baseline(
             text,
             Point::zero(),
-            MonoTextStyle::new(&FONT_9X15_BOLD, self.foreground565),
+            MonoTextStyle::new(self.font, self.foreground565),
             Baseline::Top,
         )
         .draw(self)

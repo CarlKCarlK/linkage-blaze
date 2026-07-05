@@ -180,7 +180,10 @@ mod tests {
     use linkage_blaze_cyd_memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
     use time::OffsetDateTime;
 
-    use super::{BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_RECTANGLE, clock, clock_splash};
+    use super::{
+        BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
+        clock_splash,
+    };
 
     /// A `ClockSync` test double that ticks instantly with a fixed time,
     /// rather than waiting on real NTP/timer infrastructure.
@@ -215,7 +218,8 @@ mod tests {
 
     #[test]
     fn clock_renders_expected_frame() {
-        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND);
+        let mut memory_cyd =
+            MemoryCyd::new_with_font(ORIENTATION.size(), BACKGROUND, FOREGROUND, &WIFI_STATUS_FONT);
         memory_cyd.set_frame_budget(3);
         let clock_sync = FixedClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)

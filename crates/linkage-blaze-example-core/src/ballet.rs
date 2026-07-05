@@ -92,9 +92,19 @@ where
                 .await
                 .map_err(Error::Flush)?;
 
-            last_sample_duration = Some(Instant::now() - started);
+            last_sample_duration = Some(sample_duration(started));
         }
     }
+}
+
+#[cfg(not(test))]
+fn sample_duration(started: Instant) -> Duration {
+    Instant::now() - started
+}
+
+#[cfg(test)]
+fn sample_duration(_started: Instant) -> Duration {
+    Duration::from_millis(10)
 }
 
 fn status_text(
@@ -129,15 +139,18 @@ mod tests {
     use embedded_graphics::primitives::Rectangle;
     use futures_executor::block_on;
     use linkage_blaze_cyd_core::Cyd as _;
-    use linkage_blaze_cyd_memory::{MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png};
+    use linkage_blaze_cyd_memory::{
+        MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
+    };
 
-    use super::{BACKGROUND, FOREGROUND, ORIENTATION, Error, ballet};
+    use super::{BACKGROUND, Error, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
 
     const SMOKE_TEST_FRAME_BUDGET: usize = 5;
 
     #[test]
     fn ballet_runs_bounded_frames_and_flushes_within_screen_bounds() {
-        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND);
+        let mut memory_cyd =
+            MemoryCyd::new_with_font(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(SMOKE_TEST_FRAME_BUDGET);
 
         let ballet_result = {
@@ -160,9 +173,10 @@ mod tests {
 
     #[test]
     fn ballet_renders_expected_frame() {
-        const GOLDEN_TEST_FRAME_BUDGET: usize = 200;
+        const GOLDEN_TEST_FRAME_BUDGET: usize = 225;
 
-        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND);
+        let mut memory_cyd =
+            MemoryCyd::new_with_font(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
 
         let ballet_result = {

@@ -763,11 +763,15 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
     }
 
     .demo-card__preview {
+      --preview-frame-padding-block: clamp(16px, 3vw, 24px);
+      --preview-frame-padding-inline: var(--preview-frame-padding-block);
+      --preview-image-width: 100%;
+      --preview-image-height: 100%;
       position: relative;
       overflow: hidden;
       display: grid;
       place-items: center;
-      padding: clamp(16px, 3vw, 24px);
+      padding: var(--preview-frame-padding-block) var(--preview-frame-padding-inline);
       border: 1px solid rgba(70, 48, 34, 0.16);
       border-radius: 20px;
       background:
@@ -779,12 +783,15 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
     }
 
     .demo-card__preview--portrait {
-      padding-inline: clamp(24px, 5vw, 34px);
+      --preview-frame-padding-block: clamp(8px, 1.5vw, 12px);
+      --preview-frame-padding-inline: clamp(12px, 2.5vw, 17px);
+      --preview-image-width: calc(100% - clamp(24px, 5vw, 34px));
+      --preview-image-height: calc(100% - clamp(16px, 3vw, 24px));
     }
 
     .demo-card__preview img {
-      width: 100%;
-      height: 100%;
+      width: var(--preview-image-width);
+      height: var(--preview-image-height);
       object-fit: contain;
       display: block;
       filter: drop-shadow(0 16px 28px rgba(54, 34, 20, 0.18));
