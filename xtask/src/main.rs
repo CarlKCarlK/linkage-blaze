@@ -722,7 +722,7 @@ impl DemoRecord {
         <div class=\"demo-card__header\">\n\
           <div>\n\
             <p class=\"demo-card__eyebrow\">{eyebrow}</p>\n\
-            <h2><a href=\"{latest_url}\">{title}</a></h2>\n\
+            {title_html}\n\
           </div>\n\
           <a class=\"demo-card__open\" href=\"{latest_url}\">Open latest</a>\n\
         </div>\n\
@@ -737,6 +737,7 @@ impl DemoRecord {
             eyebrow = eyebrow,
             latest_url = latest_url,
             title = self.title,
+            title_html = self.gallery_title_html(&latest_url),
             orientation = preview_spec.orientation.class_name(),
         );
 
@@ -770,6 +771,27 @@ impl DemoRecord {
         html.push_str("      </article>\n");
 
         Ok(html)
+    }
+
+    fn gallery_title_html(&self, latest_url: &str) -> String {
+        match self.slug.as_str() {
+            "clock" => format!(
+                "<h2><a class=\"demo-card__title-link\" href=\"{latest_url}\"><span class=\"demo-card__title-prefix\">3D spinning</span><span class=\"demo-card__title-main\">Clock</span></a></h2>"
+            ),
+            "armatron" => format!(
+                "<h2><a class=\"demo-card__title-link\" href=\"{latest_url}\"><span class=\"demo-card__title-main\">Armatron</span><span class=\"demo-card__title-suffix\">robot challenge</span></a></h2>"
+            ),
+            "ballet" => format!(
+                "<h2><a class=\"demo-card__title-link\" href=\"{latest_url}\"><span class=\"demo-card__title-prefix\">motion captured</span><span class=\"demo-card__title-main\">Ballet</span></a></h2>"
+            ),
+            "editor" => format!(
+                "<h2><a class=\"demo-card__title-link\" href=\"{latest_url}\"><span class=\"demo-card__title-prefix\">linkage</span><span class=\"demo-card__title-main\">Editor</span></a></h2>"
+            ),
+            _ => format!(
+                "<h2><a class=\"demo-card__title-link\" href=\"{latest_url}\"><span class=\"demo-card__title-main\">{}</span></a></h2>",
+                self.title
+            ),
+        }
     }
 }
 
@@ -1029,6 +1051,33 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
       line-height: 1.05;
     }
 
+    .demo-card__title-link {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.18rem 0.42rem;
+    }
+
+    .demo-card__title-main {
+      font-size: 1em;
+      line-height: inherit;
+    }
+
+    .demo-card__title-prefix {
+      width: 100%;
+      color: var(--accent-deep);
+      font: 700 0.66rem/1.1 "Trebuchet MS", "Gill Sans", sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .demo-card__title-suffix {
+      color: var(--muted);
+      font: 700 0.78rem/1.1 "Trebuchet MS", "Gill Sans", sans-serif;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
     a {
       color: inherit;
       text-decoration: none;
@@ -1261,6 +1310,41 @@ mod tests {
     #[test]
     fn renders_no_gallery_version_links_when_none_exist() {
         assert_eq!(gallery_versions_section_html(&[]), "");
+    }
+
+    #[test]
+    fn renders_gallery_subtitles_for_custom_titles() {
+        let clock_demo_record = DemoRecord::from_tsv_line(
+            "clock\tClock\tv3\tcrate\twww\toutput\tv2,v3",
+            1,
+        )
+        .expect("manifest line should parse");
+        let armatron_demo_record = DemoRecord::from_tsv_line(
+            "armatron\tArmatron\tv3\tcrate\twww\toutput\tv1,v2,v3",
+            1,
+        )
+        .expect("manifest line should parse");
+        let editor_demo_record = DemoRecord::from_tsv_line(
+            "editor\tEditor\tv2\tcrate\twww\toutput\tv1,v2",
+            1,
+        )
+        .expect("manifest line should parse");
+
+        let clock_html = clock_demo_record
+            .demo_card_html("./")
+            .expect("gallery card should render");
+        let armatron_html = armatron_demo_record
+            .demo_card_html("./")
+            .expect("gallery card should render");
+        let editor_html = editor_demo_record
+            .demo_card_html("./")
+            .expect("gallery card should render");
+
+        assert!(clock_html.contains("demo-card__title-prefix\">3D spinning<"));
+        assert!(clock_html.contains("demo-card__title-main\">Clock<"));
+        assert!(armatron_html.contains("demo-card__title-suffix\">robot challenge<"));
+        assert!(editor_html.contains("demo-card__title-prefix\">linkage<"));
+        assert!(editor_html.contains("demo-card__title-main\">Editor<"));
     }
 
     #[test]
