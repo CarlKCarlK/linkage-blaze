@@ -85,7 +85,7 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
             continue;
         }
 
-        demos_index_body.push_str(&demo_record.demo_card_html()?);
+        demos_index_body.push_str(&demo_record.demo_card_html("./")?);
         build_demo(&repo_root, pages_dir, &demo_record)?;
         capture_demo_preview(&repo_root, pages_dir, &demo_record)?;
     }
@@ -121,7 +121,7 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
 /// older rendering, reachable at `/demos/<version>/` once served.
 fn bump_gallery_version(requested_version: Option<&str>) -> Result<()> {
     let demos = load_manifest(Path::new(MANIFEST_PATH))?;
-    let html = render_gallery_html(&demos, "")?;
+    let html = render_gallery_html(&demos, "../", "")?;
 
     let gallery_dir = Path::new(GALLERY_VERSIONS_DIR);
     fs::create_dir_all(gallery_dir)?;
@@ -342,10 +342,14 @@ fn write_demos_index_file(path: &Path, body: &str, gallery_versions_links: &str)
     Ok(())
 }
 
-fn render_gallery_html(demos: &[DemoRecord], gallery_versions_links: &str) -> Result<String> {
+fn render_gallery_html(
+    demos: &[DemoRecord],
+    path_prefix: &str,
+    gallery_versions_links: &str,
+) -> Result<String> {
     let mut body = String::new();
     for demo_record in demos {
-        body.push_str(&demo_record.demo_card_html()?);
+        body.push_str(&demo_record.demo_card_html(path_prefix)?);
     }
     if body.is_empty() {
         return Err(Error::message("no demos in manifest"));
@@ -581,16 +585,19 @@ impl DemoRecord {
         Ok(preview_spec)
     }
 
-    fn demo_card_html(&self) -> Result<String> {
+    /// `path_prefix` locates this demo's assets relative to whichever page is
+    /// embedding the card: `"./"` for the live gallery at `/demos/`, `"../"`
+    /// for a frozen gallery snapshot one level deeper at `/demos/vN/`.
+    fn demo_card_html(&self, path_prefix: &str) -> Result<String> {
         let preview_spec = self.preview_spec()?;
-        let latest_url = format!("./{}/{}/", self.slug, self.current_version);
+        let latest_url = format!("{path_prefix}{}/{}/", self.slug, self.current_version);
         let versions: Vec<_> = self
             .versions
             .iter()
             .rev()
             .map(|version| {
                 format!(
-                    "            <option value=\"./{}/{}/\">{}</option>\n",
+                    "            <option value=\"{path_prefix}{}/{}/\">{}</option>\n",
                     self.slug, version, version
                 )
             })
@@ -607,7 +614,7 @@ impl DemoRecord {
         </div>\n\
         <a class=\"demo-card__preview demo-card__preview--{orientation}\" href=\"{latest_url}\">\n\
           <img\n\
-            src=\"./{slug}/preview.png\"\n\
+            src=\"{path_prefix}{slug}/preview.png\"\n\
             alt=\"{title} preview\"\n\
             loading=\"lazy\"\n\
           />\n\
