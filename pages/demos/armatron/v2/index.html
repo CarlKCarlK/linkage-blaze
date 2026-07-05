@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CYD Armatron Simulator</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#111418" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+</head>
+
+<body>
+  <div class="simulator">
+    <div class="stage">
+      <div class="cord"></div>
+      <img class="case" src="./case.png" alt="CYD device case" />
+      <canvas id="screen" aria-label="CYD armatron display simulator"></canvas>
+      <button id="boot-button" class="boot-button" type="button">boot</button>
+    </div>
+  </div>
+  <script type="module" src="./app.js"></script>
+</body>
+
+</html>
