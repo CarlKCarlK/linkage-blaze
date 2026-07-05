@@ -1,12 +1,27 @@
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
-import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "https://esm.sh/@codemirror/view@6";
-import { history, historyKeymap, defaultKeymap, toggleLineComment, indentWithTab } from "https://esm.sh/@codemirror/commands@6";
-import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentOnInput } from "https://esm.sh/@codemirror/language@6";
-import { closeBrackets, closeBracketsKeymap } from "https://esm.sh/@codemirror/autocomplete@6";
-import { rust } from "https://esm.sh/@codemirror/lang-rust@6";
-import { oneDark } from "https://esm.sh/@codemirror/theme-one-dark@6";
+import {
+  CSS2DObject,
+  CSS2DRenderer,
+  EditorView,
+  OrbitControls,
+  THREE,
+  bracketMatching,
+  closeBrackets,
+  closeBracketsKeymap,
+  defaultHighlightStyle,
+  defaultKeymap,
+  drawSelection,
+  highlightActiveLine,
+  history,
+  historyKeymap,
+  indentOnInput,
+  indentWithTab,
+  keymap,
+  lineNumbers,
+  oneDark,
+  rust,
+  syntaxHighlighting,
+  toggleLineComment,
+} from "../vendor/editor-deps.js?v=editor-deps-1";
 
 const editorSetup = [
   lineNumbers(),

@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Linkage Blaze Demos</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: rgb(245, 242, 234); /* warm linen */
+      --panel: rgba(255, 251, 245, 0.82); /* parchment white */
+      --panel-strong: rgb(255, 252, 247); /* ivory */
+      --line: rgba(68, 48, 34, 0.16); /* soft umber */
+      --ink: rgb(34, 28, 24); /* espresso brown */
+      --muted: rgb(102, 86, 71); /* walnut taupe */
+      --accent: rgb(184, 90, 42); /* burnt orange */
+      --accent-deep: rgb(134, 58, 22); /* rust */
+      --shadow: 0 24px 70px rgba(88, 62, 43, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(214, 132, 70, 0.18), transparent 36%),
+        radial-gradient(circle at top right, rgba(83, 123, 114, 0.16), transparent 32%),
+        linear-gradient(180deg, rgb(250, 247, 241) 0%, var(--bg) 100%);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+    }
+
+    .page {
+      width: min(1280px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 36px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: linear-gradient(135deg, rgba(255, 252, 247, 0.92), rgba(245, 238, 228, 0.78));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero__eyebrow {
+      margin: 0;
+      color: var(--accent-deep);
+      font: 700 0.78rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2.4rem, 5vw, 4.8rem);
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      max-width: 58rem;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.55;
+    }
+
+    .hero__links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+    }
+
+    .hero__links a {
+      color: var(--accent-deep);
+      font: 700 0.95rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+    }
+
+    .hero__gallery-versions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--muted);
+      font: 700 0.82rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+      white-space: nowrap;
+    }
+
+    .hero__gallery-versions select {
+      padding: 9px 32px 9px 12px;
+      border: 1px solid rgba(93, 64, 45, 0.18);
+      border-radius: 999px;
+      background: rgb(255, 251, 246);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 22px;
+    }
+
+    .demo-card {
+      --preview-aspect-ratio: 4 / 3;
+      --preview-backdrop-start: rgb(250, 246, 239); /* warm off-white */
+      --preview-backdrop-end: rgb(240, 228, 212); /* pale apricot cream */
+      --preview-glow: rgba(196, 132, 78, 0.12); /* light amber wash */
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid rgba(66, 44, 31, 0.14);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(249, 244, 236, 0.9));
+      box-shadow: 0 16px 38px rgba(83, 58, 38, 0.12);
+    }
+
+    .demo-card--skeleton-clock {
+      --preview-aspect-ratio: 3 / 4;
+    }
+
+    .demo-card--ballet {
+      --preview-aspect-ratio: 3 / 4;
+    }
+
+    .demo-card__header,
+    .demo-card__footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .demo-card__header {
+      min-height: 64px;
+      align-items: flex-start;
+    }
+
+    .demo-card__header > div {
+      min-height: 64px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+
+    .demo-card__eyebrow {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font: 700 0.72rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .demo-card h2 {
+      margin: 0;
+      font-size: 1.45rem;
+      line-height: 1.05;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+      text-decoration-thickness: 0.08em;
+      text-underline-offset: 0.16em;
+    }
+
+    .demo-card__open,
+    .demo-card__latest {
+      flex: 0 0 auto;
+      padding: 10px 14px;
+      border: 1px solid rgba(123, 73, 42, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 248, 239, 0.88);
+      color: var(--accent-deep);
+      font: 700 0.88rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+      white-space: nowrap;
+    }
+
+    .demo-card__open {
+      background: linear-gradient(180deg, rgb(211, 106, 53), rgb(171, 75, 35));
+      color: rgb(255, 246, 239);
+      border-color: rgba(128, 56, 24, 0.36);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    }
+
+    .demo-card__preview {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      padding: clamp(8px, 1.8vw, 12px);
+      border: 1px solid rgba(70, 48, 34, 0.16);
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.42), transparent 42%),
+        radial-gradient(circle at bottom, var(--preview-glow), transparent 52%),
+        linear-gradient(160deg, var(--preview-backdrop-start), var(--preview-backdrop-end));
+      aspect-ratio: var(--preview-aspect-ratio);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.76),
+        inset 0 0 0 1px rgba(198, 154, 118, 0.16);
+    }
+
+    .demo-card__preview--portrait {
+      width: 82%;
+      justify-self: center;
+    }
+
+    .demo-card__preview::before {
+      content: "";
+      position: absolute;
+      inset: clamp(5px, 1vw, 7px);
+      border-radius: 15px;
+      box-shadow:
+        inset 0 0 0 1px rgba(68, 44, 28, 0.14),
+        inset 0 0 0 2px rgba(14, 10, 8, 0.05);
+      pointer-events: none;
+    }
+
+    .demo-card__preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      filter: drop-shadow(0 16px 28px rgba(54, 34, 20, 0.18));
+    }
+
+    .demo-card__versions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font: 700 0.82rem/1.2 "Trebuchet MS", "Gill Sans", sans-serif;
+      white-space: nowrap;
+    }
+
+    .demo-card__versions select {
+      padding: 9px 32px 9px 12px;
+      border: 1px solid rgba(93, 64, 45, 0.18);
+      border-radius: 999px;
+      background: rgb(255, 251, 246);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: min(100vw - 20px, 1280px);
+        padding: 24px 0 48px;
+      }
+
+      .hero {
+        padding: 22px;
+        border-radius: 22px;
+      }
+
+      .demo-card {
+        padding: 16px;
+      }
+
+      .demo-card__header,
+      .demo-card__footer {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .demo-card__open,
+      .demo-card__latest {
+        text-align: center;
+      }
+
+      .demo-card__versions {
+        justify-content: space-between;
+      }
+
+      .demo-card__versions select {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="hero__eyebrow">Interactive Demo Gallery</p>
+      <h1>Linkage Blaze</h1>
+      <p>These browser demos are pixel-for-pixel simulations of a microcontroller and touch display — specifically the CYD (Cheap Yellow Display) and the classic ESP32. Every demo also runs on the real hardware.</p>
+      <div class="hero__links">
+        <a href="https://github.com/CarlKCarlK/linkage-blaze" target="_blank" rel="noopener">GitHub: CarlKCarlK/linkage-blaze</a>
+        <a href="https://medium.com/@carlmkadie" target="_blank" rel="noopener">Articles: @carlmkadie on Medium</a>
+      </div>
+    </section>
+    <section class="demo-grid">
+      <article class="demo-card demo-card--clock">
+<div class="demo-card__header">
+<div>
+<p class="demo-card__eyebrow">Preview</p>
+<h2><a href="../clock/v3/">Clock</a></h2>
+</div>
+<a class="demo-card__open" href="../clock/v3/">Open latest</a>
+</div>
+<a class="demo-card__preview demo-card__preview--landscape" href="../clock/v3/">
+<img
+src="../clock/preview.png"
+alt="Clock preview"
+loading="lazy"
+/>
+</a>
+        <div class="demo-card__footer">
+<label class="demo-card__versions">
+<span>Versions</span>
+<select onchange="if (this.value) window.location.href = this.value;">
+            <option value="../clock/v3/">v3</option>
+            <option value="../clock/v2/">v2</option>
+            </select>
+</label>
+</div>
+      </article>
+      <article class="demo-card demo-card--armatron">
+<div class="demo-card__header">
+<div>
+<p class="demo-card__eyebrow">Preview</p>
+<h2><a href="../armatron/v3/">Armatron</a></h2>
+</div>
+<a class="demo-card__open" href="../armatron/v3/">Open latest</a>
+</div>
+<a class="demo-card__preview demo-card__preview--landscape" href="../armatron/v3/">
+<img
+src="../armatron/preview.png"
+alt="Armatron preview"
+loading="lazy"
+/>
+</a>
+        <div class="demo-card__footer">
+<label class="demo-card__versions">
+<span>Versions</span>
+<select onchange="if (this.value) window.location.href = this.value;">
+            <option value="../armatron/v3/">v3</option>
+            <option value="../armatron/v2/">v2</option>
+            <option value="../armatron/v1/">v1</option>
+            </select>
+</label>
+</div>
+      </article>
+      <article class="demo-card demo-card--ballet">
+<div class="demo-card__header">
+<div>
+<p class="demo-card__eyebrow">Preview</p>
+<h2><a href="../ballet/v3/">Ballet</a></h2>
+</div>
+<a class="demo-card__open" href="../ballet/v3/">Open latest</a>
+</div>
+<a class="demo-card__preview demo-card__preview--portrait" href="../ballet/v3/">
+<img
+src="../ballet/preview.png"
+alt="Ballet preview"
+loading="lazy"
+/>
+</a>
+        <div class="demo-card__footer">
+<label class="demo-card__versions">
+<span>Versions</span>
+<select onchange="if (this.value) window.location.href = this.value;">
+            <option value="../ballet/v3/">v3</option>
+            <option value="../ballet/v2/">v2</option>
+            <option value="../ballet/v1/">v1</option>
+            </select>
+</label>
+</div>
+      </article>
+      <article class="demo-card demo-card--skeleton-clock">
+<div class="demo-card__header">
+<div>
+<p class="demo-card__eyebrow">Preview</p>
+<h2><a href="../skeleton-clock/v3/">Skeleton Clock</a></h2>
+</div>
+<a class="demo-card__open" href="../skeleton-clock/v3/">Open latest</a>
+</div>
+<a class="demo-card__preview demo-card__preview--portrait" href="../skeleton-clock/v3/">
+<img
+src="../skeleton-clock/preview.png"
+alt="Skeleton Clock preview"
+loading="lazy"
+/>
+</a>
+        <div class="demo-card__footer">
+<label class="demo-card__versions">
+<span>Versions</span>
+<select onchange="if (this.value) window.location.href = this.value;">
+            <option value="../skeleton-clock/v3/">v3</option>
+            <option value="../skeleton-clock/v2/">v2</option>
+            <option value="../skeleton-clock/v1/">v1</option>
+            </select>
+</label>
+</div>
+      </article>
+
+    </section>
+  </main>
+</body>
+</html>

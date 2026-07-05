@@ -59,6 +59,7 @@ p {
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .file-toolbar button,
@@ -81,6 +82,20 @@ p {
   flex: 1;
   min-width: 0;
   color: #6f8296;
+}
+
+.recent-group {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 5px;
+  border: 1px solid #2b3542;
+  border-radius: 6px;
+  background: #0d1118;
+}
+
+.recent-group select {
+  min-width: 130px;
 }
 
 .cheatsheet {

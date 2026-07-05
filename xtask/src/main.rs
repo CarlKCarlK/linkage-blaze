@@ -1106,7 +1106,7 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
     <section class="hero">
       <p class="hero__eyebrow">Interactive Demo Gallery</p>
       <h1>Linkage Blaze</h1>
-      <p>Preview the current browser builds directly in the catalog, then jump into the latest version of each simulation. Version selectors list newer snapshots first so older builds stay available without dominating the page.</p>
+      <p>These browser demos are pixel-for-pixel simulations of a microcontroller and touch display — specifically the CYD (Cheap Yellow Display) and the classic ESP32. Every demo also runs on the real hardware.</p>
       <div class="hero__links">
         <a href="https://github.com/CarlKCarlK/linkage-blaze" target="_blank" rel="noopener">GitHub: CarlKCarlK/linkage-blaze</a>
         <a href="https://medium.com/@carlmkadie" target="_blank" rel="noopener">Articles: @carlmkadie on Medium</a>

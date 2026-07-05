@@ -6,14 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Linkage Blaze</title>
   <link rel="stylesheet" href="./styles.css" />
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-      }
-    }
-  </script>
 </head>
 
 <body>
@@ -28,9 +20,11 @@
         <button id="btn-insert" title="Insert at cursor (Ctrl+I)">Insert</button>
         <button id="btn-save" title="Save (Ctrl+S)">Save</button>
         <button id="btn-save-as">Save As</button>
-        <select id="recent-select"><option value="">Recent…</option></select>
-        <button id="btn-recent-open" disabled title="Open selected recent file">Open</button>
-        <button id="btn-recent-insert" disabled title="Insert selected recent file at cursor">Insert</button>
+        <span class="recent-group">
+          <select id="recent-select"><option value="">Recent…</option></select>
+          <button id="btn-recent-open" disabled title="Open selected recent file">Open Recent</button>
+          <button id="btn-recent-insert" disabled title="Insert selected recent file at cursor">Insert Recent</button>
+        </span>
         <input type="file" id="file-input" accept=".lb.rs,.rs,text/plain" style="display:none">
         <input type="file" id="file-input-insert" accept=".lb.rs,.rs,text/plain" style="display:none">
       </div>
@@ -92,7 +86,7 @@
       <div class="params-list" id="params-list"></div>
     </section>
   </main>
-  <script type="module" src="./src/main.js?v=disk-depth-1"></script>
+  <script type="module" src="./src/main.js?v=editor-vendor-deps-1"></script>
 </body>
 
 </html>

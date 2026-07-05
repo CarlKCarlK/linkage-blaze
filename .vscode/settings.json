@@ -16,6 +16,7 @@
     "rust-analyzer.check.enable": false,
     "rust-analyzer.diagnostics.enable": false,
     "cSpell.words": [
+        "addrs",
         "cosf",
         "shldr",
         "sinf",

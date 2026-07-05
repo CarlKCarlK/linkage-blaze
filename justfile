@@ -306,6 +306,9 @@ _editor_port  := "8082"
 check-editor:
     cargo check -p linkage-blaze-editor --target wasm32-unknown-unknown
 
+build-editor-deps:
+    cd {{_editor_www}} && npm ci && npx esbuild deps-entry.js --bundle --format=esm --minify --outfile=vendor/editor-deps.js
+
 build-editor:
     wasm-pack build {{_editor_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_editor
 
