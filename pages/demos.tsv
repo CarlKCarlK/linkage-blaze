@@ -2,3 +2,4 @@ clock	Clock	v3	crates/linkage-blaze-clock-wasm	crates/linkage-blaze-clock-wasm/w
 armatron	Armatron	v3	crates/linkage-blaze-armatron-wasm	crates/linkage-blaze-armatron-wasm/www	linkage_blaze_armatron_wasm	v1,v2,v3
 ballet	Ballet	v3	crates/linkage-blaze-ballet-wasm	crates/linkage-blaze-ballet-wasm/www	linkage_blaze_ballet_wasm	v1,v2,v3
 skeleton-clock	Skeleton Clock	v3	crates/linkage-blaze-skeleton-clock-wasm	crates/linkage-blaze-skeleton-clock-wasm/www	linkage_blaze_skeleton_clock_wasm	v1,v2,v3
+editor	Editor	v1	crates/linkage-blaze-editor	crates/linkage-blaze-editor/www	linkage_blaze_editor	v1

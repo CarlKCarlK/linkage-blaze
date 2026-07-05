@@ -8,10 +8,17 @@ import socketserver
 import sys
 
 
-def parse_port(argv: list[str]) -> int:
-    if len(argv) < 2:
-        return 8081
-    return int(argv[1])
+def parse_args(argv: list[str]) -> tuple[int, bool]:
+    port = 8081
+    choose_next_free = False
+
+    for argument in argv[1:]:
+        if argument == "--next-free":
+            choose_next_free = True
+        else:
+            port = int(argument)
+
+    return port, choose_next_free
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
@@ -31,8 +38,15 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = parse_port(sys.argv)
+    port, choose_next_free = parse_args(sys.argv)
     socketserver.ThreadingTCPServer.allow_reuse_address = True
-    with socketserver.ThreadingTCPServer(("", port), NoCacheHandler) as httpd:
-        print(f"Serving no-cache HTTP on 0.0.0.0 port {port}")
-        httpd.serve_forever()
+    while True:
+        try:
+            with socketserver.ThreadingTCPServer(("", port), NoCacheHandler) as httpd:
+                print(f"Serving no-cache HTTP on 0.0.0.0 port {port}")
+                httpd.serve_forever()
+        except OSError as error:
+            if not choose_next_free or error.errno != 98:
+                raise
+            port += 1
+            continue

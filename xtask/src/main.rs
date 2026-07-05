@@ -188,7 +188,7 @@ fn bump_demo_version(demo_slug: &str, requested_version: Option<&str>) -> Result
 
     fs::create_dir_all(&new_snapshot_dir)?;
     copy_directory_contents_filtered(source_dir, &new_snapshot_dir, |entry_name| {
-        entry_name != OsStr::new("pkg")
+        entry_name != OsStr::new("pkg") && entry_name != OsStr::new("node_modules")
     })?;
 
     if !demo_record
@@ -340,11 +340,13 @@ fn collect_js_files(dir: &Path, js_files: &mut Vec<std::path::PathBuf>) -> Resul
 /// Parses the `pkg/<name>.js` wasm-bindgen import out of a single `.js` file's
 /// contents, matching both `./pkg/<name>.js` and `../pkg/<name>.js` forms.
 fn parse_pkg_out_name(js_contents: &str) -> Option<String> {
-    const PREFIX: &str = "pkg/";
+    const PREFIXES: [&str; 2] = ["./pkg/", "../pkg/"];
     const SUFFIX: &str = ".js";
 
-    let prefix_index = js_contents.find(PREFIX)?;
-    let after_prefix = &js_contents[prefix_index + PREFIX.len()..];
+    let after_prefix = PREFIXES.iter().find_map(|prefix| {
+        let prefix_index = js_contents.find(prefix)?;
+        Some(&js_contents[prefix_index + prefix.len()..])
+    })?;
     let suffix_index = after_prefix.find(SUFFIX)?;
 
     Some(after_prefix[..suffix_index].to_owned())
@@ -362,22 +364,36 @@ fn capture_demo_preview(
         .join(&demo_record.slug)
         .join("preview.png");
 
-    let mut command = Command::new("cargo");
-    command.env("LINKAGE_BLAZE_PREVIEW_OUTPUT_PATH", &preview_path);
-    command.arg("test");
-    command.arg("--quiet");
-    command.arg("-p");
-    command.arg(PREVIEW_EXAMPLE_CRATE);
-    command.arg("--features");
-    command.arg(preview_spec.feature);
-    command.arg("--lib");
-    command.arg("--");
-    command.arg("--exact");
-    command.arg(preview_spec.test_name);
-    run_command(
-        &mut command,
-        &format!("cargo test preview {}", demo_record.slug),
-    )?;
+    match preview_spec.source {
+        PreviewSource::RenderTest { feature, test_name } => {
+            let mut command = Command::new("cargo");
+            command.env("LINKAGE_BLAZE_PREVIEW_OUTPUT_PATH", &preview_path);
+            command.arg("test");
+            command.arg("--quiet");
+            command.arg("-p");
+            command.arg(PREVIEW_EXAMPLE_CRATE);
+            command.arg("--features");
+            command.arg(feature);
+            command.arg("--lib");
+            command.arg("--");
+            command.arg("--exact");
+            command.arg(test_name);
+            run_command(
+                &mut command,
+                &format!("cargo test preview {}", demo_record.slug),
+            )?;
+        }
+        PreviewSource::StaticFile { repo_path } => {
+            let source_path = repo_root.join(repo_path);
+            if !source_path.is_file() {
+                return Err(Error::message(format!(
+                    "missing preview source: {}",
+                    source_path.display()
+                )));
+            }
+            fs::copy(source_path, &preview_path)?;
+        }
+    }
 
     let preview_metadata = fs::metadata(&preview_path).map_err(|_| {
         Error::message(format!("failed to render preview for {}", demo_record.slug))
@@ -412,7 +428,10 @@ fn render_gallery_html(
     if body.is_empty() {
         return Err(Error::message("no demos in manifest"));
     }
-    Ok(render_gallery_html_from_body(&body, gallery_versions_section))
+    Ok(render_gallery_html_from_body(
+        &body,
+        gallery_versions_section,
+    ))
 }
 
 fn render_gallery_html_from_body(body: &str, gallery_versions_section: &str) -> String {
@@ -633,23 +652,37 @@ impl DemoRecord {
     fn preview_spec(&self) -> Result<PreviewSpec> {
         let preview_spec = match self.slug.as_str() {
             "armatron" => PreviewSpec {
-                feature: "armatron",
-                test_name: "armatron::tests::armatron_renders_expected_frame",
+                source: PreviewSource::RenderTest {
+                    feature: "armatron",
+                    test_name: "armatron::tests::armatron_renders_expected_frame",
+                },
                 orientation: PreviewOrientation::Landscape,
             },
             "skeleton-clock" => PreviewSpec {
-                feature: "skeleton-clock",
-                test_name: "skeleton_clock::tests::skeleton_clock_renders_expected_frame",
+                source: PreviewSource::RenderTest {
+                    feature: "skeleton-clock",
+                    test_name: "skeleton_clock::tests::skeleton_clock_renders_expected_frame",
+                },
                 orientation: PreviewOrientation::Portrait,
             },
             "ballet" => PreviewSpec {
-                feature: "ballet",
-                test_name: "ballet::tests::ballet_renders_expected_frame",
+                source: PreviewSource::RenderTest {
+                    feature: "ballet",
+                    test_name: "ballet::tests::ballet_renders_expected_frame",
+                },
                 orientation: PreviewOrientation::Portrait,
             },
             "clock" => PreviewSpec {
-                feature: "clock",
-                test_name: "clock::tests::clock_renders_expected_frame",
+                source: PreviewSource::RenderTest {
+                    feature: "clock",
+                    test_name: "clock::tests::clock_renders_expected_frame",
+                },
+                orientation: PreviewOrientation::Landscape,
+            },
+            "editor" => PreviewSpec {
+                source: PreviewSource::StaticFile {
+                    repo_path: "pages/demos/editor/preview-source.png",
+                },
                 orientation: PreviewOrientation::Landscape,
             },
             _ => {
@@ -668,6 +701,10 @@ impl DemoRecord {
     fn demo_card_html(&self, path_prefix: &str) -> Result<String> {
         let preview_spec = self.preview_spec()?;
         let latest_url = format!("{path_prefix}{}/{}/", self.slug, self.current_version);
+        let eyebrow = match preview_spec.source {
+            PreviewSource::RenderTest { .. } => "Preview",
+            PreviewSource::StaticFile { .. } => "Tool",
+        };
         let versions: Vec<_> = self
             .versions
             .iter()
@@ -684,7 +721,7 @@ impl DemoRecord {
             "      <article class=\"demo-card demo-card--{slug}\">\n\
         <div class=\"demo-card__header\">\n\
           <div>\n\
-            <p class=\"demo-card__eyebrow\">Preview</p>\n\
+            <p class=\"demo-card__eyebrow\">{eyebrow}</p>\n\
             <h2><a href=\"{latest_url}\">{title}</a></h2>\n\
           </div>\n\
           <a class=\"demo-card__open\" href=\"{latest_url}\">Open latest</a>\n\
@@ -697,6 +734,7 @@ impl DemoRecord {
           />\n\
         </a>\n",
             slug = self.slug,
+            eyebrow = eyebrow,
             latest_url = latest_url,
             title = self.title,
             orientation = preview_spec.orientation.class_name(),
@@ -752,9 +790,19 @@ impl PreviewOrientation {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 struct PreviewSpec {
-    feature: &'static str,
-    test_name: &'static str,
+    source: PreviewSource,
     orientation: PreviewOrientation,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum PreviewSource {
+    RenderTest {
+        feature: &'static str,
+        test_name: &'static str,
+    },
+    StaticFile {
+        repo_path: &'static str,
+    },
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -1123,8 +1171,8 @@ $body
 #[cfg(test)]
 mod tests {
     use super::{
-        DemoRecord, PreviewOrientation, gallery_versions_section_html, infer_next_gallery_version,
-        infer_next_version, parse_pkg_out_name, validate_version,
+        DemoRecord, PreviewOrientation, PreviewSource, gallery_versions_section_html,
+        infer_next_gallery_version, infer_next_version, parse_pkg_out_name, validate_version,
     };
 
     #[test]
@@ -1163,6 +1211,23 @@ mod tests {
                 .expect("preview metadata should exist")
                 .orientation,
             PreviewOrientation::Landscape
+        );
+    }
+
+    #[test]
+    fn editor_preview_uses_static_file() {
+        let demo_record =
+            DemoRecord::from_tsv_line("editor\tEditor\tv1\tcrate\twww\toutput\tv1", 1)
+                .expect("manifest line should parse");
+
+        assert_eq!(
+            demo_record
+                .preview_spec()
+                .expect("preview metadata should exist")
+                .source,
+            PreviewSource::StaticFile {
+                repo_path: "pages/demos/editor/preview-source.png",
+            }
         );
     }
 
@@ -1214,5 +1279,11 @@ mod tests {
     fn rejects_js_missing_pkg_import() {
         let app_js = "import init from \"./other/thing.js\";";
         assert!(parse_pkg_out_name(app_js).is_none());
+    }
+
+    #[test]
+    fn rejects_vendor_js_without_relative_pkg_import() {
+        let vendor_js = "const path = \"pkg/not-a-wasm-import.js\";";
+        assert!(parse_pkg_out_name(vendor_js).is_none());
     }
 }

@@ -64,7 +64,6 @@ let renderErrorMessage = "";
 const STORAGE_KEY = "linkage-blaze-source";
 const COPY_LINK_LABEL = "Copy Link";
 const COPIED_LINK_LABEL = "Copied!";
-const ARMATRON_FRAGMENT = "#armatron";
 const CODE_FRAGMENT_PREFIX = "#code=";
 
 const initialSourceResult = loadInitialSource();
@@ -85,7 +84,7 @@ const editor = new EditorView({
     }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        if (location.hash === ARMATRON_FRAGMENT || location.hash.startsWith(CODE_FRAGMENT_PREFIX)) {
+        if (location.hash.startsWith(CODE_FRAGMENT_PREFIX)) {
           window.history.replaceState(null, "", `${location.pathname}${location.search}`);
           startupErrorMessage = "";
           syncErrorMessage();
@@ -120,10 +119,6 @@ function syncErrorMessage() {
 }
 
 function decodeSourceFromHash(hash) {
-  if (hash === ARMATRON_FRAGMENT) {
-    return { source: default_program(), errorMessage: "" };
-  }
-
   if (!hash.startsWith(CODE_FRAGMENT_PREFIX)) {
     return { source: null, errorMessage: "" };
   }

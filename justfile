@@ -44,8 +44,7 @@ _pages_port := "8090"
 # Build and serve the local Pages gallery for browser review.
 run-all-wasm port=_pages_port:
     just build-pages
-    -lsof -ti:{{port}} | xargs -r kill
-    cd target/pages && python3 ../../.tools/no_cache_http_server.py {{port}}
+    cd target/pages && python3 ../../.tools/no_cache_http_server.py {{port}} --next-free
 
 # Freeze the current live web assets for one demo into a new immutable Pages version.
 bump-demo-version demo version='':
