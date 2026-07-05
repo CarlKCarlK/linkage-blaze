@@ -25,48 +25,44 @@ It shows preview images of each demo and links to the live, interactive WASM ver
 
 ## Example
 
-This is the clock demo's linkage, abridged. It draws a clock face and three hands as turtle-graphics steps. The two parameters (`hour` and `face spin`) are recomputed each tick, and the hands move.
+This is the full `armatron1` linkage. It defines six parameters for the shoulder, elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark so the claw can branch into two fingers.
 
 ```rust,no_run
 linkage![
-    .define_param("hour", 0.0)
-    .define_param("face spin", 0.5)
-    // Common transform for the whole clock face.
-    .roll_param("face spin", -90.0, 90.0)
-    .mark("face")
-    // Face disk
-    .pen_color(Rgb888::new(24, 62, 118)) // desaturated deep blue (24, 62, 118)
-    .disk(65.0)
-    // 12 o'clock tick
-    .restore("face")
-    .pen_color(Rgb888::new(230, 195, 115)) // muted pale gold (230, 195, 115)
+    .define_param("raise hand", 0.5)
+    .define_param("bend elbow", 0.5)
+    .define_param("close hand", 0.0)
+    .define_param("lower arm", 0.5)
+    .define_param("spin whole arm", 0.5)
+    .define_param("spin hand", 0.5)
+    .yaw_param("spin whole arm", 180.0, -180.0)
+    .pen_color(Rgb888::new(0, 139, 139)) // dark cyan (0, 139, 139)
+    .pen_width(0.15)
+    .up(2.5)
+    .pitch_param("lower arm", -30.0, 0.0)
+    .forward(3.0)
+    .yaw_param("bend elbow", 90.0, -90.0)
+    .forward(3.0)
+    .pitch_param("raise hand", 90.0, -90.0)
+    .forward(1.0)
+    .roll_param("spin hand", -180.0, 180.0)
+    .forward(0.5)
+    .mark("wrist")
+    .yaw(90.0)
+    .forward_param("close hand", 0.5, 0.0)
+    .left(-1.0)
+    .restore("wrist")
+    .yaw(-90.0)
+    .forward_param("close hand", 0.5, 0.0)
+    .left(1.0)
+    .restore("wrist")
     .pen_up()
-    .forward(45.0)
+    .forward(0.25)
     .pen_down()
-    .forward(18.0)
-    // ... 3, 6, and 9 o'clock ticks elided ...
-    // Hour hand
-    .restore("face")
-    .pen_color(Rgb888::new(245, 220, 165)) // warm brass ivory (245, 220, 165)
-    .pen_width(10.5)
-    .yaw_param("hour", 360.0, 0.0)
-    .forward(40.0)
-    // Minute hand
-    .restore("face")
-    .pen_color(Rgb888::new(96, 205, 220)) // softened blue-green (96, 205, 220)
-    .pen_width(6.0)
-    .yaw_param("hour", 4320.0, 0.0)
-    .forward(52.0)
-    // Second hand
-    .restore("face")
-    .pen_color(Rgb888::new(230, 95, 70)) // muted coral red (230, 95, 70)
-    .pen_width(2.0)
-    .yaw_param("hour", 259_200.0, 0.0)
-    .forward(60.0)
 ]
 ```
 
-The full linkage compiles to a `const` — no heap, no runtime parsing — so it lives in flash on the microcontroller. See the complete version in [clock.lb.rs](crates/linkage-blaze-example-core/src/clock.lb.rs).
+The linkage compiles to a `const` with no heap allocation and no runtime parsing, so it can live in flash on a microcontroller. See the source in [armatron1.lb.rs](crates/linkage-blaze-example-core/src/armatron/armatron1.lb.rs).
 
 ## Status
 

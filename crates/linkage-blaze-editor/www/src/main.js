@@ -533,6 +533,20 @@ const FILE_TYPES = [{ description: "Linkage Blaze", accept: { "text/plain": [".l
 const hasFilePicker = typeof window.showOpenFilePicker === "function";
 let currentFileHandle = null;
 
+function setEditorSource(source) {
+  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: source } });
+}
+
+function clearCurrentFile() {
+  currentFileHandle = null;
+  document.title = "Linkage Blaze";
+}
+
+function loadDefaultProgram() {
+  clearCurrentFile();
+  setEditorSource(default_program());
+}
+
 async function dbGet(key) {
   return new Promise((res, rej) => {
     const req = indexedDB.open("linkage-blaze-files", 1);
@@ -582,7 +596,7 @@ function populateRecentSelect(list) {
 
 async function loadHandle(handle) {
   const text = await (await handle.getFile()).text();
-  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
+  setEditorSource(text);
   currentFileHandle = handle;
   document.title = `${handle.name} — Linkage Blaze`;
   await pushRecent(handle);
@@ -647,6 +661,7 @@ async function saveFileAs() {
 }
 
 document.querySelector("#btn-open").addEventListener("click", openFile);
+document.querySelector("#btn-load-default").addEventListener("click", loadDefaultProgram);
 document.querySelector("#btn-insert").addEventListener("click", insertFile);
 document.querySelector("#btn-save").addEventListener("click", saveFile);
 document.querySelector("#btn-save-as").addEventListener("click", saveFileAs);
@@ -654,7 +669,8 @@ document.querySelector("#btn-save-as").addEventListener("click", saveFileAs);
 document.querySelector("#file-input").addEventListener("change", async function () {
   const file = this.files[0]; if (!file) return;
   const text = await file.text();
-  editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: text } });
+  clearCurrentFile();
+  setEditorSource(text);
   this.value = "";
 });
 
