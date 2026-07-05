@@ -19,11 +19,11 @@ pub use calibration::{
     CALIBRATION_POINT_COUNT, CalibrationConfig, CalibrationCorner, CalibrationFlow,
     CalibrationSolveError, CalibrationValidation, EnsureCalibrationError, EnsureCalibrationOutcome,
     EnsureCalibrationSettings, MAX_RESIDUAL_PIXELS, RawPoint, RawTouchEvent,
-    VERIFY_HIT_RADIUS_PIXELS,
-    calibration_corner_center, calibration_corner_for_index, calibration_verify_target_center,
-    distort_demo_screen_to_raw, draw_calibration_ack_dot, draw_calibration_cross,
-    draw_calibration_instruction, draw_calibration_rejected_cross, draw_calibration_verify_target,
-    ensure_calibration, ensure_calibration_with_settings, validate_calibration_points,
+    VERIFY_HIT_RADIUS_PIXELS, calibration_corner_center, calibration_corner_for_index,
+    calibration_verify_target_center, distort_demo_screen_to_raw, draw_calibration_ack_dot,
+    draw_calibration_cross, draw_calibration_instruction, draw_calibration_rejected_cross,
+    draw_calibration_verify_target, ensure_calibration, ensure_calibration_with_settings,
+    validate_calibration_points,
 };
 pub use contiguous_pixels::ContiguousPixels;
 pub use cyd::{

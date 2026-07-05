@@ -3,8 +3,6 @@
 
 // todo000 can't we allocate the largest buffer and then use it for smaller things?
 // todo000 get wifi portal and drawing work at the same time.
-// TODO00000 the analog clock-hand rendering is commented out in the generic
-// `clock` module; see the `TODO00000` there for what it needs to be ported.
 
 use core::{cell::RefCell, convert::Infallible};
 

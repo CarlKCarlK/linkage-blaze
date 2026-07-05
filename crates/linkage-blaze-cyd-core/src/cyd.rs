@@ -106,8 +106,6 @@ pub trait CydDisplay {
         tile_top_left: Point,
     ) -> Self::Frame<'_>;
 
-    // TODO0000000000 This was previously named `region`; keep reviewing these
-    // `Rectangle`-typed APIs so the naming stays consistent.
     /// Borrow a frame covering `rectangle`, cleared to the device background color.
     ///
     /// The frame remembers its `rectangle`, so [`CydFrame::flush`] presents it

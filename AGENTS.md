@@ -167,7 +167,7 @@ Avoid the builder pattern. Prefer direct construction and simple data flow:
 
 Bad:
 
-todo00000 this is out of date.
+todo0 this is out of date.
 
 ```rust
 let linkage = LinkageBuilder::new()

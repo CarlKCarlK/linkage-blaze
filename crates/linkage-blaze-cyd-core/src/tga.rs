@@ -280,9 +280,6 @@ impl<const W: usize, const H: usize, const N: usize> Iterator for Image565Pixels
         let y = index / W;
         Some(Pixel(
             self.top_left + Point::new(x as i32, y as i32),
-            // todo00000000 (may no longer apply) This once drew pixels
-            // 565->888->565 via `put_pixel`; keep image drawing on an RGB565
-            // target so decoded pixels stay in their native format.
             Rgb565::from(RawU16::new(self.image.pixels[index])),
         ))
     }
@@ -482,10 +479,6 @@ impl<const W: usize, const H: usize, const N: usize, const MASK_N: usize> Iterat
                 let y = index / W;
                 return Some(Pixel(
                     self.top_left + Point::new(x as i32, y as i32),
-                    // todo00000000 (may no longer apply) This once drew pixels
-                    // 565->888->565 via `put_pixel`; keep image drawing on an
-                    // RGB565 target so decoded pixels stay in their native
-                    // format.
                     Rgb565::from(RawU16::new(self.image.pixels[index])),
                 ));
             }

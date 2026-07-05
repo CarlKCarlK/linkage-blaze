@@ -198,7 +198,7 @@ fn linkage_buf_combine_combines_params_and_steps() {
         .define_param("y", 0.75)
         .left_param("y", 0.0, 5.0);
 
-    // todo0000000 what are these right hand side numbers? needed? in best order?
+    // The output type supplies the combined DOF and mark capacities for `combine`.
     let c: LinkageBuf<2, 0> = a.combine(b);
 
     let params = [0.5, 0.75];
@@ -227,8 +227,7 @@ fn linkage_buf_combine_ref_combines_from_view() {
     let buf_a = LinkageBuf::from(&FIXED_A);
     let view_b = FIXED_B.view();
 
-    // todo0000000 what are these right hand side numbers? needed? in best order?
-
+    // The output type supplies the combined DOF and mark capacities for `combine_ref`.
     let combined: LinkageBuf<2, 0> = buf_a.combine_ref(view_b);
 
     let params = [0.5, 0.75];
@@ -262,8 +261,7 @@ fn armatron_buf_combine_combines_limbs() {
         .yaw_param("bend elbow", 90.0, -90.0)
         .forward(3.0);
 
-    // todo0000000 what are these right hand side numbers? needed? in best order?
-
+    // The output type supplies the combined DOF and mark capacities for `combine`.
     let combined_arm: LinkageBuf<3, 0> = upper_arm.combine(forearm);
 
     let params = [0.5, 0.5, 0.5]; // spin_whole_arm, lower_arm, bend_elbow

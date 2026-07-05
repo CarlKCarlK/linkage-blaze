@@ -549,9 +549,7 @@ impl CydFrame for MemoryFrame<'_> {
         Ok(())
     }
 
-    fn flush(
-        &mut self,
-    ) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>> {
+    fn flush(&mut self) -> impl Future<Output = Result<(), <Self as CydFrame>::Error>> {
         ready(self.flush_now())
     }
 }

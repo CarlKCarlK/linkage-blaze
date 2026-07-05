@@ -2473,6 +2473,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     ///     .define_param("y", 0.5)
     ///     .left_param("y", 0.0, 5.0);
     ///
+    /// // The output annotation supplies the combined DOF and mark capacities.
     /// let c: LinkageBuf<2, 0> = a.combine(b);
     /// let params = [0.5, 0.5];
     /// let pose = c.view().final_pose(&params);
