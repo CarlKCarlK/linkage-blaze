@@ -332,6 +332,7 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "heapless 0.9.3",
+ "micromath",
  "paste",
  "portable-atomic",
  "postcard",

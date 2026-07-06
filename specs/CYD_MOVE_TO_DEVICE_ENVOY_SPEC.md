@@ -33,6 +33,60 @@ depends on them from there: `PixelTarget`, `PixelTargetAdapter`, `pixel_put`,
 `pixel_put_565`, `fill_ellipse_pixels`, and the rgb565/rgb888 conversion
 helpers (used by `cyd.rs`, `tga.rs`, and the memory and wasm backends).
 
+#### Naming update: `DrawItem`, not `DrawItem2d`, in device-envoy
+
+During phase 2, rename the moved 2D drawing type to `DrawItem` in
+`device-envoy-core::cyd`.
+
+`DrawItem2d` was useful while the type lived beside `DrawItem3d` in
+linkage-blaze. After the move, the `2d` suffix becomes unnecessary migration
+baggage. In device-envoy, CYD is a screen/touch abstraction; all drawing
+items in `device_envoy_core::cyd` are screen-space drawing items by
+definition. There is no 3D drawing model in device-envoy.
+
+Use these public names in device-envoy:
+
+- `device_envoy_core::cyd::DrawItem`
+- `device_envoy_core::cyd::Image565View`
+- `device_envoy_core::cyd::ContiguousPixels`
+
+Rename the display methods accordingly:
+
+- `CydDisplay::draw_items(...)`
+- `CydDisplay::prepare_draw_items(...)`
+- `ContiguousPixels::from_draw_items(...)`
+
+Keep explicit 3D names in linkage-blaze:
+
+- `DrawItem3d`
+- `DrawItem3dExt::project(...) -> device_envoy_core::cyd::DrawItem`
+- `CydDisplay3dExt::draw_items_3d(...)`
+- `CydDisplay3dExt::prepare_draw_items_3d(...)`
+
+If linkage-blaze implementation code needs local clarity, it may use a
+private import alias:
+
+```rust,ignore
+use device_envoy_core::cyd::DrawItem as DrawItem2d;
+```
+
+Do not expose `DrawItem2d` as part of the device-envoy public API. Also avoid
+re-exporting plain `DrawItem` at the root of `device-envoy-core`; keep it
+scoped under `cyd::DrawItem`, where the name has enough context.
+
+While working on phase 2, prefer idiomatic destination names over preserving
+old linkage-blaze names. The moved CYD API should look native to
+device-envoy, not like a compatibility layer. After renaming `DrawItem2d` to
+`DrawItem`, update docs, examples, tests, and imports in the same phase. Do
+not leave public aliases or compatibility shims unless needed temporarily
+inside one patch.
+
+Keep the linkage-blaze side explicit about projection: `DrawItem3d` stays in
+linkage-blaze, and projection produces `device_envoy_core::cyd::DrawItem`.
+
+When in doubt, use this rule: device-envoy names the screen abstraction;
+linkage-blaze names the 3D-to-screen conversion.
+
 ### 2. Scope: 320x240 resistive-touch boards only
 
 Following device-envoy's satisfied-with-90%-coverage philosophy, the
@@ -96,7 +150,8 @@ The migration does not require settling them first; they carry over verbatim
    compiles here): pull the 3D methods off `CydDisplay` into an extension
    trait, isolate the pixel utilities destined for `device-envoy-core`.
 2. **Move traits + memory + wasm into `device-envoy-core`**: `Cyd` traits,
-   tiling, calibration, orientation, TGA, `DrawItem2d`, `ContiguousPixels`,
+   tiling, calibration, orientation, TGA, `DrawItem` (renamed from
+   `DrawItem2d` — see naming update under decision 1), `ContiguousPixels`,
    pixel utilities; `CydMemory` behind `host`; `CydWasm` / `ButtonWasm` /
    `FlashDeviceWasm` behind new `wasm`.
 3. **Move `CydEsp` into `device-envoy-esp`**; widen the chip feature matrix
