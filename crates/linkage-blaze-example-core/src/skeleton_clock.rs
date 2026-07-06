@@ -21,9 +21,11 @@ use log::info;
 use time::OffsetDateTime;
 
 use device_envoy_core::cyd::{
-    CydDisplay, CydFrame,
-    display::{DrawItem, Image565Fixed, Image565Mask, Orientation, tga565, tga565_magenta_mask},
-    tiling::TileGrid,
+    CydDisplay,
+    display::{
+        CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, tga565,
+        tga565_magenta_mask, tiling::TileGrid,
+    },
 };
 
 use crate::infallible::InfallibleResultExt;

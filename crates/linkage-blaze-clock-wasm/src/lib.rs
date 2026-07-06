@@ -9,7 +9,7 @@
 mod clock;
 
 use clock::WasmClockSync;
-use device_envoy_core::cyd::{Cyd, CydDisplay, CydFrame};
+use device_envoy_core::cyd::{Cyd, CydDisplay, display::CydFrame};
 use device_envoy_core::wasm::{CydTouchWasmSource, CydWasm};
 use linkage_blaze_example_core::clock::{
     BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,

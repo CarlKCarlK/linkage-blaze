@@ -7,8 +7,8 @@ use core::{
 };
 
 use device_envoy_core::cyd::{
-    CydDisplay, CydFrame,
-    display::{Image565Fixed, Orientation, tga565},
+    CydDisplay,
+    display::{CydFrame, Image565Fixed, Orientation, tga565},
 };
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};

@@ -9,7 +9,10 @@ mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
-use device_envoy_core::cyd::{Cyd, CydDisplay, CydFrame, CydTouch, SCREEN_HEIGHT, SCREEN_WIDTH};
+use device_envoy_core::cyd::{
+    Cyd, CydDisplay, CydTouch,
+    display::{CydFrame, Orientation},
+};
 use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
@@ -59,6 +62,7 @@ pub(super) const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view
 
 // The ghost arm's params begin immediately after the displayed scene's params.
 const TARGET_PARAM_START: usize = SCENE_WITH_ARM.view().dof();
+const ORIENTATION: Orientation = Orientation::Landscape;
 
 const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_SLIDER.label(), 0);
 const TILT_PARAM_INDEX: usize = LINKAGE.param_index(TILT_SLIDER.label(), 0);
@@ -75,8 +79,11 @@ pub(super) const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = {
 pub const DOF: usize = LINKAGE.dof();
 
 const PROJECTION: Projection = Projection::front_perspective(
-    Point::new(SCREEN_WIDTH as i32 / 2, SCREEN_HEIGHT as i32 / 2),
-    SCREEN_WIDTH as f32 / 16.0, // 16 world units span the screen width
+    Point::new(
+        ORIENTATION.width() as i32 / 2,
+        ORIENTATION.height() as i32 / 2,
+    ),
+    ORIENTATION.width() as f32 / 16.0, // 16 world units span the screen width
     30.0,
 );
 
@@ -95,7 +102,7 @@ const SHOW_FPS_TEXT: bool = true;
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
 /// provide calibrated touch before calling [`armatron`]. Shared calibration
-/// UI helpers now live in [`device_envoy_core::cyd::calibration`], alongside
+/// UI helpers now live in [`device_envoy_core::cyd::touch::calibration`], alongside
 /// the rest of the CYD touch-calibration flow.
 // TODO0000 Revisit whether `armatron` should regain a type-state guarantee for
 // calibrated CYD touch instead of relying on this caller-side runtime precondition.
@@ -225,7 +232,7 @@ pub enum ArmatronExit {
 
 #[cfg(test)]
 mod tests {
-    use device_envoy_core::cyd::TouchEvent;
+    use device_envoy_core::cyd::touch::TouchEvent;
     use device_envoy_core::memory::{
         MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
     };

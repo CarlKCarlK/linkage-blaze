@@ -5,7 +5,8 @@
 
 use core::convert::Infallible;
 
-use device_envoy_core::cyd::{Cyd, CydDisplay, EnsureCalibrationError, ensure_calibration};
+use device_envoy_core::cyd::{Cyd, CydDisplay};
+use device_envoy_core::cyd::touch::calibration::{EnsureCalibrationError, ensure_calibration};
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
     cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation},

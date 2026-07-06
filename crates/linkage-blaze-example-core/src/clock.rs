@@ -6,9 +6,11 @@ use core::{convert::Infallible, fmt, iter};
 
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use device_envoy_core::cyd::{
-    CydDisplay, CydFrame,
-    display::{DrawItem, Image565Fixed, Image565View, Orientation, tga565},
-    tiling::max_rectangle_pixel_count,
+    CydDisplay,
+    display::{
+        CydFrame, DrawItem, Image565Fixed, Image565View, Orientation,
+        tga565, tiling::max_rectangle_pixel_count,
+    },
 };
 use embedded_graphics::{
     Drawable,
@@ -174,7 +176,7 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 #[cfg(test)]
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
-    use device_envoy_core::cyd::{Cyd as _, CydDisplay, CydFrame};
+    use device_envoy_core::cyd::{Cyd as _, CydDisplay, display::CydFrame};
     use device_envoy_core::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
     use time::OffsetDateTime;

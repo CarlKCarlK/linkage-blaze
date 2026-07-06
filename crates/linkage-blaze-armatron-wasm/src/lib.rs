@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use device_envoy_core::cyd::display::Orientation;
-use device_envoy_core::cyd::calibration::{
+use device_envoy_core::cyd::touch::calibration::{
     CalibrationConfig, EnsureCalibrationSettings, ensure_calibration_with_settings,
 };
 use device_envoy_core::flash_block::FlashBlock as _;

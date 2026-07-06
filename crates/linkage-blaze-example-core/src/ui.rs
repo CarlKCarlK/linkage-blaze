@@ -26,7 +26,7 @@
 //! #     pixelcolor::Rgb565,
 //! # };
 //! # use core::convert::Infallible;
-//! # use device_envoy_core::cyd::TouchEvent;
+//! # use device_envoy_core::cyd::touch::TouchEvent;
 //! # use linkage_blaze_example_core::ui::{Slider, Ui};
 //! static TILT_SLIDER: Slider = Slider::vertical(
 //!     "z",
@@ -51,7 +51,7 @@
 
 use core::{fmt, fmt::Write, ptr};
 
-use device_envoy_core::cyd::TouchEvent;
+use device_envoy_core::cyd::touch::TouchEvent;
 use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{Point, Size},

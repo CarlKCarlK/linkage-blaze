@@ -110,6 +110,30 @@ As of 2026-07-06:
 - because the writable-root split prevented completion, treat the refactor as
   unfinished and re-check the worktree before continuing
 
+### Linkage-blaze session progress
+
+As of 2026-07-06 in `/home/carlk/programs/linkage-blaze`:
+
+- downstream CYD import fallout has been updated to the intended new paths:
+  - `cyd::display::CydFrame`
+  - `cyd::display::tiling::*`
+  - `cyd::touch::TouchEvent`
+  - `cyd::touch::calibration::*`
+- armatron no longer depends on public `SCREEN_WIDTH` / `SCREEN_HEIGHT`; it now
+  uses `Orientation::Landscape.width()` / `.height()`
+- verification in this repo is still blocked because the path dependency
+  `/home/carlk/programs/mcu/device-envoy` does not currently compile after its
+  partial CYD refactor
+
+Known blocker details from `cargo check` on 2026-07-06:
+
+- unresolved `CalibrationFlow` imports inside
+  `device-envoy-core/src/cyd/touch/calibration.rs` and `touch/driver.rs`
+- `device-envoy-core/src/cyd/display/tga.rs` still refers to the old root
+  `CydFrame` path
+- `device-envoy-core/src/cyd/touch.rs` re-export visibility is incomplete for
+  `CalibrationFlow`
+
 ## Recommended handoff instructions
 
 ### For the `device-envoy` session
