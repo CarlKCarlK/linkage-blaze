@@ -108,6 +108,7 @@ public API; none are generic):
 - `cyd::CydInfallibleError` — it is an empty never-type, so it does *not*
   belong inside a fallible `Error` enum. Replace it with
   `core::convert::Infallible` plus `impl CydFlushError for Infallible {}` in
+  place at the time (the trait was later renamed to `CydIoError` and then removed by `CYD_IO_ERROR_REMOVAL_SPEC.md`) in
   `src/cyd.rs`. Update all `type Error = CydInfallibleError` impls (`src/wasm.rs`
   has several) and every doctest that names it (`src/cyd.rs`,
   `src/cyd/calibration/driver.rs`, `src/memory.rs` if present).
@@ -115,6 +116,8 @@ public API; none are generic):
 **Keep as-is (do not fold):**
 
 - `CydFlushError` (trait) — it is the *bound* on each device's associated
+  error type in this spec snapshot; the trait was later renamed to `CydIoError`
+  and then removed by `CYD_IO_ERROR_REMOVAL_SPEC.md`.
   `type Error`, the mechanism that lets platform crates (`device-envoy-esp`,
   `device-envoy-rp`) carry their own device errors and lets downstream generic
   code distinguish flush errors from local errors (see `ballet::Error` in
@@ -159,7 +162,8 @@ public API; none are generic):
 - [ ] Downstream `linkage-blaze-example-core/src/ballet.rs`: replace the
       `CopySize(CopySizeError)` variant with `Core(device_envoy_core::Error)`
       (derived `From`), and update the module-level comment that explains the
-      `CydFlushError` coherence pattern — the pattern itself is unchanged.
+      `CydFlushError` coherence pattern — the pattern itself is unchanged, and
+      the trait was later renamed to `CydIoError` and then removed by `CYD_IO_ERROR_REMOVAL_SPEC.md`.
 - [ ] Update the wifi-auto examples under `device-envoy-esp/examples/*/` that
       name `WifiAutoError`.
 - [ ] Sweep both repos for remaining references to the deleted names
@@ -188,7 +192,7 @@ everyday entry points. Data, asset, and drawing types move to `cyd::display`.
 
 `cyd` root after this part:
 
-- Traits: `Cyd`, `CydDisplay`, `CydTouch`, `CydFrame`, `CydFlushError`
+- Traits: `Cyd`, `CydDisplay`, `CydTouch`, `CydFrame`, `CydFlushError` (later renamed to `CydIoError`, then removed by `CYD_IO_ERROR_REMOVAL_SPEC.md`)
 - `TouchEvent` (return type of `CydTouch::read`)
 - `SCREEN_WIDTH`, `SCREEN_HEIGHT`, `SCREEN_PIXELS`
 - Calibration re-exports: `EnsureCalibrationError`, `EnsureCalibrationOutcome`,

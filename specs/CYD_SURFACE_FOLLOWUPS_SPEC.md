@@ -37,7 +37,7 @@ carries a few items that don't fit its "device model only" rule:
 
 `cyd` root after this spec:
 
-- Traits: `Cyd`, `CydDisplay`, `CydTouch`, `CydFlushError`
+- Traits: `Cyd`, `CydDisplay`, `CydTouch`, `CydFlushError` (later renamed to `CydIoError`, then removed by `CYD_IO_ERROR_REMOVAL_SPEC.md`)
 - `SCREEN_PIXELS` (orientation-independent; keeps
   `CydStaticEsp<{ CydEsp::SCREEN_PIXELS }>` buffer sizing working)
 - Public submodules: `display`, `touch`
@@ -71,6 +71,7 @@ New `cyd::touch` submodule (renamed/reshaped from `calibration`):
   What *does* change: its root re-export goes away; the canonical path becomes
   `cyd::touch::calibration::EnsureCalibrationError`.
 - **`CydFlushError` into `src/error.rs`?** No — it is not an error type but
+  was later renamed to `CydIoError` and then removed by `CYD_IO_ERROR_REMOVAL_SPEC.md`;
   the marker *bound* on the CYD part traits' associated `Error` types, i.e.
   part of the device-model contract and meaningless outside `cyd`. It stays
   at the `cyd` root. (`error.rs` stays the home of the unified `Error` enum

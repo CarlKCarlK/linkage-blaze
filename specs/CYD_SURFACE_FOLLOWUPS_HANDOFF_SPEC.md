@@ -27,7 +27,7 @@ Primary crates:
 Required outcomes:
 
 - `device_envoy_core::cyd` root keeps only:
-  - `Cyd`, `CydDisplay`, `CydTouch`, `CydFlushError`
+  - `Cyd`, `CydDisplay`, `CydTouch`, `CydFlushError` (later renamed to `CydIoError`, then removed by `CYD_IO_ERROR_REMOVAL_SPEC.md`)
   - `SCREEN_PIXELS`
   - `display`
   - `touch`
