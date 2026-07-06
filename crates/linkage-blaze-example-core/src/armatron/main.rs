@@ -226,7 +226,7 @@ pub enum ArmatronExit {
 #[cfg(test)]
 mod tests {
     use device_envoy_core::cyd::TouchEvent;
-    use device_envoy_core::cyd::memory::{
+    use device_envoy_core::memory::{
         MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
     };
     use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;

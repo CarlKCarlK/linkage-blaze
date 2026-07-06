@@ -176,8 +176,8 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 #[cfg(test)]
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
-    use device_envoy_core::cyd::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
     use device_envoy_core::cyd::{Cyd as _, CydDisplay, CydFrame};
+    use device_envoy_core::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
     use time::OffsetDateTime;
 

@@ -28,7 +28,9 @@
       "Bash(just check-armatron-core *)",
       "Bash(just check-arm-wasm *)",
       "Bash(ls ~/export-esp.sh 2>/dev/null && echo \"esp env present\" || echo \"no esp env\"; rustup toolchain list 2>/dev/null | grep -i esp || echo \"no esp toolchain\")",
-      "Read(//home/carlk/**)"
+      "Read(//home/carlk/**)",
+      "Bash(git mv *)",
+      "Bash(RUSTDOCFLAGS=\"-D warnings\" cargo doc --no-deps --features host,wasm)"
     ]
   }
 }
