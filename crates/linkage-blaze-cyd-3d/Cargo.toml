@@ -1,0 +1,10 @@
+[package]
+name = "linkage-blaze-cyd-3d"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+embedded-graphics = { version = "0.8", default-features = false }
+linkage-blaze-core.workspace = true
+linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }

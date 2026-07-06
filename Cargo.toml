@@ -2,6 +2,7 @@
 members = [
     "xtask",
     "crates/linkage-blaze-core",
+    "crates/linkage-blaze-cyd-3d",
     "crates/linkage-blaze-cyd",
     "crates/linkage-blaze-cyd-core",
     "crates/linkage-blaze-cyd-memory",

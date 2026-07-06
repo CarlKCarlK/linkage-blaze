@@ -6,8 +6,7 @@ use embedded_graphics::{
     primitives::{Circle, Line, Primitive, PrimitiveStyle},
 };
 use linkage_blaze_core::{
-    DrawItem3d, PixelTarget, PixelTargetAdapter, Projection, Rgb888, fill_ellipse_pixels,
-    pixel_put, pixel_put_565,
+    PixelTarget, PixelTargetAdapter, Rgb888, fill_ellipse_pixels, pixel_put, pixel_put_565,
 };
 
 /// A view into a statically-stored RGB565 bitmap, optionally cropped to a
@@ -83,10 +82,10 @@ impl Image565View {
 
 /// A pixel-space 2D draw item, ready to draw onto a [`PixelTarget`].
 ///
-/// Obtain one with [`DrawItem3dExt::project`], or construct one directly when
-/// you already have pixel-space geometry. All coordinates and sizes are in
-/// pixels. The `color` stays [`Rgb888`]; the target performs any conversion
-/// (for example to `Rgb565`) at its pixel boundary.
+/// Construct one directly when you already have pixel-space geometry, or via
+/// linkage-blaze's CYD 3D adapters when projecting a 3D scene. All coordinates
+/// and sizes are in pixels. The `color` stays [`Rgb888`]; the target performs
+/// any conversion (for example to `Rgb565`) at its pixel boundary.
 #[derive(Clone, Copy, Debug)]
 pub enum DrawItem2d {
     /// A line stroke from `start` to `end` with the given pixel width.
@@ -177,44 +176,6 @@ impl DrawItem2d {
                     }
                 }
             }
-        }
-    }
-}
-
-/// CYD-layer projection from core 3D draw items into CYD 2D draw items.
-pub trait DrawItem3dExt {
-    /// Project this 3D/linkage-space item through `projection` into pixel-space.
-    #[must_use]
-    fn project(self, projection: &Projection) -> DrawItem2d;
-}
-
-impl DrawItem3dExt for DrawItem3d {
-    fn project(self, projection: &Projection) -> DrawItem2d {
-        match self {
-            DrawItem3d::Stroke(stroke) => DrawItem2d::Stroke {
-                start: stroke.start().project(projection),
-                end: stroke.end().project(projection),
-                color: stroke.color(),
-                pixel_width: projection.project_width(stroke.width()),
-            },
-            DrawItem3d::Disk(disk) => {
-                let orientation = disk.pose().orientation();
-                DrawItem2d::Ellipse {
-                    center: disk.pose().project(projection),
-                    axis_a: projection.project_dir(
-                        disk.pose(),
-                        orientation.forward(),
-                        disk.radius(),
-                    ),
-                    axis_b: projection.project_dir(disk.pose(), orientation.left(), disk.radius()),
-                    color: disk.color(),
-                }
-            }
-            DrawItem3d::Sphere(sphere) => DrawItem2d::Circle {
-                center: sphere.pose().project(projection),
-                pixel_radius: projection.project_radius(sphere.pose(), sphere.radius()),
-                color: sphere.color(),
-            },
         }
     }
 }

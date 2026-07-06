@@ -1617,6 +1617,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "linkage-blaze-cyd-3d"
+version = "0.1.4"
+dependencies = [
+ "embedded-graphics",
+ "linkage-blaze-core",
+ "linkage-blaze-cyd-core",
+]
+
+[[package]]
 name = "linkage-blaze-cyd-core"
 version = "0.1.4"
 dependencies = [
@@ -1677,6 +1686,7 @@ dependencies = [
  "heapless 0.9.3",
  "libm",
  "linkage-blaze-core",
+ "linkage-blaze-cyd-3d",
  "linkage-blaze-cyd-core",
  "linkage-blaze-cyd-memory",
  "log",

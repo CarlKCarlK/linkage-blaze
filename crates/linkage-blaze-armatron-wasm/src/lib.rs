@@ -20,7 +20,12 @@ const BROWSER_VERIFY_TIMEOUT_FRAMES: usize = 10 * 60;
 /// first-time visitor through the four-tap flow. Tapping the on-screen "cal"
 /// button still clears this and re-runs the real calibration flow.
 const PREVIEW_DEFAULT_CALIBRATION: CalibrationConfig = CalibrationConfig::new(
-    0.891_909, -0.039_321, -160.036_33, 0.025_894, 1.074_127, -164.861_27,
+    0.891_909,
+    -0.039_321,
+    -160.036_33,
+    0.025_894,
+    1.074_127,
+    -164.861_27,
 );
 
 #[wasm_bindgen]
@@ -61,9 +66,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
         .is_none()
         && let Err(error) = calibration_flash_block.save(&PREVIEW_DEFAULT_CALIBRATION)
     {
-        web_sys::console::error_1(
-            &format!("failed to seed default calibration: {error:?}").into(),
-        );
+        web_sys::console::error_1(&format!("failed to seed default calibration: {error:?}").into());
     }
 
     wasm_bindgen_futures::spawn_local(async move {

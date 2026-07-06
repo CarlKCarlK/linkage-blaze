@@ -1314,21 +1314,15 @@ mod tests {
 
     #[test]
     fn renders_gallery_subtitles_for_custom_titles() {
-        let clock_demo_record = DemoRecord::from_tsv_line(
-            "clock\tClock\tv3\tcrate\twww\toutput\tv2,v3",
-            1,
-        )
-        .expect("manifest line should parse");
-        let armatron_demo_record = DemoRecord::from_tsv_line(
-            "armatron\tArmatron\tv3\tcrate\twww\toutput\tv1,v2,v3",
-            1,
-        )
-        .expect("manifest line should parse");
-        let editor_demo_record = DemoRecord::from_tsv_line(
-            "editor\tEditor\tv2\tcrate\twww\toutput\tv1,v2",
-            1,
-        )
-        .expect("manifest line should parse");
+        let clock_demo_record =
+            DemoRecord::from_tsv_line("clock\tClock\tv3\tcrate\twww\toutput\tv2,v3", 1)
+                .expect("manifest line should parse");
+        let armatron_demo_record =
+            DemoRecord::from_tsv_line("armatron\tArmatron\tv3\tcrate\twww\toutput\tv1,v2,v3", 1)
+                .expect("manifest line should parse");
+        let editor_demo_record =
+            DemoRecord::from_tsv_line("editor\tEditor\tv2\tcrate\twww\toutput\tv1,v2", 1)
+                .expect("manifest line should parse");
 
         let clock_html = clock_demo_record
             .demo_card_html("./")

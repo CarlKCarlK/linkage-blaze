@@ -30,7 +30,7 @@ pub use cyd::{
     CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydInfallibleError, CydRawTouch,
     CydTouch, RegionPixels, Tiles,
 };
-pub use draw_item_2d::{DrawItem2d, DrawItem3dExt, Image565View};
+pub use draw_item_2d::{DrawItem2d, Image565View};
 pub use orientation::Orientation;
 pub use tga::{Image565Fixed, Image565Mask};
 pub use touch_event::TouchEvent;

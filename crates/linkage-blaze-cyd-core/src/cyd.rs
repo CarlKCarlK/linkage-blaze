@@ -19,7 +19,7 @@ use embedded_graphics::{
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::{DrawItem3d, PixelTarget, Projection, Rgb888, rgb565_from_rgb888};
+use linkage_blaze_core::{PixelTarget, Rgb888, rgb565_from_rgb888};
 
 use crate::{ContiguousPixels, DrawItem2d, RawTouchEvent, TouchEvent, tiling::TileGrid};
 
@@ -60,7 +60,7 @@ pub trait Cyd {
     fn parts(&mut self) -> (Self::Display<'_>, Self::Touch<'_>);
 }
 
-/// A CYD display: hands out cleared, rectangle-sized frames.
+/// A CYD display: hands out cleared, rectangle-sized 2D frames.
 pub trait CydDisplay {
     /// Error returned when flushing a frame fails.
     type Error: CydFlushError;
@@ -170,37 +170,6 @@ pub trait CydDisplay {
     ) -> ContiguousPixels<PRIMITIVE_COUNT> {
         let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
         ContiguousPixels::from_draw_items_2d(bounds, background, items.iter().copied())
-    }
-
-    /// Project and draw 3D draw items immediately inside `bounds`.
-    fn draw_items_3d<const PRIMITIVE_COUNT: usize, I>(
-        &mut self,
-        bounds: Rectangle,
-        background: Rgb565,
-        items: I,
-        projection: &Projection,
-    ) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = DrawItem3d>,
-    {
-        let primitive_pixels =
-            self.prepare_draw_items_3d::<PRIMITIVE_COUNT, _>(bounds, background, items, projection);
-        self.fill_contiguous(primitive_pixels.bounds(), primitive_pixels.iter())
-    }
-
-    /// Compile 3D draw items for indexed pixel lookups inside `bounds`.
-    fn prepare_draw_items_3d<const PRIMITIVE_COUNT: usize, I>(
-        &self,
-        bounds: Rectangle,
-        background: Rgb565,
-        items: I,
-        projection: &Projection,
-    ) -> ContiguousPixels<PRIMITIVE_COUNT>
-    where
-        I: IntoIterator<Item = DrawItem3d>,
-    {
-        let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
-        ContiguousPixels::from_draw_items_3d(bounds, background, items, projection)
     }
 
     /// Clear the whole screen to the device default background color.

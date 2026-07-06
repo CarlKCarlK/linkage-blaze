@@ -15,9 +15,8 @@ use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
 use linkage_blaze_core::{
     LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed, rgb565_from_rgb888,
 };
-use linkage_blaze_cyd_core::{
-    Cyd, CydDisplay, CydFrame, CydTouch, DrawItem3dExt, SCREEN_HEIGHT, SCREEN_WIDTH,
-};
+use linkage_blaze_cyd_3d::DrawItem3dExt;
+use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, SCREEN_HEIGHT, SCREEN_WIDTH};
 use nanorand::{Rng, WyRand};
 
 use crate::ui::{Ui, UiError};

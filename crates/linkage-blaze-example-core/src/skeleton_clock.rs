@@ -16,12 +16,13 @@ use embedded_graphics::{
 use linkage_blaze_core::{
     LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
 };
+use linkage_blaze_cyd_3d::DrawItem3dExt;
 use log::info;
 use time::OffsetDateTime;
 
 use linkage_blaze_cyd_core::{
-    CydDisplay, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565Mask, Orientation,
-    tga565, tga565_magenta_mask,
+    CydDisplay, CydFrame, DrawItem2d, Image565Fixed, Image565Mask, Orientation, tga565,
+    tga565_magenta_mask,
     tiling::{TileGrid, max_u32},
 };
 
@@ -492,8 +493,7 @@ mod tests {
 
     #[test]
     fn skeleton_clock_renders_expected_frame() {
-        let mut memory_cyd =
-            MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(ONE_COMPLETE_FRAME_BUDGET);
         let clock_sync = FixedClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
@@ -504,8 +504,7 @@ mod tests {
             let (mut display, _touch) = memory_cyd.parts();
             block_on(skeleton_clock(&mut display, &clock_sync))
         };
-        skeleton_clock_result
-            .expect_err("the free-running loop should stop at the frame budget");
+        skeleton_clock_result.expect_err("the free-running loop should stop at the frame budget");
 
         assert_framebuffer_matches_expected_png(
             &memory_cyd,

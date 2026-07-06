@@ -15,9 +15,10 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
+use linkage_blaze_cyd_3d::DrawItem3dExt;
 use linkage_blaze_cyd_core::{
-    ContiguousPixels, CydDisplay, CydFrame, DrawItem2d, DrawItem3dExt, Image565Fixed, Image565View,
-    Orientation, tga565, tiling::max_rectangle_pixel_count,
+    ContiguousPixels, CydDisplay, CydFrame, DrawItem2d, Image565Fixed, Image565View, Orientation,
+    tga565, tiling::max_rectangle_pixel_count,
 };
 use log::info;
 use profont::PROFONT_18_POINT;
@@ -218,8 +219,12 @@ mod tests {
 
     #[test]
     fn clock_renders_expected_frame() {
-        let mut memory_cyd =
-            MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &WIFI_STATUS_FONT);
+        let mut memory_cyd = MemoryCyd::new(
+            ORIENTATION.size(),
+            BACKGROUND,
+            FOREGROUND,
+            &WIFI_STATUS_FONT,
+        );
         memory_cyd.set_frame_budget(3);
         let clock_sync = FixedClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)

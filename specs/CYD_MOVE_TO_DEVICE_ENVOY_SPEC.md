@@ -1,0 +1,172 @@
+<!-- todo0 consider deleting this spec once the work below is implemented and released. -->
+
+# Spec: Move CYD from linkage-blaze to device-envoy
+
+Early plan for migrating the four CYD crates (`linkage-blaze-cyd-core`,
+`linkage-blaze-cyd`, `linkage-blaze-cyd-wasm`, `linkage-blaze-cyd-memory`) into
+the device-envoy workspace. The CYD abstraction was designed for this move
+(cyd-core is explicitly modeled on `device-envoy-core` and already depends on
+it), so the migration is mostly relocation plus one trait split.
+
+## Decisions
+
+### 1. 2D stays with CYD; 3D stays with linkage-blaze
+
+`DrawItem2d`, `Image565View`, the `ContiguousPixels` rasterizer, and the
+`draw_items_2d` / `prepare_draw_items_2d` trait methods move to device-envoy.
+Their data models are pure 2D screen-space; the "projected disk / sphere" doc
+wording is motivation, not coupling.
+
+Three thin 3D-to-2D converters stay behind in linkage-blaze as extension code
+over the moved types:
+
+- `DrawItem3dExt::project` — extension trait on linkage's own `DrawItem3d`
+  producing the moved `DrawItem2d` (orphan-rule clean).
+- `ContiguousPixels::from_draw_items_3d` — becomes a linkage-blaze helper that
+  projects and calls the moved `from_draw_items_2d`.
+- `CydDisplay::draw_items_3d` / `prepare_draw_items_3d` — removed from the
+  trait; become a linkage-blaze extension trait over `CydDisplay`.
+
+Prerequisite: the generic pixel utilities in `linkage-blaze-core` that the 2D
+layer uses move down into `device-envoy-core`, and `linkage-blaze-core` then
+depends on them from there: `PixelTarget`, `PixelTargetAdapter`, `pixel_put`,
+`pixel_put_565`, `fill_ellipse_pixels`, and the rgb565/rgb888 conversion
+helpers (used by `cyd.rs`, `tga.rs`, and the memory and wasm backends).
+
+### 2. Scope: 320x240 resistive-touch boards only
+
+Following device-envoy's satisfied-with-90%-coverage philosophy, the
+abstraction targets 320x240 ILI9341 + XPT2046 boards: the CYD family on ESP
+and the Waveshare Pico-ResTouch-LCD-2.8 (same controller pair) on Pico. Panel
+size and controller stay fixed; the existing 320x240 constants and tiling and
+calibration math keep their current simple form.
+
+Known first ask to defer with a TODO: the two-USB CYD variant
+(ESP32-2432S028R rev 2) uses ST7789 with inverted colors. mipidsi treats the
+model as a type parameter, so supporting it later is a Cargo feature or a
+second constructor, not a redesign.
+
+### 3. The name stays "CYD"
+
+`Cyd`, `CydDisplay`, `CydTouch`, `CydFrame` move to `device-envoy-core` as-is.
+Implementations follow the platform-suffix convention: `CydEsp`
+(device-envoy-esp), `CydWasm` and `CydMemory` (device-envoy-core, see below),
+`CydRp` (device-envoy-rp, later). Matches device-envoy's opinionated named
+devices (`WifiAuto`, `Led4`).
+
+### 4. WASM and Memory live in device-envoy-core behind features
+
+No `device-envoy-wasm` crate. WASM support is scoped to exactly what exists
+today — `CydWasm`, `ButtonWasm` / `ButtonWasmSource`, `FlashDeviceWasm`
+(localStorage) — behind a new `wasm` feature on `device-envoy-core` pulling
+the optional deps (`wasm-bindgen`, `web-sys`, `js-sys`, `embassy-time` wasm +
+generic-queue). Module docs must state this scope explicitly (a simulation
+surface for examples, not a general browser platform) so it does not accrete.
+
+`CydMemory` goes behind the existing `host` feature, which already gates
+`png` — its only std dependency. This also merges cyd-memory's host-side
+flash test double with device-envoy-core's.
+
+Caveats to encode:
+
+- The `wasm` feature must stay strictly opt-in for leaf binaries — never a
+  default or transitive feature. `embassy-time/wasm` swaps the global time
+  driver and would break an MCU build if feature unification enabled it.
+- Before publishing, check whether the `wasm-bindgen = "=0.2.118"` exact pin
+  in cyd-wasm can relax to `0.2`; an exact pin in a published
+  `device-envoy-core` is hostile to downstreams.
+
+### 5. Open TODO0s move with the code, unchanged in priority
+
+The migration does not require settling them first; they carry over verbatim
+(moved, not deleted, per workspace convention):
+
+- `TODO0000` software-vs-hardware clipping question in
+  `linkage-blaze-cyd/src/display.rs` (`clip_to_screen`).
+- `TODO00` on `CydEsp::rgb565` — likely resolved by deletion once the color
+  helpers move to `device-envoy-core` (decision 1).
+- cyd-memory flash-test-double consolidation — resolved by decision 4.
+- The `TODO` in `cyd-wasm/src/lib.rs` anticipating a `device-envoy-wasm`
+  crate — reword: the destination is `device-envoy-core` behind the `wasm`
+  feature (decision 4).
+
+## Phases
+
+1. **Split 2D from 3D in place** (inside linkage-blaze, everything still
+   compiles here): pull the 3D methods off `CydDisplay` into an extension
+   trait, isolate the pixel utilities destined for `device-envoy-core`.
+2. **Move traits + memory + wasm into `device-envoy-core`**: `Cyd` traits,
+   tiling, calibration, orientation, TGA, `DrawItem2d`, `ContiguousPixels`,
+   pixel utilities; `CydMemory` behind `host`; `CydWasm` / `ButtonWasm` /
+   `FlashDeviceWasm` behind new `wasm`.
+3. **Move `CydEsp` into `device-envoy-esp`**; widen the chip feature matrix
+   from {esp32, esp32c6} toward the chips device-envoy-esp already supports
+   (mostly Cargo-feature plumbing; verify SPI/DMA setup per chip family).
+3b. **Board example templates for CYD** (follow-up pass after phase 3;
+   numbered 3b so the existing phase numbers stay stable):
+   device-envoy-esp generates its per-chip examples from Jinja2 templates
+   (`examples/templates/*.rs.j2`) via `cargo xtask generate-board-examples`,
+   with per-board pin assignments and generated wiring doc comments. CYD
+   needs:
+
+   - One or more `cyd_*.rs.j2` templates — a basic draw/tiles demo and a
+     touch example (the calibration flow is a natural candidate).
+   - Per-chip pin assignments in the board data for the display SPI + touch
+     SPI pin sets. On the classic esp32 these are the CYD board's fixed
+     wiring; on every other chip they describe wiring a standalone module —
+     pick free SPI-capable GPIOs per chip, avoiding strapping pins. The
+     generated wiring comments are the documentation for hooking up the
+     module.
+   - A device-envoy-native example. The existing CYD examples (clock,
+     ballet, armatron) depend on linkage-blaze's 3D layer and stay in
+     linkage-blaze-classic; device-envoy needs a small new demo
+     (touch-paint, or tiled text/graphics) with no linkage dependency.
+
+4. **`CydRp` in `device-envoy-rp`** (later): embassy-rp SPI + mipidsi +
+   XPT2046. Reference hardware is a standalone 320x240 ILI9341 + XPT2046
+   touch-screen module wired over SPI (on hand), targeting both Pico 1 and
+   Pico 2; the Waveshare Pico-ResTouch-LCD-2.8 uses the same controller pair
+   and should work identically. The tiled-frame model is what makes 320x240
+   viable in Pico 1 RAM (a full RGB565 framebuffer is 150 KB); keep it
+   first-class.
+
+## Logistics
+
+- All migration work happens locally: both repos live in the same VS Code
+  workspace on dev branches. During development, point linkage-blaze's
+  `device-envoy-*` dependencies at local paths
+  (`/home/carlk/programs/mcu/device-envoy/crates/...`) instead of the
+  published 0.1.0 crates. Coordinated crates.io releases happen only at the
+  end, when both dev branches are ready to land.
+- After the move, linkage-blaze keeps: `DrawItem3d` / `Projection` and the 3D
+  extension code, the examples, and everything under `linkage-blaze-core`
+  that is not a generic pixel utility.
+
+## Handoff Notes for Implementation
+
+- Scope of implementation is phases 1-3 only. Phase 3b (board example
+  templates) and phase 4 (`CydRp`) are follow-up passes.
+- Hardware on hand for testing: a standalone 320x240 ILI9341 + XPT2046
+  touch-screen module (no classic-ESP32 CYD board), various non-classic ESP
+  chips, and both Pico 1 and Pico 2. So the phase 3 chip-matrix widening can
+  be hardware-verified on the non-classic ESPs, and the classic-esp32 path is
+  verified by compile/CI only.
+- The four `linkage-blaze-cyd*` crates are deleted at the end of phase 3 (no
+  compatibility shims, per workspace convention). Dependents to re-point at
+  the device-envoy locations, plus the workspace root `Cargo.toml` member and
+  dependency lists:
+  - `linkage-blaze-example-core`
+  - `linkage-blaze-classic` (examples: clock, ballet, armatron,
+    skeleton-clock)
+  - `linkage-blaze-clock-wasm`, `linkage-blaze-ballet-wasm`,
+    `linkage-blaze-armatron-wasm`, `linkage-blaze-skeleton-clock-wasm`
+- Both repos have their own `AGENTS.md`; read each before editing that repo.
+- Verification: `just check-all` in each repo is the local CI (tests, checks,
+  and builds across all targets, including embedded and WASM). Run it in both
+  repos after each phase; every phase must end green.
+- Suggested destination layout in `device-envoy-core`: a `cyd` module
+  following the existing no-`mod.rs` convention (`src/cyd.rs` +
+  `src/cyd/*.rs`), with the wasm and memory backends as feature-gated
+  submodules (`src/cyd/wasm.rs`, `src/cyd/memory.rs`). The esp implementation
+  becomes `src/cyd.rs` + submodules in `device-envoy-esp`, mirroring how the
+  other devices there are laid out.

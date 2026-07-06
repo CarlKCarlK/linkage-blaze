@@ -1,7 +1,6 @@
 use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
-use linkage_blaze_core::{DrawItem3d, Projection};
 
-use crate::{DrawItem2d, DrawItem3dExt, Image565View};
+use crate::{DrawItem2d, Image565View};
 
 #[derive(Clone, Copy, Debug)]
 struct PreparedBounds {
@@ -226,30 +225,6 @@ pub struct ContiguousPixels<const PIXEL_SOURCE_COUNT: usize> {
 }
 
 impl<const PIXEL_SOURCE_COUNT: usize> ContiguousPixels<PIXEL_SOURCE_COUNT> {
-    /// Project and compile 3D draw items for indexed pixel lookups.
-    #[must_use]
-    pub fn from_draw_items_3d<I>(
-        bounds: Rectangle,
-        background: Rgb565,
-        draw_items_3d: I,
-        projection: &Projection,
-    ) -> Self
-    where
-        I: IntoIterator<Item = DrawItem3d>,
-    {
-        let mut pixel_sources = heapless::Vec::<PreparedPixelSource, PIXEL_SOURCE_COUNT>::new();
-        for draw_item_3d in draw_items_3d {
-            let draw_item_2d = draw_item_3d.project(projection);
-            if let Some(prepared_pixel_source) = PreparedPrimitive::from_projected(&draw_item_2d) {
-                pixel_sources
-                    .push(prepared_pixel_source)
-                    .expect("draw items fit the prepared pixel source capacity");
-            }
-        }
-
-        Self::new(bounds, background, pixel_sources)
-    }
-
     /// Compile already-projected draw items for indexed pixel lookups.
     #[must_use]
     pub fn from_draw_items_2d(
