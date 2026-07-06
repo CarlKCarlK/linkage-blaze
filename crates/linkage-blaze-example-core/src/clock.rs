@@ -6,8 +6,9 @@ use core::{convert::Infallible, fmt, iter};
 
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use device_envoy_core::cyd::{
-    ContiguousPixels, CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565View, Orientation,
-    tga565, tiling::max_rectangle_pixel_count,
+    CydDisplay, CydFrame,
+    display::{DrawItem, Image565Fixed, Image565View, Orientation, tga565},
+    tiling::max_rectangle_pixel_count,
 };
 use embedded_graphics::{
     Drawable,
@@ -107,17 +108,14 @@ where
             .draw_items_3d(&params)
             .map(|draw_item_3d| draw_item_3d.project(&PROJECTION));
 
-        // `ContiguousPixels` yields row-major colors for `fill_contiguous` without
-        // allocating a frame or tile buffer. It includes a background bitmap.
-        let contiguous_pixels =
-            ContiguousPixels::<{ 1 + LINKAGE.draw_item_3d_count() }>::from_draw_items(
+        // Stream the pixels row-major straight to the display with no frame or
+        // tile buffer, with the background bitmap as the first pixel source.
+        display
+            .draw_items::<{ 1 + LINKAGE.draw_item_3d_count() }>(
                 CLOCK_BOUNDS,
                 background, // color, but will be overridden by the bitmap background
                 iter::once(CLOCK_BACKGROUND_BITMAP).chain(draw_items_2d),
-            );
-
-        display
-            .fill_contiguous(contiguous_pixels.bounds(), contiguous_pixels.iter())
+            )
             .map_err(Error::Flush)?;
     }
 }

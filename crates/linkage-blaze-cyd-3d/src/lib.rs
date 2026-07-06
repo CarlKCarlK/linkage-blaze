@@ -1,7 +1,7 @@
 #![no_std]
 
-use device_envoy_core::cyd::{ContiguousPixels, CydDisplay, DrawItem as DrawItem2d};
-use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
+use device_envoy_core::cyd::{CydDisplay, display::DrawItem as DrawItem2d};
+use embedded_graphics::{pixelcolor::Rgb565, primitives::Rectangle};
 use linkage_blaze_core::{DrawItem3d, Projection};
 
 /// CYD/linkage projection from core 3D draw items into CYD 2D draw items.
@@ -42,24 +42,6 @@ impl DrawItem3dExt for DrawItem3d {
     }
 }
 
-/// Compile 3D draw items for indexed pixel lookups by projecting them into the
-/// CYD 2D draw-item layer.
-#[must_use]
-pub fn contiguous_pixels_from_draw_items_3d<const PIXEL_SOURCE_COUNT: usize, I>(
-    bounds: Rectangle,
-    background: Rgb565,
-    draw_items_3d: I,
-    projection: &Projection,
-) -> ContiguousPixels<PIXEL_SOURCE_COUNT>
-where
-    I: IntoIterator<Item = DrawItem3d>,
-{
-    let draw_items_2d = draw_items_3d
-        .into_iter()
-        .map(|draw_item_3d| draw_item_3d.project(projection));
-    ContiguousPixels::from_draw_items(bounds, background, draw_items_2d)
-}
-
 /// Linkage/3D helpers layered on top of the 2D [`CydDisplay`] surface.
 pub trait CydDisplay3dExt: CydDisplay {
     /// Project and draw 3D draw items immediately inside `bounds`.
@@ -73,28 +55,10 @@ pub trait CydDisplay3dExt: CydDisplay {
     where
         I: IntoIterator<Item = DrawItem3d>,
     {
-        let contiguous_pixels = self.prepare_draw_items_3d::<PIXEL_SOURCE_COUNT, _>(
-            bounds,
-            background,
-            draw_items_3d,
-            projection,
-        );
-        self.fill_contiguous(contiguous_pixels.bounds(), contiguous_pixels.iter())
-    }
-
-    /// Compile 3D draw items for indexed pixel lookups inside `bounds`.
-    fn prepare_draw_items_3d<const PIXEL_SOURCE_COUNT: usize, I>(
-        &self,
-        bounds: Rectangle,
-        background: Rgb565,
-        draw_items_3d: I,
-        projection: &Projection,
-    ) -> ContiguousPixels<PIXEL_SOURCE_COUNT>
-    where
-        I: IntoIterator<Item = DrawItem3d>,
-    {
-        let bounds = bounds.intersection(&Rectangle::new(Point::zero(), self.screen_size()));
-        contiguous_pixels_from_draw_items_3d(bounds, background, draw_items_3d, projection)
+        let draw_items_2d = draw_items_3d
+            .into_iter()
+            .map(|draw_item_3d| draw_item_3d.project(projection));
+        self.draw_items::<PIXEL_SOURCE_COUNT>(bounds, background, draw_items_2d)
     }
 }
 

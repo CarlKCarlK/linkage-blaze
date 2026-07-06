@@ -7,7 +7,8 @@ use core::{
 };
 
 use device_envoy_core::cyd::{
-    CopySizeError, CydDisplay, CydFrame, Image565Fixed, Orientation, tga565,
+    CydDisplay, CydFrame,
+    display::{Image565Fixed, Orientation, tga565},
 };
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
@@ -199,18 +200,19 @@ pub struct StatusTextError(pub fmt::Error);
 // todo0000 review this.
 /// Error from the generic ballet loop, generic over the surface's flush error `F`.
 ///
-/// Our own error types ([`StatusTextError`], [`CopySizeError`]) get a derived
+/// Our own error types ([`StatusTextError`], [`device_envoy_core::Error`]) get a derived
 /// `From`, so they propagate with a plain `?`. The device's flush error `F` is
 /// the one exception: a blanket `From<F>` would be greedy enough to collide
 /// with those concrete `From`s (Rust can't rule out a future
-/// `F: CydFlushError == CopySizeError`), so flush is converted explicitly with
+/// `F: CydFlushError == device_envoy_core::Error`), so flush is converted explicitly with
 /// `.map_err(Error::Flush)` at the call site.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
     /// Formatting the status line failed.
     StatusText(StatusTextError),
-    /// The background bitmap's dimensions didn't match the frame's.
-    CopySize(CopySizeError),
+    /// A device-envoy-core operation failed (for example, the background bitmap's
+    /// dimensions didn't match the frame's).
+    Core(device_envoy_core::Error),
     /// Flushing a frame to the display failed.
     #[from(ignore)]
     Flush(F),
