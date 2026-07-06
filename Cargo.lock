@@ -350,6 +350,7 @@ dependencies = [
 name = "device-envoy-esp"
 version = "0.1.0"
 dependencies = [
+ "derive_more",
  "device-envoy-core",
  "embassy-executor",
  "embassy-futures",
@@ -357,6 +358,7 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embassy-time",
  "embedded-graphics",
+ "embedded-hal 1.0.0",
  "embedded-hal-bus",
  "embedded-storage",
  "esp-alloc",
@@ -367,6 +369,7 @@ dependencies = [
  "esp-storage",
  "heapless 0.9.3",
  "log",
+ "mipidsi",
  "paste",
  "portable-atomic",
  "serde",
@@ -879,7 +882,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6aebfabb2c21bec45e575e4f6cb6bb7aa8e1b33e7ac45b5dffa0f9d33ff59105"
 dependencies = [
  "document-features",
- "object",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -907,9 +909,7 @@ dependencies = [
  "esp-metadata-generated",
  "esp-sync",
  "esp-wifi-sys-esp32",
- "esp-wifi-sys-esp32c6",
  "esp32",
- "esp32c6",
  "log",
 ]
 
@@ -958,7 +958,6 @@ dependencies = [
  "esp-wifi-sys-esp32s2",
  "esp-wifi-sys-esp32s3",
  "esp32",
- "esp32c6",
  "heapless 0.9.3",
  "instability",
  "log",
@@ -1001,7 +1000,6 @@ dependencies = [
  "document-features",
  "esp-metadata-generated",
  "esp32",
- "esp32c6",
 ]
 
 [[package]]
@@ -1556,7 +1554,6 @@ dependencies = [
  "esp-rtos",
  "heapless 0.9.3",
  "linkage-blaze-core",
- "linkage-blaze-cyd",
  "linkage-blaze-example-core",
  "log",
  "static_cell",
@@ -1590,24 +1587,6 @@ dependencies = [
  "png",
  "static_cell",
  "trybuild",
-]
-
-[[package]]
-name = "linkage-blaze-cyd"
-version = "0.1.4"
-dependencies = [
- "derive_more",
- "device-envoy-core",
- "device-envoy-esp",
- "embedded-graphics",
- "embedded-hal 1.0.0",
- "embedded-hal-bus",
- "esp-hal",
- "heapless 0.8.0",
- "micromath",
- "mipidsi",
- "serde",
- "static_cell",
 ]
 
 [[package]]
@@ -1772,13 +1751,14 @@ dependencies = [
 
 [[package]]
 name = "mipidsi"
-version = "0.10.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "790ebd28bd67addbccf41b1c0c188c26bb9f5bdcd91d4d6da9bd558e20d97a1d"
+checksum = "9ba34dcbf61182ffa6992b5a4d9b566d5a99df127fd93f6d314213347329e92f"
 dependencies = [
  "embedded-graphics-core",
  "embedded-hal 1.0.0",
  "heapless 0.8.0",
+ "nb 1.1.0",
 ]
 
 [[package]]
@@ -1835,15 +1815,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "object"
-version = "0.37.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
-dependencies = [
- "memchr",
 ]
 
 [[package]]

@@ -9,8 +9,8 @@ license.workspace = true
 # (the `CydSurface`/`CydFrameOps` traits, tiled-layout machinery, the
 # coordinate-translating draw target) plus the generic example logic
 # (`skeleton_clock`) written against those traits and the `ClockSync` trait.
-# Concrete platforms (esp `linkage-blaze-cyd`, a future WASM sim) implement the
-# traits; this crate never depends on a platform.
+# Concrete platforms (`device-envoy-esp::cyd`, `device-envoy-core::cyd::wasm`)
+# implement the traits; this crate never depends on a platform.
 
 [features]
 # Each generic example is gated behind its own feature so a consumer compiles

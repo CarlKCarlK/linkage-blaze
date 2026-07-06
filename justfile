@@ -18,7 +18,6 @@ test-core:
 check-all:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example armatron {{_armatron_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
@@ -122,11 +121,6 @@ _bundle-docs:
     tar -cf "$archive" -C target ai-docs
     printf -- 'Wrote %s\n' "$bundle"
     printf -- 'Wrote %s\n' "$archive"
-
-# ── linkage-blaze-cyd ─────────────────────────────────────────────────────────
-
-check-cyd:
-    cargo +esp check -p linkage-blaze-cyd {{_classic_args}}
 
 # ── linkage-blaze-classic examples (dance, ballet) ──────────────────────
 #

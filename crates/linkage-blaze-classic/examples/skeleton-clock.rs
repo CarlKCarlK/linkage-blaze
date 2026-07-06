@@ -17,12 +17,12 @@ use device_envoy_esp::{
         fields::{TimezoneField, TimezoneFieldStatic},
     },
 };
-use embassy_executor::Spawner;
-use esp_backtrace as _;
-use linkage_blaze_cyd::{
+use device_envoy_esp::cyd::{
     CydDevice, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp,
     tiling::{max_pixel_count, rectangle_pixel_count},
 };
+use embassy_executor::Spawner;
+use esp_backtrace as _;
 use linkage_blaze_example_core::skeleton_clock::{
     self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE,
     skeleton_clock,

@@ -5,16 +5,15 @@
 
 use core::convert::Infallible;
 
+use device_envoy_core::cyd::{Cyd, CydDisplay, EnsureCalibrationError, ensure_calibration};
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
+    cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-
-use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation};
-use device_envoy_core::cyd::{Cyd, CydDisplay, EnsureCalibrationError, ensure_calibration};
 use linkage_blaze_example_core::armatron::{
     ArmatronExit, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
 };
@@ -46,19 +45,19 @@ impl From<CydError> for MainError {
         match error {
             CydError::Flash(_) => MainError::Flash,
             CydError::DisplayInit(error) => match error {
-                linkage_blaze_cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
+                device_envoy_esp::cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
                     MainError::ConfigureDisplaySpi
                 }
-                linkage_blaze_cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
+                device_envoy_esp::cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
                     MainError::CreateDisplaySpiDevice
                 }
-                linkage_blaze_cyd::CydDisplayEspInitError::InitDisplay => MainError::InitDisplay,
+                device_envoy_esp::cyd::CydDisplayEspInitError::InitDisplay => MainError::InitDisplay,
             },
             CydError::TouchInit(error) => match error {
-                linkage_blaze_cyd::CydTouchEspInitError::ConfigureTouchSpi => {
+                device_envoy_esp::cyd::CydTouchEspInitError::ConfigureTouchSpi => {
                     MainError::ConfigureTouchSpi
                 }
-                linkage_blaze_cyd::CydTouchEspInitError::CreateTouchSpiDevice => {
+                device_envoy_esp::cyd::CydTouchEspInitError::CreateTouchSpiDevice => {
                     MainError::CreateTouchSpiDevice
                 }
             },

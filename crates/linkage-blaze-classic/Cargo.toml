@@ -53,7 +53,6 @@ log = { version = "0.4", default-features = false }
 linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
-linkage-blaze-cyd = { path = "../linkage-blaze-cyd" }
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
 device-envoy-core = { version = "0.1.0", default-features = false }
 embassy-time = "0.5.1"

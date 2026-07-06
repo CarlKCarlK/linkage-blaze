@@ -17,9 +17,9 @@ use device_envoy_esp::{
         fields::{TimezoneField, TimezoneFieldStatic},
     },
 };
+use device_envoy_esp::cyd::{CydDevice, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp};
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydDevice, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp};
 use linkage_blaze_example_core::clock::{
     self, BACKGROUND, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
     WIFI_STATUS_RECTANGLE, clock, clock_splash,

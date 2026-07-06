@@ -3,7 +3,6 @@ members = [
     "xtask",
     "crates/linkage-blaze-core",
     "crates/linkage-blaze-cyd-3d",
-    "crates/linkage-blaze-cyd",
     "crates/linkage-blaze-clock-wasm",
     "crates/linkage-blaze-ballet-wasm",
     "crates/linkage-blaze-skeleton-clock-wasm",

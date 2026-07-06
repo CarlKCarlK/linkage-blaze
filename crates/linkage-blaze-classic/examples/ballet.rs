@@ -6,10 +6,10 @@
 
 use core::convert::Infallible;
 
+use device_envoy_esp::cyd::{CydDevice as _, CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_cyd::{CydDevice as _, CydError, CydEsp, CydStaticEsp};
 use linkage_blaze_example_core::ballet::{
     self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
 };
