@@ -1588,6 +1588,7 @@ dependencies = [
 name = "linkage-blaze-core"
 version = "0.1.4"
 dependencies = [
+ "device-envoy-core",
  "embassy-time",
  "embedded-graphics",
  "libm",
@@ -1602,13 +1603,13 @@ name = "linkage-blaze-cyd"
 version = "0.1.4"
 dependencies = [
  "derive_more",
+ "device-envoy-core",
  "device-envoy-esp",
  "embedded-graphics",
  "embedded-hal 1.0.0",
  "embedded-hal-bus",
  "esp-hal",
  "heapless 0.8.0",
- "linkage-blaze-core",
  "linkage-blaze-cyd-core",
  "micromath",
  "mipidsi",
@@ -1632,7 +1633,6 @@ dependencies = [
  "device-envoy-core",
  "embedded-graphics",
  "heapless 0.8.0",
- "linkage-blaze-core",
  "micromath",
  "serde",
 ]
@@ -1644,7 +1644,6 @@ dependencies = [
  "device-envoy-core",
  "embedded-graphics",
  "futures-executor",
- "linkage-blaze-core",
  "linkage-blaze-cyd-core",
  "png",
  "serde",
@@ -1658,7 +1657,6 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "js-sys",
- "linkage-blaze-core",
  "linkage-blaze-cyd-core",
  "postcard",
  "serde",

@@ -7,6 +7,7 @@ mod touch;
 
 use core::{convert::Infallible, fmt};
 
+use device_envoy_core::PixelTarget;
 use embedded_graphics::{
     Pixel,
     mono_font::MonoFont,
@@ -14,7 +15,6 @@ use embedded_graphics::{
     prelude::{Dimensions, DrawTarget, OriginDimensions, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::PixelTarget;
 use static_cell::StaticCell;
 
 use buffer::DynPixelBuffer;

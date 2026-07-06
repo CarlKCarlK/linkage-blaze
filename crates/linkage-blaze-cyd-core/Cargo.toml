@@ -16,6 +16,5 @@ license.workspace = true
 device-envoy-core = { version = "0.1.0", default-features = false }
 embedded-graphics = { version = "0.8", default-features = false }
 heapless = "0.8"
-linkage-blaze-core.workspace = true
 micromath = "2.1"
 serde = { version = "1.0", default-features = false, features = ["derive"] }

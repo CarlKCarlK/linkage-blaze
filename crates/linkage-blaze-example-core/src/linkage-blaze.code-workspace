@@ -10,6 +10,9 @@
 	"settings": {
 		"rust-analyzer.cargo.allTargets": false,
 		"rust-analyzer.cargo.features": "all",
-		"rust-analyzer.diagnostics.enable": false
+		"rust-analyzer.diagnostics.enable": false,
+		"cSpell.words": [
+			"downstreams"
+		]
 	}
 }

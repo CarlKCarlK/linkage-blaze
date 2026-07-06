@@ -518,11 +518,10 @@ fn ceil_nonnegative_f32(value: f32) -> i32 {
 #[cfg(test)]
 mod tests {
     use embedded_graphics::{
-        pixelcolor::{Rgb565, raw::RawU16},
+        pixelcolor::{Rgb565, Rgb888, RgbColor, WebColors, raw::RawU16},
         prelude::{IntoStorage, Point, Size},
         primitives::Rectangle,
     };
-    use linkage_blaze_core::{RgbColor, WebColors};
 
     use super::*;
     use crate::Image565View;
@@ -539,7 +538,7 @@ mod tests {
         let circle = DrawItem2d::Circle {
             center: (0.0, 0.0),
             pixel_radius: 0.1,
-            color: linkage_blaze_core::Rgb888::CSS_BLUE,
+            color: Rgb888::CSS_BLUE,
         };
 
         let contiguous_pixels = ContiguousPixels::<2>::from_draw_items_2d(
@@ -554,7 +553,7 @@ mod tests {
         );
         assert_eq!(
             contiguous_pixels.pixel_at(0, 0).into_storage(),
-            Rgb565::from(linkage_blaze_core::Rgb888::CSS_BLUE).into_storage()
+            Rgb565::from(Rgb888::CSS_BLUE).into_storage()
         );
         assert_eq!(
             contiguous_pixels.pixel_at(0, 1).into_storage(),

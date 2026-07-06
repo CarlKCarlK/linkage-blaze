@@ -9,11 +9,11 @@ mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
-use device_envoy_core::button::Button;
+use device_envoy_core::{button::Button, rgb565_from_rgb888};
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed, rgb565_from_rgb888,
+    LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
 };
 use linkage_blaze_cyd_3d::DrawItem3dExt;
 use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, SCREEN_HEIGHT, SCREEN_WIDTH};

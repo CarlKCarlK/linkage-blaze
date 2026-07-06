@@ -14,12 +14,12 @@
 
 use core::{convert::Infallible, future::Future};
 
+use device_envoy_core::{PixelTarget, rgb565_from_rgb888};
 use embedded_graphics::{
-    pixelcolor::{Rgb565, raw::RawU16},
+    pixelcolor::{Rgb565, Rgb888, raw::RawU16},
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::{PixelTarget, Rgb888, rgb565_from_rgb888};
 
 use crate::{ContiguousPixels, DrawItem2d, RawTouchEvent, TouchEvent, tiling::TileGrid};
 
@@ -355,8 +355,8 @@ pub struct CopySizeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use embedded_graphics::pixelcolor::WebColors;
     use embedded_graphics::{Pixel, prelude::OriginDimensions};
-    use linkage_blaze_core::WebColors;
 
     // TODO The shared `linkage-blaze-cyd-memory` fake cannot replace this unit-test
     // double directly because a cyd-core <-> cyd-memory dev-dependency cycle gives
@@ -452,7 +452,7 @@ mod tests {
             self.rectangle.size.height as usize
         }
 
-        fn put_pixel(&mut self, _x: usize, _y: usize, _color: linkage_blaze_core::Rgb888) {}
+        fn put_pixel(&mut self, _x: usize, _y: usize, _color: Rgb888) {}
     }
 
     impl CydFrame for TestFrame {

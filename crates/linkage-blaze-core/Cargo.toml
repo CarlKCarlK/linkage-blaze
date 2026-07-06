@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+device-envoy-core = { version = "0.1.0", default-features = false }
 embassy-time = "0.5.1"
 embedded-graphics = { version = "0.8", default-features = false }
 libm = "0.2"

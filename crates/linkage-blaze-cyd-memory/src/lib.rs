@@ -15,9 +15,12 @@ use std::{
 };
 
 use device_envoy_core::{
+    PixelTarget,
     button::{__ButtonMonitor, Button},
     flash_block::{FlashBlock, FlashBlockError, FlashDevice, clear_block, load_block, save_block},
+    rgb888_from_rgb565,
 };
+use embedded_graphics::pixelcolor::{Rgb888, RgbColor};
 use embedded_graphics::{
     Drawable, Pixel,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_9X15_BOLD},
@@ -26,7 +29,6 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Baseline, Text},
 };
-use linkage_blaze_core::{PixelTarget, Rgb888, RgbColor, rgb888_from_rgb565};
 use linkage_blaze_cyd_core::{
     CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydRawTouch, CydTouch, RawTouchEvent,
     RegionPixels, TouchEvent,

@@ -1,12 +1,12 @@
+use device_envoy_core::{
+    PixelTarget, PixelTargetAdapter, fill_ellipse_pixels, pixel_put, pixel_put_565,
+};
 use embedded_graphics::{
     Drawable,
-    pixelcolor::{Rgb565, raw::RawU16},
+    pixelcolor::{Rgb565, Rgb888, raw::RawU16},
     prelude::{IntoStorage, Point, Size},
     primitives::Rectangle,
     primitives::{Circle, Line, Primitive, PrimitiveStyle},
-};
-use linkage_blaze_core::{
-    PixelTarget, PixelTargetAdapter, Rgb888, fill_ellipse_pixels, pixel_put, pixel_put_565,
 };
 
 /// A view into a statically-stored RGB565 bitmap, optionally cropped to a

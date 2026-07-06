@@ -16,6 +16,7 @@ esp32c6 = [
 ]
 
 [dependencies]
+device-envoy-core = { version = "0.1.0", default-features = false }
 device-envoy-esp = { version = "0.1.0", default-features = false }
 derive_more = { version = "2.1.1", default-features = false, features = [
     "from",
@@ -30,6 +31,5 @@ heapless = "0.8"
 micromath = "2.1"
 mipidsi = "0.10.0"
 linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
-linkage-blaze-core.workspace = true
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 static_cell = "2.1.1"

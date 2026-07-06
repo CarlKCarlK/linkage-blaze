@@ -20,13 +20,13 @@
 //! Anything outside this subset triggers a `const` panic, so an unsupported file
 //! fails the build rather than at runtime.
 
+use device_envoy_core::rgb565_raw_from_rgb888_components;
 use embedded_graphics::{
     Drawable, Pixel,
     pixelcolor::{Rgb565, raw::RawU16},
     prelude::{DrawTarget, Point, Size},
     primitives::Rectangle,
 };
-use linkage_blaze_core::rgb565_raw_from_rgb888_components;
 
 /// An opaque RGB565 image decoded from a TGA at compile time.
 ///
