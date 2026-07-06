@@ -51,6 +51,7 @@
 
 use core::{fmt, fmt::Write, ptr};
 
+use device_envoy_core::cyd::TouchEvent;
 use embedded_graphics::{
     draw_target::DrawTarget,
     geometry::{Point, Size},
@@ -61,7 +62,6 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use heapless::String;
-use device_envoy_core::cyd::TouchEvent;
 
 const LABEL_CAPACITY: usize = 24;
 const SLIDER_TOUCH_PAD: i32 = 14;

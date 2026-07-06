@@ -6,7 +6,7 @@
 
 use core::convert::Infallible;
 
-use device_envoy_esp::cyd::{CydDevice as _, CydError, CydEsp, CydStaticEsp};
+use device_envoy_esp::cyd::{Cyd as _, CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;

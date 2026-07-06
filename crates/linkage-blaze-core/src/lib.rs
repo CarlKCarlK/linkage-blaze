@@ -44,7 +44,7 @@ use alloc::vec::Vec;
 
 use core::convert::Infallible;
 
-use device_envoy_core::{PixelTarget, fill_ellipse_pixels, pixel_put};
+use device_envoy_core::pixel_target::{PixelTarget, fill_ellipse_pixels, pixel_put};
 
 pub use math::{Mat3, Vec3};
 
@@ -3949,7 +3949,7 @@ impl Projection {
 /// Set it to `Point::new(0, 0)` to render to the full target without any offset.
 ///
 /// ```rust,no_run
-/// # use device_envoy_core::PixelTarget;
+/// # use device_envoy_core::pixel_target::PixelTarget;
 /// # use linkage_blaze_core::{PixelSurface, Rgb888};
 /// # use embedded_graphics::prelude::Point;
 /// # struct MyTarget;

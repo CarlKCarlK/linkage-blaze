@@ -9,14 +9,14 @@ mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
-use device_envoy_core::{button::Button, rgb565_from_rgb888};
+use device_envoy_core::cyd::{Cyd, CydDisplay, CydFrame, CydTouch, SCREEN_HEIGHT, SCREEN_WIDTH};
+use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
 use linkage_blaze_core::{
     LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
 };
 use linkage_blaze_cyd_3d::DrawItem3dExt;
-use device_envoy_core::cyd::{Cyd, CydDisplay, CydFrame, CydTouch, SCREEN_HEIGHT, SCREEN_WIDTH};
 use nanorand::{Rng, WyRand};
 
 use crate::ui::{Ui, UiError};
@@ -225,12 +225,12 @@ pub enum ArmatronExit {
 
 #[cfg(test)]
 mod tests {
-    use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
-    use futures_executor::block_on;
     use device_envoy_core::cyd::TouchEvent;
     use device_envoy_core::cyd::memory::{
         MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
     };
+    use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
+    use futures_executor::block_on;
 
     use super::controls::CALIBRATE_BUTTON;
     use super::{ArmatronExit, Error, armatron};

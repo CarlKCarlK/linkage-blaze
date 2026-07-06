@@ -21,10 +21,10 @@ use log::info;
 use time::OffsetDateTime;
 
 use device_envoy_core::cyd::{
-    CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation,
+    CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, tga565,
+    tga565_magenta_mask,
     tiling::{TileGrid, max_u32},
 };
-use device_envoy_core::{tga565, tga565_magenta_mask};
 
 use crate::infallible::InfallibleResultExt;
 
@@ -449,9 +449,9 @@ pub enum Error<F> {
 #[cfg(test)]
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
-    use futures_executor::block_on;
     use device_envoy_core::cyd::Cyd as _;
     use device_envoy_core::cyd::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use futures_executor::block_on;
     use time::OffsetDateTime;
 
     use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, skeleton_clock};

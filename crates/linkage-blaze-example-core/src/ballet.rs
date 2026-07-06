@@ -6,14 +6,15 @@ use core::{
     fmt::{self, Write},
 };
 
+use device_envoy_core::cyd::{
+    CopySizeError, CydDisplay, CydFrame, Image565Fixed, Orientation, tga565,
+};
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
 use linkage_blaze_core::{
     LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion, bvh_parse::BvhMotion,
     linkage, linkage_fixed,
 };
-use device_envoy_core::cyd::{CopySizeError, CydDisplay, CydFrame, Image565Fixed, Orientation};
-use device_envoy_core::tga565;
 use linkage_blaze_cyd_3d::DrawItem3dExt;
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ const PROJECTION: Projection = Projection::front_orthographic(
 
 // ── Generic entry point ────────────────────────────────────────────────────────
 
-/// Run the ballet example forever on the CydDevice (e.g. CydEsp32, CydWasm, etc.) given.
+/// Run the ballet example forever on a [`Cyd`] implementation (for example `CydEsp` or `CydWasm`).
 pub async fn ballet<CydDisplayDevice>(
     display: &mut CydDisplayDevice,
 ) -> Result<Infallible, Error<CydDisplayDevice::Error>>
@@ -134,13 +135,13 @@ fn status_text(
 
 #[cfg(test)]
 mod tests {
-    use embedded_graphics::geometry::Point;
-    use embedded_graphics::primitives::Rectangle;
-    use futures_executor::block_on;
     use device_envoy_core::cyd::Cyd as _;
     use device_envoy_core::cyd::memory::{
         MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
     };
+    use embedded_graphics::geometry::Point;
+    use embedded_graphics::primitives::Rectangle;
+    use futures_executor::block_on;
 
     use super::{BACKGROUND, Error, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
 

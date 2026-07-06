@@ -6,6 +6,10 @@
 
 use core::{cell::RefCell, convert::Infallible};
 
+use device_envoy_esp::cyd::{
+    Cyd, CydDisplay as _, CydError, CydEsp, CydStaticEsp,
+    tiling::{max_pixel_count, rectangle_pixel_count},
+};
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -16,10 +20,6 @@ use device_envoy_esp::{
         WifiAuto as _, WifiAutoEsp, WifiAutoEvent,
         fields::{TimezoneField, TimezoneFieldStatic},
     },
-};
-use device_envoy_esp::cyd::{
-    CydDevice, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp,
-    tiling::{max_pixel_count, rectangle_pixel_count},
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;

@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
+use device_envoy_core::cyd::wasm::{ButtonWasmSource, CydTouchWasmSource, CydWasm, FlashBlockWasm};
 use device_envoy_core::cyd::{
     CalibrationConfig, EnsureCalibrationSettings, Orientation, ensure_calibration_with_settings,
 };
-use device_envoy_core::cyd::wasm::{ButtonWasmSource, CydTouchWasmSource, CydWasm, FlashBlockWasm};
 use device_envoy_core::flash_block::FlashBlock as _;
 use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
 use linkage_blaze_core::{LinkageFixed, Pose, Rgb888, Vec3, linkage, linkage_fixed};

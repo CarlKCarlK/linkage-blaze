@@ -6,6 +6,7 @@
 
 use core::{cell::RefCell, convert::Infallible};
 
+use device_envoy_esp::cyd::{Cyd, CydDisplay as _, CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -17,7 +18,6 @@ use device_envoy_esp::{
         fields::{TimezoneField, TimezoneFieldStatic},
     },
 };
-use device_envoy_esp::cyd::{CydDevice, CydDisplayTrait as _, CydError, CydEsp, CydStaticEsp};
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_example_core::clock::{

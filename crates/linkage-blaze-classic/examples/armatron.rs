@@ -51,7 +51,9 @@ impl From<CydError> for MainError {
                 device_envoy_esp::cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
                     MainError::CreateDisplaySpiDevice
                 }
-                device_envoy_esp::cyd::CydDisplayEspInitError::InitDisplay => MainError::InitDisplay,
+                device_envoy_esp::cyd::CydDisplayEspInitError::InitDisplay => {
+                    MainError::InitDisplay
+                }
             },
             CydError::TouchInit(error) => match error {
                 device_envoy_esp::cyd::CydTouchEspInitError::ConfigureTouchSpi => {

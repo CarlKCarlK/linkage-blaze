@@ -5,6 +5,10 @@
 use core::{convert::Infallible, fmt, iter};
 
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
+use device_envoy_core::cyd::{
+    ContiguousPixels, CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565View, Orientation,
+    tga565, tiling::max_rectangle_pixel_count,
+};
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10},
@@ -15,11 +19,6 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
-use device_envoy_core::cyd::{
-    ContiguousPixels, CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565View, Orientation,
-    tiling::max_rectangle_pixel_count,
-};
-use device_envoy_core::tga565;
 use linkage_blaze_cyd_3d::DrawItem3dExt;
 use log::info;
 use profont::PROFONT_18_POINT;
@@ -177,9 +176,9 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 #[cfg(test)]
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
-    use futures_executor::block_on;
-    use device_envoy_core::cyd::{Cyd as _, CydDisplay, CydFrame};
     use device_envoy_core::cyd::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use device_envoy_core::cyd::{Cyd as _, CydDisplay, CydFrame};
+    use futures_executor::block_on;
     use time::OffsetDateTime;
 
     use super::{
