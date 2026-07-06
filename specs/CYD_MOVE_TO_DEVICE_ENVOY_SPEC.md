@@ -206,6 +206,16 @@ The migration does not require settling them first; they carry over verbatim
   chips, and both Pico 1 and Pico 2. So the phase 3 chip-matrix widening can
   be hardware-verified on the non-classic ESPs, and the classic-esp32 path is
   verified by compile/CI only.
+- **Chip-matrix widening status**: `CydEsp`'s display/touch code only uses
+  chip-agnostic `esp-hal` generic trait bounds (`impl spi::master::Instance`,
+  generic GPIO input/output traits) with no per-chip `cfg`, so once the code
+  moved into `device-envoy-esp` (which already declares all 9 chip features)
+  it compiled clean across the full matrix with zero source changes:
+  `esp32`, `esp32c2`, `esp32c3`, `esp32c5`, `esp32c6`, `esp32c61`, `esp32h2`,
+  `esp32s2`, `esp32s3` (compile-verified via `cargo check -p device-envoy-esp
+  --no-default-features --features <chip>`, `+esp`/`-Zbuild-std=core,alloc`
+  for the xtensa chips). Hardware verification (real SPI/DMA behavior on the
+  non-classic ESPs on hand) is still outstanding and left to the user.
 - The four `linkage-blaze-cyd*` crates are deleted at the end of phase 3 (no
   compatibility shims, per workspace convention). Dependents to re-point at
   the device-envoy locations, plus the workspace root `Cargo.toml` member and
