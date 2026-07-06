@@ -157,25 +157,36 @@ The migration does not require settling them first; they carry over verbatim
 3. **Move `CydEsp` into `device-envoy-esp`**; widen the chip feature matrix
    from {esp32, esp32c6} toward the chips device-envoy-esp already supports
    (mostly Cargo-feature plumbing; verify SPI/DMA setup per chip family).
-3b. **Board example templates for CYD** (follow-up pass after phase 3;
-   numbered 3b so the existing phase numbers stay stable):
-   device-envoy-esp generates its per-chip examples from Jinja2 templates
-   (`examples/templates/*.rs.j2`) via `cargo xtask generate-board-examples`,
-   with per-board pin assignments and generated wiring doc comments. CYD
-   needs:
+3b. **Board example templates for CYD** — done. Added
+   `cyd_tiles.rs.j2` (tiled draw demo, display-only, small tile-sized buffer
+   rather than a full-screen one) and `cyd_touch_paint.rs.j2` (calibration
+   flow + touch-paint), generated per chip/board via `cargo xtask
+   generate-board-examples`. Both are device-envoy-native with no
+   linkage-blaze dependency.
 
-   - One or more `cyd_*.rs.j2` templates — a basic draw/tiles demo and a
-     touch example (the calibration flow is a natural candidate).
-   - Per-chip pin assignments in the board data for the display SPI + touch
-     SPI pin sets. On the classic esp32 these are the CYD board's fixed
-     wiring; on every other chip they describe wiring a standalone module —
-     pick free SPI-capable GPIOs per chip, avoiding strapping pins. The
-     generated wiring comments are the documentation for hooking up the
-     module.
-   - A device-envoy-native example. The existing CYD examples (clock,
-     ballet, armatron) depend on linkage-blaze's 3D layer and stay in
-     linkage-blaze-classic; device-envoy needs a small new demo
-     (touch-paint, or tiled text/graphics) with no linkage dependency.
+   Added `CydDisplayWiring`/`CydTouchWiring` pin assignments to every board
+   profile: the classic esp32 CYD board's fixed factory wiring, and spare
+   SPI-capable GPIOs on the other chips (standalone module wiring).
+
+   This surfaced two pre-existing, previously-unexercised board-data bugs
+   (nothing before CYD required real dual-SPI):
+
+   - `spi_count` was wrongly `2` for esp32c3/c5/c6/c61/h2 — esp-hal doesn't
+     expose a second general-purpose SPI peripheral (`SPI3`) on those chips,
+     only on classic esp32 and esp32s2/s3. Corrected to `1`; those chips now
+     correctly get the "requires 2 SPI resources" placeholder for CYD.
+   - esp32s2's RAM budget can't fit a full 320x240 framebuffer plus the
+     Wi-Fi stack (`cyd_touch_paint` needs `CydEsp::SCREEN_PIXELS`, unlike
+     `cyd_tiles`'s small tile buffer) — added a new `large_stack`
+     board-example requirement token, matching the existing
+     `stack_constrained` board-data field.
+
+   Also added a `Cyd*` family of `device_envoy_esp::Error` variants,
+   matching the crate's existing per-device error convention, so the new
+   examples can use `device_envoy_esp::{Result, Error}` directly instead of
+   a local error enum.
+
+   device-envoy-esp's full multi-chip `check-all` passes clean.
 
 4. **`CydRp` in `device-envoy-rp`** (later): embassy-rp SPI + mipidsi +
    XPT2046. Reference hardware is a standalone 320x240 ILI9341 + XPT2046
