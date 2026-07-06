@@ -8,8 +8,8 @@ use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, Image565View, Orientation,
-        tga565, tiling::max_rectangle_pixel_count,
+        CydFrame, DrawItem, Image565Fixed, Image565View, Orientation, tga565,
+        tiling::max_rectangle_pixel_count,
     },
 };
 use embedded_graphics::{
@@ -177,7 +177,7 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
     use device_envoy_core::cyd::{Cyd as _, CydDisplay, display::CydFrame};
-    use device_envoy_core::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
     use time::OffsetDateTime;
 
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn clock_renders_expected_frame() {
-        let mut memory_cyd = MemoryCyd::new(
+        let mut memory_cyd = CydMemory::new(
             ORIENTATION.size(),
             BACKGROUND,
             FOREGROUND,

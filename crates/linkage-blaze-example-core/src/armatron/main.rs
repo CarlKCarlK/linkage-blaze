@@ -234,7 +234,7 @@ pub enum ArmatronExit {
 mod tests {
     use device_envoy_core::cyd::touch::TouchEvent;
     use device_envoy_core::memory::{
-        MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
+        CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
     };
     use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
     use futures_executor::block_on;
@@ -242,8 +242,8 @@ mod tests {
     use super::controls::CALIBRATE_BUTTON;
     use super::{ArmatronExit, Error, armatron};
 
-    fn test_memory_cyd() -> MemoryCyd {
-        MemoryCyd::new(
+    fn test_memory_cyd() -> CydMemory {
+        CydMemory::new(
             embedded_graphics::geometry::Size::new(320, 240),
             super::BACKGROUND,
             super::FOREGROUND,
@@ -263,7 +263,7 @@ mod tests {
         memory_cyd.push_touch_event(TouchEvent::Down {
             point: touch_center,
         });
-        let mut memory_button = memory_cyd.memory_button();
+        let mut memory_button = memory_cyd.button_memory();
 
         let armatron_exit = block_on(armatron(&mut memory_cyd, &mut memory_button))
             .expect("tapping the calibrate button should exit cleanly, not error");
@@ -280,13 +280,13 @@ mod tests {
     fn armatron_renders_expected_frame() {
         let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(1);
-        let mut memory_button = memory_cyd.memory_button();
+        let mut memory_button = memory_cyd.button_memory();
 
         let armatron_error = block_on(armatron(&mut memory_cyd, &mut memory_button))
             .expect_err("the free-running loop should stop at the frame budget");
         assert!(matches!(
             armatron_error,
-            Error::Cyd(MemoryCydError::OutOfFrames)
+            Error::Cyd(CydMemoryError::OutOfFrames)
         ));
 
         assert_framebuffer_matches_expected_png(

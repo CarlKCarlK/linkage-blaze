@@ -24,6 +24,7 @@
 //! # use embedded_graphics::{
 //! #     mock_display::MockDisplay,
 //! #     pixelcolor::Rgb565,
+//! #     prelude::Point,
 //! # };
 //! # use core::convert::Infallible;
 //! # use device_envoy_core::cyd::touch::TouchEvent;

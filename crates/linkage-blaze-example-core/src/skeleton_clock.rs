@@ -23,8 +23,8 @@ use time::OffsetDateTime;
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, tga565,
-        tga565_magenta_mask, tiling::TileGrid,
+        CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, tga565, tga565_magenta_mask,
+        tiling::TileGrid,
     },
 };
 
@@ -455,7 +455,7 @@ pub enum Error<F> {
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
     use device_envoy_core::cyd::Cyd as _;
-    use device_envoy_core::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
     use time::OffsetDateTime;
 
@@ -498,7 +498,7 @@ mod tests {
 
     #[test]
     fn skeleton_clock_renders_expected_frame() {
-        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(ONE_COMPLETE_FRAME_BUDGET);
         let clock_sync = FixedClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)

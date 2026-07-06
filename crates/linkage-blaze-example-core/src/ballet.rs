@@ -138,7 +138,7 @@ fn status_text(
 mod tests {
     use device_envoy_core::cyd::Cyd as _;
     use device_envoy_core::memory::{
-        MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
+        CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
     };
     use embedded_graphics::geometry::Point;
     use embedded_graphics::primitives::Rectangle;
@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn ballet_runs_bounded_frames_and_flushes_within_screen_bounds() {
-        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(SMOKE_TEST_FRAME_BUDGET);
 
         let ballet_result = {
@@ -162,7 +162,7 @@ mod tests {
             ballet_result.expect_err("the free-running loop should stop at the frame budget");
         assert!(matches!(
             ballet_error,
-            Error::Flush(MemoryCydError::OutOfFrames)
+            Error::Flush(CydMemoryError::OutOfFrames)
         ));
         assert_eq!(memory_cyd.flush_count(), SMOKE_TEST_FRAME_BUDGET);
         assert_eq!(
@@ -175,7 +175,7 @@ mod tests {
     fn ballet_renders_expected_frame() {
         const GOLDEN_TEST_FRAME_BUDGET: usize = 225;
 
-        let mut memory_cyd = MemoryCyd::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
 
         let ballet_result = {
