@@ -204,7 +204,7 @@ pub struct StatusTextError(pub fmt::Error);
 /// `From`, so they propagate with a plain `?`. The device's flush error `F` is
 /// the one exception: a blanket `From<F>` would be greedy enough to collide
 /// with those concrete `From`s (Rust can't rule out a future
-/// `F: CydFlushError == device_envoy_core::Error`), so flush is converted explicitly with
+/// `F: CydIoError == device_envoy_core::Error`), so flush is converted explicitly with
 /// `.map_err(Error::Flush)` at the call site.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
