@@ -12,10 +12,9 @@ use linkage_blaze_core::{
     LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion, bvh_parse::BvhMotion,
     linkage, linkage_fixed,
 };
+use device_envoy_core::cyd::{CopySizeError, CydDisplay, CydFrame, Image565Fixed, Orientation};
+use device_envoy_core::tga565;
 use linkage_blaze_cyd_3d::DrawItem3dExt;
-use linkage_blaze_cyd_core::{
-    CopySizeError, CydDisplay, CydFrame, Image565Fixed, Orientation, tga565,
-};
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
@@ -138,8 +137,8 @@ mod tests {
     use embedded_graphics::geometry::Point;
     use embedded_graphics::primitives::Rectangle;
     use futures_executor::block_on;
-    use linkage_blaze_cyd_core::Cyd as _;
-    use linkage_blaze_cyd_memory::{
+    use device_envoy_core::cyd::Cyd as _;
+    use device_envoy_core::cyd::memory::{
         MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
     };
 

@@ -20,7 +20,7 @@ This reuses the same pieces as the ballet app: the device-agnostic
 `async fn skeleton_clock` from
 [`linkage-blaze-example-core`](../linkage-blaze-example-core) (an unchanged
 `loop { wait_for_tick().await; draw; flush_at(..).await?; }`) drawn onto the
-[`CydWasm`](../linkage-blaze-cyd-wasm) device, whose `flush_at` awaits
+`CydWasm` (`device-envoy-core::cyd::wasm::CydWasm`) device, whose `flush_at` awaits
 `requestAnimationFrame`. The browser future is driven by
 `wasm_bindgen_futures::spawn_local`.
 

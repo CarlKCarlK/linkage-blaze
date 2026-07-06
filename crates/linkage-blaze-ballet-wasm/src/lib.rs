@@ -8,11 +8,11 @@
 //! Wires the page's `<canvas id="screen">` to a [`CydWasm`] and spawns the
 //! device-agnostic [`ballet`] render loop. The loop is unchanged from the esp32
 //! build; it paces itself to the browser via
-//! [`CydFrameWasm::flush`](linkage_blaze_cyd_wasm::CydFrameWasm), which awaits
+//! [`CydFrameWasm::flush`](device_envoy_core::cyd::wasm::CydFrameWasm), which awaits
 //! `requestAnimationFrame`.
 
-use linkage_blaze_cyd_core::Cyd;
-use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm};
+use device_envoy_core::cyd::Cyd;
+use device_envoy_core::cyd::wasm::{CydTouchWasmSource, CydWasm};
 use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};

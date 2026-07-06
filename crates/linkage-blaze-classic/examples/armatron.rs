@@ -14,7 +14,7 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 
 use linkage_blaze_cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation};
-use linkage_blaze_cyd_core::{Cyd, CydDisplay, EnsureCalibrationError, ensure_calibration};
+use device_envoy_core::cyd::{Cyd, CydDisplay, EnsureCalibrationError, ensure_calibration};
 use linkage_blaze_example_core::armatron::{
     ArmatronExit, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
 };

@@ -5,7 +5,7 @@ use embedded_graphics::{
     pixelcolor::{IntoStorage, Rgb565},
     prelude::{DrawTarget, OriginDimensions, Size},
 };
-use linkage_blaze_cyd_core::RegionPixels;
+use device_envoy_core::cyd::RegionPixels;
 use static_cell::StaticCell;
 
 pub struct RegionBuffer<const WIDTH: usize, const HEIGHT: usize, const PIXEL_COUNT: usize> {

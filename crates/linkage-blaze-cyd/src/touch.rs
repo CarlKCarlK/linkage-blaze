@@ -6,7 +6,7 @@ use esp_hal::{
     },
     spi,
 };
-use linkage_blaze_cyd_core::RawTouchEvent;
+use device_envoy_core::cyd::RawTouchEvent;
 
 pub const TOUCH_SPI_HZ: u32 = 2_500_000;
 

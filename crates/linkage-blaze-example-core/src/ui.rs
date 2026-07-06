@@ -26,7 +26,7 @@
 //! #     pixelcolor::Rgb565,
 //! # };
 //! # use core::convert::Infallible;
-//! # use linkage_blaze_cyd_core::TouchEvent;
+//! # use device_envoy_core::cyd::TouchEvent;
 //! # use linkage_blaze_example_core::ui::{Slider, Ui};
 //! static TILT_SLIDER: Slider = Slider::vertical(
 //!     "z",
@@ -61,7 +61,7 @@ use embedded_graphics::{
     text::{Baseline, Text},
 };
 use heapless::String;
-use linkage_blaze_cyd_core::TouchEvent;
+use device_envoy_core::cyd::TouchEvent;
 
 const LABEL_CAPACITY: usize = 24;
 const SLIDER_TOUCH_PAD: i32 = 14;

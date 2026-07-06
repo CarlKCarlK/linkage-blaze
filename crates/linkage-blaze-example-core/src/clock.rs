@@ -15,11 +15,12 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder},
 };
 use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
-use linkage_blaze_cyd_3d::DrawItem3dExt;
-use linkage_blaze_cyd_core::{
-    ContiguousPixels, CydDisplay, CydFrame, DrawItem2d, Image565Fixed, Image565View, Orientation,
-    tga565, tiling::max_rectangle_pixel_count,
+use device_envoy_core::cyd::{
+    ContiguousPixels, CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565View, Orientation,
+    tiling::max_rectangle_pixel_count,
 };
+use device_envoy_core::tga565;
+use linkage_blaze_cyd_3d::DrawItem3dExt;
 use log::info;
 use profont::PROFONT_18_POINT;
 use time::OffsetDateTime;
@@ -57,7 +58,7 @@ const PROJECTION: Projection = Projection::top_orthographic(
     /* scale */ 1.375,
 );
 const CLOCK_BACKGROUND_VIEW: Image565View = BACKGROUND_BITMAP.view_rect(CLOCK_BOUNDS);
-const CLOCK_BACKGROUND_BITMAP: DrawItem2d = DrawItem2d::Bitmap {
+const CLOCK_BACKGROUND_BITMAP: DrawItem = DrawItem::Bitmap {
     view: CLOCK_BACKGROUND_VIEW,
     top_left: CLOCK_BOUNDS.top_left,
 };
@@ -110,7 +111,7 @@ where
         // `ContiguousPixels` yields row-major colors for `fill_contiguous` without
         // allocating a frame or tile buffer. It includes a background bitmap.
         let contiguous_pixels =
-            ContiguousPixels::<{ 1 + LINKAGE.draw_item_3d_count() }>::from_draw_items_2d(
+            ContiguousPixels::<{ 1 + LINKAGE.draw_item_3d_count() }>::from_draw_items(
                 CLOCK_BOUNDS,
                 background, // color, but will be overridden by the bitmap background
                 iter::once(CLOCK_BACKGROUND_BITMAP).chain(draw_items_2d),
@@ -177,8 +178,8 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
     use futures_executor::block_on;
-    use linkage_blaze_cyd_core::{Cyd as _, CydDisplay, CydFrame};
-    use linkage_blaze_cyd_memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use device_envoy_core::cyd::{Cyd as _, CydDisplay, CydFrame};
+    use device_envoy_core::cyd::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
     use time::OffsetDateTime;
 
     use super::{

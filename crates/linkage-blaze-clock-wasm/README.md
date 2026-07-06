@@ -19,7 +19,7 @@ won't connect from Windows, use the WSL VM's IP or enable
 This reuses the same pieces as [`linkage-blaze-skeleton-clock-wasm`](../linkage-blaze-skeleton-clock-wasm):
 the device-agnostic `async fn clock` from
 [`linkage-blaze-example-core`](../linkage-blaze-example-core) drawn onto the
-[`CydWasm`](../linkage-blaze-cyd-wasm) device, whose `flush` awaits
+`CydWasm` (`device-envoy-core::cyd::wasm::CydWasm`) device, whose `flush` awaits
 `requestAnimationFrame`. The browser future is driven by
 `wasm_bindgen_futures::spawn_local`.
 

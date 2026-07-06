@@ -26,7 +26,7 @@ share the executor); in the browser it awaits the next `requestAnimationFrame`,
 blits the frame to the canvas, then resolves — so the identical loop paces itself
 to each platform's natural present point. The browser future is driven by
 `wasm_bindgen_futures::spawn_local`; the `requestAnimationFrame` wrapper
-([`linkage-blaze-cyd-wasm`](../linkage-blaze-cyd-wasm)) owns its closure (the
+(`device-envoy-core::cyd::wasm`) owns its closure (the
 closure captures only an `Rc` to shared state, never the reverse) so there is no
 reference cycle and no per-frame leak.
 

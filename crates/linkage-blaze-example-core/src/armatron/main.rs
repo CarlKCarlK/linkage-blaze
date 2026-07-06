@@ -3,7 +3,7 @@
 //! The device-agnostic game loop lives here.
 //!
 //! The generic loop redraws every frame, updates immediate-mode controls, and
-//! flushes frames through the [`Cyd`](linkage_blaze_cyd_core::Cyd) boundary.
+//! flushes frames through the [`Cyd`](device_envoy_core::cyd::Cyd) boundary.
 
 mod controlled;
 mod controls;
@@ -16,7 +16,7 @@ use linkage_blaze_core::{
     LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
 };
 use linkage_blaze_cyd_3d::DrawItem3dExt;
-use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame, CydTouch, SCREEN_HEIGHT, SCREEN_WIDTH};
+use device_envoy_core::cyd::{Cyd, CydDisplay, CydFrame, CydTouch, SCREEN_HEIGHT, SCREEN_WIDTH};
 use nanorand::{Rng, WyRand};
 
 use crate::ui::{Ui, UiError};
@@ -95,7 +95,7 @@ const SHOW_FPS_TEXT: bool = true;
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
 /// provide calibrated touch before calling [`armatron`]. Shared calibration
-/// UI helpers now live in [`linkage_blaze_cyd_core::calibration`], alongside
+/// UI helpers now live in [`device_envoy_core::cyd::calibration`], alongside
 /// the rest of the CYD touch-calibration flow.
 // TODO0000 Revisit whether `armatron` should regain a type-state guarantee for
 // calibrated CYD touch instead of relying on this caller-side runtime precondition.
@@ -227,8 +227,8 @@ pub enum ArmatronExit {
 mod tests {
     use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
     use futures_executor::block_on;
-    use linkage_blaze_cyd_core::TouchEvent;
-    use linkage_blaze_cyd_memory::{
+    use device_envoy_core::cyd::TouchEvent;
+    use device_envoy_core::cyd::memory::{
         MemoryCyd, MemoryCydError, assert_framebuffer_matches_expected_png,
     };
 

@@ -20,12 +20,12 @@ use static_cell::StaticCell;
 use buffer::DynPixelBuffer;
 pub use buffer::{PixelBuffer, RegionBuffer, RegionView};
 pub use display::{CydDisplayEspFlushError, CydDisplayEspInitError, DISPLAY_SPI_HZ};
-use linkage_blaze_cyd_core::{
+use device_envoy_core::cyd::{
     CopySizeError, Cyd, CydDisplay, CydFlushError, CydFrame, CydRawTouch, CydTouch,
 };
 // The device abstraction and its neutral support types live in
-// `linkage-blaze-cyd-core`; re-export the public surface from this device crate.
-pub use linkage_blaze_cyd_core::{
+// `device-envoy-core::cyd`; re-export the public surface from this device crate.
+pub use device_envoy_core::cyd::{
     CalibrationConfig, Cyd as CydDevice, CydDisplay as CydDisplayTrait, CydFrame as CydFrameTrait,
     CydTouch as CydTouchTrait, Orientation, RawPoint, RawTouchEvent, RegionPixels, SCREEN_HEIGHT,
     SCREEN_PIXELS, SCREEN_WIDTH, TouchEvent, tiling,
@@ -486,9 +486,9 @@ impl fmt::Debug for CydEsp {
 
 // ── Device-agnostic `Cyd` trait impls ─────────────────────────────────────────
 //
-// These let platform-neutral code (`linkage-blaze-cyd-core` consumers) drive the
-// concrete esp `CydEsp` through the `Cyd`/`CydFrame` traits without naming any
-// esp type.
+// These let platform-neutral code (`device-envoy-core::cyd` consumers) drive
+// the concrete esp `CydEsp` through the `Cyd`/`CydFrame` traits without naming
+// any esp type.
 
 impl Cyd for CydEsp {
     type Error = CydError;

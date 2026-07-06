@@ -2,11 +2,11 @@
 
 //! Platform-neutral example logic for the linkage-blaze CYD examples.
 //!
-//! The device abstraction itself lives in [`linkage_blaze_cyd_core`]; this crate
+//! The device abstraction itself lives in [`device_envoy_core::cyd`]; this crate
 //! holds the generic examples ([`armatron`], [`skeleton_clock`], [`clock`], [`ballet`]) written
-//! against the [`Cyd`](linkage_blaze_cyd_core::Cyd),
-//! [`CydDisplay`](linkage_blaze_cyd_core::CydDisplay), and
-//! [`CydTouch`](linkage_blaze_cyd_core::CydTouch) traits.
+//! against the [`Cyd`](device_envoy_core::cyd::Cyd),
+//! [`CydDisplay`](device_envoy_core::cyd::CydDisplay), and
+//! [`CydTouch`](device_envoy_core::cyd::CydTouch) traits.
 
 #[cfg(feature = "armatron")]
 #[path = "armatron/main.rs"]

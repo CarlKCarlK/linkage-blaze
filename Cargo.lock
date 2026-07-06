@@ -332,14 +332,18 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "heapless 0.9.3",
+ "js-sys",
  "micromath",
  "paste",
+ "png",
  "portable-atomic",
  "postcard",
  "serde",
  "smart-leds",
  "static_cell",
  "time",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -646,12 +650,6 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
 ]
-
-[[package]]
-name = "embedded-io"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef1a6892d9eef45c8fa6b9e0086428a2cca8491aca8f787c534a3d6d0bcb3ced"
 
 [[package]]
 name = "embedded-io"
@@ -1521,8 +1519,6 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "linkage-blaze-core",
- "linkage-blaze-cyd-core",
- "linkage-blaze-cyd-wasm",
  "linkage-blaze-example-core",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1533,11 +1529,10 @@ dependencies = [
 name = "linkage-blaze-ballet-wasm"
 version = "0.1.4"
 dependencies = [
+ "device-envoy-core",
  "embassy-executor",
  "embassy-time",
  "embedded-graphics",
- "linkage-blaze-cyd-core",
- "linkage-blaze-cyd-wasm",
  "linkage-blaze-example-core",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1549,6 +1544,7 @@ name = "linkage-blaze-classic"
 version = "0.1.4"
 dependencies = [
  "derive_more",
+ "device-envoy-core",
  "device-envoy-esp",
  "embassy-executor",
  "embassy-time",
@@ -1561,7 +1557,6 @@ dependencies = [
  "heapless 0.9.3",
  "linkage-blaze-core",
  "linkage-blaze-cyd",
- "linkage-blaze-cyd-core",
  "linkage-blaze-example-core",
  "log",
  "static_cell",
@@ -1576,8 +1571,6 @@ dependencies = [
  "embassy-executor",
  "embassy-time",
  "js-sys",
- "linkage-blaze-cyd-core",
- "linkage-blaze-cyd-wasm",
  "linkage-blaze-example-core",
  "time",
  "wasm-bindgen",
@@ -1611,7 +1604,6 @@ dependencies = [
  "embedded-hal-bus",
  "esp-hal",
  "heapless 0.8.0",
- "linkage-blaze-cyd-core",
  "micromath",
  "mipidsi",
  "serde",
@@ -1622,47 +1614,9 @@ dependencies = [
 name = "linkage-blaze-cyd-3d"
 version = "0.1.4"
 dependencies = [
+ "device-envoy-core",
  "embedded-graphics",
  "linkage-blaze-core",
- "linkage-blaze-cyd-core",
-]
-
-[[package]]
-name = "linkage-blaze-cyd-core"
-version = "0.1.4"
-dependencies = [
- "device-envoy-core",
- "embedded-graphics",
- "heapless 0.8.0",
- "micromath",
- "serde",
-]
-
-[[package]]
-name = "linkage-blaze-cyd-memory"
-version = "0.1.4"
-dependencies = [
- "device-envoy-core",
- "embedded-graphics",
- "futures-executor",
- "linkage-blaze-cyd-core",
- "png",
- "serde",
-]
-
-[[package]]
-name = "linkage-blaze-cyd-wasm"
-version = "0.1.4"
-dependencies = [
- "device-envoy-core",
- "embassy-time",
- "embedded-graphics",
- "js-sys",
- "linkage-blaze-cyd-core",
- "postcard",
- "serde",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
@@ -1686,8 +1640,6 @@ dependencies = [
  "libm",
  "linkage-blaze-core",
  "linkage-blaze-cyd-3d",
- "linkage-blaze-cyd-core",
- "linkage-blaze-cyd-memory",
  "log",
  "nanorand",
  "profont",
@@ -1730,8 +1682,6 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "js-sys",
- "linkage-blaze-cyd-core",
- "linkage-blaze-cyd-wasm",
  "linkage-blaze-example-core",
  "time",
  "wasm-bindgen",
@@ -2001,8 +1951,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24"
 dependencies = [
  "cobs",
- "embedded-io 0.4.0",
- "embedded-io 0.6.1",
  "serde",
 ]
 

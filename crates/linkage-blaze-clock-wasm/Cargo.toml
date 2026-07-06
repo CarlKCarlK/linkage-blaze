@@ -20,10 +20,9 @@ wasm-opt = false
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", features = [
     "clock",
 ] }
-linkage-blaze-cyd-wasm = { path = "../linkage-blaze-cyd-wasm" }
-linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
 device-envoy-core = { version = "0.1.0", default-features = false, features = [
     "wifi",
+    "wasm",
 ] }
 time = { version = "0.3.47", default-features = false }
 # device-envoy-core pulls embassy-executor (for its esp constructors we never

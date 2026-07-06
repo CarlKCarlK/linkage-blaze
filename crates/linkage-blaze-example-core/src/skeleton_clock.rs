@@ -20,11 +20,11 @@ use linkage_blaze_cyd_3d::DrawItem3dExt;
 use log::info;
 use time::OffsetDateTime;
 
-use linkage_blaze_cyd_core::{
-    CydDisplay, CydFrame, DrawItem2d, Image565Fixed, Image565Mask, Orientation, tga565,
-    tga565_magenta_mask,
+use device_envoy_core::cyd::{
+    CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation,
     tiling::{TileGrid, max_u32},
 };
+use device_envoy_core::{tga565, tga565_magenta_mask};
 
 use crate::infallible::InfallibleResultExt;
 
@@ -443,15 +443,15 @@ pub enum Error<F> {
     Mark(MarkLookupError),
     /// The projected-items scratch buffer was smaller than the linkage draw-item count.
     #[from(ignore)]
-    VecOverflow(DrawItem2d),
+    VecOverflow(DrawItem),
 }
 
 #[cfg(test)]
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
     use futures_executor::block_on;
-    use linkage_blaze_cyd_core::Cyd as _;
-    use linkage_blaze_cyd_memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
+    use device_envoy_core::cyd::Cyd as _;
+    use device_envoy_core::cyd::memory::{MemoryCyd, assert_framebuffer_matches_expected_png};
     use time::OffsetDateTime;
 
     use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, skeleton_clock};

@@ -14,7 +14,7 @@ use esp_hal::{
     },
     spi,
 };
-use linkage_blaze_cyd_core::RegionPixels;
+use device_envoy_core::cyd::RegionPixels;
 use mipidsi::{
     Builder,
     interface::SpiInterface,

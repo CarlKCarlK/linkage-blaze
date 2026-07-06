@@ -13,15 +13,15 @@ wasm-opt = false
 [dependencies]
 # Pull in embassy-time's built-in WASM time driver here in the final WASM
 # crate only. The generic armatron loop reads Instant::now() for FPS display.
-device-envoy-core = { version = "0.1.0", default-features = false }
+device-envoy-core = { version = "0.1.0", default-features = false, features = [
+    "wasm",
+] }
 embassy-executor = { version = "0.10.0", features = [
     "platform-wasm",
     "executor-thread",
 ] }
 embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
 embedded-graphics = { version = "0.8", default-features = false }
-linkage-blaze-cyd-wasm = { path = "../linkage-blaze-cyd-wasm" }
-linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false, features = [
     "armatron",
 ] }

@@ -23,16 +23,17 @@ wasm-opt = false
 # self-contained timer queue instead of the executor-integrated one, since this
 # build has no embassy-executor to provide the integrated queue's symbols.
 embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
-# `linkage-blaze-cyd-wasm` now pulls device-envoy-core, which brings in
-# embassy-executor internals that still expect the WASM `__pender` symbol.
+# device-envoy-core (behind the `wasm` feature) brings in embassy-executor
+# internals that still expect the WASM `__pender` symbol.
 embassy-executor = { version = "0.10.0", features = [
     "platform-wasm",
     "executor-thread",
 ] }
+device-envoy-core = { version = "0.1.0", default-features = false, features = [
+    "wasm",
+] }
 embedded-graphics = { version = "0.8", default-features = false }
-linkage-blaze-cyd-wasm = { path = "../linkage-blaze-cyd-wasm" }
-linkage-blaze-cyd-core = { path = "../linkage-blaze-cyd-core" }
-# `ballet` only — no `skeleton-clock`, so device-envoy-core/embassy-executor
+# `ballet` only — no `skeleton-clock`, so wifi-only device-envoy-core features
 # stay out of the WASM graph.
 linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false, features = [
     "ballet",

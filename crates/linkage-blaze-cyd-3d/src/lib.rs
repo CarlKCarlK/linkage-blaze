@@ -1,8 +1,8 @@
 #![no_std]
 
+use device_envoy_core::cyd::{ContiguousPixels, CydDisplay, DrawItem as DrawItem2d};
 use embedded_graphics::{pixelcolor::Rgb565, prelude::Point, primitives::Rectangle};
 use linkage_blaze_core::{DrawItem3d, Projection};
-use linkage_blaze_cyd_core::{ContiguousPixels, CydDisplay, DrawItem2d};
 
 /// CYD/linkage projection from core 3D draw items into CYD 2D draw items.
 pub trait DrawItem3dExt {
@@ -57,7 +57,7 @@ where
     let draw_items_2d = draw_items_3d
         .into_iter()
         .map(|draw_item_3d| draw_item_3d.project(projection));
-    ContiguousPixels::from_draw_items_2d(bounds, background, draw_items_2d)
+    ContiguousPixels::from_draw_items(bounds, background, draw_items_2d)
 }
 
 /// Linkage/3D helpers layered on top of the 2D [`CydDisplay`] surface.

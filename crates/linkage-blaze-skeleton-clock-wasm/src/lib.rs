@@ -14,8 +14,8 @@
 mod clock;
 
 use clock::WasmClockSync;
-use linkage_blaze_cyd_core::{Cyd, CydDisplay, CydFrame};
-use linkage_blaze_cyd_wasm::{CydTouchWasmSource, CydWasm};
+use device_envoy_core::cyd::{Cyd, CydDisplay, CydFrame};
+use device_envoy_core::cyd::wasm::{CydTouchWasmSource, CydWasm};
 use linkage_blaze_example_core::skeleton_clock::{
     BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE, skeleton_clock,
     skeleton_clock_splash,
