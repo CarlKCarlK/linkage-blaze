@@ -188,13 +188,29 @@ The migration does not require settling them first; they carry over verbatim
 
    device-envoy-esp's full multi-chip `check-all` passes clean.
 
-4. **`CydRp` in `device-envoy-rp`** (later): embassy-rp SPI + mipidsi +
-   XPT2046. Reference hardware is a standalone 320x240 ILI9341 + XPT2046
-   touch-screen module wired over SPI (on hand), targeting both Pico 1 and
-   Pico 2; the Waveshare Pico-ResTouch-LCD-2.8 uses the same controller pair
-   and should work identically. The tiled-frame model is what makes 320x240
-   viable in Pico 1 RAM (a full RGB565 framebuffer is 150 KB); keep it
-   first-class.
+4. **`CydRp` in `device-envoy-rp`** — done. Implements `CydRp` for a
+   standalone 320x240 ILI9341 + XPT2046 module wired over SPI to a Pico
+   (display on `SPI0`, touch on `SPI1`), mirroring `CydEsp`'s
+   buffer/display/text/touch module structure but built on embassy-rp's
+   blocking SPI instead of esp-hal. The XPT2046 touch-sampling logic ported
+   verbatim, since it only depends on embedded-hal's `SpiDevice`/`InputPin`
+   traits, not the platform HAL.
+
+   Pinned `mipidsi = "=0.9.0"` here too, for the same az/embedded-graphics-core
+   conflict with this crate's own `fixed` dependency found on the ESP side
+   (see decision 3b above).
+
+   Added a `Cyd*` family of `device_envoy_rp::Error` variants matching this
+   crate's `derive_more::Display` convention, and a `cyd_touch_paint` example
+   (calibration flow + touch-paint) mirroring the ESP one.
+
+   device-envoy-rp's full `check-all` (embedded builds for both Pico 1 and
+   Pico 2, docs, packaging verification) passes clean. The tiled-frame model
+   (unchanged from `CydEsp`) is what makes 320x240 viable in Pico 1 RAM (a
+   full RGB565 framebuffer is 150 KB); the Waveshare Pico-ResTouch-LCD-2.8
+   uses the same ILI9341 + XPT2046 controller pair and should work
+   identically, though only compile-verified — hardware verification on the
+   Pico 1/2 + standalone module on hand is left to the user.
 
 ## Logistics
 
