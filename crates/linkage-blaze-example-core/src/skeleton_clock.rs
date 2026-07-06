@@ -22,8 +22,7 @@ use time::OffsetDateTime;
 
 use device_envoy_core::cyd::{
     CydDisplay, CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, tga565,
-    tga565_magenta_mask,
-    tiling::{TileGrid, max_u32},
+    tga565_magenta_mask, tiling::TileGrid,
 };
 
 use crate::infallible::InfallibleResultExt;
@@ -97,10 +96,13 @@ const TIME_RECTANGLE: Rectangle = Rectangle::new(
 );
 
 // The figure starts below the top-level display. We will tile to save memory.
-const FIGURE_Y: u32 = max_u32(
-    WIFI_STATUS_RECTANGLE.top_left.y as u32 + WIFI_STATUS_RECTANGLE.size.height,
-    TIME_RECTANGLE.top_left.y as u32 + TIME_RECTANGLE.size.height,
-);
+const FIGURE_Y: u32 = if WIFI_STATUS_RECTANGLE.top_left.y as u32 + WIFI_STATUS_RECTANGLE.size.height
+    > TIME_RECTANGLE.top_left.y as u32 + TIME_RECTANGLE.size.height
+{
+    WIFI_STATUS_RECTANGLE.top_left.y as u32 + WIFI_STATUS_RECTANGLE.size.height
+} else {
+    TIME_RECTANGLE.top_left.y as u32 + TIME_RECTANGLE.size.height
+};
 pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
     Point::new(0, FIGURE_Y as i32),
     Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),

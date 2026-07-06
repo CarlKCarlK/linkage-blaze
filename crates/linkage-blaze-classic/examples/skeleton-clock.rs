@@ -7,8 +7,7 @@
 use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_esp::cyd::{
-    Cyd, CydDisplay as _, CydError, CydEsp, CydStaticEsp,
-    tiling::{max_pixel_count, rectangle_pixel_count},
+    Cyd, CydDisplay as _, CydError, CydEsp, CydStaticEsp, tiling::rectangle_pixel_count,
 };
 use device_envoy_esp::{
     Error,
@@ -57,7 +56,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // The shared pixel buffer must hold the largest frame: a skeleton-clock tile
     // or a wi-fi or time message.
-    const BUFFER_PIXEL_COUNT: usize = max_pixel_count(
+    const BUFFER_PIXEL_COUNT: usize = max_usize(
         rectangle_pixel_count(WIFI_STATUS_RECTANGLE),
         FIGURE_TILE_GRID.max_tile_pixel_count(),
     );
@@ -149,4 +148,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     // Hand off to the device-agnostic render loop.
     Ok(skeleton_clock(&mut display, &clock_sync).await?)
+}
+const fn max_usize(first: usize, second: usize) -> usize {
+    if first > second { first } else { second }
 }

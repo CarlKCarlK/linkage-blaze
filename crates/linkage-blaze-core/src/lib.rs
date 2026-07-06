@@ -4216,7 +4216,7 @@ mod tests {
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
     };
-    use device_envoy_core::{
+    use device_envoy_core::pixel_target::{
         rgb565_from_rgb888, rgb565_from_rgb888_components, rgb888_from_rgb565,
     };
     use std::{boxed::Box, error::Error};
