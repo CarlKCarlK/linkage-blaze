@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 
-use device_envoy_core::cyd::{
-    CalibrationConfig, EnsureCalibrationSettings, Orientation, ensure_calibration_with_settings,
+use device_envoy_core::cyd::Orientation;
+use device_envoy_core::cyd::calibration::{
+    CalibrationConfig, EnsureCalibrationSettings, ensure_calibration_with_settings,
 };
 use device_envoy_core::flash_block::FlashBlock as _;
 use device_envoy_core::wasm::{ButtonWasmSource, CydTouchWasmSource, CydWasm, FlashBlockWasm};
