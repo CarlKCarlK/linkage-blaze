@@ -4,9 +4,9 @@
 //!
 //! The device abstraction itself lives in [`device_envoy_core::cyd`]; this crate
 //! holds the generic examples ([`armatron`], [`skeleton_clock`], [`clock`], [`ballet`]) written
-//! against the [`Cyd`](device_envoy_core::cyd::Cyd),
-//! [`CydDisplay`](device_envoy_core::cyd::CydDisplay), and
-//! [`CydTouch`](device_envoy_core::cyd::CydTouch) traits.
+//! against the owned CYD parts:
+//! [`CydDisplay`](device_envoy_core::cyd::CydDisplay) and
+//! [`CydTouch`](device_envoy_core::cyd::CydTouch).
 
 #[cfg(feature = "armatron")]
 #[path = "armatron/main.rs"]

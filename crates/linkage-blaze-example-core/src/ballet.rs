@@ -136,7 +136,6 @@ fn status_text(
 
 #[cfg(test)]
 mod tests {
-    use device_envoy_core::cyd::CydScreen as _;
     use device_envoy_core::memory::{
         CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
     };

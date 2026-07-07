@@ -7,8 +7,7 @@
 use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_esp::cyd::{
-    CydDisplay as _, CydError, CydEsp, CydScreen as _, CydStaticEsp,
-    tiling::rectangle_pixel_count,
+    CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, tiling::rectangle_pixel_count,
 };
 use device_envoy_esp::{
     Error,
@@ -62,7 +61,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         FIGURE_TILE_GRID.max_tile_pixel_count(),
     );
     static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
-    let mut cyd = CydEsp::new_display_only(
+    let mut display = CydDisplayEsp::new(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
@@ -78,8 +77,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         &TOP_FONT,
     )?;
     info!("CYD display initialized");
-
-    let mut display = cyd.display();
 
     // Show the framed clock immediately, before WiFi/NTP, with placeholder status.
     skeleton_clock::skeleton_clock_splash(&mut display).await?;

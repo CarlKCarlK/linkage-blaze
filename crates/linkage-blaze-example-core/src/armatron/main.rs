@@ -3,14 +3,14 @@
 //! The device-agnostic game loop lives here.
 //!
 //! The generic loop redraws every frame, updates immediate-mode controls, and
-//! flushes frames through the [`Cyd`](device_envoy_core::cyd::Cyd) boundary.
+//! flushes frames through [`CydDisplay`](device_envoy_core::cyd::CydDisplay).
 
 mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
 use device_envoy_core::cyd::{
-    Cyd, CydDisplay, CydTouch,
+    CydDisplay, CydTouch,
     display::{CydFrame, Orientation},
 };
 use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
@@ -106,16 +106,16 @@ const SHOW_FPS_TEXT: bool = true;
 /// the rest of the CYD touch-calibration flow.
 // TODO0000 Revisit whether `armatron` should regain a type-state guarantee for
 // calibrated CYD touch instead of relying on this caller-side runtime precondition.
-pub async fn armatron<C, R>(
-    cyd: &mut C,
+pub async fn armatron<D, T, R>(
+    display: &mut D,
+    touch: &mut T,
     recalibration_button: &mut R,
-) -> Result<ArmatronExit, Error<C::Error>>
+) -> Result<ArmatronExit, Error<D::Error>>
 where
-    C: Cyd,
+    D: CydDisplay,
+    T: CydTouch<Error = D::Error>,
     R: Button,
 {
-    let (mut display, mut touch) = cyd.parts();
-
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
     let mut target_seed: u8 = 0;
@@ -232,9 +232,7 @@ pub enum ArmatronExit {
 
 #[cfg(test)]
 mod tests {
-    use device_envoy_core::cyd::Calibrated;
     use device_envoy_core::cyd::touch::TouchEvent;
-    use device_envoy_core::cyd::touch::calibration::CalibrationConfig;
     use device_envoy_core::memory::{
         CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
     };
@@ -244,14 +242,13 @@ mod tests {
     use super::controls::CALIBRATE_BUTTON;
     use super::{ArmatronExit, Error, armatron};
 
-    fn test_memory_cyd() -> CydMemory<Calibrated> {
+    fn test_memory_cyd() -> CydMemory {
         CydMemory::new(
             embedded_graphics::geometry::Size::new(320, 240),
             super::BACKGROUND,
             super::FOREGROUND,
             &FONT_9X15_BOLD,
         )
-        .calibrate(CalibrationConfig::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0))
     }
 
     #[test]
@@ -268,7 +265,8 @@ mod tests {
         });
         let mut memory_button = memory_cyd.button_memory();
 
-        let armatron_exit = block_on(armatron(&mut memory_cyd, &mut memory_button))
+        let (mut display, mut touch) = memory_cyd.parts();
+        let armatron_exit = block_on(armatron(&mut display, &mut touch, &mut memory_button))
             .expect("tapping the calibrate button should exit cleanly, not error");
 
         assert!(matches!(armatron_exit, ArmatronExit::CalibrationRequested));
@@ -284,8 +282,9 @@ mod tests {
         let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(1);
         let mut memory_button = memory_cyd.button_memory();
+        let (mut display, mut touch) = memory_cyd.parts();
 
-        let armatron_error = block_on(armatron(&mut memory_cyd, &mut memory_button))
+        let armatron_error = block_on(armatron(&mut display, &mut touch, &mut memory_button))
             .expect_err("the free-running loop should stop at the frame budget");
         assert!(matches!(
             armatron_error,

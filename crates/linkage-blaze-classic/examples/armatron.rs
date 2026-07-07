@@ -5,13 +5,16 @@
 
 use core::convert::Infallible;
 
-use device_envoy_core::cyd::{Calibrated, CydDisplay, CydScreen, Uncalibrated};
+use device_envoy_core::cyd::CydDisplay;
 use device_envoy_core::cyd::touch::calibration::{
     EnsureCalibrationError, EnsureCalibrationErrorKind, ensure_calibration,
 };
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
-    cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation},
+    cyd::{
+        CydDisplayEsp, CydError, CydEsp, CydEspUncalibrated, CydStaticEsp, CydTouchUncalibratedEsp,
+        DEFAULT_FONT, Orientation,
+    },
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
@@ -46,7 +49,6 @@ impl From<device_envoy_esp::Error> for MainError {
 impl From<CydError> for MainError {
     fn from(error: CydError) -> Self {
         match error {
-            CydError::Flash(_) => MainError::Flash,
             CydError::DisplayInit(error) => match error {
                 device_envoy_esp::cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
                     MainError::ConfigureDisplaySpi
@@ -67,7 +69,6 @@ impl From<CydError> for MainError {
                 }
             },
             CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
-            CydError::TouchUnavailable => unreachable!("touch always available when calibrated"),
         }
     }
 }
@@ -81,8 +82,10 @@ impl From<ArmatronError<CydError>> for MainError {
     }
 }
 
-impl From<EnsureCalibrationError<CydEsp<Uncalibrated>, device_envoy_esp::Error>> for MainError {
-    fn from(error: EnsureCalibrationError<CydEsp<Uncalibrated>, device_envoy_esp::Error>) -> Self {
+impl From<EnsureCalibrationError<CydTouchUncalibratedEsp, device_envoy_esp::Error>> for MainError {
+    fn from(
+        error: EnsureCalibrationError<CydTouchUncalibratedEsp, device_envoy_esp::Error>,
+    ) -> Self {
         match error.kind {
             EnsureCalibrationErrorKind::Device(error) => error.into(),
             EnsureCalibrationErrorKind::Flash(_error) => MainError::CalibrationDriverFlash,
@@ -105,7 +108,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     let mut calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
-    let cyd = CydEsp::new(
+    let CydEspUncalibrated { mut display, touch } = CydEspUncalibrated::new(
         &CYD_STATIC,
         p.SPI2,   // display SPI
         p.GPIO14, // display SCK
@@ -128,8 +131,9 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display and touch initialized");
 
-    let (mut cyd, calibration_outcome) = ensure_calibration(
-        cyd,
+    let (mut touch, calibration_outcome) = ensure_calibration(
+        &mut display,
+        touch,
         &mut calibration_flash_block,
         &mut calibration_button,
         Some("rebooting"),
@@ -140,9 +144,9 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         esp_hal::system::software_reset();
     }
 
-    match armatron(&mut cyd, &mut calibration_button).await? {
+    match armatron(&mut display, &mut touch, &mut calibration_button).await? {
         ArmatronExit::CalibrationRequested => {
-            clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
+            clear_calibration_and_reset(&mut display, &mut calibration_flash_block).await?;
         }
     }
 
@@ -150,15 +154,14 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 }
 
 async fn clear_calibration_and_reset(
-    cyd: &mut CydEsp<Calibrated>,
+    display: &mut CydDisplayEsp,
     calibration_flash_block: &mut FlashBlockEsp,
 ) -> Result<(), MainError> {
     calibration_flash_block.clear()?;
-    reboot_with_message(cyd, "rebooting").await
+    reboot_with_message(display, "rebooting").await
 }
 
-async fn reboot_with_message(cyd: &mut CydEsp<Calibrated>, message: &str) -> Result<(), MainError> {
-    let mut display = cyd.display();
+async fn reboot_with_message(display: &mut CydDisplayEsp, message: &str) -> Result<(), MainError> {
     let background565 = display.background_565();
     let mut frame = display.full_frame_mut();
     frame.fill(background565).write_text(message).flush()?;

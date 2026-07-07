@@ -6,7 +6,7 @@
 
 use core::convert::Infallible;
 
-use device_envoy_esp::cyd::{CydError, CydEsp, CydScreen as _, CydStaticEsp};
+use device_envoy_esp::cyd::{CydDisplayEsp, CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
@@ -39,7 +39,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("Starting CYD ballet loop");
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
-    let mut cyd = CydEsp::new_display_only(
+    let mut display = CydDisplayEsp::new(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
@@ -57,6 +57,5 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     // Hand off to the device-agnostic render loop.
-    let mut display = cyd.display();
     Ok(ballet(&mut display).await?)
 }

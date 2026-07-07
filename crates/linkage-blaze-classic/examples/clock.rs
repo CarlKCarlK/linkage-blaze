@@ -6,7 +6,7 @@
 
 use core::{cell::RefCell, convert::Infallible};
 
-use device_envoy_esp::cyd::{CydDisplay as _, CydError, CydEsp, CydScreen as _, CydStaticEsp};
+use device_envoy_esp::cyd::{CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -53,7 +53,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("Starting CYD clock with WiFi");
 
     static CYD_STATIC: CydStaticEsp<MAX_FRAME_PIXEL_COUNT> = CydEsp::new_static();
-    let mut cyd = CydEsp::new_display_only(
+    let mut display = CydDisplayEsp::new(
         &CYD_STATIC,
         p.SPI2,
         p.GPIO14,
@@ -70,7 +70,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
-    let mut display = cyd.display();
     clock_splash(&mut display).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
