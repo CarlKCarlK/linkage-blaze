@@ -26,8 +26,6 @@ use linkage_blaze_example_core::clock::{
 };
 use log::info;
 
-// ── Binary entry point ────────────────────────────────────────────────────────
-
 esp_bootloader_esp_idf::esp_app_desc!();
 
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores
@@ -50,19 +48,19 @@ async fn main(spawner: Spawner) -> ! {
 async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
-    info!("Starting CYD clock with WiFi");
+    info!("Starting CYD clock with WiFi on ESP32-C6 / generic");
 
     static CYD_STATIC: CydStaticEsp<MAX_FRAME_PIXEL_COUNT> = CydEsp::new_static();
     let mut display = CydDisplayEsp::new(
         &CYD_STATIC,
         p.SPI2,
-        p.GPIO14,
-        p.GPIO13,
-        p.GPIO12,
-        p.GPIO15,
+        p.GPIO1,
         p.GPIO2,
+        p.GPIO3,
         p.GPIO4,
-        p.GPIO21,
+        p.GPIO5,
+        p.GPIO7,
+        p.GPIO8,
         ORIENTATION,
         BACKGROUND,
         FOREGROUND,
@@ -76,7 +74,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
     let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
-    let mut force_portal_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
+    let mut force_portal_button = ButtonEsp::new(p.GPIO6, PressedTo::Ground);
 
     let wifi_auto = WifiAutoEsp::new(
         p.WIFI,
@@ -86,8 +84,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,
     )?;
 
-    // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
-    // reference and mutate it through interior mutability on each event.
     let background565 = display.background_565();
     let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
@@ -135,6 +131,5 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("clock sync ready; entering clock loop");
 
-    // Hand off to the device-agnostic render loop.
     Ok(clock(&mut display, &clock_sync).await?)
 }

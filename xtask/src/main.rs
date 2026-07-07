@@ -5,6 +5,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+mod linkage_esp_examples_generated;
+
 const PAGES_DIR: &str = "target/pages";
 const MANIFEST_PATH: &str = "pages/demos.tsv";
 const PREVIEW_EXAMPLE_CRATE: &str = "linkage-blaze-example-core";
@@ -62,12 +64,28 @@ fn inner_main() -> Result<()> {
             }
             bump_gallery_version(requested_version.as_deref())
         }
+        "generate-board-examples" => {
+            if arguments.next().is_some() {
+                return Err(Error::message(
+                    "usage: cargo run -p linkage-blaze-xtask -- generate-board-examples",
+                ));
+            }
+            generate_board_examples()
+        }
         _ => Err(Error::message(usage())),
     }
 }
 
 fn usage() -> &'static str {
-    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]\n  cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]"
+    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]\n  cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]\n  cargo run -p linkage-blaze-xtask -- generate-board-examples"
+}
+
+fn generate_board_examples() -> Result<()> {
+    let repo_root = env::current_dir()?;
+    linkage_esp_examples_generated::generate_board_examples(&repo_root)
+        .map_err(|error| Error::message(error.to_string()))?;
+    println!("Generated linkage-blaze-esp board examples");
+    Ok(())
 }
 
 fn build_pages(selected_demo: Option<&str>) -> Result<()> {

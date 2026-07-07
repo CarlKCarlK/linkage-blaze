@@ -1,0 +1,408 @@
+[package]
+name = "linkage-blaze-esp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Shared CYD-oriented ESP examples. Each example is a standalone no_std binary
+# selected with `--example <name>`. The library target exists only to host the
+# precomputed-frames regression test (see `src/lib.rs`).
+#
+# BEGIN GENERATED BOARD EXAMPLES
+[[example]]
+name = "armatron_esp32_generic"
+path = "examples/esp32/generic/armatron.rs"
+required-features = ["esp32", "armatron"]
+
+[[example]]
+name = "ballet_esp32_generic"
+path = "examples/esp32/generic/ballet.rs"
+required-features = ["esp32", "ballet"]
+
+[[example]]
+name = "clock_esp32_generic"
+path = "examples/esp32/generic/clock.rs"
+required-features = ["esp32", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32_generic"
+path = "examples/esp32/generic/skeleton_clock.rs"
+required-features = ["esp32", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c2_generic"
+path = "examples/c2/generic/armatron.rs"
+required-features = ["esp32c2", "armatron"]
+
+[[example]]
+name = "ballet_esp32c2_generic"
+path = "examples/c2/generic/ballet.rs"
+required-features = ["esp32c2", "ballet"]
+
+[[example]]
+name = "clock_esp32c2_generic"
+path = "examples/c2/generic/clock.rs"
+required-features = ["esp32c2", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c2_generic"
+path = "examples/c2/generic/skeleton_clock.rs"
+required-features = ["esp32c2", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c2_devkitm1_v1_0"
+path = "examples/c2/devkitm1_v1_0/armatron.rs"
+required-features = ["esp32c2", "armatron"]
+
+[[example]]
+name = "ballet_esp32c2_devkitm1_v1_0"
+path = "examples/c2/devkitm1_v1_0/ballet.rs"
+required-features = ["esp32c2", "ballet"]
+
+[[example]]
+name = "clock_esp32c2_devkitm1_v1_0"
+path = "examples/c2/devkitm1_v1_0/clock.rs"
+required-features = ["esp32c2", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c2_devkitm1_v1_0"
+path = "examples/c2/devkitm1_v1_0/skeleton_clock.rs"
+required-features = ["esp32c2", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c3_generic"
+path = "examples/c3/generic/armatron.rs"
+required-features = ["esp32c3", "armatron"]
+
+[[example]]
+name = "ballet_esp32c3_generic"
+path = "examples/c3/generic/ballet.rs"
+required-features = ["esp32c3", "ballet"]
+
+[[example]]
+name = "clock_esp32c3_generic"
+path = "examples/c3/generic/clock.rs"
+required-features = ["esp32c3", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c3_generic"
+path = "examples/c3/generic/skeleton_clock.rs"
+required-features = ["esp32c3", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c3_luatos"
+path = "examples/c3/luatos/armatron.rs"
+required-features = ["esp32c3", "armatron"]
+
+[[example]]
+name = "ballet_esp32c3_luatos"
+path = "examples/c3/luatos/ballet.rs"
+required-features = ["esp32c3", "ballet"]
+
+[[example]]
+name = "clock_esp32c3_luatos"
+path = "examples/c3/luatos/clock.rs"
+required-features = ["esp32c3", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c3_luatos"
+path = "examples/c3/luatos/skeleton_clock.rs"
+required-features = ["esp32c3", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c5_generic"
+path = "examples/c5/generic/armatron.rs"
+required-features = ["esp32c5", "armatron"]
+
+[[example]]
+name = "ballet_esp32c5_generic"
+path = "examples/c5/generic/ballet.rs"
+required-features = ["esp32c5", "ballet"]
+
+[[example]]
+name = "clock_esp32c5_generic"
+path = "examples/c5/generic/clock.rs"
+required-features = ["esp32c5", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c5_generic"
+path = "examples/c5/generic/skeleton_clock.rs"
+required-features = ["esp32c5", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c6_generic"
+path = "examples/c6/generic/armatron.rs"
+required-features = ["esp32c6", "armatron"]
+
+[[example]]
+name = "ballet_esp32c6_generic"
+path = "examples/c6/generic/ballet.rs"
+required-features = ["esp32c6", "ballet"]
+
+[[example]]
+name = "clock_esp32c6_generic"
+path = "examples/c6/generic/clock.rs"
+required-features = ["esp32c6", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c6_generic"
+path = "examples/c6/generic/skeleton_clock.rs"
+required-features = ["esp32c6", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c61_generic"
+path = "examples/c61/generic/armatron.rs"
+required-features = ["esp32c61", "armatron"]
+
+[[example]]
+name = "ballet_esp32c61_generic"
+path = "examples/c61/generic/ballet.rs"
+required-features = ["esp32c61", "ballet"]
+
+[[example]]
+name = "clock_esp32c61_generic"
+path = "examples/c61/generic/clock.rs"
+required-features = ["esp32c61", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c61_generic"
+path = "examples/c61/generic/skeleton_clock.rs"
+required-features = ["esp32c61", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32c6_devkitc1_n8"
+path = "examples/c6/devkitc1_n8/armatron.rs"
+required-features = ["esp32c6", "armatron"]
+
+[[example]]
+name = "ballet_esp32c6_devkitc1_n8"
+path = "examples/c6/devkitc1_n8/ballet.rs"
+required-features = ["esp32c6", "ballet"]
+
+[[example]]
+name = "clock_esp32c6_devkitc1_n8"
+path = "examples/c6/devkitc1_n8/clock.rs"
+required-features = ["esp32c6", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32c6_devkitc1_n8"
+path = "examples/c6/devkitc1_n8/skeleton_clock.rs"
+required-features = ["esp32c6", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32h2_generic"
+path = "examples/h2/generic/armatron.rs"
+required-features = ["esp32h2", "armatron"]
+
+[[example]]
+name = "ballet_esp32h2_generic"
+path = "examples/h2/generic/ballet.rs"
+required-features = ["esp32h2", "ballet"]
+
+[[example]]
+name = "clock_esp32h2_generic"
+path = "examples/h2/generic/clock.rs"
+required-features = ["esp32h2", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32h2_generic"
+path = "examples/h2/generic/skeleton_clock.rs"
+required-features = ["esp32h2", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32s2_generic"
+path = "examples/s2/generic/armatron.rs"
+required-features = ["esp32s2", "armatron"]
+
+[[example]]
+name = "ballet_esp32s2_generic"
+path = "examples/s2/generic/ballet.rs"
+required-features = ["esp32s2", "ballet"]
+
+[[example]]
+name = "clock_esp32s2_generic"
+path = "examples/s2/generic/clock.rs"
+required-features = ["esp32s2", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32s2_generic"
+path = "examples/s2/generic/skeleton_clock.rs"
+required-features = ["esp32s2", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32s3_generic"
+path = "examples/s3/generic/armatron.rs"
+required-features = ["esp32s3", "armatron"]
+
+[[example]]
+name = "ballet_esp32s3_generic"
+path = "examples/s3/generic/ballet.rs"
+required-features = ["esp32s3", "ballet"]
+
+[[example]]
+name = "clock_esp32s3_generic"
+path = "examples/s3/generic/clock.rs"
+required-features = ["esp32s3", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32s3_generic"
+path = "examples/s3/generic/skeleton_clock.rs"
+required-features = ["esp32s3", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32s3_devkitc1_v1_1_n16r8"
+path = "examples/s3/devkitc1_v1_1_n16r8/armatron.rs"
+required-features = ["esp32s3", "armatron"]
+
+[[example]]
+name = "ballet_esp32s3_devkitc1_v1_1_n16r8"
+path = "examples/s3/devkitc1_v1_1_n16r8/ballet.rs"
+required-features = ["esp32s3", "ballet"]
+
+[[example]]
+name = "clock_esp32s3_devkitc1_v1_1_n16r8"
+path = "examples/s3/devkitc1_v1_1_n16r8/clock.rs"
+required-features = ["esp32s3", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32s3_devkitc1_v1_1_n16r8"
+path = "examples/s3/devkitc1_v1_1_n16r8/skeleton_clock.rs"
+required-features = ["esp32s3", "skeleton-clock"]
+
+[[example]]
+name = "armatron_esp32s3_devkitc1_v1_0_n16r8"
+path = "examples/s3/devkitc1_v1_0_n16r8/armatron.rs"
+required-features = ["esp32s3", "armatron"]
+
+[[example]]
+name = "ballet_esp32s3_devkitc1_v1_0_n16r8"
+path = "examples/s3/devkitc1_v1_0_n16r8/ballet.rs"
+required-features = ["esp32s3", "ballet"]
+
+[[example]]
+name = "clock_esp32s3_devkitc1_v1_0_n16r8"
+path = "examples/s3/devkitc1_v1_0_n16r8/clock.rs"
+required-features = ["esp32s3", "clock"]
+
+[[example]]
+name = "skeleton_clock_esp32s3_devkitc1_v1_0_n16r8"
+path = "examples/s3/devkitc1_v1_0_n16r8/skeleton_clock.rs"
+required-features = ["esp32s3", "skeleton-clock"]
+
+# END GENERATED BOARD EXAMPLES
+
+[features]
+default = ["esp32"]
+esp32 = [
+    "device-envoy-esp/esp32",
+    "esp-hal/esp32",
+    "esp-rtos/esp32",
+    "esp-backtrace/esp32",
+    "esp-println/esp32",
+    "esp-bootloader-esp-idf/esp32",
+]
+esp32c2 = [
+    "device-envoy-esp/esp32c2",
+    "esp-hal/esp32c2",
+    "esp-rtos/esp32c2",
+    "esp-backtrace/esp32c2",
+    "esp-println/esp32c2",
+    "esp-bootloader-esp-idf/esp32c2",
+]
+esp32c3 = [
+    "device-envoy-esp/esp32c3",
+    "esp-hal/esp32c3",
+    "esp-rtos/esp32c3",
+    "esp-backtrace/esp32c3",
+    "esp-println/esp32c3",
+    "esp-bootloader-esp-idf/esp32c3",
+]
+esp32c5 = [
+    "device-envoy-esp/esp32c5",
+    "esp-hal/esp32c5",
+    "esp-rtos/esp32c5",
+    "esp-backtrace/esp32c5",
+    "esp-println/esp32c5",
+    "esp-bootloader-esp-idf/esp32c5",
+]
+esp32c6 = [
+    "device-envoy-esp/esp32c6",
+    "esp-hal/esp32c6",
+    "esp-rtos/esp32c6",
+    "esp-backtrace/esp32c6",
+    "esp-println/esp32c6",
+    "esp-bootloader-esp-idf/esp32c6",
+]
+esp32c61 = [
+    "device-envoy-esp/esp32c61",
+    "esp-hal/esp32c61",
+    "esp-rtos/esp32c61",
+    "esp-backtrace/esp32c61",
+    "esp-println/esp32c61",
+    "esp-bootloader-esp-idf/esp32c61",
+]
+esp32h2 = [
+    "device-envoy-esp/esp32h2",
+    "esp-hal/esp32h2",
+    "esp-rtos/esp32h2",
+    "esp-backtrace/esp32h2",
+    "esp-println/esp32h2",
+    "esp-bootloader-esp-idf/esp32h2",
+]
+esp32s2 = [
+    "device-envoy-esp/esp32s2",
+    "esp-hal/esp32s2",
+    "esp-rtos/esp32s2",
+    "esp-backtrace/esp32s2",
+    "esp-println/esp32s2",
+    "esp-bootloader-esp-idf/esp32s2",
+]
+esp32s3 = [
+    "device-envoy-esp/esp32s3",
+    "esp-hal/esp32s3",
+    "esp-rtos/esp32s3",
+    "esp-backtrace/esp32s3",
+    "esp-println/esp32s3",
+    "esp-bootloader-esp-idf/esp32s3",
+]
+# Each example module is gated in `linkage-blaze-example-core`; enable only the
+# one being built so unused modules (and ballet's slow `MOTION` const) are never
+# compiled. The example targets above list these in their `required-features`.
+armatron = ["linkage-blaze-example-core/armatron"]
+ballet = ["linkage-blaze-example-core/ballet"]
+skeleton-clock = ["linkage-blaze-example-core/skeleton-clock"]
+clock = ["linkage-blaze-example-core/clock"]
+
+[dependencies]
+embedded-graphics = { version = "0.8", default-features = false }
+heapless = "0.9.1"
+log = { version = "0.4", default-features = false }
+linkage-blaze-core.workspace = true
+
+[target.'cfg(target_os = "none")'.dependencies]
+linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
+device-envoy-core = { version = "0.1.0", default-features = false }
+embassy-time = "0.5.1"
+derive_more = { version = "2.1.1", default-features = false, features = [
+    "from",
+] }
+embassy-executor = "0.10.0"
+static_cell = "2.1.1"
+device-envoy-esp = { version = "0.1.0", default-features = false }
+time = { version = "0.3.47", default-features = false }
+esp-hal = { version = "1.1.0", default-features = false, features = [
+    "unstable",
+] }
+esp-rtos = { version = "0.3.0", default-features = false, features = [
+    "embassy",
+] }
+esp-backtrace = { version = "0.19.0", default-features = false, features = [
+    "panic-handler",
+    "halt-cores",
+    "println",
+] }
+esp-println = { version = "0.17.0", default-features = false, features = [
+    "uart",
+    "log-04",
+] }
+esp-bootloader-esp-idf = { version = "0.5.0", default-features = false }

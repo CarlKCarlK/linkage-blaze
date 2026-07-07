@@ -1,14 +1,13 @@
+{# @board-example wifi min_spi=1 large_stack #}
 #![no_std]
 #![no_main]
 
-// todo000 we need to use color and/or size to tell hours from minutes
-// todo000 we need some wasm preview
+// todo000 can't we allocate the largest buffer and then use it for smaller things?
+// todo000 get wifi portal and drawing work at the same time.
 
 use core::{cell::RefCell, convert::Infallible};
 
-use device_envoy_esp::cyd::{
-    CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, tiling::rectangle_pixel_count,
-};
+use device_envoy_esp::cyd::{CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -22,13 +21,11 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_example_core::skeleton_clock::{
-    self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE,
-    skeleton_clock,
+use linkage_blaze_example_core::clock::{
+    self, BACKGROUND, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
+    WIFI_STATUS_RECTANGLE, clock, clock_splash,
 };
 use log::info;
-
-// ── Binary entry point ────────────────────────────────────────────────────────
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -40,7 +37,7 @@ enum MainError {
     DeviceEnvoy(Error),
     Core(CoreError),
     CydEsp(CydError),
-    SkeletonClock(skeleton_clock::Error<CydError>),
+    Clock(clock::Error<CydError>),
 }
 
 #[esp_rtos::main]
@@ -52,51 +49,42 @@ async fn main(spawner: Spawner) -> ! {
 async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
-    info!("Starting CYD skeleton-clock with WiFi");
+    info!("Starting CYD clock with WiFi on {{ chip_name }} / {{ board_slug }}");
 
-    // The shared pixel buffer must hold the largest frame: a skeleton-clock tile
-    // or a wi-fi or time message.
-    const BUFFER_PIXEL_COUNT: usize = max_usize(
-        rectangle_pixel_count(WIFI_STATUS_RECTANGLE),
-        FIGURE_TILE_GRID.max_tile_pixel_count(),
-    );
-    static CYD_STATIC: CydStaticEsp<BUFFER_PIXEL_COUNT> = CydEsp::new_static();
+    static CYD_STATIC: CydStaticEsp<MAX_FRAME_PIXEL_COUNT> = CydEsp::new_static();
     let mut display = CydDisplayEsp::new(
         &CYD_STATIC,
         p.SPI2,
-        p.GPIO14,
-        p.GPIO13,
-        p.GPIO12,
-        p.GPIO15,
-        p.GPIO2,
-        p.GPIO4,
-        p.GPIO21,
+        p.GPIO{{ cyd_display_sck_pin }},
+        p.GPIO{{ cyd_display_mosi_pin }},
+        p.GPIO{{ cyd_display_miso_pin }},
+        p.GPIO{{ cyd_display_cs_pin }},
+        p.GPIO{{ cyd_display_dc_pin }},
+        p.GPIO{{ cyd_display_rst_pin }},
+        p.GPIO{{ cyd_display_backlight_pin }},
         ORIENTATION,
         BACKGROUND,
         FOREGROUND,
-        &TOP_FONT,
+        &WIFI_STATUS_FONT,
     )?;
     info!("CYD display initialized");
 
-    // Show the framed clock immediately, before WiFi/NTP, with placeholder status.
-    skeleton_clock::skeleton_clock_splash(&mut display).await?;
+    clock_splash(&mut display).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
     let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
-    let mut force_portal_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
+    let mut force_portal_button = ButtonEsp::new(p.GPIO{{ button_pin }}, PressedTo::Ground);
 
     let wifi_auto = WifiAutoEsp::new(
         p.WIFI,
         wifi_auto_flash_block,
-        "SkelClock",
+        "CydClock",
         [timezone_field],
         spawner,
     )?;
 
-    // A `RefCell` so the `FnMut` connect callback can capture the frame by shared
-    // reference and mutate it through interior mutability on each event.
     let background565 = display.background_565();
     let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
@@ -104,9 +92,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
             &mut force_portal_button,
             async |wifi_auto_event| -> Result<(), Error> {
                 let message = match wifi_auto_event {
-                    WifiAutoEvent::CaptivePortalReady => "WiFi: setup SkelClock",
-                    WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
-                    WifiAutoEvent::ConnectionFailed => "WiFi: connect failed",
+                    WifiAutoEvent::CaptivePortalReady => "WiFi setup",
+                    WifiAutoEvent::Connecting { .. } => "WiFi ...",
+                    WifiAutoEvent::ConnectionFailed => "WiFi fail",
                 };
                 if let Err(error) = wifi_status_frame
                     .borrow_mut()
@@ -125,7 +113,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     wifi_status_frame
         .borrow_mut()
         .fill(background565)
-        .write_text("WiFi: OK")
+        .write_text("WiFi OK")
         .flush()?;
     drop(wifi_status_frame);
     info!("WiFi connected");
@@ -142,11 +130,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         Some(ONE_SECOND),
         spawner,
     )?;
-    info!("clock sync ready; entering skeleton-clock loop");
+    info!("clock sync ready; entering clock loop");
 
-    // Hand off to the device-agnostic render loop.
-    Ok(skeleton_clock(&mut display, &clock_sync).await?)
-}
-const fn max_usize(first: usize, second: usize) -> usize {
-    if first > second { first } else { second }
+    Ok(clock(&mut display, &clock_sync).await?)
 }

@@ -84,32 +84,32 @@ async fn main(spawner: Spawner) -> ! {
 async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
-    info!("Starting CYD armatron loop");
+    info!("Starting CYD armatron loop on ESP32-S3 / esp32-s3-devkitc-1-v1.1-n16r8");
 
     let [mut calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
-    let mut calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
+    let mut calibration_button = ButtonEsp::new(p.GPIO6, PressedTo::Ground);
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     let (mut cyd, calibration_outcome) = CydEsp::new(
         &CYD_STATIC,
-        p.SPI2,   // display SPI
-        p.GPIO14, // display SCK
-        p.GPIO13, // display MOSI
-        p.GPIO12, // display MISO
-        p.GPIO15, // display CS
-        p.GPIO2,  // display DC
-        p.GPIO4,  // display reset
-        p.GPIO21, // display backlight
+        p.SPI2,
+        p.GPIO1,
+        p.GPIO2,
+        p.GPIO3,
+        p.GPIO4,
+        p.GPIO5,
+        p.GPIO7,
+        p.GPIO8,
         Orientation::Landscape,
-        BACKGROUND,    // default background
-        FOREGROUND,    // default foreground
-        &DEFAULT_FONT, // default font
-        p.SPI3,        // touch SPI
-        p.GPIO25,      // touch SCK
-        p.GPIO32,      // touch MOSI
-        p.GPIO39,      // touch MISO
-        p.GPIO33,      // touch CS
-        p.GPIO36,      // touch IRQ
+        BACKGROUND,
+        FOREGROUND,
+        &DEFAULT_FONT,
+        p.SPI3,
+        p.GPIO9,
+        p.GPIO10,
+        p.GPIO11,
+        p.GPIO12,
+        p.GPIO13,
         &mut calibration_flash_block,
         &mut calibration_button,
         Some("rebooting"),

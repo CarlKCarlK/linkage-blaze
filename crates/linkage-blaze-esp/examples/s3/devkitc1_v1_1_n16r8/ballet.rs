@@ -36,19 +36,19 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
 
-    info!("Starting CYD ballet loop");
+    info!("Starting CYD ballet loop on ESP32-S3 / esp32-s3-devkitc-1-v1.1-n16r8");
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     let mut display = CydDisplayEsp::new(
         &CYD_STATIC,
         p.SPI2,
-        p.GPIO14,
-        p.GPIO13,
-        p.GPIO12,
-        p.GPIO15,
+        p.GPIO1,
         p.GPIO2,
+        p.GPIO3,
         p.GPIO4,
-        p.GPIO21,
+        p.GPIO5,
+        p.GPIO7,
+        p.GPIO8,
         ORIENTATION,
         BACKGROUND,
         FOREGROUND,
@@ -56,6 +56,5 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
-    // Hand off to the device-agnostic render loop.
     Ok(ballet(&mut display).await?)
 }

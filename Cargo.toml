@@ -4,7 +4,7 @@ members = [
     "crates/linkage-blaze-core",
     "crates/linkage-blaze-example-core",
     "crates/linkage-blaze-editor",
-    "crates/linkage-blaze-classic",
+    "crates/linkage-blaze-esp",
 ]
 resolver = "3"
 

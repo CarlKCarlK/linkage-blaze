@@ -1,6 +1,15 @@
 set shell := ["bash", "-cu"]
 
-_classic_args    := "--target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
+run name chip="" port="":
+    ./scripts/device-action.sh run "{{name}}" "{{chip}}" "{{port}}" "{{invocation_directory()}}"
+
+check name chip="":
+    ./scripts/device-action.sh check "{{name}}" "{{chip}}" "" "{{invocation_directory()}}"
+
+build name chip="":
+    ./scripts/device-action.sh build "{{name}}" "{{chip}}" "" "{{invocation_directory()}}"
+
+_esp_args        := "--target xtensa-esp32-none-elf --release -Zbuild-std=core,alloc"
 # RUSTFLAGS for ESP targets: -D warnings PLUS the linker script that .cargo/config.toml provides
 # but that env RUSTFLAGS= would otherwise override.
 _esp_rustflags   := "-D warnings -C link-arg=-Tlinkall.x"
@@ -16,16 +25,17 @@ test-core:
 
 # Check and build all crates
 check-all:
+    cargo run --quiet -p linkage-blaze-xtask -- generate-board-examples
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example armatron {{_armatron_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example armatron_esp32_generic {{_armatron_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example clock_esp32_generic {{_clock_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example skeleton_clock_esp32_generic {{_skeleton_clock_args}}
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example ballet_esp32_generic {{_ballet_args}}
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
 
 # Alias for check-all
-build:
+build-all:
     just check-all
 
 # Build the static GitHub Pages artifact with immutable demo version URLs.
@@ -109,67 +119,81 @@ _bundle-docs:
     printf -- 'Wrote %s\n' "$bundle"
     printf -- 'Wrote %s\n' "$archive"
 
-# ── linkage-blaze-classic examples (dance, ballet) ──────────────────────
+# Regenerate the board/chip example matrix under `crates/linkage-blaze-esp/examples/`.
+generate-board-examples:
+    cargo run --quiet -p linkage-blaze-xtask -- generate-board-examples
+
+# ── linkage-blaze-esp examples (dance, ballet) ───────────────────────────
 #
-# dance and ballet now live as `--example`s in the shared `linkage-blaze-classic`
-# crate. Example binaries land in target/<triple>/release/examples/<name>.
+# dance and ballet now live as generated `--example`s in the shared
+# `linkage-blaze-esp` crate. Example binaries land in
+# target/<triple>/release/examples/<name>.
 
 # Each example enables only its own `linkage-blaze-example-core` module, so unused
 # example modules (and ballet's slow `MOTION` const) are never compiled.
-_armatron_args       := _classic_args + " --features armatron"
-_ballet_args         := _classic_args + " --features ballet"
-_skeleton_clock_args := _classic_args + " --features skeleton-clock"
-_clock_args          := _classic_args + " --features clock"
+_armatron_args       := _esp_args + " --features armatron"
+_ballet_args         := _esp_args + " --features ballet"
+_skeleton_clock_args := _esp_args + " --features skeleton-clock"
+_clock_args          := _esp_args + " --features clock"
 
-check-skeleton-clock-classic:
-    cargo +esp check -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
+check-skeleton-clock-esp:
+    just generate-board-examples
+    cargo +esp check -p linkage-blaze-esp --example skeleton_clock_esp32_generic {{_skeleton_clock_args}}
 
-build-skeleton-clock-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
+build-skeleton-clock-esp:
+    just generate-board-examples
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-esp --example skeleton_clock_esp32_generic {{_skeleton_clock_args}}
 
-run-skeleton-clock-classic:
-    just check-skeleton-clock-classic
-    just build-skeleton-clock-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
+run-skeleton-clock-esp:
+    just check-skeleton-clock-esp
+    just build-skeleton-clock-esp
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-esp --example skeleton_clock_esp32_generic {{_skeleton_clock_args}}
 
-check-clock-classic:
-    cargo +esp check -p linkage-blaze-classic --example clock {{_clock_args}}
+check-clock-esp:
+    just generate-board-examples
+    cargo +esp check -p linkage-blaze-esp --example clock_esp32_generic {{_clock_args}}
 
-build-clock-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
+build-clock-esp:
+    just generate-board-examples
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-esp --example clock_esp32_generic {{_clock_args}}
 
-run-clock-classic:
-    just check-clock-classic
-    just build-clock-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example clock {{_clock_args}}
+run-clock-esp:
+    just check-clock-esp
+    just build-clock-esp
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-esp --example clock_esp32_generic {{_clock_args}}
 
-check-armatron-classic:
-    cargo +esp check -p linkage-blaze-classic --example armatron {{_armatron_args}}
+check-armatron-esp:
+    just generate-board-examples
+    cargo +esp check -p linkage-blaze-esp --example armatron_esp32_generic {{_armatron_args}}
 
-build-armatron-classic:
-    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-classic --example armatron {{_armatron_args}}
+build-armatron-esp:
+    just generate-board-examples
+    source ~/export-esp.sh && cargo +esp build -p linkage-blaze-esp --example armatron_esp32_generic {{_armatron_args}}
 
-run-armatron-classic:
-    just check-armatron-classic
-    just build-armatron-classic
-    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example armatron {{_armatron_args}}
+run-armatron-esp:
+    just check-armatron-esp
+    just build-armatron-esp
+    source ~/export-esp.sh && cargo +esp run -p linkage-blaze-esp --example armatron_esp32_generic {{_armatron_args}}
 
-check-ballet-classic:
-    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp check -p linkage-blaze-classic --example ballet {{_ballet_args}}
+check-ballet-esp:
+    just generate-board-examples
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp check -p linkage-blaze-esp --example ballet_esp32_generic {{_ballet_args}}
 
-build-ballet-classic:
-    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
+build-ballet-esp:
+    just generate-board-examples
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example ballet_esp32_generic {{_ballet_args}}
 
-size-ballet-classic:
-    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
-    source ~/export-esp.sh && xtensa-esp32-elf-size target/xtensa-esp32-none-elf/release/examples/ballet
-    source ~/export-esp.sh && xtensa-esp32-elf-size -A target/xtensa-esp32-none-elf/release/examples/ballet
-    source ~/export-esp.sh && xtensa-esp32-elf-nm -S --size-sort target/xtensa-esp32-none-elf/release/examples/ballet | tail -n 30
+size-ballet-esp:
+    just generate-board-examples
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example ballet_esp32_generic {{_ballet_args}}
+    source ~/export-esp.sh && xtensa-esp32-elf-size target/xtensa-esp32-none-elf/release/examples/ballet_esp32_generic
+    source ~/export-esp.sh && xtensa-esp32-elf-size -A target/xtensa-esp32-none-elf/release/examples/ballet_esp32_generic
+    source ~/export-esp.sh && xtensa-esp32-elf-nm -S --size-sort target/xtensa-esp32-none-elf/release/examples/ballet_esp32_generic | tail -n 30
 
-run-ballet-classic:
-    just check-ballet-classic
-    just build-ballet-classic
-    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp run -p linkage-blaze-classic --example ballet {{_ballet_args}}
+run-ballet-esp:
+    just check-ballet-esp
+    just build-ballet-esp
+    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp run -p linkage-blaze-esp --example ballet_esp32_generic {{_ballet_args}}
 
 # ── linkage-blaze-editor ──────────────────────────────────────────────────────
 
