@@ -11,7 +11,7 @@
 //! [`CydFrameWasm::flush`](device_envoy_core::wasm::CydFrameWasm), which awaits
 //! `requestAnimationFrame`.
 
-use device_envoy_core::cyd::Cyd;
+use device_envoy_core::cyd::CydScreen;
 use device_envoy_core::wasm::{CydTouchWasmSource, CydWasm};
 use linkage_blaze_example_core::ballet::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
@@ -68,7 +68,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
     // borrows it for the whole run.
     wasm_bindgen_futures::spawn_local(async move {
         let mut cyd = cyd;
-        let (mut display, _touch) = cyd.parts();
+        let mut display = cyd.display();
         match ballet(&mut display).await {
             Ok(never) => match never {},
             Err(error) => panic!("ballet stopped: {error:?}"),

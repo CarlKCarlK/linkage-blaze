@@ -176,7 +176,7 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 #[cfg(test)]
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
-    use device_envoy_core::cyd::{Cyd as _, CydDisplay, display::CydFrame};
+    use device_envoy_core::cyd::{CydDisplay, CydScreen as _, display::CydFrame};
     use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
     use time::OffsetDateTime;
@@ -232,7 +232,7 @@ mod tests {
         };
 
         {
-            let (mut display, _touch) = memory_cyd.parts();
+            let mut display = memory_cyd.display();
             block_on(clock_splash(&mut display))
                 .expect("clock splash should draw the static background");
             let background565 = display.background_565();
@@ -247,7 +247,7 @@ mod tests {
         }
 
         let clock_result = {
-            let (mut display, _touch) = memory_cyd.parts();
+            let mut display = memory_cyd.display();
             block_on(clock(&mut display, &clock_sync))
         };
         clock_result.expect_err("the free-running loop should stop at the frame budget");

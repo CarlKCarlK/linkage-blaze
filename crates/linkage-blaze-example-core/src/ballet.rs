@@ -136,7 +136,7 @@ fn status_text(
 
 #[cfg(test)]
 mod tests {
-    use device_envoy_core::cyd::Cyd as _;
+    use device_envoy_core::cyd::CydScreen as _;
     use device_envoy_core::memory::{
         CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
     };
@@ -154,7 +154,7 @@ mod tests {
         memory_cyd.set_frame_budget(SMOKE_TEST_FRAME_BUDGET);
 
         let ballet_result = {
-            let (mut display, _touch) = memory_cyd.parts();
+            let mut display = memory_cyd.display();
             block_on(ballet(&mut display))
         };
 
@@ -179,7 +179,7 @@ mod tests {
         memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
 
         let ballet_result = {
-            let (mut display, _touch) = memory_cyd.parts();
+            let mut display = memory_cyd.display();
             block_on(ballet(&mut display))
         };
         ballet_result.expect_err("the free-running loop should stop at the frame budget");

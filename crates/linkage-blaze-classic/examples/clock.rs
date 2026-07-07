@@ -6,7 +6,7 @@
 
 use core::{cell::RefCell, convert::Infallible};
 
-use device_envoy_esp::cyd::{Cyd, CydDisplay as _, CydError, CydEsp, CydStaticEsp};
+use device_envoy_esp::cyd::{CydDisplay as _, CydError, CydEsp, CydScreen as _, CydStaticEsp};
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -70,7 +70,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
-    let (mut display, _touch) = cyd.parts();
+    let mut display = cyd.display();
     clock_splash(&mut display).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;

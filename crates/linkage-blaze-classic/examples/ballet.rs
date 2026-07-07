@@ -6,7 +6,7 @@
 
 use core::convert::Infallible;
 
-use device_envoy_esp::cyd::{Cyd as _, CydError, CydEsp, CydStaticEsp};
+use device_envoy_esp::cyd::{CydError, CydEsp, CydScreen as _, CydStaticEsp};
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
@@ -57,6 +57,6 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     // Hand off to the device-agnostic render loop.
-    let (mut display, _touch) = cyd.parts();
+    let mut display = cyd.display();
     Ok(ballet(&mut display).await?)
 }

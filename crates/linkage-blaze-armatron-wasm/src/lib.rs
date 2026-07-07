@@ -72,7 +72,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
 
     wasm_bindgen_futures::spawn_local(async move {
         loop {
-            let mut cyd = CydWasm::new(
+            let cyd = CydWasm::new(
                 context.clone(),
                 ORIENTATION,
                 BACKGROUND,
@@ -82,8 +82,8 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             );
 
             let mut recalibration_button = button_source.button();
-            match ensure_calibration_with_settings(
-                &mut cyd,
+            let mut cyd = match ensure_calibration_with_settings(
+                cyd,
                 &mut calibration_flash_block,
                 &mut recalibration_button,
                 None,
@@ -91,12 +91,11 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             )
             .await
             {
-                Ok(calibration_outcome) => {
+                Ok((cyd, calibration_outcome)) => {
                     if calibration_outcome.was_saved() {
                         continue;
                     }
-                    let calibration_config = calibration_outcome.calibration_config();
-                    cyd.set_calibration(calibration_config);
+                    cyd
                 }
                 Err(error) => {
                     web_sys::console::error_1(
@@ -104,11 +103,10 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
                     );
                     break;
                 }
-            }
+            };
 
             match armatron(&mut cyd, &mut recalibration_button).await {
                 Ok(ArmatronExit::CalibrationRequested) => {
-                    cyd.clear_calibration();
                     if let Err(error) = calibration_flash_block.clear() {
                         web_sys::console::error_1(
                             &format!("failed to clear calibration flash: {error:?}").into(),

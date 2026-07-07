@@ -454,7 +454,7 @@ pub enum Error<F> {
 #[cfg(test)]
 mod tests {
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
-    use device_envoy_core::cyd::Cyd as _;
+    use device_envoy_core::cyd::CydScreen as _;
     use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
     use time::OffsetDateTime;
@@ -506,7 +506,7 @@ mod tests {
         };
 
         let skeleton_clock_result = {
-            let (mut display, _touch) = memory_cyd.parts();
+            let mut display = memory_cyd.display();
             block_on(skeleton_clock(&mut display, &clock_sync))
         };
         skeleton_clock_result.expect_err("the free-running loop should stop at the frame budget");

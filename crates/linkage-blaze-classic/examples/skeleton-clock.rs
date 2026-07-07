@@ -7,7 +7,8 @@
 use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_esp::cyd::{
-    Cyd, CydDisplay as _, CydError, CydEsp, CydStaticEsp, tiling::rectangle_pixel_count,
+    CydDisplay as _, CydError, CydEsp, CydScreen as _, CydStaticEsp,
+    tiling::rectangle_pixel_count,
 };
 use device_envoy_esp::{
     Error,
@@ -78,7 +79,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
-    let (mut display, _touch) = cyd.parts();
+    let mut display = cyd.display();
 
     // Show the framed clock immediately, before WiFi/NTP, with placeholder status.
     skeleton_clock::skeleton_clock_splash(&mut display).await?;

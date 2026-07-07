@@ -232,7 +232,9 @@ pub enum ArmatronExit {
 
 #[cfg(test)]
 mod tests {
+    use device_envoy_core::cyd::Calibrated;
     use device_envoy_core::cyd::touch::TouchEvent;
+    use device_envoy_core::cyd::touch::calibration::CalibrationConfig;
     use device_envoy_core::memory::{
         CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
     };
@@ -242,13 +244,14 @@ mod tests {
     use super::controls::CALIBRATE_BUTTON;
     use super::{ArmatronExit, Error, armatron};
 
-    fn test_memory_cyd() -> CydMemory {
+    fn test_memory_cyd() -> CydMemory<Calibrated> {
         CydMemory::new(
             embedded_graphics::geometry::Size::new(320, 240),
             super::BACKGROUND,
             super::FOREGROUND,
             &FONT_9X15_BOLD,
         )
+        .calibrate(CalibrationConfig::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0))
     }
 
     #[test]
