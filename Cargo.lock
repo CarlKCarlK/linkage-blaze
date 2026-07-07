@@ -349,6 +349,7 @@ version = "0.1.0"
 dependencies = [
  "derive_more",
  "device-envoy-core",
+ "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-net",
