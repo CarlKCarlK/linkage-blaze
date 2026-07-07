@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use device_envoy_core::cyd::CydTouch;
+use device_envoy_core::cyd::Cyd;
 use device_envoy_core::cyd::display::Orientation;
 use device_envoy_core::cyd::touch::calibration::{
     CalibrationConfig, EnsureCalibrationSettings, ensure_calibration_with_settings,
@@ -73,7 +73,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
 
     wasm_bindgen_futures::spawn_local(async move {
         loop {
-            let mut cyd = CydWasm::new(
+            let source_cyd = CydWasm::new(
                 context.clone(),
                 ORIENTATION,
                 BACKGROUND,
@@ -83,7 +83,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             );
 
             let mut recalibration_button = button_source.button();
-            let (mut display, touch_uncalibrated) = cyd.parts_uncalibrated();
+            let (mut display, touch_uncalibrated) = source_cyd.parts_uncalibrated();
             let touch = match ensure_calibration_with_settings(
                 &mut display,
                 touch_uncalibrated,
@@ -107,7 +107,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
                     break;
                 }
             };
-            cyd.set_calibration_config(touch.calibration_config());
+            let mut cyd = CydWasm::from_parts(display, touch);
 
             match armatron(&mut cyd, &mut recalibration_button).await {
                 Ok(ArmatronExit::CalibrationRequested) => {
