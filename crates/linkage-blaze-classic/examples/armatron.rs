@@ -5,16 +5,10 @@
 
 use core::convert::Infallible;
 
-use device_envoy_core::cyd::CydDisplay;
-use device_envoy_core::cyd::touch::calibration::{
-    EnsureCalibrationError, EnsureCalibrationErrorKind, ensure_calibration,
-};
+use device_envoy_core::cyd::{Cyd as _, CydDisplay};
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
-    cyd::{
-        CydDisplayEsp, CydError, CydEsp, CydEspUncalibrated, CydStaticEsp, CydTouchUncalibratedEsp,
-        DEFAULT_FONT, Orientation,
-    },
+    cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
@@ -37,7 +31,6 @@ enum MainError {
     InitDisplay,
     FlushFrameBuffer,
     FormatText,
-    CalibrationDriverFlash,
 }
 
 impl From<device_envoy_esp::Error> for MainError {
@@ -82,17 +75,6 @@ impl From<ArmatronError<CydError>> for MainError {
     }
 }
 
-impl From<EnsureCalibrationError<CydTouchUncalibratedEsp, device_envoy_esp::Error>> for MainError {
-    fn from(
-        error: EnsureCalibrationError<CydTouchUncalibratedEsp, device_envoy_esp::Error>,
-    ) -> Self {
-        match error.kind {
-            EnsureCalibrationErrorKind::Device(error) => error.into(),
-            EnsureCalibrationErrorKind::Flash(_error) => MainError::CalibrationDriverFlash,
-        }
-    }
-}
-
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -108,7 +90,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     let mut calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
-    let CydEspUncalibrated { mut display, touch } = CydEspUncalibrated::new(
+    let (mut cyd, calibration_outcome) = CydEsp::new(
         &CYD_STATIC,
         p.SPI2,   // display SPI
         p.GPIO14, // display SCK
@@ -128,25 +110,20 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO39,      // touch MISO
         p.GPIO33,      // touch CS
         p.GPIO36,      // touch IRQ
-    )?;
-    info!("CYD display and touch initialized");
-
-    let (mut touch, calibration_outcome) = ensure_calibration(
-        &mut display,
-        touch,
         &mut calibration_flash_block,
         &mut calibration_button,
         Some("rebooting"),
     )
     .await?;
+    info!("CYD display and touch initialized");
     if calibration_outcome.was_saved() {
         info!("Restarting");
         esp_hal::system::software_reset();
     }
 
-    match armatron(&mut display, &mut touch, &mut calibration_button).await? {
+    match armatron(&mut cyd, &mut calibration_button).await? {
         ArmatronExit::CalibrationRequested => {
-            clear_calibration_and_reset(&mut display, &mut calibration_flash_block).await?;
+            clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
         }
     }
 
@@ -154,14 +131,15 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 }
 
 async fn clear_calibration_and_reset(
-    display: &mut CydDisplayEsp,
+    cyd: &mut CydEsp,
     calibration_flash_block: &mut FlashBlockEsp,
 ) -> Result<(), MainError> {
     calibration_flash_block.clear()?;
-    reboot_with_message(display, "rebooting").await
+    reboot_with_message(cyd, "rebooting").await
 }
 
-async fn reboot_with_message(display: &mut CydDisplayEsp, message: &str) -> Result<(), MainError> {
+async fn reboot_with_message(cyd: &mut CydEsp, message: &str) -> Result<(), MainError> {
+    let display = cyd.display();
     let background565 = display.background_565();
     let mut frame = display.full_frame_mut();
     frame.fill(background565).write_text(message).flush()?;

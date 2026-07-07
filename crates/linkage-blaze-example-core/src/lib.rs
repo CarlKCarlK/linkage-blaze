@@ -15,7 +15,6 @@ pub mod armatron;
 pub mod ballet;
 #[cfg(feature = "clock")]
 pub mod clock;
-pub mod infallible;
 #[cfg(feature = "skeleton-clock")]
 pub mod skeleton_clock;
 pub mod ui;

@@ -8,7 +8,7 @@ This file contains shared workspace rules for this repository.
 - Do not "fix" warnings or errors by suppressing lints (for example `#[allow(...)]`, crate-level allow attributes, or similar) unless the human explicitly requests that suppression.
 - If warnings are caused by obsolete code, delete or refactor the obsolete code instead of hiding the warning.
 - Never use `let _ = …` to suppress a `Result`. Handle the error properly. For a non-`Result` value that is intentionally unused, call the function as a plain statement instead of binding it to `_`.
-- Never use `.ok()` to discard a `Result`. When the enclosing function can propagate the error, use `?` so it eventually reaches `inner_main`/`main`. In MCU app paths, do not use `.expect(...)` or `.unwrap()` for fallible operations; return the error instead. When the operation truly cannot fail because the error type is `Infallible`, use `.unwrap_never()` (from the local infallible-result extension) rather than `.expect(...)`.
+- Never use `.ok()` to discard a `Result`. When the enclosing function can propagate the error, use `?` so it eventually reaches `inner_main`/`main`. In MCU app paths, do not use `.expect(...)` or `.unwrap()` for fallible operations; return the error instead. When the operation truly cannot fail because the error type is `Infallible`, use `.unwrap_infallible()` (from `device_envoy_core::UnwrapInfallible`) rather than `.expect(...)`.
 - Prefer a plain `?` over an explicit `.map_err(Variant)?`. Give an error enum a derived `From` (e.g. `derive_more::From`, or `#[from]` on the variant) for each source error so propagation is just `?`. When a generic blanket conversion (such as `impl<F: SomeBound> From<F> for Error<F>` for a device/flush error) would collide under coherence with those concrete `From`s, reserve the clean `?` path for *our own* error types and make the single generic/foreign error the explicit `.map_err(Error::Flush)?` exception — not the other way around. Document the collision at the enum so the asymmetry is not mistaken for an oversight. See `ballet::Error` in `linkage-blaze-example-core` for the canonical example.
 - Keep the core crate `no_std` and no-allocation unless the user explicitly changes that goal.
 - Avoid silent clamping; prefer asserts or typed ranges so out-of-range inputs fail fast.
@@ -16,6 +16,7 @@ This file contains shared workspace rules for this repository.
 - Always use `rust,no_run` in doctest fences, not just `no_run`.
 - Hide boilerplate in doctests using the `#` prefix when it is noise to the reader but required for compilation, such as `#![no_std]` or ordinary imports.
 - When adding docs for modules or public items, link readers to the primary type and keep a single compilable example on that type when practical.
+- For public methods, almost every method should either include its own doctest or link directly to a doctest that mentions the method. If one shared doctest covers a family of methods, make each method doc point to that example explicitly.
 - Prefer `const` values defined in the local context when they are only used there.
 - Prefer explicit `drop(variable)` over anonymous code blocks when the only purpose of the block is to end a borrow or temporary lifetime early.
 - Do not add redundant command wrappers that only mirror an existing `cargo` command.

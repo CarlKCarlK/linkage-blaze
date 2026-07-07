@@ -4,6 +4,7 @@
 
 use core::{array::from_fn, convert::Infallible, fmt};
 
+use device_envoy_core::UnwrapInfallible;
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embedded_graphics::{
     Drawable,
@@ -27,8 +28,6 @@ use device_envoy_core::cyd::{
         tiling::TileGrid,
     },
 };
-
-use crate::infallible::InfallibleResultExt;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 

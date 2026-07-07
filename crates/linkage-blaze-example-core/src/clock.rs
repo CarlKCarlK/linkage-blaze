@@ -4,6 +4,7 @@
 
 use core::{convert::Infallible, fmt, iter};
 
+use device_envoy_core::UnwrapInfallible;
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use device_envoy_core::cyd::{
     CydDisplay,
@@ -26,8 +27,6 @@ use linkage_blaze_cyd_3d::DrawItem3dExt;
 use log::info;
 use profont::PROFONT_18_POINT;
 use time::OffsetDateTime;
-
-use crate::infallible::InfallibleResultExt;
 
 // ── Public constants ────────────────────────────────────────────────────────────────
 

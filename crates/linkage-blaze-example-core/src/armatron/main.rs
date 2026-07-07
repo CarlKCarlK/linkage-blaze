@@ -10,7 +10,7 @@ mod controls;
 pub mod reverse_kinematics;
 
 use device_envoy_core::cyd::{
-    CydDisplay, CydTouch,
+    Cyd, CydDisplay, CydTouch,
     display::{CydFrame, Orientation},
 };
 use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
@@ -106,16 +106,15 @@ const SHOW_FPS_TEXT: bool = true;
 /// the rest of the CYD touch-calibration flow.
 // TODO0000 Revisit whether `armatron` should regain a type-state guarantee for
 // calibrated CYD touch instead of relying on this caller-side runtime precondition.
-pub async fn armatron<D, T, R>(
-    display: &mut D,
-    touch: &mut T,
+pub async fn armatron<C, R>(
+    cyd: &mut C,
     recalibration_button: &mut R,
-) -> Result<ArmatronExit, Error<D::Error>>
+) -> Result<ArmatronExit, Error<C::Error>>
 where
-    D: CydDisplay,
-    T: CydTouch<Error = D::Error>,
+    C: Cyd,
     R: Button,
 {
+    let (display, touch) = cyd.parts();
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
     let mut target_seed: u8 = 0;
@@ -265,8 +264,7 @@ mod tests {
         });
         let mut memory_button = memory_cyd.button_memory();
 
-        let (mut display, mut touch) = memory_cyd.parts();
-        let armatron_exit = block_on(armatron(&mut display, &mut touch, &mut memory_button))
+        let armatron_exit = block_on(armatron(&mut memory_cyd, &mut memory_button))
             .expect("tapping the calibrate button should exit cleanly, not error");
 
         assert!(matches!(armatron_exit, ArmatronExit::CalibrationRequested));
@@ -282,9 +280,8 @@ mod tests {
         let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(1);
         let mut memory_button = memory_cyd.button_memory();
-        let (mut display, mut touch) = memory_cyd.parts();
 
-        let armatron_error = block_on(armatron(&mut display, &mut touch, &mut memory_button))
+        let armatron_error = block_on(armatron(&mut memory_cyd, &mut memory_button))
             .expect_err("the free-running loop should stop at the frame budget");
         assert!(matches!(
             armatron_error,

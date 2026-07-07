@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use device_envoy_core::cyd::CydTouch;
 use device_envoy_core::cyd::display::Orientation;
 use device_envoy_core::cyd::touch::calibration::{
     CalibrationConfig, EnsureCalibrationSettings, ensure_calibration_with_settings,
@@ -72,7 +73,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
 
     wasm_bindgen_futures::spawn_local(async move {
         loop {
-            let cyd = CydWasm::new(
+            let mut cyd = CydWasm::new(
                 context.clone(),
                 ORIENTATION,
                 BACKGROUND,
@@ -82,8 +83,10 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             );
 
             let mut recalibration_button = button_source.button();
-            let mut cyd = match ensure_calibration_with_settings(
-                cyd,
+            let (mut display, touch_uncalibrated) = cyd.parts_uncalibrated();
+            let touch = match ensure_calibration_with_settings(
+                &mut display,
+                touch_uncalibrated,
                 &mut calibration_flash_block,
                 &mut recalibration_button,
                 None,
@@ -91,11 +94,11 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
             )
             .await
             {
-                Ok((cyd, calibration_outcome)) => {
+                Ok((touch, calibration_outcome)) => {
                     if calibration_outcome.was_saved() {
                         continue;
                     }
-                    cyd
+                    touch
                 }
                 Err(error) => {
                     web_sys::console::error_1(
@@ -104,6 +107,7 @@ pub fn start(canvas_id: &str) -> Result<(), wasm_bindgen::JsValue> {
                     break;
                 }
             };
+            cyd.set_calibration_config(touch.calibration_config());
 
             match armatron(&mut cyd, &mut recalibration_button).await {
                 Ok(ArmatronExit::CalibrationRequested) => {
