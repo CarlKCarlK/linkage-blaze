@@ -40,19 +40,19 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     let mut display = CydDisplayEsp::new(
-        &CYD_STATIC,
-        p.SPI2,
-        p.GPIO19,
-        p.GPIO18,
-        p.GPIO20,
-        p.GPIO21,
-        p.GPIO4,
-        p.GPIO5,
-        p.GPIO7,
-        ORIENTATION,
-        BACKGROUND,
-        FOREGROUND,
-        &TOP_FONT,
+        &CYD_STATIC, // statics
+        p.SPI2,      // display_spi
+        p.GPIO19,    // display_sck_pin
+        p.GPIO18,    // display_mosi_pin
+        p.GPIO20,    // display_miso_pin
+        p.GPIO21,    // display_cs_pin
+        p.GPIO4,     // display_dc_pin
+        p.GPIO5,     // display_rst_pin
+        p.GPIO7,     // display_backlight_pin
+        ORIENTATION, // orientation
+        BACKGROUND,  // background
+        FOREGROUND,  // foreground
+        &TOP_FONT,   // font
     )?;
     info!("CYD display initialized");
 

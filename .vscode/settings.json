@@ -11,7 +11,9 @@
         "**/target/**": true
     },
     "rust-analyzer.cargo.allTargets": false,
-    "rust-analyzer.cargo.features": "all",
+    "rust-analyzer.cargo.noDefaultFeatures": true,
+    "rust-analyzer.cargo.features": ["esp32c6", "ballet"],
+    "rust-analyzer.cargo.target": "riscv32imac-unknown-none-elf",
     "rust-analyzer.checkOnSave.enable": false,
     "rust-analyzer.check.enable": false,
     "rust-analyzer.diagnostics.enable": false,

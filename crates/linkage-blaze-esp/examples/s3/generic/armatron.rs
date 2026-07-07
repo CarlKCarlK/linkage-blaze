@@ -91,28 +91,28 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     let (mut cyd, calibration_outcome) = CydEsp::new(
-        &CYD_STATIC,
-        p.SPI2,
-        p.GPIO1,
-        p.GPIO2,
-        p.GPIO3,
-        p.GPIO4,
-        p.GPIO5,
-        p.GPIO7,
-        p.GPIO8,
-        Orientation::Landscape,
-        BACKGROUND,
-        FOREGROUND,
-        &DEFAULT_FONT,
-        p.SPI3,
-        p.GPIO9,
-        p.GPIO10,
-        p.GPIO11,
-        p.GPIO12,
-        p.GPIO13,
-        &mut calibration_flash_block,
-        &mut calibration_button,
-        Some("rebooting"),
+        &CYD_STATIC,                  // statics
+        p.SPI2,                       // display_spi
+        p.GPIO1,                      // display_sck_pin
+        p.GPIO2,                      // display_mosi_pin
+        p.GPIO3,                      // display_miso_pin
+        p.GPIO4,                      // display_cs_pin
+        p.GPIO5,                      // display_dc_pin
+        p.GPIO7,                      // display_rst_pin
+        p.GPIO8,                      // display_backlight_pin
+        Orientation::Landscape,       // orientation
+        BACKGROUND,                   // background
+        FOREGROUND,                   // foreground
+        &DEFAULT_FONT,                // font
+        p.SPI3,                       // touch_spi
+        p.GPIO9,                      // touch_sck_pin
+        p.GPIO10,                     // touch_mosi_pin
+        p.GPIO11,                     // touch_miso_pin
+        p.GPIO12,                     // touch_cs_pin
+        p.GPIO13,                     // touch_irq_pin
+        &mut calibration_flash_block, // calibration_flash_block
+        &mut calibration_button,      // recalibration_button
+        Some("rebooting"),            // confirmed_message
     )
     .await?;
     info!("CYD display and touch initialized");

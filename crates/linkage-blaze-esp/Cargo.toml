@@ -15,6 +15,11 @@ path = "examples/esp32/generic/armatron.rs"
 required-features = ["esp32", "armatron"]
 
 [[example]]
+name = "armatron_one_spi_esp32_generic"
+path = "examples/esp32/generic/armatron_one_spi.rs"
+required-features = ["esp32", "armatron"]
+
+[[example]]
 name = "ballet_esp32_generic"
 path = "examples/esp32/generic/ballet.rs"
 required-features = ["esp32", "ballet"]
@@ -32,6 +37,11 @@ required-features = ["esp32", "skeleton-clock"]
 [[example]]
 name = "armatron_esp32c2_generic"
 path = "examples/c2/generic/armatron.rs"
+required-features = ["esp32c2", "armatron"]
+
+[[example]]
+name = "armatron_one_spi_esp32c2_generic"
+path = "examples/c2/generic/armatron_one_spi.rs"
 required-features = ["esp32c2", "armatron"]
 
 [[example]]
@@ -55,6 +65,11 @@ path = "examples/c2/devkitm1_v1_0/armatron.rs"
 required-features = ["esp32c2", "armatron"]
 
 [[example]]
+name = "armatron_one_spi_esp32c2_devkitm1_v1_0"
+path = "examples/c2/devkitm1_v1_0/armatron_one_spi.rs"
+required-features = ["esp32c2", "armatron"]
+
+[[example]]
 name = "ballet_esp32c2_devkitm1_v1_0"
 path = "examples/c2/devkitm1_v1_0/ballet.rs"
 required-features = ["esp32c2", "ballet"]
@@ -72,6 +87,11 @@ required-features = ["esp32c2", "skeleton-clock"]
 [[example]]
 name = "armatron_esp32c3_generic"
 path = "examples/c3/generic/armatron.rs"
+required-features = ["esp32c3", "armatron"]
+
+[[example]]
+name = "armatron_one_spi_esp32c3_generic"
+path = "examples/c3/generic/armatron_one_spi.rs"
 required-features = ["esp32c3", "armatron"]
 
 [[example]]
@@ -95,6 +115,11 @@ path = "examples/c3/luatos/armatron.rs"
 required-features = ["esp32c3", "armatron"]
 
 [[example]]
+name = "armatron_one_spi_esp32c3_luatos"
+path = "examples/c3/luatos/armatron_one_spi.rs"
+required-features = ["esp32c3", "armatron"]
+
+[[example]]
 name = "ballet_esp32c3_luatos"
 path = "examples/c3/luatos/ballet.rs"
 required-features = ["esp32c3", "ballet"]
@@ -112,6 +137,11 @@ required-features = ["esp32c3", "skeleton-clock"]
 [[example]]
 name = "armatron_esp32c5_generic"
 path = "examples/c5/generic/armatron.rs"
+required-features = ["esp32c5", "armatron"]
+
+[[example]]
+name = "armatron_one_spi_esp32c5_generic"
+path = "examples/c5/generic/armatron_one_spi.rs"
 required-features = ["esp32c5", "armatron"]
 
 [[example]]
@@ -135,6 +165,11 @@ path = "examples/c6/generic/armatron.rs"
 required-features = ["esp32c6", "armatron"]
 
 [[example]]
+name = "armatron_one_spi_esp32c6_generic"
+path = "examples/c6/generic/armatron_one_spi.rs"
+required-features = ["esp32c6", "armatron"]
+
+[[example]]
 name = "ballet_esp32c6_generic"
 path = "examples/c6/generic/ballet.rs"
 required-features = ["esp32c6", "ballet"]
@@ -152,6 +187,11 @@ required-features = ["esp32c6", "skeleton-clock"]
 [[example]]
 name = "armatron_esp32c61_generic"
 path = "examples/c61/generic/armatron.rs"
+required-features = ["esp32c61", "armatron"]
+
+[[example]]
+name = "armatron_one_spi_esp32c61_generic"
+path = "examples/c61/generic/armatron_one_spi.rs"
 required-features = ["esp32c61", "armatron"]
 
 [[example]]
@@ -175,6 +215,11 @@ path = "examples/c6/devkitc1_n8/armatron.rs"
 required-features = ["esp32c6", "armatron"]
 
 [[example]]
+name = "armatron_one_spi_esp32c6_devkitc1_n8"
+path = "examples/c6/devkitc1_n8/armatron_one_spi.rs"
+required-features = ["esp32c6", "armatron"]
+
+[[example]]
 name = "ballet_esp32c6_devkitc1_n8"
 path = "examples/c6/devkitc1_n8/ballet.rs"
 required-features = ["esp32c6", "ballet"]
@@ -192,6 +237,11 @@ required-features = ["esp32c6", "skeleton-clock"]
 [[example]]
 name = "armatron_esp32h2_generic"
 path = "examples/h2/generic/armatron.rs"
+required-features = ["esp32h2", "armatron"]
+
+[[example]]
+name = "armatron_one_spi_esp32h2_generic"
+path = "examples/h2/generic/armatron_one_spi.rs"
 required-features = ["esp32h2", "armatron"]
 
 [[example]]
@@ -215,6 +265,11 @@ path = "examples/s2/generic/armatron.rs"
 required-features = ["esp32s2", "armatron"]
 
 [[example]]
+name = "armatron_one_spi_esp32s2_generic"
+path = "examples/s2/generic/armatron_one_spi.rs"
+required-features = ["esp32s2", "armatron"]
+
+[[example]]
 name = "ballet_esp32s2_generic"
 path = "examples/s2/generic/ballet.rs"
 required-features = ["esp32s2", "ballet"]
@@ -232,6 +287,11 @@ required-features = ["esp32s2", "skeleton-clock"]
 [[example]]
 name = "armatron_esp32s3_generic"
 path = "examples/s3/generic/armatron.rs"
+required-features = ["esp32s3", "armatron"]
+
+[[example]]
+name = "armatron_one_spi_esp32s3_generic"
+path = "examples/s3/generic/armatron_one_spi.rs"
 required-features = ["esp32s3", "armatron"]
 
 [[example]]
@@ -255,6 +315,11 @@ path = "examples/s3/devkitc1_v1_1_n16r8/armatron.rs"
 required-features = ["esp32s3", "armatron"]
 
 [[example]]
+name = "armatron_one_spi_esp32s3_devkitc1_v1_1_n16r8"
+path = "examples/s3/devkitc1_v1_1_n16r8/armatron_one_spi.rs"
+required-features = ["esp32s3", "armatron"]
+
+[[example]]
 name = "ballet_esp32s3_devkitc1_v1_1_n16r8"
 path = "examples/s3/devkitc1_v1_1_n16r8/ballet.rs"
 required-features = ["esp32s3", "ballet"]
@@ -272,6 +337,11 @@ required-features = ["esp32s3", "skeleton-clock"]
 [[example]]
 name = "armatron_esp32s3_devkitc1_v1_0_n16r8"
 path = "examples/s3/devkitc1_v1_0_n16r8/armatron.rs"
+required-features = ["esp32s3", "armatron"]
+
+[[example]]
+name = "armatron_one_spi_esp32s3_devkitc1_v1_0_n16r8"
+path = "examples/s3/devkitc1_v1_0_n16r8/armatron_one_spi.rs"
 required-features = ["esp32s3", "armatron"]
 
 [[example]]

@@ -53,19 +53,19 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticEsp<MAX_FRAME_PIXEL_COUNT> = CydEsp::new_static();
     let mut display = CydDisplayEsp::new(
-        &CYD_STATIC,
-        p.SPI2,
-        p.GPIO{{ cyd_display_sck_pin }},
-        p.GPIO{{ cyd_display_mosi_pin }},
-        p.GPIO{{ cyd_display_miso_pin }},
-        p.GPIO{{ cyd_display_cs_pin }},
-        p.GPIO{{ cyd_display_dc_pin }},
-        p.GPIO{{ cyd_display_rst_pin }},
-        p.GPIO{{ cyd_display_backlight_pin }},
-        ORIENTATION,
-        BACKGROUND,
-        FOREGROUND,
-        &WIFI_STATUS_FONT,
+        &CYD_STATIC, // statics
+        p.SPI2, // display_spi
+        p.GPIO{{ cyd_display_sck_pin }}, // display_sck_pin
+        p.GPIO{{ cyd_display_mosi_pin }}, // display_mosi_pin
+        p.GPIO{{ cyd_display_miso_pin }}, // display_miso_pin
+        p.GPIO{{ cyd_display_cs_pin }}, // display_cs_pin
+        p.GPIO{{ cyd_display_dc_pin }}, // display_dc_pin
+        p.GPIO{{ cyd_display_rst_pin }}, // display_rst_pin
+        p.GPIO{{ cyd_display_backlight_pin }}, // display_backlight_pin
+        ORIENTATION, // orientation
+        BACKGROUND, // background
+        FOREGROUND, // foreground
+        &WIFI_STATUS_FONT, // font
     )?;
     info!("CYD display initialized");
 

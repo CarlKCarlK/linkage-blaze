@@ -1,14 +1,12 @@
 #![no_std]
 #![no_main]
 
-// todo00 can/should there be a mode to share spi and cs pins?
-
 use core::convert::Infallible;
 
 use device_envoy_core::cyd::{Cyd as _, CydDisplay};
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
-    cyd::{CydError, CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation},
+    cyd::{CydError, CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
@@ -84,32 +82,28 @@ async fn main(spawner: Spawner) -> ! {
 async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
-    info!("Starting CYD armatron loop on ESP32-S3 / esp32-s3-devkitc-1-v1.0-n16r8");
+    info!("Starting CYD armatron loop (one-SPI) on ESP32-S2 / generic");
 
     let [mut calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
-    let mut calibration_button = ButtonEsp::new(p.GPIO6, PressedTo::Ground);
+    let mut calibration_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
 
-    static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
-    let (mut cyd, calibration_outcome) = CydEsp::new(
+    static CYD_STATIC: CydStaticEsp<{ CydEspOneSpi::SCREEN_PIXELS }> = CydEspOneSpi::new_static();
+    let (mut cyd, calibration_outcome) = CydEspOneSpi::new(
         &CYD_STATIC,                  // statics
-        p.SPI2,                       // display_spi
-        p.GPIO1,                      // display_sck_pin
-        p.GPIO2,                      // display_mosi_pin
-        p.GPIO3,                      // display_miso_pin
-        p.GPIO4,                      // display_cs_pin
-        p.GPIO5,                      // display_dc_pin
-        p.GPIO7,                      // display_rst_pin
-        p.GPIO8,                      // display_backlight_pin
+        p.SPI2,                       // spi
+        p.GPIO1,                      // sck_pin
+        p.GPIO2,                      // mosi_pin
+        p.GPIO3,                      // miso_pin
+        p.GPIO4,                      // lcd_cs_pin
+        p.GPIO5,                      // lcd_dc_pin
+        p.GPIO7,                      // lcd_rst_pin
+        p.GPIO8,                      // lcd_backlight_pin
+        p.GPIO12,                     // touch_cs_pin
+        p.GPIO13,                     // touch_irq_pin
         Orientation::Landscape,       // orientation
         BACKGROUND,                   // background
         FOREGROUND,                   // foreground
         &DEFAULT_FONT,                // font
-        p.SPI3,                       // touch_spi
-        p.GPIO9,                      // touch_sck_pin
-        p.GPIO10,                     // touch_mosi_pin
-        p.GPIO11,                     // touch_miso_pin
-        p.GPIO12,                     // touch_cs_pin
-        p.GPIO13,                     // touch_irq_pin
         &mut calibration_flash_block, // calibration_flash_block
         &mut calibration_button,      // recalibration_button
         Some("rebooting"),            // confirmed_message
@@ -131,14 +125,14 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 }
 
 async fn clear_calibration_and_reset(
-    cyd: &mut CydEsp,
+    cyd: &mut CydEspOneSpi,
     calibration_flash_block: &mut FlashBlockEsp,
 ) -> Result<(), MainError> {
     calibration_flash_block.clear()?;
     reboot_with_message(cyd, "rebooting").await
 }
 
-async fn reboot_with_message(cyd: &mut CydEsp, message: &str) -> Result<(), MainError> {
+async fn reboot_with_message(cyd: &mut CydEspOneSpi, message: &str) -> Result<(), MainError> {
     let display = cyd.display();
     let background565 = display.background_565();
     let mut frame = display.full_frame_mut();

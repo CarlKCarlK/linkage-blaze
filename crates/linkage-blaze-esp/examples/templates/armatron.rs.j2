@@ -92,28 +92,28 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     let (mut cyd, calibration_outcome) = CydEsp::new(
-        &CYD_STATIC,
-        p.SPI2,
-        p.GPIO{{ cyd_display_sck_pin }},
-        p.GPIO{{ cyd_display_mosi_pin }},
-        p.GPIO{{ cyd_display_miso_pin }},
-        p.GPIO{{ cyd_display_cs_pin }},
-        p.GPIO{{ cyd_display_dc_pin }},
-        p.GPIO{{ cyd_display_rst_pin }},
-        p.GPIO{{ cyd_display_backlight_pin }},
-        Orientation::Landscape,
-        BACKGROUND,
-        FOREGROUND,
-        &DEFAULT_FONT,
-        p.SPI3,
-        p.GPIO{{ cyd_touch_sck_pin }},
-        p.GPIO{{ cyd_touch_mosi_pin }},
-        p.GPIO{{ cyd_touch_miso_pin }},
-        p.GPIO{{ cyd_touch_cs_pin }},
-        p.GPIO{{ cyd_touch_irq_pin }},
-        &mut calibration_flash_block,
-        &mut calibration_button,
-        Some("rebooting"),
+        &CYD_STATIC, // statics
+        p.SPI2, // display_spi
+        p.GPIO{{ cyd_display_sck_pin }}, // display_sck_pin
+        p.GPIO{{ cyd_display_mosi_pin }}, // display_mosi_pin
+        p.GPIO{{ cyd_display_miso_pin }}, // display_miso_pin
+        p.GPIO{{ cyd_display_cs_pin }}, // display_cs_pin
+        p.GPIO{{ cyd_display_dc_pin }}, // display_dc_pin
+        p.GPIO{{ cyd_display_rst_pin }}, // display_rst_pin
+        p.GPIO{{ cyd_display_backlight_pin }}, // display_backlight_pin
+        Orientation::Landscape, // orientation
+        BACKGROUND, // background
+        FOREGROUND, // foreground
+        &DEFAULT_FONT, // font
+        p.SPI3, // touch_spi
+        p.GPIO{{ cyd_touch_sck_pin }}, // touch_sck_pin
+        p.GPIO{{ cyd_touch_mosi_pin }}, // touch_mosi_pin
+        p.GPIO{{ cyd_touch_miso_pin }}, // touch_miso_pin
+        p.GPIO{{ cyd_touch_cs_pin }}, // touch_cs_pin
+        p.GPIO{{ cyd_touch_irq_pin }}, // touch_irq_pin
+        &mut calibration_flash_block, // calibration_flash_block
+        &mut calibration_button, // recalibration_button
+        Some("rebooting"), // confirmed_message
     )
     .await?;
     info!("CYD display and touch initialized");
