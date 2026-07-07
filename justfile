@@ -22,13 +22,7 @@ check-all:
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example clock {{_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
     source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-classic --example ballet {{_ballet_args}}
-    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_clock_wasm
-    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build crates/linkage-blaze-ballet-wasm --target web --out-dir www/pkg --out-name linkage_blaze_ballet_wasm
-    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-skeleton-clock-wasm --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
-    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-armatron-wasm --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
-    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-printer-wasm --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
-    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-mocap-wasm --target web --out-dir web/pkg --out-name linkage_blaze_mocap_wasm
 
 # Alias for check-all
 build:
@@ -82,12 +76,8 @@ _bundle-docs:
     mkdir -p "$rustdoc_dir"
 
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc
-    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-mocap --no-deps
-    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-printer-wasm --no-deps
 
     cp -R target/doc/linkage_blaze_core "$rustdoc_dir/"
-    cp -R target/doc/linkage_blaze_mocap "$rustdoc_dir/"
-    cp -R target/doc/linkage_blaze_printer_wasm "$rustdoc_dir/"
     cp target/doc/crates.js target/doc/help.html target/doc/search-index.js target/doc/settings.html target/doc/src-files.js "$rustdoc_dir/" 2>/dev/null || true
 
     {
@@ -95,10 +85,7 @@ _bundle-docs:
         printf -- 'Generated: %s UTC\n\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
         printf -- 'This bundle is intended for an outside AI reviewer. It includes repository guidance, Markdown docs, Cargo manifests, and generated rustdoc HTML copied under `rustdoc/`.\n\n'
         printf -- '## Rustdoc entry points\n\n'
-        printf -- '%s\n' '- `rustdoc/linkage_blaze_core/index.html`'
-        printf -- '%s\n' '- `rustdoc/linkage_blaze_mocap/index.html`'
-        printf -- '%s\n' '- `rustdoc/linkage_blaze_armatron_core/index.html`'
-        printf -- '%s\n\n' '- `rustdoc/linkage_blaze_printer_wasm/index.html`'
+        printf -- '%s\n\n' '- `rustdoc/linkage_blaze_core/index.html`'
         printf -- '## Repository docs and manifests\n\n'
     } > "$bundle"
 
@@ -134,9 +121,6 @@ _ballet_args         := _classic_args + " --features ballet"
 _skeleton_clock_args := _classic_args + " --features skeleton-clock"
 _clock_args          := _classic_args + " --features clock"
 
-generate-skeleton-clock:
-    cargo run -p linkage-blaze-mocap --example specialize_dance
-
 check-skeleton-clock-classic:
     cargo +esp check -p linkage-blaze-classic --example skeleton-clock {{_skeleton_clock_args}}
 
@@ -170,69 +154,6 @@ run-armatron-classic:
     just build-armatron-classic
     source ~/export-esp.sh && cargo +esp run -p linkage-blaze-classic --example armatron {{_armatron_args}}
 
-# ── linkage-blaze-clock-wasm (browser-simulated CYD `clock`) ─────────────────
-_clock_wasm_crate := "crates/linkage-blaze-clock-wasm"
-_clock_wasm_www   := "crates/linkage-blaze-clock-wasm/www"
-_clock_wasm_port  := "8084"
-
-check-clock-wasm:
-    cargo check -p linkage-blaze-clock-wasm --target wasm32-unknown-unknown
-
-build-clock-wasm:
-    wasm-pack build {{_clock_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_clock_wasm
-
-serve-clock-wasm port=_clock_wasm_port:
-    -lsof -ti:{{port}} | xargs -r kill
-    cd {{_clock_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
-
-run-clock-wasm port=_clock_wasm_port:
-    just check-clock-wasm
-    just build-clock-wasm
-    just serve-clock-wasm {{port}}
-
-# ── linkage-blaze-ballet-wasm (browser-simulated CYD `ballet`) ──────────────
-_ballet_wasm_crate := "crates/linkage-blaze-ballet-wasm"
-_ballet_wasm_www   := "crates/linkage-blaze-ballet-wasm/www"
-_ballet_wasm_port  := "8085"
-
-check-ballet-wasm:
-    env RUSTFLAGS="{{_ballet_rustflags}}" cargo check -p linkage-blaze-ballet-wasm --target wasm32-unknown-unknown
-
-build-ballet-wasm:
-    env RUSTFLAGS="{{_ballet_rustflags}}" wasm-pack build {{_ballet_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_ballet_wasm
-
-serve-ballet-wasm port=_ballet_wasm_port:
-    -lsof -ti:{{port}} | xargs -r kill
-    cd {{_ballet_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
-
-run-ballet-wasm port=_ballet_wasm_port:
-    just check-ballet-wasm
-    just build-ballet-wasm
-    just serve-ballet-wasm {{port}}
-
-# ── linkage-blaze-skeleton-clock-wasm (browser-simulated CYD `skeleton_clock`) ─
-_skeleton_clock_wasm_crate := "crates/linkage-blaze-skeleton-clock-wasm"
-_skeleton_clock_wasm_www   := "crates/linkage-blaze-skeleton-clock-wasm/www"
-_skeleton_clock_wasm_port  := "8086"
-
-check-skeleton-clock-wasm:
-    cargo check -p linkage-blaze-skeleton-clock-wasm --target wasm32-unknown-unknown
-
-build-skeleton-clock-wasm:
-    wasm-pack build {{_skeleton_clock_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_skeleton_clock_wasm
-
-serve-skeleton-clock-wasm port=_skeleton_clock_wasm_port:
-    -lsof -ti:{{port}} | xargs -r kill
-    cd {{_skeleton_clock_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
-
-run-skeleton-clock-wasm port=_skeleton_clock_wasm_port:
-    just check-skeleton-clock-wasm
-    just build-skeleton-clock-wasm
-    just serve-skeleton-clock-wasm {{port}}
-
-generate-ballet:
-    cargo run -p linkage-blaze-mocap --example generate_ballet
-
 check-ballet-classic:
     source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp check -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
@@ -250,50 +171,6 @@ run-ballet-classic:
     just build-ballet-classic
     source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp run -p linkage-blaze-classic --example ballet {{_ballet_args}}
 
-# ── linkage-blaze-armatron-wasm (web simulator + 3D viewer) ─────────────────
-
-_arm_wasm_crate      := "crates/linkage-blaze-armatron-wasm"
-_arm_wasm_www        := "crates/linkage-blaze-armatron-wasm/www"
-_arm_wasm_viewer_www := "crates/linkage-blaze-armatron-wasm/www/viewer"
-_arm_sim_port        := "8081"
-_arm_viewer_port     := "8080"
-
-check-arm-wasm:
-    cargo check -p linkage-blaze-armatron-wasm --target wasm32-unknown-unknown
-
-build-arm-wasm:
-    wasm-pack build {{_arm_wasm_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_armatron_wasm
-
-serve-arm-wasm port=_arm_sim_port:
-    -lsof -ti:{{port}} | xargs -r kill
-    cd {{_arm_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
-
-run-arm-wasm port=_arm_sim_port:
-    just check-arm-wasm
-    just build-arm-wasm
-    just serve-arm-wasm {{port}}
-
-check-armatron-wasm:
-    just check-arm-wasm
-
-build-armatron-wasm:
-    just build-arm-wasm
-
-serve-armatron-wasm port=_arm_sim_port:
-    just serve-arm-wasm {{port}}
-
-run-armatron-wasm port=_arm_sim_port:
-    just run-arm-wasm {{port}}
-
-serve-arm-viewer-wasm port=_arm_viewer_port:
-    -lsof -ti:{{port}} | xargs -r kill
-    cd {{_arm_wasm_viewer_www}} && python3 ../../../../.tools/no_cache_http_server.py {{port}}
-
-run-arm-viewer-wasm port=_arm_viewer_port:
-    just check-arm-wasm
-    just build-arm-wasm
-    just serve-arm-viewer-wasm {{port}}
-
 # ── linkage-blaze-editor ──────────────────────────────────────────────────────
 
 _editor_crate := "crates/linkage-blaze-editor"
@@ -307,46 +184,3 @@ build-editor-deps:
 
 build-editor:
     wasm-pack build {{_editor_crate}} --target web --out-dir www/pkg --out-name linkage_blaze_editor
-
-# ── linkage-blaze-printer-wasm ────────────────────────────────────────────────
-
-_printer_crate := "crates/linkage-blaze-printer-wasm"
-_printer_www   := "crates/linkage-blaze-printer-wasm/web"
-_printer_port  := "8083"
-
-check-printer-wasm:
-    cargo check -p linkage-blaze-printer-wasm --target wasm32-unknown-unknown
-
-build-printer-wasm:
-    wasm-pack build {{_printer_crate}} --target web --out-dir web/pkg --out-name linkage_blaze_printer_wasm
-
-serve-printer-wasm port=_printer_port:
-    -lsof -ti:{{port}} | xargs -r kill
-    cd {{_printer_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
-
-run-printer-wasm port=_printer_port:
-    just check-printer-wasm
-    just build-printer-wasm
-    just serve-printer-wasm {{port}}
-
-# ── linkage-blaze-mocap-wasm ─────────────────────────────────────────────────
-
-_mocap_wasm_crate := "crates/linkage-blaze-mocap-wasm"
-_mocap_wasm_www   := "crates/linkage-blaze-mocap-wasm/web"
-_mocap_wasm_port  := "8084"
-
-check-mocap-wasm:
-    cargo check -p linkage-blaze-mocap-wasm --target wasm32-unknown-unknown
-
-build-mocap-wasm:
-    wasm-pack build {{_mocap_wasm_crate}} --target web --out-dir web/pkg --out-name linkage_blaze_mocap_wasm
-
-serve-mocap-wasm port=_mocap_wasm_port:
-    -lsof -ti:{{port}} | xargs -r kill
-    cd {{_mocap_wasm_www}} && python3 ../../../.tools/no_cache_http_server.py {{port}}
-
-run-mocap-bvh port=_mocap_wasm_port:
-    @echo "Open http://127.0.0.1:{{port}}/ and click Load sample."
-    just check-mocap-wasm
-    just build-mocap-wasm
-    just serve-mocap-wasm {{port}}

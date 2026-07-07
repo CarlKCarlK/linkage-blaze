@@ -13,10 +13,9 @@ use device_envoy_core::cyd::{
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion, bvh_parse::BvhMotion,
-    linkage, linkage_fixed,
+    DrawItem3dExt, LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion,
+    bvh_parse::BvhMotion, linkage, linkage_fixed,
 };
-use linkage_blaze_cyd_3d::DrawItem3dExt;
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
@@ -32,7 +31,7 @@ pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
 
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
 const LINKAGE0: LinkageFixed<{ MOTION.dof() }, 6, 538> =
-    linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
+    linkage_fixed!("../assets/mocap/pirouette.lb.rs");
 const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = LinkageFixed::<0, 0, 3>::start()
     .pen_color(FOREGROUND)
     .pen_width(3.2)
@@ -42,7 +41,7 @@ const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = LinkageFixed::<0, 0, 3>::start
 // The motion capture data, read at compile time from BVH and stored in the binary.
 #[allow(long_running_const_eval)]
 // This can take ~8 seconds to compile and will generate a warning.
-const MOTION: BvhMotion<132, 592> = bvh_motion!("../../linkage-blaze-mocap/samples/pirouette.bvh");
+const MOTION: BvhMotion<132, 592> = bvh_motion!("../assets/mocap/pirouette.bvh");
 const MOTION_FPS: f32 = 120.0; // the mocap was captured at 120fps, so we can run it at that speed.
 
 // A background bitmap read at compile time and stored in the binary.

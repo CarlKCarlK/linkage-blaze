@@ -17,9 +17,8 @@ use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
+    DrawItem3dExt, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
 };
-use linkage_blaze_cyd_3d::DrawItem3dExt;
 use nanorand::{Rng, WyRand};
 
 use crate::ui::{Ui, UiError};

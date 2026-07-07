@@ -46,7 +46,6 @@ profont = "0.7"
 static_cell = "2.1.1"
 time = { version = "0.3.47", default-features = false }
 linkage-blaze-core.workspace = true
-linkage-blaze-cyd-3d = { path = "../linkage-blaze-cyd-3d" }
 device-envoy-core = { version = "0.1.0", default-features = false, optional = true }
 
 [dev-dependencies]

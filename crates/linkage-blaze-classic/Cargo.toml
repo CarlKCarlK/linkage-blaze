@@ -5,9 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 # Shared esp32 "classic" (CYD) examples. Each example is a standalone no_std
-# binary selected with `--example <name>`; `linkage-blaze-mocap` regenerates
-# the motion data they embed. The library target exists only to host the
-# precomputed-frames regression test (see `src/lib.rs`).
+# binary selected with `--example <name>`. The library target exists only to
+# host the precomputed-frames regression test (see `src/lib.rs`).
 [[example]]
 name = "armatron"
 path = "examples/armatron.rs"

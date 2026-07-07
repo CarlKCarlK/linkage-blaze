@@ -1,4 +1,0 @@
-# TODO00 Keep real BVH sample data out of git until the license/data packaging
-# story is settled.
-*
-!.gitignore

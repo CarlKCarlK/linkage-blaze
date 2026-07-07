@@ -22,8 +22,9 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder},
 };
-use linkage_blaze_core::{LinkageFixed, LinkageView, Projection, linkage, linkage_fixed};
-use linkage_blaze_cyd_3d::DrawItem3dExt;
+use linkage_blaze_core::{
+    DrawItem3dExt, LinkageFixed, LinkageView, Projection, linkage, linkage_fixed,
+};
 use log::info;
 use profont::PROFONT_18_POINT;
 use time::OffsetDateTime;

@@ -44,6 +44,7 @@ use alloc::vec::Vec;
 
 use core::convert::Infallible;
 
+use device_envoy_core::cyd::display::DrawItem as DrawItem2d;
 use device_envoy_core::pixel_target::{PixelTarget, fill_ellipse_pixels, pixel_put};
 
 pub use math::{Mat3, Vec3};
@@ -3814,6 +3815,48 @@ pub enum DrawItem3d {
     Stroke(StrokeSegment),
     Disk(DiskItem),
     Sphere(SphereItem),
+}
+
+/// Projects a linkage 3D draw item into a CYD/device-envoy 2D draw item.
+pub trait DrawItem3dExt {
+    /// Project this 3D draw item through `projection` into pixel-space.
+    #[must_use]
+    fn project(self, projection: &Projection) -> DrawItem2d;
+}
+
+impl DrawItem3dExt for DrawItem3d {
+    fn project(self, projection: &Projection) -> DrawItem2d {
+        match self {
+            Self::Stroke(stroke_segment) => DrawItem2d::Stroke {
+                start: stroke_segment.start().project(projection),
+                end: stroke_segment.end().project(projection),
+                color: stroke_segment.color(),
+                pixel_width: projection.project_width(stroke_segment.width()),
+            },
+            Self::Disk(disk_item) => {
+                let orientation = disk_item.pose().orientation();
+                DrawItem2d::Ellipse {
+                    center: disk_item.pose().project(projection),
+                    axis_a: projection.project_dir(
+                        disk_item.pose(),
+                        orientation.forward(),
+                        disk_item.radius(),
+                    ),
+                    axis_b: projection.project_dir(
+                        disk_item.pose(),
+                        orientation.left(),
+                        disk_item.radius(),
+                    ),
+                    color: disk_item.color(),
+                }
+            }
+            Self::Sphere(sphere_item) => DrawItem2d::Circle {
+                center: sphere_item.pose().project(projection),
+                pixel_radius: projection.project_radius(sphere_item.pose(), sphere_item.radius()),
+                color: sphere_item.color(),
+            },
+        }
+    }
 }
 
 /// Maps 3D world-space geometry to 2D pixel-space for a particular view.

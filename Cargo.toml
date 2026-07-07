@@ -2,17 +2,9 @@
 members = [
     "xtask",
     "crates/linkage-blaze-core",
-    "crates/linkage-blaze-cyd-3d",
-    "crates/linkage-blaze-clock-wasm",
-    "crates/linkage-blaze-ballet-wasm",
-    "crates/linkage-blaze-skeleton-clock-wasm",
     "crates/linkage-blaze-example-core",
     "crates/linkage-blaze-editor",
-    "crates/linkage-blaze-armatron-wasm",
     "crates/linkage-blaze-classic",
-    "crates/linkage-blaze-printer-wasm",
-    "crates/linkage-blaze-mocap",
-    "crates/linkage-blaze-mocap-wasm",
 ]
 resolver = "3"
 
@@ -23,7 +15,6 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 linkage-blaze-core = { path = "crates/linkage-blaze-core" }
-linkage-blaze-mocap = { path = "crates/linkage-blaze-mocap" }
 
 # Build against the local sister `device-envoy` working copy instead of the
 # published crates.io releases, so `just check-all` catches breakage from

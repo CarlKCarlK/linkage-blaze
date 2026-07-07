@@ -15,9 +15,8 @@ use embedded_graphics::{
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
 use linkage_blaze_core::{
-    LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
+    DrawItem3dExt, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
 };
-use linkage_blaze_cyd_3d::DrawItem3dExt;
 use log::info;
 use time::OffsetDateTime;
 
@@ -39,8 +38,7 @@ const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
 // ── Linkage ────────────────────────────────────────────────────────────
 
 // Load the motion-capture linkage converted *.bvh -> *.lb.rs.
-const LINKAGE0: LinkageFixed<132, 6, 600> =
-    linkage_fixed!("../../linkage-blaze-mocap/samples/pirouette.lb.rs");
+const LINKAGE0: LinkageFixed<132, 6, 600> = linkage_fixed!("../assets/mocap/pirouette.lb.rs");
 
 // Prepend a linkage drawing style.
 const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
