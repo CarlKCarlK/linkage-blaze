@@ -1,6 +1,9 @@
 [alias]
 xtask = "run -p linkage-blaze-xtask --"
 
+[env]
+DEFMT_LOG = "info"
+
 [target.xtensa-esp32-none-elf]
 runner = "espflash flash --monitor"
 rustflags = ["-C", "link-arg=-Tlinkall.x"]
@@ -20,3 +23,25 @@ rustflags = ["-C", "link-arg=-Tlinkall.x"]
 [target.riscv32imac-unknown-none-elf]
 runner = "espflash flash --monitor"
 rustflags = ["-C", "link-arg=-Tlinkall.x"]
+
+[target.thumbv6m-none-eabi]
+runner = "probe-rs run --chip=RP2040"
+rustflags = [
+    "-C",
+    "link-arg=-Tlink.x",
+    "-C",
+    "link-arg=-Tdefmt.x",
+    "-C",
+    "link-arg=--gc-sections",
+]
+
+[target.thumbv8m.main-none-eabihf]
+runner = "probe-rs run --chip=RP235x"
+rustflags = [
+    "-C",
+    "link-arg=-Tlink.x",
+    "-C",
+    "link-arg=-Tdefmt.x",
+    "-C",
+    "link-arg=--gc-sections",
+]

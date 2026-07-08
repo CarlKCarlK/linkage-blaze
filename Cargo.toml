@@ -5,6 +5,7 @@ members = [
     "crates/linkage-blaze-example-core",
     "crates/linkage-blaze-editor",
     "crates/linkage-blaze-esp",
+    "crates/linkage-blaze-rp",
 ]
 resolver = "3"
 
@@ -22,6 +23,7 @@ linkage-blaze-core = { path = "crates/linkage-blaze-core" }
 [patch.crates-io]
 device-envoy-core = { path = "../mcu/device-envoy/crates/device-envoy-core" }
 device-envoy-esp = { path = "../mcu/device-envoy/crates/device-envoy-esp" }
+device-envoy-rp = { path = "../mcu/device-envoy/crates/device-envoy-rp" }
 
 [profile.dev]
 panic = "abort"

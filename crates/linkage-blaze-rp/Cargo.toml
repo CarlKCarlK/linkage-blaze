@@ -1,0 +1,82 @@
+[package]
+name = "linkage-blaze-rp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[example]]
+name = "armatron"
+path = "examples/armatron.rs"
+required-features = ["armatron"]
+
+[[example]]
+name = "ballet"
+path = "examples/ballet.rs"
+required-features = ["ballet"]
+
+[[example]]
+name = "clock"
+path = "examples/clock.rs"
+required-features = ["clock", "wifi"]
+
+[[example]]
+name = "skeleton_clock"
+path = "examples/skeleton_clock.rs"
+required-features = ["skeleton-clock", "wifi"]
+
+[features]
+default = []
+pico1 = [
+    "dep:embassy-rp",
+    "embassy-rp/rp2040",
+    "device-envoy-rp/pico1",
+]
+pico2 = [
+    "dep:embassy-rp",
+    "embassy-rp/rp235xb",
+    "device-envoy-rp/pico2",
+]
+arm = [
+    "dep:cortex-m",
+    "dep:cortex-m-rt",
+    "dep:embassy-hal-internal",
+    "embassy-executor/platform-cortex-m",
+    "embassy-hal-internal/cortex-m",
+    "embassy-hal-internal/prio-bits-2",
+    "critical-section/restore-state-u8",
+    "device-envoy-rp/arm",
+]
+wifi = ["device-envoy-rp/wifi"]
+armatron = ["linkage-blaze-example-core/armatron"]
+ballet = ["linkage-blaze-example-core/ballet"]
+clock = ["linkage-blaze-example-core/clock"]
+skeleton-clock = ["linkage-blaze-example-core/skeleton-clock"]
+
+[dependencies]
+critical-section = { version = "1.2.0", default-features = false }
+cortex-m = { version = "0.7.7", optional = true }
+cortex-m-rt = { version = "0.7.5", optional = true }
+defmt = "=1.0.1"
+defmt-rtt = "=1.1.0"
+device-envoy-core = { version = "0.1.0", default-features = false }
+device-envoy-rp = { version = "0.1.0", default-features = false }
+embedded-graphics = { version = "0.8", default-features = false }
+embassy-executor = { version = "0.10.0", default-features = false, features = [
+    "executor-thread",
+    "defmt",
+] }
+embassy-hal-internal = { version = "0.5.0", default-features = false, optional = true }
+embassy-time = { version = "0.5.1", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+] }
+linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
+panic-probe = { version = "=1.0.0", features = ["print-defmt"] }
+
+[target.'cfg(target_os = "none")'.dependencies]
+embassy-rp = { version = "0.10.0", default-features = false, features = [
+    "rt",
+    "defmt",
+    "time-driver",
+    "critical-section-impl",
+], optional = true }

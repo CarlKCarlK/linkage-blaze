@@ -29,6 +29,19 @@ check-all:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
     source ~/export-esp.sh && cargo run --quiet -p linkage-blaze-xtask -- build-esp-examples
+    just --justfile crates/linkage-blaze-rp/justfile build armatron 1
+    just --justfile crates/linkage-blaze-rp/justfile build armatron 2
+    just --justfile crates/linkage-blaze-rp/justfile build armatron w
+    just --justfile crates/linkage-blaze-rp/justfile build armatron 2w
+    just --justfile crates/linkage-blaze-rp/justfile build ballet 1
+    just --justfile crates/linkage-blaze-rp/justfile build ballet 2
+    just --justfile crates/linkage-blaze-rp/justfile build ballet w
+    just --justfile crates/linkage-blaze-rp/justfile build ballet 2w
+    just --justfile crates/linkage-blaze-rp/justfile build clock w
+    just --justfile crates/linkage-blaze-rp/justfile build clock 2w
+    just --justfile crates/linkage-blaze-rp/justfile build skeleton_clock w
+    just --justfile crates/linkage-blaze-rp/justfile build skeleton_clock 2w
+    cd ../mcu/device-envoy/crates/device-envoy-rp && cargo run --quiet --manifest-path xtask/Cargo.toml -- check-examples
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
 
 # Alias for check-all
