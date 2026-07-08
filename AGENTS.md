@@ -22,7 +22,7 @@ This file contains shared workspace rules for this repository.
 - Do not add redundant command wrappers that only mirror an existing `cargo` command.
 - Do not maintain backwards-compatibility shims or type aliases. Refactor aggressively so the code looks as-if-designed knowing the final requirements.
 - Any time a color is defined with numeric components, add a nearby comment with its approximate color name.
-- Put primary entry points (`main`, `inner_main`, public run/game-loop functions) near the top of the file before helper types and functions. Do not bury them at the bottom.
+- Put primary entry points (`main`, `inner_main`, public run/game-loop functions) near the top of the file before helper types and functions. Do not bury them at the bottom. Concretely, order top-level items as: includes and constants; then the entry point(s); then error types, other helper types, and helper functions. In particular, error enums (e.g. `MainError`) and their `From` impls belong after the entry point, not before it.
 
 ## Specs
 

@@ -16,24 +16,6 @@ use linkage_blaze_core::examples::ballet::{
 };
 use panic_probe as _;
 
-#[derive(Debug)]
-enum MainError {
-    Cyd,
-    Ballet,
-}
-
-impl From<CydError> for MainError {
-    fn from(_error: CydError) -> Self {
-        Self::Cyd
-    }
-}
-
-impl From<ballet::Error<CydError>> for MainError {
-    fn from(_error: ballet::Error<CydError>) -> Self {
-        Self::Ballet
-    }
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -65,4 +47,22 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     Ok(ballet(&mut display).await?)
+}
+
+#[derive(Debug)]
+enum MainError {
+    Cyd,
+    Ballet,
+}
+
+impl From<CydError> for MainError {
+    fn from(_error: CydError) -> Self {
+        Self::Cyd
+    }
+}
+
+impl From<ballet::Error<CydError>> for MainError {
+    fn from(_error: ballet::Error<CydError>) -> Self {
+        Self::Ballet
+    }
 }

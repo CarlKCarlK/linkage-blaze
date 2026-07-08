@@ -30,17 +30,6 @@ use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
-// derived impls under -D warnings.
-#[allow(dead_code)]
-#[derive(Debug, derive_more::From)]
-enum MainError {
-    DeviceEnvoy(Error),
-    Core(CoreError),
-    CydEsp(CydError),
-    Clock(clock::Error<CydError>),
-}
-
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -135,4 +124,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("clock sync ready; entering clock loop");
 
     Ok(clock(&mut display, &clock_sync).await?)
+}
+
+// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
+enum MainError {
+    DeviceEnvoy(Error),
+    Core(CoreError),
+    CydEsp(CydError),
+    Clock(clock::Error<CydError>),
 }

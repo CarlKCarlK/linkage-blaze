@@ -22,60 +22,6 @@ use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-#[derive(Debug)]
-enum MainError {
-    Flash,
-    ConfigureDisplaySpi,
-    CreateDisplaySpiDevice,
-    ConfigureTouchSpi,
-    CreateTouchSpiDevice,
-    InitDisplay,
-    FlushFrameBuffer,
-    FormatText,
-}
-
-impl From<device_envoy_esp::Error> for MainError {
-    fn from(_error: device_envoy_esp::Error) -> Self {
-        MainError::Flash
-    }
-}
-
-impl From<CydError> for MainError {
-    fn from(error: CydError) -> Self {
-        match error {
-            CydError::DisplayInit(error) => match error {
-                device_envoy_esp::cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
-                    MainError::ConfigureDisplaySpi
-                }
-                device_envoy_esp::cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
-                    MainError::CreateDisplaySpiDevice
-                }
-                device_envoy_esp::cyd::CydDisplayEspInitError::InitDisplay => {
-                    MainError::InitDisplay
-                }
-            },
-            CydError::TouchInit(error) => match error {
-                device_envoy_esp::cyd::CydTouchEspInitError::ConfigureTouchSpi => {
-                    MainError::ConfigureTouchSpi
-                }
-                device_envoy_esp::cyd::CydTouchEspInitError::CreateTouchSpiDevice => {
-                    MainError::CreateTouchSpiDevice
-                }
-            },
-            CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
-        }
-    }
-}
-
-impl From<ArmatronError<CydError>> for MainError {
-    fn from(error: ArmatronError<CydError>) -> Self {
-        match error {
-            ArmatronError::Ui(_) => MainError::FormatText,
-            ArmatronError::Cyd(error) => error.into(),
-        }
-    }
-}
-
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -147,4 +93,58 @@ async fn reboot_with_message(cyd: &mut CydEsp, message: &str) -> Result<(), Main
     frame.fill(background565).write_text(message).flush()?;
     info!("Restarting");
     esp_hal::system::software_reset();
+}
+
+#[derive(Debug)]
+enum MainError {
+    Flash,
+    ConfigureDisplaySpi,
+    CreateDisplaySpiDevice,
+    ConfigureTouchSpi,
+    CreateTouchSpiDevice,
+    InitDisplay,
+    FlushFrameBuffer,
+    FormatText,
+}
+
+impl From<device_envoy_esp::Error> for MainError {
+    fn from(_error: device_envoy_esp::Error) -> Self {
+        MainError::Flash
+    }
+}
+
+impl From<CydError> for MainError {
+    fn from(error: CydError) -> Self {
+        match error {
+            CydError::DisplayInit(error) => match error {
+                device_envoy_esp::cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
+                    MainError::ConfigureDisplaySpi
+                }
+                device_envoy_esp::cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
+                    MainError::CreateDisplaySpiDevice
+                }
+                device_envoy_esp::cyd::CydDisplayEspInitError::InitDisplay => {
+                    MainError::InitDisplay
+                }
+            },
+            CydError::TouchInit(error) => match error {
+                device_envoy_esp::cyd::CydTouchEspInitError::ConfigureTouchSpi => {
+                    MainError::ConfigureTouchSpi
+                }
+                device_envoy_esp::cyd::CydTouchEspInitError::CreateTouchSpiDevice => {
+                    MainError::CreateTouchSpiDevice
+                }
+            },
+            CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
+        }
+    }
+}
+
+impl From<ArmatronError<CydError>> for MainError {
+    fn from(error: ArmatronError<CydError>) -> Self {
+        match error {
+            ArmatronError::Ui(_) => MainError::FormatText,
+            ArmatronError::Cyd(error) => error.into(),
+        }
+    }
 }

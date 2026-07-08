@@ -31,17 +31,6 @@ use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
-// derived impls under -D warnings.
-#[allow(dead_code)]
-#[derive(Debug, derive_more::From)]
-enum MainError {
-    DeviceEnvoy(Error),
-    Core(CoreError),
-    CydEsp(CydError),
-    SkeletonClock(skeleton_clock::Error<CydError>),
-}
-
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -146,4 +135,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
 const fn max_usize(first: usize, second: usize) -> usize {
     if first > second { first } else { second }
+}
+
+// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
+enum MainError {
+    DeviceEnvoy(Error),
+    Core(CoreError),
+    CydEsp(CydError),
+    SkeletonClock(skeleton_clock::Error<CydError>),
 }

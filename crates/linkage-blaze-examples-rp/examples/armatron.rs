@@ -19,31 +19,6 @@ use linkage_blaze_core::examples::armatron::{
 };
 use panic_probe as _;
 
-#[derive(Debug)]
-enum MainError {
-    DeviceEnvoy,
-    Cyd,
-    Armatron,
-}
-
-impl From<device_envoy_rp::Error> for MainError {
-    fn from(_error: device_envoy_rp::Error) -> Self {
-        Self::DeviceEnvoy
-    }
-}
-
-impl From<CydError> for MainError {
-    fn from(_error: CydError) -> Self {
-        Self::Cyd
-    }
-}
-
-impl From<ArmatronError<CydError>> for MainError {
-    fn from(_error: ArmatronError<CydError>) -> Self {
-        Self::Armatron
-    }
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -116,4 +91,29 @@ async fn reboot_with_message(cyd: &mut CydRp, message: &str) -> Result<(), MainE
     frame.fill(background565).write_text(message).flush()?;
     info!("Restarting");
     cortex_m::peripheral::SCB::sys_reset();
+}
+
+#[derive(Debug)]
+enum MainError {
+    DeviceEnvoy,
+    Cyd,
+    Armatron,
+}
+
+impl From<device_envoy_rp::Error> for MainError {
+    fn from(_error: device_envoy_rp::Error) -> Self {
+        Self::DeviceEnvoy
+    }
+}
+
+impl From<CydError> for MainError {
+    fn from(_error: CydError) -> Self {
+        Self::Cyd
+    }
+}
+
+impl From<ArmatronError<CydError>> for MainError {
+    fn from(_error: ArmatronError<CydError>) -> Self {
+        Self::Armatron
+    }
 }

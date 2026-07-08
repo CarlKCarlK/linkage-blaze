@@ -19,15 +19,6 @@ use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
-// derived impls under -D warnings.
-#[allow(dead_code)]
-#[derive(Debug, derive_more::From)]
-enum MainError {
-    CydEsp(CydError),
-    Ballet(ballet::Error<CydError>),
-}
-
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -60,4 +51,13 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     info!("CYD display initialized");
 
     Ok(ballet(&mut display).await?)
+}
+
+// Derived Debug reads these payloads at runtime, but dead_code analysis ignores
+// derived impls under -D warnings.
+#[allow(dead_code)]
+#[derive(Debug, derive_more::From)]
+enum MainError {
+    CydEsp(CydError),
+    Ballet(ballet::Error<CydError>),
 }

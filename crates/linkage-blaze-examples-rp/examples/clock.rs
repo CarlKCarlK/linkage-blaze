@@ -25,38 +25,6 @@ use linkage_blaze_core::examples::clock::{
 };
 use panic_probe as _;
 
-#[derive(Debug)]
-enum MainError {
-    DeviceEnvoy,
-    Core,
-    Cyd,
-    Clock,
-}
-
-impl From<device_envoy_rp::Error> for MainError {
-    fn from(_error: device_envoy_rp::Error) -> Self {
-        Self::DeviceEnvoy
-    }
-}
-
-impl From<CoreError> for MainError {
-    fn from(_error: CoreError) -> Self {
-        Self::Core
-    }
-}
-
-impl From<CydError> for MainError {
-    fn from(_error: CydError) -> Self {
-        Self::Cyd
-    }
-}
-
-impl From<clock::Error<CydError>> for MainError {
-    fn from(_error: clock::Error<CydError>) -> Self {
-        Self::Clock
-    }
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -157,4 +125,36 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     info!("clock sync ready; entering clock loop");
 
     Ok(clock(&mut display, &clock_sync).await?)
+}
+
+#[derive(Debug)]
+enum MainError {
+    DeviceEnvoy,
+    Core,
+    Cyd,
+    Clock,
+}
+
+impl From<device_envoy_rp::Error> for MainError {
+    fn from(_error: device_envoy_rp::Error) -> Self {
+        Self::DeviceEnvoy
+    }
+}
+
+impl From<CoreError> for MainError {
+    fn from(_error: CoreError) -> Self {
+        Self::Core
+    }
+}
+
+impl From<CydError> for MainError {
+    fn from(_error: CydError) -> Self {
+        Self::Cyd
+    }
+}
+
+impl From<clock::Error<CydError>> for MainError {
+    fn from(_error: clock::Error<CydError>) -> Self {
+        Self::Clock
+    }
 }

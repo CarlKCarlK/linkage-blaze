@@ -28,38 +28,6 @@ use linkage_blaze_core::examples::skeleton_clock::{
 };
 use panic_probe as _;
 
-#[derive(Debug)]
-enum MainError {
-    DeviceEnvoy,
-    Core,
-    Cyd,
-    SkeletonClock,
-}
-
-impl From<device_envoy_rp::Error> for MainError {
-    fn from(_error: device_envoy_rp::Error) -> Self {
-        Self::DeviceEnvoy
-    }
-}
-
-impl From<CoreError> for MainError {
-    fn from(_error: CoreError) -> Self {
-        Self::Core
-    }
-}
-
-impl From<CydError> for MainError {
-    fn from(_error: CydError) -> Self {
-        Self::Cyd
-    }
-}
-
-impl From<skeleton_clock::Error<CydError>> for MainError {
-    fn from(_error: skeleton_clock::Error<CydError>) -> Self {
-        Self::SkeletonClock
-    }
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
@@ -168,4 +136,36 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
 const fn max_usize(first: usize, second: usize) -> usize {
     if first > second { first } else { second }
+}
+
+#[derive(Debug)]
+enum MainError {
+    DeviceEnvoy,
+    Core,
+    Cyd,
+    SkeletonClock,
+}
+
+impl From<device_envoy_rp::Error> for MainError {
+    fn from(_error: device_envoy_rp::Error) -> Self {
+        Self::DeviceEnvoy
+    }
+}
+
+impl From<CoreError> for MainError {
+    fn from(_error: CoreError) -> Self {
+        Self::Core
+    }
+}
+
+impl From<CydError> for MainError {
+    fn from(_error: CydError) -> Self {
+        Self::Cyd
+    }
+}
+
+impl From<skeleton_clock::Error<CydError>> for MainError {
+    fn from(_error: skeleton_clock::Error<CydError>) -> Self {
+        Self::SkeletonClock
+    }
 }
