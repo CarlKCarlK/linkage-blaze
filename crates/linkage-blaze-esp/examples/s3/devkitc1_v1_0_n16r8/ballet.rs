@@ -6,7 +6,9 @@
 
 use core::convert::Infallible;
 
-use device_envoy_esp::cyd::{CydDisplayEsp, CydError, CydEsp, CydStaticEsp};
+use device_envoy_esp::cyd::{
+    CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
+};
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
@@ -49,6 +51,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO5,     // display_dc_pin
         p.GPIO7,     // display_rst_pin
         p.GPIO8,     // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION, // orientation
         BACKGROUND,  // background
         FOREGROUND,  // foreground

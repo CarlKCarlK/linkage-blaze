@@ -4,6 +4,7 @@
 use core::convert::Infallible;
 
 use device_envoy_core::cyd::{Cyd as _, CydDisplay};
+use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
     cyd::{CydError, CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
@@ -89,15 +90,16 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticEsp<{ CydEspOneSpi::SCREEN_PIXELS }> = CydEspOneSpi::new_static();
     let (mut cyd, calibration_outcome) = CydEspOneSpi::new(
-        &CYD_STATIC,                  // statics
-        p.SPI2,                       // spi
-        p.GPIO6,                      // sck_pin
-        p.GPIO7,                      // mosi_pin
-        p.GPIO2,                      // miso_pin
-        p.GPIO10,                     // lcd_cs_pin
-        p.GPIO3,                      // lcd_dc_pin
-        p.GPIO4,                      // lcd_rst_pin
-        p.GPIO5,                      // lcd_backlight_pin
+        &CYD_STATIC, // statics
+        p.SPI2,      // spi
+        p.GPIO6,     // sck_pin
+        p.GPIO7,     // mosi_pin
+        p.GPIO2,     // miso_pin
+        p.GPIO10,    // lcd_cs_pin
+        p.GPIO3,     // lcd_dc_pin
+        p.GPIO4,     // lcd_rst_pin
+        p.GPIO5,     // lcd_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         p.GPIO0,                      // touch_cs_pin
         p.GPIO1,                      // touch_irq_pin
         Orientation::Landscape,       // orientation

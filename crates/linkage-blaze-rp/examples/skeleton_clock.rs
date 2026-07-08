@@ -12,7 +12,8 @@ use device_envoy_rp::{
     button::{ButtonRp, PressedTo},
     clock_sync::{ClockSyncRp, ClockSyncStaticRp, CoreError, ONE_SECOND},
     cyd::{
-        CydDisplay as _, CydDisplayRp, CydError, CydRp, CydStaticRp, tiling::rectangle_pixel_count,
+        CydDisplay as _, CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ,
+        tiling::rectangle_pixel_count,
     },
     flash_block::FlashBlockRp,
     wifi_auto::{
@@ -85,6 +86,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.PIN_20,    // display_dc_pin
         p.PIN_21,    // display_rst_pin
         p.PIN_22,    // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION, // orientation
         BACKGROUND,  // background
         FOREGROUND,  // foreground

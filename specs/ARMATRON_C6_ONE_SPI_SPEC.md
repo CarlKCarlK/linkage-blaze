@@ -55,7 +55,7 @@ ESP32-C6-devkitc1-n8 actually uses (SCK=19, MOSI=18, MISO=20, CS=21, DC=4, RST=5
    `armatron` unusably slow. Fixed by giving each device its own `spi::master::Config` via
    `SpiDeviceWithConfig`, which esp-hal supports out of the box (`Spi` already implements
    `embassy_embedded_hal::SetConfig`, calling its own `apply_config`) — no bespoke wrapper needed.
-   Display now runs at `DISPLAY_SPI_HZ` (60 MHz, same as the two-SPI design); touch stays at
+   Display now runs at `DEFAULT_DISPLAY_SPI_HZ` (60 MHz, same as the two-SPI design); touch stays at
    `TOUCH_SPI_HZ` (2.5 MHz), and only ever engages when `T_IRQ` is low (touch was already
    IRQ-gated before this fix, so idle frames pay ~zero touch-read cost). Measured on real
    ESP32-C6-devkitc1-n8 hardware: `armatron` now runs at **9.8 fps — parity with the two-SPI

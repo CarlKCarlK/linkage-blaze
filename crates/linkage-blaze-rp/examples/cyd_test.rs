@@ -8,7 +8,10 @@ use defmt_rtt as _;
 use device_envoy_core::cyd::CydDisplay;
 use device_envoy_rp::{
     Result,
-    cyd::{CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_FONT, Orientation},
+    cyd::{
+        CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ, DEFAULT_FONT,
+        Orientation,
+    },
 };
 use embassy_executor::Spawner;
 use embassy_time::Timer;
@@ -45,15 +48,16 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticRp<0> = CydRp::new_static();
     let mut display = CydDisplayRp::new(
-        &CYD_STATIC,            // statics
-        p.SPI0,                 // display_spi
-        p.PIN_18,               // display_sck_pin
-        p.PIN_19,               // display_mosi_pin
-        p.PIN_16,               // display_miso_pin
-        p.PIN_17,               // display_cs_pin
-        p.PIN_20,               // display_dc_pin
-        p.PIN_21,               // display_rst_pin
-        p.PIN_22,               // display_backlight_pin
+        &CYD_STATIC, // statics
+        p.SPI0,      // display_spi
+        p.PIN_18,    // display_sck_pin
+        p.PIN_19,    // display_mosi_pin
+        p.PIN_16,    // display_miso_pin
+        p.PIN_17,    // display_cs_pin
+        p.PIN_20,    // display_dc_pin
+        p.PIN_21,    // display_rst_pin
+        p.PIN_22,    // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         Orientation::Landscape, // orientation
         BACKGROUND,             // background
         FOREGROUND,             // foreground

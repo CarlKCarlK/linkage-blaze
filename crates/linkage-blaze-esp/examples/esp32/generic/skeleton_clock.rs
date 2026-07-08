@@ -7,7 +7,8 @@
 use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_esp::cyd::{
-    CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, tiling::rectangle_pixel_count,
+    CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
+    tiling::rectangle_pixel_count,
 };
 use device_envoy_esp::{
     Error,
@@ -67,6 +68,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO2,     // display_dc_pin
         p.GPIO4,     // display_rst_pin
         p.GPIO21,    // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION, // orientation
         BACKGROUND,  // background
         FOREGROUND,  // foreground

@@ -6,6 +6,7 @@ use core::convert::Infallible;
 use defmt::info;
 use defmt_rtt as _;
 use device_envoy_core::cyd::{Cyd as _, CydDisplay};
+use device_envoy_rp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_rp::{
     Result,
     button::{ButtonRp, PressedTo},
@@ -59,15 +60,16 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticRp<{ CydRp::SCREEN_PIXELS }> = CydRp::new_static();
     let (mut cyd, calibration_outcome) = CydRp::new(
-        &CYD_STATIC,                  // statics
-        p.SPI0,                       // display_spi
-        p.PIN_18,                     // display_sck_pin
-        p.PIN_19,                     // display_mosi_pin
-        p.PIN_16,                     // display_miso_pin
-        p.PIN_17,                     // display_cs_pin
-        p.PIN_20,                     // display_dc_pin
-        p.PIN_21,                     // display_rst_pin
-        p.PIN_22,                     // display_backlight_pin
+        &CYD_STATIC, // statics
+        p.SPI0,      // display_spi
+        p.PIN_18,    // display_sck_pin
+        p.PIN_19,    // display_mosi_pin
+        p.PIN_16,    // display_miso_pin
+        p.PIN_17,    // display_cs_pin
+        p.PIN_20,    // display_dc_pin
+        p.PIN_21,    // display_rst_pin
+        p.PIN_22,    // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         Orientation::Landscape,       // orientation
         BACKGROUND,                   // background
         FOREGROUND,                   // foreground

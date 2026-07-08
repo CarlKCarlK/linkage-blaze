@@ -11,7 +11,7 @@ use device_envoy_rp::{
     Error, Result,
     button::{ButtonRp, PressedTo},
     clock_sync::{ClockSyncRp, ClockSyncStaticRp, CoreError, ONE_SECOND},
-    cyd::{CydDisplay as _, CydDisplayRp, CydError, CydRp, CydStaticRp},
+    cyd::{CydDisplay as _, CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ},
     flash_block::FlashBlockRp,
     wifi_auto::{
         WifiAutoEvent, WifiAutoRp,
@@ -70,15 +70,16 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticRp<MAX_FRAME_PIXEL_COUNT> = CydRp::new_static();
     let mut display = CydDisplayRp::new(
-        &CYD_STATIC,       // statics
-        p.SPI0,            // display_spi
-        p.PIN_18,          // display_sck_pin
-        p.PIN_19,          // display_mosi_pin
-        p.PIN_16,          // display_miso_pin
-        p.PIN_17,          // display_cs_pin
-        p.PIN_20,          // display_dc_pin
-        p.PIN_21,          // display_rst_pin
-        p.PIN_22,          // display_backlight_pin
+        &CYD_STATIC, // statics
+        p.SPI0,      // display_spi
+        p.PIN_18,    // display_sck_pin
+        p.PIN_19,    // display_mosi_pin
+        p.PIN_16,    // display_miso_pin
+        p.PIN_17,    // display_cs_pin
+        p.PIN_20,    // display_dc_pin
+        p.PIN_21,    // display_rst_pin
+        p.PIN_22,    // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION,       // orientation
         BACKGROUND,        // background
         FOREGROUND,        // foreground

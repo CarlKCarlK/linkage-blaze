@@ -5,6 +5,7 @@
 use core::convert::Infallible;
 
 use device_envoy_core::cyd::{Cyd as _, CydDisplay};
+use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},
     cyd::{CydError, CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
@@ -99,6 +100,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO{{ cyd_display_dc_pin }}, // lcd_dc_pin
         p.GPIO{{ cyd_display_rst_pin }}, // lcd_rst_pin
         p.GPIO{{ cyd_display_backlight_pin }}, // lcd_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         p.GPIO{{ cyd_touch_cs_pin }}, // touch_cs_pin
         p.GPIO{{ cyd_touch_irq_pin }}, // touch_irq_pin
         Orientation::Landscape, // orientation

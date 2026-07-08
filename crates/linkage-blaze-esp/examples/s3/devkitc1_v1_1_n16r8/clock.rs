@@ -6,7 +6,9 @@
 
 use core::{cell::RefCell, convert::Infallible};
 
-use device_envoy_esp::cyd::{CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp};
+use device_envoy_esp::cyd::{
+    CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
+};
 use device_envoy_esp::{
     Error,
     button::{ButtonEsp, PressedTo},
@@ -52,15 +54,16 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydStaticEsp<MAX_FRAME_PIXEL_COUNT> = CydEsp::new_static();
     let mut display = CydDisplayEsp::new(
-        &CYD_STATIC,       // statics
-        p.SPI2,            // display_spi
-        p.GPIO1,           // display_sck_pin
-        p.GPIO2,           // display_mosi_pin
-        p.GPIO3,           // display_miso_pin
-        p.GPIO4,           // display_cs_pin
-        p.GPIO5,           // display_dc_pin
-        p.GPIO7,           // display_rst_pin
-        p.GPIO8,           // display_backlight_pin
+        &CYD_STATIC, // statics
+        p.SPI2,      // display_spi
+        p.GPIO1,     // display_sck_pin
+        p.GPIO2,     // display_mosi_pin
+        p.GPIO3,     // display_miso_pin
+        p.GPIO4,     // display_cs_pin
+        p.GPIO5,     // display_dc_pin
+        p.GPIO7,     // display_rst_pin
+        p.GPIO8,     // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION,       // orientation
         BACKGROUND,        // background
         FOREGROUND,        // foreground

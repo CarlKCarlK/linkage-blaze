@@ -8,7 +8,7 @@ use defmt::info;
 use defmt_rtt as _;
 use device_envoy_rp::{
     Result,
-    cyd::{CydDisplayRp, CydError, CydRp, CydStaticRp},
+    cyd::{CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ},
 };
 use embassy_executor::Spawner;
 use linkage_blaze_example_core::ballet::{
@@ -56,6 +56,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.PIN_20,    // display_dc_pin
         p.PIN_21,    // display_rst_pin
         p.PIN_22,    // display_backlight_pin
+        DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION, // orientation
         BACKGROUND,  // background
         FOREGROUND,  // foreground
