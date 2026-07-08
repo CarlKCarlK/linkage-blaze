@@ -42,13 +42,13 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     let mut display = CydDisplayEsp::new(
         &CYD_STATIC, // statics
         p.SPI2,      // display_spi
-        p.GPIO3,     // display_sck_pin
-        p.GPIO4,     // display_mosi_pin
-        p.GPIO5,     // display_miso_pin
-        p.GPIO6,     // display_cs_pin
-        p.GPIO7,     // display_dc_pin
-        p.GPIO8,     // display_rst_pin
-        p.GPIO9,     // display_backlight_pin
+        p.GPIO6,     // display_sck_pin
+        p.GPIO7,     // display_mosi_pin
+        p.GPIO2,     // display_miso_pin
+        p.GPIO10,    // display_cs_pin
+        p.GPIO3,     // display_dc_pin
+        p.GPIO4,     // display_rst_pin
+        p.GPIO5,     // display_backlight_pin
         ORIENTATION, // orientation
         BACKGROUND,  // background
         FOREGROUND,  // foreground
