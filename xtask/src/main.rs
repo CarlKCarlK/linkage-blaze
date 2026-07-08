@@ -72,12 +72,20 @@ fn inner_main() -> Result<()> {
             }
             generate_board_examples()
         }
+        "build-esp-examples" => {
+            if arguments.next().is_some() {
+                return Err(Error::message(
+                    "usage: cargo run -p linkage-blaze-xtask -- build-esp-examples",
+                ));
+            }
+            build_esp_examples()
+        }
         _ => Err(Error::message(usage())),
     }
 }
 
 fn usage() -> &'static str {
-    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]\n  cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]\n  cargo run -p linkage-blaze-xtask -- generate-board-examples"
+    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]\n  cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]\n  cargo run -p linkage-blaze-xtask -- generate-board-examples\n  cargo run -p linkage-blaze-xtask -- build-esp-examples"
 }
 
 fn generate_board_examples() -> Result<()> {
@@ -85,6 +93,14 @@ fn generate_board_examples() -> Result<()> {
     linkage_esp_examples_generated::generate_board_examples(&repo_root)
         .map_err(|error| Error::message(error.to_string()))?;
     println!("Generated linkage-blaze-esp board examples");
+    Ok(())
+}
+
+fn build_esp_examples() -> Result<()> {
+    let repo_root = env::current_dir()?;
+    linkage_esp_examples_generated::build_all_board_examples(&repo_root)
+        .map_err(|error| Error::message(error.to_string()))?;
+    println!("Built all linkage-blaze-esp board examples");
     Ok(())
 }
 

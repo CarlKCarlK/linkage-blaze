@@ -28,10 +28,7 @@ check-all:
     cargo run --quiet -p linkage-blaze-xtask -- generate-board-examples
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example armatron_esp32_generic {{_armatron_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example clock_esp32_generic {{_clock_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example skeleton_clock_esp32_generic {{_skeleton_clock_args}}
-    source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp build -p linkage-blaze-esp --example ballet_esp32_generic {{_ballet_args}}
+    source ~/export-esp.sh && cargo run --quiet -p linkage-blaze-xtask -- build-esp-examples
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-editor --target web --out-dir www/pkg --out-name linkage_blaze_editor
 
 # Alias for check-all

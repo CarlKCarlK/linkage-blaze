@@ -52,6 +52,128 @@ pub fn generate_board_examples(workspace_root: &Path) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
+/// Target triple and Xtensa linker name for a `device-envoy-esp` chip feature, or `None`
+/// for RISC-V chips that build with plain stable `cargo build` (no Xtensa toolchain needed).
+///
+/// Xtensa chips (`esp32`, `esp32s2`, `esp32s3`) build with the `esp` toolchain and
+/// `-Zbuild-std=core,alloc`, since the `esp` toolchain ships no prebuilt Xtensa sysroot.
+fn build_target_for_chip_feature(chip_feature: &str) -> (&'static str, Option<&'static str>) {
+    match chip_feature {
+        "esp32" => ("xtensa-esp32-none-elf", Some("xtensa-esp32-elf-gcc")),
+        "esp32c2" | "esp32c3" => ("riscv32imc-unknown-none-elf", None),
+        "esp32c5" | "esp32c6" | "esp32c61" | "esp32h2" => ("riscv32imac-unknown-none-elf", None),
+        "esp32s2" => ("xtensa-esp32s2-none-elf", Some("xtensa-esp32s2-elf-gcc")),
+        "esp32s3" => ("xtensa-esp32s3-none-elf", Some("xtensa-esp32s3-elf-gcc")),
+        other => panic!("unknown device-envoy-esp chip feature: {other}"),
+    }
+}
+
+/// Locates the requested Xtensa linker and returns its parent directory, or `None` when it
+/// is already on `PATH`. `espup install` places these under `~/.rustup/toolchains/esp/`.
+fn find_xtensa_linker_dir(linker: &str) -> Option<PathBuf> {
+    if Command::new(linker)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+    {
+        return None;
+    }
+
+    let home = std::env::var_os("HOME").unwrap_or_default();
+    let esp_toolchain = Path::new(&home).join(".rustup/toolchains/esp");
+
+    fn find_in(dir: &Path, linker: &str, depth: u32) -> Option<PathBuf> {
+        if depth == 0 {
+            return None;
+        }
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return None;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.join(linker).exists() {
+                    return Some(path);
+                }
+                if let Some(found) = find_in(&path, linker, depth - 1) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    find_in(&esp_toolchain, linker, 6)
+}
+
+/// Prepends `dir` to the `PATH` environment variable for `command`.
+fn prepend_path(command: &mut Command, dir: &Path) {
+    let current = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = std::env::split_paths(&current).collect::<Vec<_>>();
+    paths.insert(0, dir.to_owned());
+    command.env(
+        "PATH",
+        std::env::join_paths(paths).expect("PATH join failed"),
+    );
+}
+
+/// Builds every generated `linkage-blaze-esp` board example (real or placeholder) for its
+/// own board's target, so `just check-all` exercises the full board matrix instead of a
+/// hand-picked handful of `esp32_generic` examples.
+pub fn build_all_board_examples(workspace_root: &Path) -> Result<(), Box<dyn Error>> {
+    let crate_root = workspace_root.join(LINKAGE_ESP_CRATE_DIR);
+    let templates_dir = crate_root.join("examples").join("templates");
+    let template_base_names = discover_template_base_names(&templates_dir)?;
+
+    for board_profile in BOARD_PROFILES {
+        let (target, xtensa_linker) = build_target_for_chip_feature(board_profile.chip_feature());
+        let xtensa_linker_dir = xtensa_linker.and_then(find_xtensa_linker_dir);
+        for base_name in &template_base_names {
+            let example_name = board_example_name(*board_profile, base_name);
+            let example_feature = example_feature_name(base_name)
+                .unwrap_or_else(|| panic!("missing example feature mapping for {base_name}"));
+            println!("    build example: {example_name}");
+
+            let mut command = Command::new("cargo");
+            command.current_dir(&crate_root);
+            if let Some(dir) = &xtensa_linker_dir {
+                prepend_path(&mut command, dir);
+            }
+            if xtensa_linker.is_some() {
+                command.arg("+esp");
+            }
+            command.args(["build", "--example", &example_name, "--release"]);
+            command.args(["--target", target]);
+            command.args(["--no-default-features", "--features"]);
+            command.arg(format!(
+                "{},{example_feature}",
+                board_profile.chip_feature()
+            ));
+            if xtensa_linker.is_some() {
+                command.arg("-Zbuild-std=core,alloc");
+            }
+            // `ballet`'s embedded `MOTION` capture is a heavy const; the generated source
+            // already carries `#![allow(long_running_const_eval)]`, but -D warnings at the
+            // command line has tripped over it historically, so belt-and-suspenders here too.
+            let rustflags = if example_feature == "ballet" {
+                "-D warnings -C link-arg=-Tlinkall.x -A long-running-const-eval"
+            } else {
+                "-D warnings -C link-arg=-Tlinkall.x"
+            };
+            command.env("RUSTFLAGS", rustflags);
+
+            let status = command.status()?;
+            if !status.success() {
+                return Err(format!("cargo build failed for example {example_name}").into());
+            }
+        }
+    }
+    Ok(())
+}
+
 fn verify_imported_board_schema_is_fully_referenced() {
     for board_profile in BOARD_PROFILES {
         std::hint::black_box(
