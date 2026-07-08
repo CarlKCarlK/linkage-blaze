@@ -12,7 +12,7 @@ use device_envoy_esp::cyd::{
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_example_core::ballet::{
+use linkage_blaze_core::examples::ballet::{
     self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
 };
 use log::info;
@@ -51,7 +51,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO3,     // display_dc_pin
         p.GPIO4,     // display_rst_pin
         p.GPIO5,     // display_backlight_pin
-        device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ,
+        DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION, // orientation
         BACKGROUND,  // background
         FOREGROUND,  // foreground

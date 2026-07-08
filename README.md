@@ -19,8 +19,8 @@ The live gallery is the main showcase: **[carlkcarlk.github.io/linkage-blaze/dem
 It shows preview images of each demo and links to the live, interactive WASM versions.
 
 <p>
-  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze-example-core/tests/assets/armatron.png" alt="Armatron demo preview" width="200" />
-  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze-example-core/tests/assets/ballet.png" alt="Ballet demo preview" width="150" />
+  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze-core/tests/assets/armatron.png" alt="Armatron demo preview" width="200" />
+  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze-core/tests/assets/ballet.png" alt="Ballet demo preview" width="150" />
 </p>
 
 ## Example Linkage

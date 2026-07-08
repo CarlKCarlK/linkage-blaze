@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 //todo000000 need to update the editor to work with linkage![...], or switch to a simpler pattern of just including the .lb.rs file after LinkageFixed::start() --- IGNORE --- (may no longer apply)
 
+pub mod bvh;
+
 use linkage_blaze_core::{DrawItem3d, LinkageBuf, RgbColor};
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 #[wasm_bindgen]
 pub fn default_program() -> String {
-    include_str!("../../linkage-blaze-example-core/src/armatron/armatron1.lb.rs").into()
+    include_str!("../../linkage-blaze-core/src/assets/examples/armatron/armatron1.lb.rs").into()
 }
 
 #[wasm_bindgen]

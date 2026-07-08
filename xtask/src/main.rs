@@ -9,7 +9,7 @@ mod linkage_esp_examples_generated;
 
 const PAGES_DIR: &str = "target/pages";
 const MANIFEST_PATH: &str = "pages/demos.tsv";
-const PREVIEW_EXAMPLE_CRATE: &str = "linkage-blaze-example-core";
+const PREVIEW_EXAMPLE_CRATE: &str = "linkage-blaze-core";
 const GALLERY_VERSIONS_DIR: &str = "pages/gallery";
 
 fn main() {
@@ -92,7 +92,7 @@ fn generate_board_examples() -> Result<()> {
     let repo_root = env::current_dir()?;
     linkage_esp_examples_generated::generate_board_examples(&repo_root)
         .map_err(|error| Error::message(error.to_string()))?;
-    println!("Generated linkage-blaze-esp board examples");
+    println!("Generated linkage-blaze-examples-esp board examples");
     Ok(())
 }
 
@@ -100,7 +100,7 @@ fn build_esp_examples() -> Result<()> {
     let repo_root = env::current_dir()?;
     linkage_esp_examples_generated::build_all_board_examples(&repo_root)
         .map_err(|error| Error::message(error.to_string()))?;
-    println!("Built all linkage-blaze-esp board examples");
+    println!("Built all linkage-blaze-examples-esp board examples");
     Ok(())
 }
 
@@ -687,29 +687,30 @@ impl DemoRecord {
         let preview_spec = match self.slug.as_str() {
             "armatron" => PreviewSpec {
                 source: PreviewSource::RenderTest {
-                    feature: "armatron",
-                    test_name: "armatron::tests::armatron_renders_expected_frame",
+                    feature: "examples-armatron",
+                    test_name: "examples::armatron::tests::armatron_renders_expected_frame",
                 },
                 orientation: PreviewOrientation::Landscape,
             },
             "skeleton-clock" => PreviewSpec {
                 source: PreviewSource::RenderTest {
-                    feature: "skeleton-clock",
-                    test_name: "skeleton_clock::tests::skeleton_clock_renders_expected_frame",
+                    feature: "examples-skeleton-clock",
+                    test_name:
+                        "examples::skeleton_clock::tests::skeleton_clock_renders_expected_frame",
                 },
                 orientation: PreviewOrientation::Portrait,
             },
             "ballet" => PreviewSpec {
                 source: PreviewSource::RenderTest {
-                    feature: "ballet",
-                    test_name: "ballet::tests::ballet_renders_expected_frame",
+                    feature: "examples-ballet",
+                    test_name: "examples::ballet::tests::ballet_renders_expected_frame",
                 },
                 orientation: PreviewOrientation::Portrait,
             },
             "clock" => PreviewSpec {
                 source: PreviewSource::RenderTest {
-                    feature: "clock",
-                    test_name: "clock::tests::clock_renders_expected_frame",
+                    feature: "examples-clock",
+                    test_name: "examples::clock::tests::clock_renders_expected_frame",
                 },
                 orientation: PreviewOrientation::Landscape,
             },

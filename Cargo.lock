@@ -2092,26 +2092,24 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 name = "linkage-blaze-core"
 version = "0.1.4"
 dependencies = [
+ "derive_more",
  "device-envoy-core",
  "embassy-time",
  "embedded-graphics",
+ "futures-executor",
+ "heapless 0.9.3",
  "libm",
+ "log",
  "nanorand",
  "png",
+ "profont",
  "static_cell",
+ "time",
  "trybuild",
 ]
 
 [[package]]
-name = "linkage-blaze-editor"
-version = "0.1.4"
-dependencies = [
- "linkage-blaze-core",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "linkage-blaze-esp"
+name = "linkage-blaze-examples-esp"
 version = "0.1.4"
 dependencies = [
  "derive_more",
@@ -2127,33 +2125,13 @@ dependencies = [
  "esp-rtos",
  "heapless 0.9.3",
  "linkage-blaze-core",
- "linkage-blaze-example-core",
  "log",
  "static_cell",
  "time",
 ]
 
 [[package]]
-name = "linkage-blaze-example-core"
-version = "0.1.4"
-dependencies = [
- "derive_more",
- "device-envoy-core",
- "embassy-time",
- "embedded-graphics",
- "futures-executor",
- "heapless 0.9.3",
- "libm",
- "linkage-blaze-core",
- "log",
- "nanorand",
- "profont",
- "static_cell",
- "time",
-]
-
-[[package]]
-name = "linkage-blaze-rp"
+name = "linkage-blaze-examples-rp"
 version = "0.1.4"
 dependencies = [
  "cortex-m",
@@ -2168,8 +2146,16 @@ dependencies = [
  "embassy-rp",
  "embassy-time",
  "embedded-graphics",
- "linkage-blaze-example-core",
+ "linkage-blaze-core",
  "panic-probe",
+]
+
+[[package]]
+name = "linkage-blaze-utils"
+version = "0.1.4"
+dependencies = [
+ "linkage-blaze-core",
+ "wasm-bindgen",
 ]
 
 [[package]]

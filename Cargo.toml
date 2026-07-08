@@ -2,10 +2,9 @@
 members = [
     "xtask",
     "crates/linkage-blaze-core",
-    "crates/linkage-blaze-example-core",
-    "crates/linkage-blaze-editor",
-    "crates/linkage-blaze-esp",
-    "crates/linkage-blaze-rp",
+    "crates/linkage-blaze-utils",
+    "crates/linkage-blaze-examples-esp",
+    "crates/linkage-blaze-examples-rp",
 ]
 resolver = "3"
 

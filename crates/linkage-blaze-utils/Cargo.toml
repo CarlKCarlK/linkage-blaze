@@ -1,11 +1,21 @@
 [package]
-name = "linkage-blaze-editor"
+name = "linkage-blaze-utils"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+# Host-side dev tools with no natural home in the embedded crates: the
+# browser program editor (`src/lib.rs`, a wasm-bindgen `cdylib`) and the
+# `bvh-to-lb` motion-capture converter (`src/bin/bvh-to-lb.rs`, a plain
+# `std` binary). The `[lib]`'s `cdylib`-ness doesn't affect `[[bin]]`
+# targets, which are independent crate roots.
+
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "bvh-to-lb"
+path = "src/bin/bvh-to-lb.rs"
 
 [dependencies]
 linkage-blaze-core = { workspace = true, features = ["alloc"] }

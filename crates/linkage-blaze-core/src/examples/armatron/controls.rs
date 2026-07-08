@@ -6,7 +6,7 @@ use embedded_graphics::{
     primitives::Rectangle,
 };
 
-use crate::ui::{Button, Icon, IconButton, Label, Slider};
+use crate::examples::ui::{Button, Icon, IconButton, Label, Slider};
 
 // Target selector strip: previous button, target text, next button.
 pub(super) static PREVIOUS_TARGET_BUTTON: Button = Button::new(rectangle(65, 17, 42, 14), "prev");

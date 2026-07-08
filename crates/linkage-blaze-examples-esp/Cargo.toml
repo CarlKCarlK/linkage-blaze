@@ -1,5 +1,5 @@
 [package]
-name = "linkage-blaze-esp"
+name = "linkage-blaze-examples-esp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -435,13 +435,13 @@ esp32s3 = [
     "esp-println/esp32s3",
     "esp-bootloader-esp-idf/esp32s3",
 ]
-# Each example module is gated in `linkage-blaze-example-core`; enable only the
+# Each example module is gated in `linkage-blaze-core`; enable only the
 # one being built so unused modules (and ballet's slow `MOTION` const) are never
 # compiled. The example targets above list these in their `required-features`.
-armatron = ["linkage-blaze-example-core/armatron"]
-ballet = ["linkage-blaze-example-core/ballet"]
-skeleton-clock = ["linkage-blaze-example-core/skeleton-clock"]
-clock = ["linkage-blaze-example-core/clock"]
+armatron = ["linkage-blaze-core/examples-armatron"]
+ballet = ["linkage-blaze-core/examples-ballet"]
+skeleton-clock = ["linkage-blaze-core/examples-skeleton-clock"]
+clock = ["linkage-blaze-core/examples-clock"]
 
 [dependencies]
 embedded-graphics = { version = "0.8", default-features = false }
@@ -450,7 +450,6 @@ log = { version = "0.4", default-features = false }
 linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
-linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
 device-envoy-core = { version = "0.1.0", default-features = false }
 embassy-time = "0.5.1"
 derive_more = { version = "2.1.1", default-features = false, features = [

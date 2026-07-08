@@ -10,7 +10,7 @@ mod tests {
 
     #[allow(long_running_const_eval)]
     const CONST_MOTION: linkage_blaze_core::bvh_parse::BvhMotion<132, 592> = linkage_blaze_core::bvh_motion!(
-        "../../linkage-blaze-example-core/assets/mocap/pirouette.bvh"
+        "../../linkage-blaze-core/src/assets/mocap/pirouette.bvh"
     );
 
     #[test]

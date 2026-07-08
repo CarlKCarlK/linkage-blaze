@@ -28,7 +28,7 @@
 //! # };
 //! # use core::convert::Infallible;
 //! # use device_envoy_core::cyd::touch::TouchEvent;
-//! # use linkage_blaze_example_core::ui::{Slider, Ui};
+//! # use linkage_blaze_core::examples::ui::{Slider, Ui};
 //! static TILT_SLIDER: Slider = Slider::vertical(
 //!     "z",
 //!     16,
@@ -47,7 +47,7 @@
 //! }));
 //! ui.slider(&mut display, &TILT_SLIDER, &mut tilt)?;
 //! ui.end(&mut display)?;
-//! # Ok::<(), linkage_blaze_example_core::ui::UiError<Infallible>>(())
+//! # Ok::<(), linkage_blaze_core::examples::ui::UiError<Infallible>>(())
 //! ```
 
 use core::{fmt, fmt::Write, ptr};

@@ -17,7 +17,7 @@
 #![allow(dead_code)]
 
 use embedded_graphics::{pixelcolor::Rgb565, primitives::PrimitiveStyle};
-use linkage_blaze_core::{Rgb888, WebColors};
+use crate::{Rgb888, WebColors};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlledKnob {

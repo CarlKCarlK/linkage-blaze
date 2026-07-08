@@ -22,7 +22,7 @@ use device_envoy_rp::{
     },
 };
 use embassy_executor::Spawner;
-use linkage_blaze_example_core::skeleton_clock::{
+use linkage_blaze_core::examples::skeleton_clock::{
     self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE,
     skeleton_clock,
 };

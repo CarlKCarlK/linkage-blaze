@@ -11,7 +11,7 @@
 //! distance-to-target label remains owned by `main.rs`, because it is part of
 //! the manual game even when the solver is idle.
 
-use crate::ui::{HoldButtonState, IconButton};
+use crate::examples::ui::{HoldButtonState, IconButton};
 
 use super::controls::{RK_RUN_BUTTON, RK_STOP_BUTTON};
 

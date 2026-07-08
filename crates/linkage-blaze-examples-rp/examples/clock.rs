@@ -19,7 +19,7 @@ use device_envoy_rp::{
     },
 };
 use embassy_executor::Spawner;
-use linkage_blaze_example_core::clock::{
+use linkage_blaze_core::examples::clock::{
     self, BACKGROUND, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
     WIFI_STATUS_RECTANGLE, clock, clock_splash,
 };

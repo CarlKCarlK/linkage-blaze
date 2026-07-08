@@ -1,5 +1,5 @@
 [package]
-name = "linkage-blaze-rp"
+name = "linkage-blaze-examples-rp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -47,10 +47,10 @@ arm = [
     "device-envoy-rp/arm",
 ]
 wifi = ["device-envoy-rp/wifi"]
-armatron = ["linkage-blaze-example-core/armatron"]
-ballet = ["linkage-blaze-example-core/ballet"]
-clock = ["linkage-blaze-example-core/clock"]
-skeleton-clock = ["linkage-blaze-example-core/skeleton-clock"]
+armatron = ["linkage-blaze-core/examples-armatron"]
+ballet = ["linkage-blaze-core/examples-ballet"]
+clock = ["linkage-blaze-core/examples-clock"]
+skeleton-clock = ["linkage-blaze-core/examples-skeleton-clock"]
 
 [dependencies]
 critical-section = { version = "1.2.0", default-features = false }
@@ -70,7 +70,7 @@ embassy-time = { version = "0.5.1", features = [
     "defmt",
     "defmt-timestamp-uptime",
 ] }
-linkage-blaze-example-core = { path = "../linkage-blaze-example-core", default-features = false }
+linkage-blaze-core.workspace = true
 panic-probe = { version = "=1.0.0", features = ["print-defmt"] }
 
 [target.'cfg(target_os = "none")'.dependencies]

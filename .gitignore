@@ -3,4 +3,5 @@
 .claude/worktrees/*
 /crates/*/web/pkg
 /crates/*/www/pkg
-crates/linkage-blaze-rp/target/
+*.code-workspace
+**/target/

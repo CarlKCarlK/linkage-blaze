@@ -6,7 +6,7 @@ run-cyd-backlight-test board="1":
       2|2w) target="thumbv8m.main-none-eabihf"; board_features="pico2,arm" ;; \
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
-    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-rp --example cyd_backlight_test --target "$target" --release --features "$board_features" --no-default-features; \
+    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-examples-rp --example cyd_backlight_test --target "$target" --release --features "$board_features" --no-default-features; \
     artifact="$(find "target/rp-no-lto/$target/release/examples" -maxdepth 1 -type f -name 'cyd_backlight_test-*' ! -name '*.d' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"; \
     if [[ -z "$artifact" ]]; then echo "no built artifact found for cyd_backlight_test" >&2; exit 1; fi; \
     probe-rs run --chip="$([[ "$target" == "thumbv6m-none-eabi" ]] && echo RP2040 || echo RP235x)" "$artifact"
@@ -17,7 +17,7 @@ build-cyd-backlight-test board="1":
       2|2w) target="thumbv8m.main-none-eabihf"; board_features="pico2,arm" ;; \
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
-    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-rp --example cyd_backlight_test --target "$target" --release --features "$board_features" --no-default-features
+    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-examples-rp --example cyd_backlight_test --target "$target" --release --features "$board_features" --no-default-features
 
 run-cyd-test board="1":
     @case "{{board}}" in \
@@ -26,7 +26,7 @@ run-cyd-test board="1":
       w) target="thumbv6m-none-eabi"; board_features="pico1,arm" ;; \
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
-    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-rp --example cyd_test --target "$target" --release --features "$board_features" --no-default-features; \
+    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-examples-rp --example cyd_test --target "$target" --release --features "$board_features" --no-default-features; \
     artifact="$(find "target/rp-no-lto/$target/release/examples" -maxdepth 1 -type f -name 'cyd_test-*' ! -name '*.d' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"; \
     if [[ -z "$artifact" ]]; then echo "no built artifact found for cyd_test" >&2; exit 1; fi; \
     probe-rs run --chip="$([[ "$target" == "thumbv6m-none-eabi" ]] && echo RP2040 || echo RP235x)" "$artifact"
@@ -38,7 +38,7 @@ build-cyd-test board="1":
       w) target="thumbv6m-none-eabi"; board_features="pico1,arm" ;; \
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
-    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-rp --example cyd_test --target "$target" --release --features "$board_features" --no-default-features
+    env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-examples-rp --example cyd_test --target "$target" --release --features "$board_features" --no-default-features
 
 run name board="1":
     @example_name="{{name}}"; \
@@ -53,9 +53,9 @@ run name board="1":
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
     if [[ "$example_name" == "ballet" ]]; then \
-      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo rustc -p linkage-blaze-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
+      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo rustc -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
     else \
-      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features; \
+      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features; \
     fi; \
     artifact="$(find "target/rp-no-lto/$target/release/examples" -maxdepth 1 -type f -name "$example_name-*" ! -name '*.d' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"; \
     if [[ -z "$artifact" ]]; then echo "no built artifact found for $example_name" >&2; exit 1; fi; \
@@ -74,9 +74,9 @@ run-bootsel name board="1":
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
     if [[ "$example_name" == "ballet" ]]; then \
-      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo rustc -p linkage-blaze-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
+      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo rustc -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
     else \
-      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features; \
+      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features; \
     fi; \
     artifact="$(find "target/rp-no-lto/$target/release/examples" -maxdepth 1 -type f -name "$example_name-*" ! -name '*.d' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"; \
     if [[ -z "$artifact" ]]; then echo "no built artifact found for $example_name" >&2; exit 1; fi; \
@@ -95,9 +95,9 @@ check name board="1":
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
     if [[ "$example_name" == "ballet" ]]; then \
-      cargo rustc -p linkage-blaze-rp --example "$example_name" --target "$target" --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
+      cargo rustc -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
     else \
-      cargo check -p linkage-blaze-rp --example "$example_name" --target "$target" --features "$board_features,$feature_name" --no-default-features; \
+      cargo check -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --features "$board_features,$feature_name" --no-default-features; \
     fi
 
 build name board="1":
@@ -113,7 +113,7 @@ build name board="1":
       *) echo "invalid board '{{board}}' (expected one of: 1, 2, w, 2w)" >&2; exit 1 ;; \
     esac; \
     if [[ "$example_name" == "ballet" ]]; then \
-      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo rustc -p linkage-blaze-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
+      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo rustc -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features -- -A long-running-const-eval; \
     else \
-      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features; \
+      env CARGO_TARGET_DIR=target/rp-no-lto CARGO_PROFILE_RELEASE_LTO=off cargo build -p linkage-blaze-examples-rp --example "$example_name" --target "$target" --release --features "$board_features,$feature_name" --no-default-features; \
     fi

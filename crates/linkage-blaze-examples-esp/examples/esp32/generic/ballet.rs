@@ -12,7 +12,7 @@ use device_envoy_esp::cyd::{
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_example_core::ballet::{
+use linkage_blaze_core::examples::ballet::{
     self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
 };
 use log::info;

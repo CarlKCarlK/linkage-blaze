@@ -16,12 +16,12 @@ use device_envoy_core::cyd::{
 use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
-use linkage_blaze_core::{
+use crate::{
     DrawItem3dExt, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
 };
 use nanorand::{Rng, WyRand};
 
-use crate::ui::{Ui, UiError};
+use crate::examples::ui::{Ui, UiError};
 use controls::{
     CALIBRATE_BUTTON, DISTANCE_LABEL, DOLLY_SLIDER, FPS_LABEL, NEXT_TARGET_BUTTON,
     PARAM_SLIDER_COUNT, PARAM_SLIDERS, PREVIOUS_TARGET_BUTTON, RK_STEP_BUTTON, TARGET_LABEL,
@@ -43,10 +43,10 @@ pub const FOREGROUND: Rgb888 = Rgb888::CSS_WHITE;
 // - `SCENE_WITH_ARM` adds the articulated arm plus joint spheres for display.
 //       The arm linkage ends with an invisible tip in the center of the hand.
 // - `LINKAGE_FIXED` appends a red ghost arm that shows the current target pose.
-const CAMERA_CONTROL: LinkageFixed<3, 1, 8> = linkage_fixed!("camera_control.lb.rs");
-const GRID_9X9: LinkageFixed<0, 1, 81> = linkage_fixed!("grid_9x9.lb.rs");
+const CAMERA_CONTROL: LinkageFixed<3, 1, 8> = linkage_fixed!("../../assets/examples/armatron/camera_control.lb.rs");
+const GRID_9X9: LinkageFixed<0, 1, 81> = linkage_fixed!("../../assets/examples/armatron/grid_9x9.lb.rs");
 const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);
-const ARMATRON1: LinkageFixed<6, 1, 25> = linkage_fixed!("armatron1.lb.rs");
+const ARMATRON1: LinkageFixed<6, 1, 25> = linkage_fixed!("../../assets/examples/armatron/armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
 const SCENE_WITH_ARM: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM

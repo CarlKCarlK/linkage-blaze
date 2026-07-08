@@ -1,5 +1,5 @@
 //! The generic "clock" example: an analog clock face whose hands are driven by a
-//! tiny [`linkage`](linkage_blaze_core::linkage), with a digital time read-out
+//! tiny [`linkage`](crate::linkage), with a digital time read-out
 //! above it.
 
 use core::{convert::Infallible, fmt, iter};
@@ -22,7 +22,7 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder},
 };
-use linkage_blaze_core::{
+use crate::{
     DrawItem3dExt, LinkageFixed, LinkageView, Projection, linkage, linkage_fixed,
 };
 use log::info;
@@ -64,7 +64,7 @@ const CLOCK_BACKGROUND_BITMAP: DrawItem = DrawItem::Bitmap {
     view: CLOCK_BACKGROUND_VIEW,
     top_left: CLOCK_BOUNDS.top_left,
 };
-const LINKAGE0: LinkageFixed<2, 2, 50> = linkage_fixed!("clock.lb.rs");
+const LINKAGE0: LinkageFixed<2, 2, 50> = linkage_fixed!("../assets/examples/clock.lb.rs");
 const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 
 /// Run the clock render loop forever, driven by `clock_sync` ticks and drawn

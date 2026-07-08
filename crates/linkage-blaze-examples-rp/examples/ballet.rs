@@ -11,7 +11,7 @@ use device_envoy_rp::{
     cyd::{CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ},
 };
 use embassy_executor::Spawner;
-use linkage_blaze_example_core::ballet::{
+use linkage_blaze_core::examples::ballet::{
     self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
 };
 use panic_probe as _;

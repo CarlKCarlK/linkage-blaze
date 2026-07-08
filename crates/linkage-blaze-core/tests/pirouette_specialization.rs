@@ -3,9 +3,9 @@ use linkage_blaze_core::LinkageBuf;
 use linkage_blaze_core::{DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_fixed};
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
-// 538 steps.  The path crosses into the mocap crate's samples directory.
+// 538 steps.
 const PIROUETTE: LinkageFixed<132, 6, 538> =
-    linkage_fixed!("../../linkage-blaze-example-core/assets/mocap/pirouette.lb.rs");
+    linkage_fixed!("../src/assets/mocap/pirouette.lb.rs");
 
 // Freeze l_shin_yrotation first (DOF 132 → 131), then retain the four joints
 // of interest (DOF 131 → 4).  Retained param order follows the original linkage:

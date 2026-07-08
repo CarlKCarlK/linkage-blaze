@@ -31,6 +31,27 @@ extern crate alloc;
 pub mod bvh_parse;
 mod math;
 
+/// Platform-neutral example logic for the linkage-blaze CYD examples.
+///
+/// The device abstraction itself lives in [`device_envoy_core::cyd`]; this module
+/// holds the generic examples (`armatron`, `skeleton_clock`, `clock`, `ballet`) written
+/// against the owned CYD parts:
+/// [`CydDisplay`](device_envoy_core::cyd::CydDisplay) and
+/// [`CydTouch`](device_envoy_core::cyd::CydTouch).
+pub mod examples {
+    #[cfg(feature = "examples-armatron")]
+    #[path = "armatron/main.rs"]
+    pub mod armatron;
+    #[cfg(feature = "examples-ballet")]
+    pub mod ballet;
+    #[cfg(feature = "examples-clock")]
+    pub mod clock;
+    #[cfg(feature = "examples-skeleton-clock")]
+    pub mod skeleton_clock;
+    #[cfg(feature = "examples-armatron")]
+    pub mod ui;
+}
+
 #[cfg(feature = "alloc")]
 use alloc::borrow::ToOwned;
 #[cfg(feature = "alloc")]

@@ -14,7 +14,7 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
-use linkage_blaze_core::{
+use crate::{
     DrawItem3dExt, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
 };
 use log::info;

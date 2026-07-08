@@ -12,7 +12,7 @@ use device_envoy_core::cyd::{
 };
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
-use linkage_blaze_core::{
+use crate::{
     DrawItem3dExt, LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion,
     bvh_parse::BvhMotion, linkage, linkage_fixed,
 };
