@@ -3424,7 +3424,7 @@ impl Pose {
     /// Project this pose's position through `projection` into screen-space `(x, y)`.
     #[must_use]
     pub fn project(self, projection: &Projection) -> (f32, f32) {
-        let c = projection.cam(self.position());
+        let c = projection.world_to_camera(self.position());
         let k = projection.scale * projection.depth_factor(c[0]);
         (
             projection.target_origin.x as f32 - c[1] * k,
@@ -3965,12 +3965,11 @@ impl Projection {
         }
     }
 
-    //todo0000 add a runtime constructor (e.g. from_yaw_pitch) that builds
-    // `rotation` from camera angles via Mat3::yaw/pitch/roll, for camera_control.
+    // TODO Add a runtime constructor for camera-controlled projections if needed.
 
     /// Map a world vector into camera axes `[depth, screen-x source, screen-y source]`.
     #[inline]
-    fn cam(&self, v: Vec3) -> [f32; 3] {
+    fn world_to_camera(&self, v: Vec3) -> [f32; 3] {
         let r = &self.rotation;
         [
             r[0][0] * v[0] + r[0][1] * v[1] + r[0][2] * v[2],
@@ -3989,15 +3988,15 @@ impl Projection {
 
     /// Project a world-space direction vector (scaled by `radius`) to pixel-space.
     pub fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
-        let factor = self.depth_factor(self.cam(pose.position())[0]);
-        let d = self.cam(world_dir);
+        let factor = self.depth_factor(self.world_to_camera(pose.position())[0]);
+        let d = self.world_to_camera(world_dir);
         let r = radius * self.scale * factor;
         (-d[1] * r, -d[2] * r)
     }
 
     /// Scale a world-space sphere radius to pixel-space.
     pub fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
-        let factor = self.depth_factor(self.cam(pose.position())[0]);
+        let factor = self.depth_factor(self.world_to_camera(pose.position())[0]);
         radius * self.scale * factor
     }
 
@@ -4317,7 +4316,6 @@ mod tests {
         .yaw(90.0)
         .forward(1.0);
 
-    // todo0000 kill 2nd one
     const LINKAGE1: LinkageFixed<3, 0, 16> = LinkageFixed::start()
         .define_param("spin whole arm", 0.5)
         .define_param("bend elbow", 0.5)

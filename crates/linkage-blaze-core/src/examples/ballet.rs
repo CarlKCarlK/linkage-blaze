@@ -6,16 +6,16 @@ use core::{
     fmt::{self, Write},
 };
 
+use crate::{
+    DrawItem3dExt, LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion,
+    bvh_parse::BvhMotion, linkage, linkage_fixed,
+};
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{CydFrame, Image565Fixed, Orientation, tga565},
 };
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
-use crate::{
-    DrawItem3dExt, LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion,
-    bvh_parse::BvhMotion, linkage, linkage_fixed,
-};
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
@@ -195,17 +195,9 @@ mod tests {
 #[derive(Debug, derive_more::From)]
 pub struct StatusTextError(pub fmt::Error);
 
-// todo0000 review this.
-/// Error from the generic ballet loop, generic over the surface's flush error `F`.
-///
-/// Our own error types ([`StatusTextError`], [`device_envoy_core::Error`]) get a derived
-/// `From`, so they propagate with a plain `?`. The device's flush error `F` is
-/// the one exception: a blanket `From<F>` would be greedy enough to collide
-/// with those concrete `From`s (Rust can't rule out a future
-/// `F == device_envoy_core::Error`), so flush is converted explicitly with
-/// `.map_err(Error::Flush)` at the call site.
+/// Errors from the generic ballet loop.
 #[derive(Debug, derive_more::From)]
-pub enum Error<F> {
+pub enum Error<FlushError> {
     /// Formatting the status line failed.
     StatusText(StatusTextError),
     /// A device-envoy-core operation failed (for example, the background bitmap's
@@ -213,5 +205,5 @@ pub enum Error<F> {
     Core(device_envoy_core::Error),
     /// Flushing a frame to the display failed.
     #[from(ignore)]
-    Flush(F),
+    Flush(FlushError),
 }

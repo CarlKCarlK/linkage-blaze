@@ -1,5 +1,4 @@
 #![forbid(unsafe_code)]
-//todo000000 need to update the editor to work with linkage![...], or switch to a simpler pattern of just including the .lb.rs file after LinkageFixed::start() --- IGNORE --- (may no longer apply)
 
 pub mod bvh;
 

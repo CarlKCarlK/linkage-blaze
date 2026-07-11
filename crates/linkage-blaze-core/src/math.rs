@@ -138,6 +138,7 @@ impl Mat3 {
     }
 
     /// Rotation around z. Yaw = Rz: \[\[c,-s,0\],\[s,c,0\],\[0,0,1\]\].
+    #[must_use]
     pub fn yaw(radians: f32) -> Self {
         let cos = libm::cosf(radians);
         let sin = libm::sinf(radians);
@@ -145,6 +146,7 @@ impl Mat3 {
     }
 
     /// Rotation around y. Pitch = Ry: \[\[c,0,s\],\[0,1,0\],\[-s,0,c\]\].
+    #[must_use]
     pub fn pitch(radians: f32) -> Self {
         let cos = libm::cosf(radians);
         let sin = libm::sinf(radians);
@@ -152,6 +154,7 @@ impl Mat3 {
     }
 
     /// Rotation around x. Roll = Rx: \[\[1,0,0\],\[0,c,-s\],\[0,s,c\]\].
+    #[must_use]
     pub fn roll(radians: f32) -> Self {
         let cos = libm::cosf(radians);
         let sin = libm::sinf(radians);
@@ -228,13 +231,10 @@ impl Mul for Mat3 {
     }
 }
 
+#[must_use]
 pub const fn degrees_to_radians(degrees: f32) -> f32 {
     degrees * (PI / 180.0)
 }
-
-//todo0000 make inline? and elsewhere?
-//todo0000 why free functions? (may no longer apply)
-// f32 comparison is now implemented by F32Ext.
 
 #[cfg(test)]
 mod tests {
