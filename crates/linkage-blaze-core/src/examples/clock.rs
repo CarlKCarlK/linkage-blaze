@@ -54,10 +54,10 @@ const TIME_TEXT_TOP_PADDING: i32 = -1;
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(50, 20), Size::new(220, 220));
 const BACKGROUND_BITMAP_RECTANGLE: Rectangle = Rectangle::new(Point::zero(), Size::new(320, 240));
 const BACKGROUND_BITMAP: Image565Fixed<320, 240, { 320 * 240 }> =
-    tga565!("../assets/astronomy_window_background.tga", 320, 240);
+    tga565!("../assets/astronomy_window_background.tga");
 const PROJECTION: Projection = Projection::top_orthographic(
-    /* target origin */ Point::new(160, 130),
-    /* scale */ 1.375,
+    Point::new(160, 130), // target origin
+    1.375,                // scale
 );
 const CLOCK_BACKGROUND_VIEW: Image565View = BACKGROUND_BITMAP.view_rect(CLOCK_BOUNDS);
 const CLOCK_BACKGROUND_BITMAP: DrawItem = DrawItem::Bitmap {

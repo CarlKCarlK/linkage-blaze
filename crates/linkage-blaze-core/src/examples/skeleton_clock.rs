@@ -23,8 +23,8 @@ use time::OffsetDateTime;
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, tga565, tga565_magenta_mask,
-        tiling::TileGrid,
+        CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, mask_byte_count, tga565,
+        tga565_magenta_mask, tiling::TileGrid,
     },
 };
 
@@ -57,8 +57,8 @@ const LINKAGE: LinkageView<3, 6> = LINKAGE1
 // ── Projection ───────────────────────────────────────────────────────────────
 
 const PROJECTION: Projection = Projection::front_orthographic(
-    /* target origin */ Point::new(139, 306),
-    /* scale */ 1.35,
+    Point::new(139, 306), // target origin
+    1.35,                 // scale
 );
 
 // ── Background bitmap ──────────────────────────────────────────────────────────
@@ -67,15 +67,15 @@ const PROJECTION: Projection = Projection::front_orthographic(
 //todo0000 we need all these numbers?
 //todo0000 is tga565! good?
 const BACKGROUND_BITMAP: Image565Fixed<239, 319, { 239 * 319 }> =
-    tga565!("../assets/clock_back.small.tga", 239, 319);
+    tga565!("../assets/clock_back.small.tga");
 
-const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { (45 * 73 + 7) / 8 }> =
-    tga565_magenta_mask!("../assets/hours.small.tga", 45, 73);
+const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { mask_byte_count(45 * 73) }> =
+    tga565_magenta_mask!("../assets/hours.small.tga");
 const HOURS_SIGN_ANCHOR_X: f32 = 22.0;
 const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
 
-const MINUTE_SIGN: Image565Mask<45, 77, { 45 * 77 }, { (45 * 77 + 7) / 8 }> =
-    tga565_magenta_mask!("../assets/minute.small.tga", 45, 77);
+const MINUTE_SIGN: Image565Mask<45, 77, { 45 * 77 }, { mask_byte_count(45 * 77) }> =
+    tga565_magenta_mask!("../assets/minute.small.tga");
 const MINUTE_SIGN_ANCHOR_X: f32 = 22.0;
 const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
