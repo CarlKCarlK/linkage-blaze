@@ -10,6 +10,11 @@ path = "examples/armatron.rs"
 required-features = ["armatron"]
 
 [[example]]
+name = "armatron_one_spi"
+path = "examples/armatron_one_spi.rs"
+required-features = ["armatron"]
+
+[[example]]
 name = "ballet"
 path = "examples/ballet.rs"
 required-features = ["ballet"]

@@ -16,6 +16,10 @@ _esp_rustflags   := "-D warnings -C link-arg=-Tlinkall.x"
 _ballet_rustflags := "-D warnings -A long-running-const-eval"
 _ballet_esp_rustflags := _esp_rustflags + " -A long-running-const-eval"
 
+# Run the RP one-SPI armatron example. Board values are 1, 2, w, or 2w.
+run-armatron-spi board="2":
+    just --justfile crates/linkage-blaze-examples-rp/justfile run armatron_one_spi "{{board}}"
+
 # ── Tests / checks ───────────────────────────────────────────────────────────
 
 # Run linkage-blaze-core tests (unit tests + doc tests + alloc + examples integration tests)
