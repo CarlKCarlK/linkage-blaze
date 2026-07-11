@@ -54,6 +54,10 @@ check-all:
     env RUSTFLAGS="-D warnings" cargo check -p linkage-blaze-utils --target wasm32-unknown-unknown
     env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-utils --target web --out-dir www/pkg --out-name linkage_blaze_editor
 
+# Profile each command in check-all and write a Markdown report under specs/.
+profile-check-all:
+    ./scripts/profile-check-all.sh
+
 # Alias for check-all
 build-all:
     just check-all

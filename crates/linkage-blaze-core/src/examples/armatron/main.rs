@@ -9,6 +9,9 @@ mod controlled;
 mod controls;
 pub mod reverse_kinematics;
 
+use crate::{
+    DrawItem3dExt, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
+};
 use device_envoy_core::cyd::{
     Cyd, CydDisplay, CydTouch,
     display::{CydFrame, Orientation},
@@ -16,9 +19,6 @@ use device_envoy_core::cyd::{
 use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
-use crate::{
-    DrawItem3dExt, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
-};
 use nanorand::{Rng, WyRand};
 
 use crate::examples::ui::{Ui, UiError};
@@ -43,10 +43,13 @@ pub const FOREGROUND: Rgb888 = Rgb888::CSS_WHITE;
 // - `SCENE_WITH_ARM` adds the articulated arm plus joint spheres for display.
 //       The arm linkage ends with an invisible tip in the center of the hand.
 // - `LINKAGE_FIXED` appends a red ghost arm that shows the current target pose.
-const CAMERA_CONTROL: LinkageFixed<3, 1, 8> = linkage_fixed!("../../assets/examples/armatron/camera_control.lb.rs");
-const GRID_9X9: LinkageFixed<0, 1, 81> = linkage_fixed!("../../assets/examples/armatron/grid_9x9.lb.rs");
+const CAMERA_CONTROL: LinkageFixed<3, 1, 8> =
+    linkage_fixed!("../../assets/examples/armatron/camera_control.lb.rs");
+const GRID_9X9: LinkageFixed<0, 1, 81> =
+    linkage_fixed!("../../assets/examples/armatron/grid_9x9.lb.rs");
 const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);
-const ARMATRON1: LinkageFixed<6, 1, 25> = linkage_fixed!("../../assets/examples/armatron/armatron1.lb.rs");
+const ARMATRON1: LinkageFixed<6, 1, 25> =
+    linkage_fixed!("../../assets/examples/armatron/armatron1.lb.rs");
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
 const SCENE_WITH_ARM: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
 const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM
@@ -103,8 +106,6 @@ const SHOW_FPS_TEXT: bool = true;
 /// provide calibrated touch before calling [`armatron`]. Shared calibration
 /// UI helpers now live in [`device_envoy_core::cyd::touch::calibration`], alongside
 /// the rest of the CYD touch-calibration flow.
-// TODO0000 Revisit whether `armatron` should regain a type-state guarantee for
-// calibrated CYD touch instead of relying on this caller-side runtime precondition.
 pub async fn armatron<C, R>(
     cyd: &mut C,
     recalibration_button: &mut R,
