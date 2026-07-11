@@ -1,5 +1,5 @@
 use minijinja::{Environment, context};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -128,49 +128,93 @@ pub fn build_all_board_examples(workspace_root: &Path) -> Result<(), Box<dyn Err
     let templates_dir = crate_root.join("examples").join("templates");
     let template_base_names = discover_template_base_names(&templates_dir)?;
 
+    let mut examples_by_chip = BTreeMap::<&str, Vec<String>>::new();
     for board_profile in BOARD_PROFILES {
-        let (target, xtensa_linker) = build_target_for_chip_feature(board_profile.chip_feature());
-        let xtensa_linker_dir = xtensa_linker.and_then(find_xtensa_linker_dir);
+        let examples = examples_by_chip
+            .entry(board_profile.chip_feature())
+            .or_default();
         for base_name in &template_base_names {
-            let example_name = board_example_name(*board_profile, base_name);
-            let example_feature = example_feature_name(base_name)
-                .unwrap_or_else(|| panic!("missing example feature mapping for {base_name}"));
-            println!("    build example: {example_name}");
+            examples.push(board_example_name(*board_profile, base_name));
+        }
+    }
 
-            let mut command = Command::new("cargo");
-            command.current_dir(&crate_root);
-            if let Some(dir) = &xtensa_linker_dir {
-                prepend_path(&mut command, dir);
-            }
-            if xtensa_linker.is_some() {
-                command.arg("+esp");
-            }
-            command.args(["build", "--example", &example_name, "--release"]);
-            command.args(["--target", target]);
-            command.args(["--no-default-features", "--features"]);
-            command.arg(format!(
-                "{},{example_feature}",
-                board_profile.chip_feature()
-            ));
-            if xtensa_linker.is_some() {
-                command.arg("-Zbuild-std=core,alloc");
-            }
-            // `ballet`'s embedded `MOTION` capture is a heavy const; the generated source
-            // already carries `#![allow(long_running_const_eval)]`, but -D warnings at the
-            // command line has tripped over it historically, so belt-and-suspenders here too.
-            let rustflags = if example_feature == "ballet" {
-                "-D warnings -C link-arg=-Tlinkall.x -A long-running-const-eval"
-            } else {
-                "-D warnings -C link-arg=-Tlinkall.x"
-            };
-            command.env("RUSTFLAGS", rustflags);
+    let mut grouped_builds = Vec::new();
+    for (chip_feature, example_names) in examples_by_chip {
+        let (target, xtensa_linker) = build_target_for_chip_feature(chip_feature);
+        let xtensa_linker_dir = xtensa_linker.and_then(find_xtensa_linker_dir);
+        println!(
+            "    spawn grouped {chip_feature} build ({} examples)",
+            example_names.len()
+        );
 
-            let status = command.status()?;
+        let mut command = Command::new("cargo");
+        command.current_dir(&crate_root);
+        if let Some(dir) = &xtensa_linker_dir {
+            prepend_path(&mut command, dir);
+        }
+        if xtensa_linker.is_some() {
+            command.arg("+esp");
+        }
+        command.args(["build", "--release"]);
+        for example_name in &example_names {
+            command.args(["--example", example_name]);
+        }
+        command.args(["--target", target, "--no-default-features", "--features"]);
+        command.arg(format!(
+            "{chip_feature},armatron,ballet,clock,skeleton-clock"
+        ));
+        if xtensa_linker.is_some() {
+            command.arg("-Zbuild-std=core,alloc");
+        }
+        // `ballet`'s embedded `MOTION` capture is a heavy const. All examples in this
+        // grouped invocation share RUSTFLAGS so Cargo can reuse their compiled dependencies.
+        command.env(
+            "RUSTFLAGS",
+            "-D warnings -C link-arg=-Tlinkall.x -A long-running-const-eval",
+        );
+        // Four grouped Cargo jobs at four compiler jobs each keep the 16-core machine busy
+        // without multiplying Cargo's own job pool into hundreds of compiler processes.
+        command.env("CARGO_BUILD_JOBS", "4");
+
+        grouped_builds.push((chip_feature.to_owned(), command));
+    }
+
+    let mut failed_chips = Vec::new();
+    for grouped_batch in grouped_builds.chunks_mut(4) {
+        let mut spawned_builds = Vec::new();
+        for (chip_feature, command) in grouped_batch {
+            match command.spawn() {
+                Ok(child) => spawned_builds.push((chip_feature.as_str(), child)),
+                Err(error) => {
+                    for (spawned_chip_feature, mut child) in spawned_builds {
+                        let status = child.wait()?;
+                        if !status.success() {
+                            failed_chips.push(format!("{spawned_chip_feature} ({status})"));
+                        }
+                    }
+                    return Err(format!(
+                        "failed to spawn grouped cargo build for {chip_feature}: {error}"
+                    )
+                    .into());
+                }
+            }
+        }
+        for (chip_feature, mut child) in spawned_builds {
+            let status = child.wait()?;
             if !status.success() {
-                return Err(format!("cargo build failed for example {example_name}").into());
+                failed_chips.push(format!("{chip_feature} ({status})"));
             }
         }
     }
+
+    if !failed_chips.is_empty() {
+        return Err(format!(
+            "grouped cargo builds failed for chips: {}",
+            failed_chips.join(", ")
+        )
+        .into());
+    }
+
     Ok(())
 }
 

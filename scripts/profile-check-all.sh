@@ -2,9 +2,9 @@
 set -u
 
 output_path="${1:-specs/check-all-timing.md}"
-log_path="${output_path%.md}.log"
+log_path="target/check-all-timing.log"
 output_directory="$(dirname "$output_path")"
-mkdir -p "$output_directory"
+mkdir -p "$output_directory" "$(dirname "$log_path")"
 
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 started_epoch="$(date +%s)"
