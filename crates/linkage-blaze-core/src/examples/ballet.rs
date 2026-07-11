@@ -12,7 +12,7 @@ use crate::{
 };
 use device_envoy_core::cyd::{
     CydDisplay,
-    display::{CydFrame, Image565Fixed, Orientation, tga565},
+    display::{CydFrame, Image565Fixed, Orientation, tga},
 };
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
@@ -46,7 +46,7 @@ const MOTION_FPS: f32 = 120.0; // the mocap was captured at 120fps, so we can ru
 
 // A background bitmap read at compile time and stored in the binary.
 const BACKGROUND_BITMAP: Image565Fixed<240, 320, { 240 * 320 }> =
-    tga565!("../assets/ballet_background.tga");
+    tga!("../assets/ballet_background.tga").to_565();
 
 // How we convert 3D points in the linkage to 2D points in a frame.
 const PROJECTION: Projection = Projection::front_orthographic(

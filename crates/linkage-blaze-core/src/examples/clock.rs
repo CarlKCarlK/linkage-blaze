@@ -9,7 +9,7 @@ use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, Image565View, Orientation, tga565,
+        CydFrame, DrawItem, Image565Fixed, Image565View, Orientation, tga,
         tiling::max_rectangle_pixel_count,
     },
 };
@@ -54,7 +54,7 @@ const TIME_TEXT_TOP_PADDING: i32 = -1;
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(50, 20), Size::new(220, 220));
 const BACKGROUND_BITMAP_RECTANGLE: Rectangle = Rectangle::new(Point::zero(), Size::new(320, 240));
 const BACKGROUND_BITMAP: Image565Fixed<320, 240, { 320 * 240 }> =
-    tga565!("../assets/astronomy_window_background.tga");
+    tga!("../assets/astronomy_window_background.tga").to_565();
 const PROJECTION: Projection = Projection::top_orthographic(
     Point::new(160, 130), // target origin
     1.375,                // scale

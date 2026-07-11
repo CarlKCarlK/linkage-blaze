@@ -4,6 +4,9 @@
 
 use core::{array::from_fn, convert::Infallible, fmt};
 
+use crate::{
+    DrawItem3dExt, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
+};
 use device_envoy_core::UnwrapInfallible;
 use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
 use embedded_graphics::{
@@ -14,17 +17,14 @@ use embedded_graphics::{
     primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
-use crate::{
-    DrawItem3dExt, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
-};
 use log::info;
 use time::OffsetDateTime;
 
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, Image565Mask, Orientation, mask_byte_count, tga565,
-        tga565_magenta_mask, tiling::TileGrid,
+        CydFrame, DrawItem, Image565Fixed, MaskFixed, Orientation, TgaImageFixed, mask_byte_count,
+        tga, tiling::TileGrid,
     },
 };
 
@@ -64,18 +64,20 @@ const PROJECTION: Projection = Projection::front_orthographic(
 // ── Background bitmap ──────────────────────────────────────────────────────────
 
 /// Clock-face background bitmap, loaded at compile time.
-//todo0000 we need all these numbers?
-//todo0000 is tga565! good?
 const BACKGROUND_BITMAP: Image565Fixed<239, 319, { 239 * 319 }> =
-    tga565!("../assets/clock_back.small.tga");
+    tga!("../assets/clock_back.small.tga").to_565();
 
-const HOURS_SIGN: Image565Mask<45, 73, { 45 * 73 }, { mask_byte_count(45 * 73) }> =
-    tga565_magenta_mask!("../assets/hours.small.tga");
+const HOURS_SIGN_TGA: TgaImageFixed<45, 73, { 45 * 73 }> = tga!("../assets/hours.small.tga");
+const HOURS_SIGN_BITMAP: Image565Fixed<45, 73, { 45 * 73 }> = HOURS_SIGN_TGA.to_565();
+const HOURS_SIGN_MASK: MaskFixed<45, 73, { mask_byte_count(45, 73) }> =
+    HOURS_SIGN_TGA.to_mask_magenta();
 const HOURS_SIGN_ANCHOR_X: f32 = 22.0;
 const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
 
-const MINUTE_SIGN: Image565Mask<45, 77, { 45 * 77 }, { mask_byte_count(45 * 77) }> =
-    tga565_magenta_mask!("../assets/minute.small.tga");
+const MINUTE_SIGN_TGA: TgaImageFixed<45, 77, { 45 * 77 }> = tga!("../assets/minute.small.tga");
+const MINUTE_SIGN_BITMAP: Image565Fixed<45, 77, { 45 * 77 }> = MINUTE_SIGN_TGA.to_565();
+const MINUTE_SIGN_MASK: MaskFixed<45, 77, { mask_byte_count(45, 77) }> =
+    MINUTE_SIGN_TGA.to_mask_magenta();
 const MINUTE_SIGN_ANCHOR_X: f32 = 22.0;
 const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
@@ -182,9 +184,9 @@ where
             }
 
             // Draw the hour sign and number
-            HOURS_SIGN
+            HOURS_SIGN_BITMAP
                 .at(hours_top_left)
-                .draw(&mut tile)
+                .draw_masked(&HOURS_SIGN_MASK, &mut tile)
                 .unwrap_infallible();
             draw_centered_sign_value(
                 &mut tile,
@@ -194,9 +196,9 @@ where
             );
 
             // Draw the minute sign and number.
-            MINUTE_SIGN
+            MINUTE_SIGN_BITMAP
                 .at(minute_top_left)
-                .draw(&mut tile)
+                .draw_masked(&MINUTE_SIGN_MASK, &mut tile)
                 .unwrap_infallible();
             draw_centered_sign_value(
                 &mut tile,
