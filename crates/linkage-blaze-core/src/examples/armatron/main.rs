@@ -310,9 +310,6 @@ pub enum Error<F> {
 
 // ── Private helper functions ───────────────────────────────────────────────────
 
-// todo000 shared home question from SINGLE_SOURCE_SPEC.md: if both armatron UI
-// paths stay live, move arm_tip/target_center/compute_target_distance/
-// VERSION_TEXT into one shared module instead of duplicating them here.
 fn randomize_target_from_seed(target_seed: u8, params: &mut [f32; DOF]) {
     let mut rng = WyRand::new_seed(u64::from(target_seed));
     for param in params[TARGET_PARAM_START..].iter_mut() {

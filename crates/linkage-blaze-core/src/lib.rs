@@ -4547,7 +4547,6 @@ mod tests {
 
     #[test]
     fn test_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
-        //todo00 might be nice to have the names available somehow.
         let params = [
             0.7514501463, // raise hand
             0.49,         // bend elbow

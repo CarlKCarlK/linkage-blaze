@@ -1,11 +1,9 @@
 #![no_std]
 #![no_main]
 
-// todo000 can't we allocate the largest buffer and then use it for smaller things?
-// todo000 get wifi portal and drawing work at the same time.
-
 use core::{cell::RefCell, convert::Infallible};
 
+use device_envoy_core::cyd::display::CydFrame;
 use device_envoy_esp::cyd::{
     CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
 };

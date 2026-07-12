@@ -7,6 +7,7 @@ use core::{cell::RefCell, convert::Infallible};
 
 use defmt::info;
 use defmt_rtt as _;
+use device_envoy_core::cyd::display::CydFrame;
 use device_envoy_rp::{
     Error, Result,
     button::{ButtonRp, PressedTo},

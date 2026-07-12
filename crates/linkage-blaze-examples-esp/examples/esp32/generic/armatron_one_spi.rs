@@ -3,7 +3,7 @@
 
 use core::convert::Infallible;
 
-use device_envoy_core::cyd::{Cyd as _, CydDisplay};
+use device_envoy_core::cyd::{Cyd as _, CydDisplay, display::CydFrame};
 use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_esp::{
     button::{ButtonEsp, PressedTo},

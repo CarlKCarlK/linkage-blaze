@@ -1,11 +1,9 @@
 #![no_std]
 #![no_main]
 
-// todo000 we need to use color and/or size to tell hours from minutes
-// todo000 we need some wasm preview
-
 use core::{cell::RefCell, convert::Infallible};
 
+use device_envoy_core::cyd::display::CydFrame;
 use device_envoy_esp::cyd::{
     CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
     tiling::rectangle_pixel_count,
