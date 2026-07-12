@@ -1,6 +1,5 @@
 //! The generic "skeleton clock" example: a motion-captured figure whose limbs
 //! act as clock hands, with hour/minute placards hanging from its hands.
-// todo0 the esp32 may not have a reset button for wifi
 
 use core::{array::from_fn, convert::Infallible, fmt};
 

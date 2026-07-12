@@ -66,11 +66,11 @@ infer_board_example_from_invocation_dir() {
   if [[ "$relative_invocation_dir" == "$workspace_root"* ]]; then
     relative_invocation_dir="${relative_invocation_dir#"$workspace_root"/}"
   fi
-  if [[ "$relative_invocation_dir" != crates/linkage-blaze-esp/examples/*/* ]]; then
+  if [[ "$relative_invocation_dir" != crates/linkage-blaze-examples-esp/examples/*/* ]]; then
     return
   fi
 
-  local relative_after_examples="${relative_invocation_dir#crates/linkage-blaze-esp/examples/}"
+  local relative_after_examples="${relative_invocation_dir#crates/linkage-blaze-examples-esp/examples/}"
   local chip_dir="${relative_after_examples%%/*}"
   local board_dir="${relative_after_examples#${chip_dir}/}"
   board_dir="${board_dir%%/*}"
@@ -134,7 +134,7 @@ infer_board_example_from_invocation_dir() {
   fi
 
   local inferred_example="${name}_${chip_feature}_${board_dir}"
-  if grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${inferred_example}\"[[:space:]]*$" crates/linkage-blaze-esp/Cargo.toml; then
+  if grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${inferred_example}\"[[:space:]]*$" crates/linkage-blaze-examples-esp/Cargo.toml; then
     name="$inferred_example"
     if [[ -z "$chip" ]]; then
       chip="$inferred_chip"
@@ -183,12 +183,12 @@ if [[ -z "$chip" ]]; then
 fi
 
 has_example=0
-if grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${name}\"[[:space:]]*$" crates/linkage-blaze-esp/Cargo.toml; then
+if grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${name}\"[[:space:]]*$" crates/linkage-blaze-examples-esp/Cargo.toml; then
   has_example=1
 fi
 
 if [[ "$has_example" -eq 0 ]]; then
-  echo "unknown example '$name' (no matching example in crates/linkage-blaze-esp/Cargo.toml)" >&2
+  echo "unknown example '$name' (no matching example in crates/linkage-blaze-examples-esp/Cargo.toml)" >&2
   exit 1
 fi
 
@@ -296,7 +296,7 @@ if [[ "${#extra_env[@]}" -gt 0 ]]; then
 fi
 
 "${command_prefix[@]}" "${cargo_bin[@]}" "$action" \
-  -p linkage-blaze-esp \
+  -p linkage-blaze-examples-esp \
   --example "$name" \
   --target "$target" \
   --release \
