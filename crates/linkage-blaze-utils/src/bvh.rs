@@ -1,8 +1,32 @@
 //! BVH motion-capture parsing for Linkage Blaze.
 
+use std::collections::HashSet;
 use std::fmt;
+use std::sync::{Mutex, OnceLock};
 
 use linkage_blaze_core::LinkageBuf;
+
+/// Promote a runtime joint name to `&'static str` for `LinkageBuf::mark`, which
+/// shares its `mark_names: [&'static str; MARKS]` field with the const/no_std
+/// `LinkageFixed` type. Names are interned so repeated joint names (BVH
+/// skeletons reuse standard names like "Hips" or "Spine1" across clips) leak
+/// only once each rather than once per call.
+fn intern_mark_name(name: &str) -> &'static str {
+    static INTERNED: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+    let mut set = INTERNED
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .unwrap();
+    if let Some(&existing) = set.get(name) {
+        return existing;
+    }
+    // TODO  still leaks one allocation per unique name (bounded by the
+    // interner now, rather than one per call). Consider whether LinkageBuf could
+    // store owned names to avoid the leak entirely.
+    let leaked: &'static str = Box::leak(name.to_string().into_boxed_str());
+    set.insert(leaked);
+    leaked
+}
 
 /// Parsed BVH clip: hierarchy plus motion samples.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -371,7 +395,7 @@ fn depth_mark_name(depth: usize) -> &'static str {
     if depth < NAMES.len() {
         NAMES[depth]
     } else {
-        Box::leak(format!("depth {depth}").into_boxed_str())
+        intern_mark_name(&format!("depth {depth}"))
     }
 }
 
@@ -511,11 +535,7 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
 
     let joint_name = clip.joints[joint_index].name.as_str();
     if mark_joints.iter().any(|&name| name == joint_name) {
-        // TODO000 review: Box::leak is used because LinkageBuf::mark requires &'static str
-        // (mark_names field is [&'static str; MARKS] shared with LinkageFixed). Consider
-        // whether LinkageBuf could store owned names to avoid the leak.
-        let static_name: &'static str = Box::leak(joint_name.to_string().into_boxed_str());
-        linkage = linkage.mark(static_name);
+        linkage = linkage.mark(intern_mark_name(joint_name));
     }
 
     let joint_children = &children[joint_index];
