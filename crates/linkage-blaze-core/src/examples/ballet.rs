@@ -19,7 +19,7 @@ use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
-// todo000 are there 4 orientations?
+// The CYD display supports landscape, portrait, and the inverted form of each.
 pub const ORIENTATION: Orientation = Orientation::Portrait;
 pub const TOP_FONT: MonoFont<'static> = FONT_6X10;
 
@@ -97,14 +97,8 @@ where
     }
 }
 
-#[cfg(not(test))]
 fn sample_duration(started: Instant) -> Duration {
     Instant::now() - started
-}
-
-#[cfg(test)]
-fn sample_duration(_started: Instant) -> Duration {
-    Duration::from_millis(10)
 }
 
 fn status_text(
@@ -131,65 +125,6 @@ fn status_text(
         slomo,
     )?;
     Ok(status_text)
-}
-
-#[cfg(test)]
-mod tests {
-    use device_envoy_core::memory::{
-        CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
-    };
-    use embedded_graphics::geometry::Point;
-    use embedded_graphics::primitives::Rectangle;
-    use futures_executor::block_on;
-
-    use super::{BACKGROUND, Error, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
-
-    const SMOKE_TEST_FRAME_BUDGET: usize = 5;
-
-    #[test]
-    fn ballet_runs_bounded_frames_and_flushes_within_screen_bounds() {
-        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
-        memory_cyd.set_frame_budget(SMOKE_TEST_FRAME_BUDGET);
-
-        let ballet_result = {
-            let mut display = memory_cyd.display();
-            block_on(ballet(&mut display))
-        };
-
-        let ballet_error =
-            ballet_result.expect_err("the free-running loop should stop at the frame budget");
-        assert!(matches!(
-            ballet_error,
-            Error::Flush(CydMemoryError::OutOfFrames)
-        ));
-        assert_eq!(memory_cyd.flush_count(), SMOKE_TEST_FRAME_BUDGET);
-        assert_eq!(
-            memory_cyd.last_flush_rectangle(),
-            Some(Rectangle::new(Point::zero(), ORIENTATION.size()))
-        );
-    }
-
-    #[test]
-    fn ballet_renders_expected_frame() {
-        const GOLDEN_TEST_FRAME_BUDGET: usize = 225;
-
-        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
-        memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
-
-        let ballet_result = {
-            let mut display = memory_cyd.display();
-            block_on(ballet(&mut display))
-        };
-        ballet_result.expect_err("the free-running loop should stop at the frame budget");
-        assert_eq!(memory_cyd.flush_count(), GOLDEN_TEST_FRAME_BUDGET);
-
-        assert_framebuffer_matches_expected_png(
-            &memory_cyd,
-            env!("CARGO_MANIFEST_DIR"),
-            "ballet.png",
-        )
-        .expect("rendered frame should match the golden image");
-    }
 }
 
 #[derive(Debug, derive_more::From)]

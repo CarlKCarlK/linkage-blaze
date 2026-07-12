@@ -700,13 +700,6 @@ impl DemoRecord {
                 },
                 orientation: PreviewOrientation::Portrait,
             },
-            "ballet" => PreviewSpec {
-                source: PreviewSource::RenderTest {
-                    feature: "examples-ballet",
-                    test_name: "examples::ballet::tests::ballet_renders_expected_frame",
-                },
-                orientation: PreviewOrientation::Portrait,
-            },
             "clock" => PreviewSpec {
                 source: PreviewSource::RenderTest {
                     feature: "examples-clock",

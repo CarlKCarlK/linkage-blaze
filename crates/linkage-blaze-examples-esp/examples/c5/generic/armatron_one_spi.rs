@@ -82,9 +82,8 @@ async fn clear_calibration_and_reset(
 
 async fn reboot_with_message(cyd: &mut CydEspOneSpi, message: &str) -> Result<(), MainError> {
     let display = cyd.display();
-    let background565 = display.background_565();
     let mut frame = display.full_frame_mut();
-    frame.fill(background565).write_text(message).flush()?;
+    frame.clear().write_text(message).flush()?;
     info!("Restarting");
     esp_hal::system::software_reset();
 }

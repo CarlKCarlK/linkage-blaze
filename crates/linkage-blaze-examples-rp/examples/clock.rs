@@ -76,7 +76,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         spawner,               // spawner
     )?;
 
-    let background565 = display.background_565();
     let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
         .connect(
@@ -89,7 +88,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
                 };
                 if wifi_status_frame
                     .borrow_mut()
-                    .fill(background565)
+                    .clear()
                     .write_text(message)
                     .flush()
                     .is_err()
@@ -104,7 +103,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     wifi_status_frame
         .borrow_mut()
-        .fill(background565)
+        .clear()
         .write_text("WiFi OK")
         .flush()?;
     drop(wifi_status_frame);

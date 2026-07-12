@@ -26,7 +26,7 @@
 //! visualization.  Validated against `str::parse::<f32>` for representative BVH
 //! values with relative tolerance 1e-5.
 
-// todo000 article: Parsing a 764 KB BVH file in a Rust const fn takes ~8 s.
+// todo0article: Parsing a 764 KB BVH file in a Rust const fn takes ~8 s.
 // Is that acceptable for an embedded project?  Weigh against the alternative:
 // a `just generate-ballet` code-generation step checked in as
 // `ballet_frames_precomputed.rs`.  Neither answer is clearly right.

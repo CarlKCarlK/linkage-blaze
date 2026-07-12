@@ -235,11 +235,10 @@ mod tests {
             let mut display = memory_cyd.display();
             block_on(clock_splash(&mut display))
                 .expect("clock splash should draw the static background");
-            let background565 = display.background_565();
             block_on(
                 display
                     .frame_mut(WIFI_STATUS_RECTANGLE)
-                    .fill(background565)
+                    .clear()
                     .write_text("WiFi: OK")
                     .flush(),
             )

@@ -14,12 +14,6 @@
 //! - pitch = rotate about local +Y
 //! - roll = rotate about local +X
 
-//todo000 move some of that global static stuff to be const local.
-//todo000 revisit the name Param and Args
-//todo00 allow splits/DAGs in the models.
-//todo00 could have (compile-time?) optimizations that collapse adjacent steps of the same type into one step with a combined angle/distance. Would that be worth it? or even multiple moves if one doesn't have parameters.
-//todo00 might be nice to have invisible or colored links, but that would be more turtle than linkage.
-//todo00 if we did have colored links RGBA, could use a fluent command.
 //todo "DOF" == params = parameters. do these names make sense? are they explained well?
 
 #[cfg(test)]
@@ -152,7 +146,6 @@ impl Param {
         default: 0.0,
     };
 
-    // todo000 maybe later not static.
     /// Return the parameter's display name.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -4284,7 +4277,6 @@ mod tests {
     };
     use std::{boxed::Box, error::Error};
 
-    //todo000 *_param might not be a good suffix.
     const LINKAGE0: LinkageFixed<6, 0, 24> = LinkageFixed::start()
         .define_param("raise hand", 0.5)
         .define_param("bend elbow", 0.5)

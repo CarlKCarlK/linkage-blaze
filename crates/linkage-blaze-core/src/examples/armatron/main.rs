@@ -12,11 +12,11 @@ pub mod reverse_kinematics;
 use crate::{
     DrawItem3dExt, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
 };
+use device_envoy_core::button::Button;
 use device_envoy_core::cyd::{
     Cyd, CydDisplay, CydTouch,
     display::{CydFrame, Orientation},
 };
-use device_envoy_core::{button::Button, pixel_target::rgb565_from_rgb888};
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
 use nanorand::{Rng, WyRand};
@@ -127,18 +127,13 @@ where
 
     // Set up buffers
     let mut frame = display.full_frame_mut();
-    let background565 = rgb565_from_rgb888(BACKGROUND);
-
     loop {
         if recalibration_button.is_pressed() {
             return Ok(ArmatronExit::CalibrationRequested);
         }
 
         let current_tick = Instant::now();
-        // todo000 review whether armatron should use the display's default background instead of
-        // its own `BACKGROUND` constant; this explicit color fill is correct today because the
-        // loop intentionally clears to `background565`, not merely to whatever the device default is.
-        frame.fill(background565);
+        frame.clear();
 
         // Scene first, UI on top: params here were updated by last frame's
         // widgets, so input affects the scene with the standard one-frame
