@@ -2313,12 +2313,15 @@ impl<'a, const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageVi
 /// # #[cfg(feature = "alloc")]
 /// # {
 /// # use linkage_blaze_core::{LinkageBuf, Vec3};
+/// # fn example() -> Result<(), linkage_blaze_core::Error> {
 /// let linkage: LinkageBuf<1, 0> = LinkageBuf::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
 /// let pose = linkage.view().final_pose(&[0.5])?;
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+/// # Ok(())
+/// # }
 /// # }
 /// ```
 ///
@@ -2328,6 +2331,7 @@ impl<'a, const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageVi
 /// # #[cfg(feature = "alloc")]
 /// # {
 /// # use linkage_blaze_core::{LinkageFixed, LinkageBuf, Vec3};
+/// # fn example() -> Result<(), linkage_blaze_core::Error> {
 /// const FIXED: LinkageFixed<1, 0, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
@@ -2335,6 +2339,8 @@ impl<'a, const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageVi
 /// let buf = LinkageBuf::from(&FIXED);
 /// let pose = buf.view().final_pose(&[0.5])?;
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+/// # Ok(())
+/// # }
 /// # }
 /// ```
 #[derive(Clone)]
@@ -2523,6 +2529,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// # #[cfg(feature = "alloc")]
     /// # {
     /// # use linkage_blaze_core::{LinkageBuf, Vec3};
+    /// # fn example() -> Result<(), linkage_blaze_core::Error> {
     /// let a = LinkageBuf::<1, 0>::start()
     ///     .define_param("x", 0.5)
     ///     .forward_param("x", 0.0, 10.0);
@@ -2535,6 +2542,8 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// let c: LinkageBuf<2, 0> = a.combine(b);
     /// let params = [0.5, 0.5];
     /// let pose = c.view().final_pose(&params)?;
+    /// # Ok(())
+    /// # }
     /// # }
     /// ```
     pub fn combine<

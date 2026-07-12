@@ -11,7 +11,7 @@ use png::{BitDepth, ColorType, Encoder};
 use std::{
     boxed::Box,
     env,
-    error::Error,
+    error::Error as StdError,
     format,
     fs::{self, File},
     io::BufWriter,
@@ -19,6 +19,7 @@ use std::{
     println, process,
     string::String,
     time::{SystemTime, UNIX_EPOCH},
+    vec,
     vec::Vec,
 };
 
@@ -34,7 +35,7 @@ pub(super) fn assert_pose_approx_eq(actual: Pose, expected: Pose) {
 pub(super) fn assert_pose_trace_matches_expected<I>(
     filename: &str,
     poses: I,
-) -> Result<(), Box<dyn Error>>
+) -> Result<(), Box<dyn StdError>>
 where
     I: IntoIterator<Item = Pose>,
 {
@@ -102,7 +103,7 @@ fn format_pose_trace(poses: &[Pose]) -> String {
     text
 }
 
-fn parse_pose_trace(text: &str) -> Result<Vec<Pose>, Box<dyn Error>> {
+fn parse_pose_trace(text: &str) -> Result<Vec<Pose>, Box<dyn StdError>> {
     let mut poses = Vec::new();
 
     for (line_index, line) in text.lines().enumerate() {
@@ -150,18 +151,18 @@ const WORLD_MAX: f32 = 10.0;
 const EXCEL_BLUE: Rgb888 = Rgb888::new(21, 96, 130);
 
 pub(super) struct Canvas {
-    pixels: [Rgb888; CANVAS_PIXELS],
+    pixels: Vec<Rgb888>,
 }
 
 impl Canvas {
     fn new() -> Self {
         Self {
-            pixels: [Rgb888::WHITE; CANVAS_PIXELS],
+            pixels: vec![Rgb888::WHITE; CANVAS_PIXELS],
         }
     }
 
-    fn rgb_bytes(&self) -> [u8; CANVAS_PIXELS * 3] {
-        let mut bytes = [0u8; CANVAS_PIXELS * 3];
+    fn rgb_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![0u8; CANVAS_PIXELS * 3];
         let mut pixel_index = 0;
         while pixel_index < CANVAS_PIXELS {
             let pixel = self.pixels[pixel_index];
@@ -267,7 +268,7 @@ fn world_to_pixel(value: f32) -> i32 {
 pub(super) fn assert_png_matches_expected(
     filename: &str,
     canvas: &Canvas,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn StdError>> {
     let expected_path = expected_png_path(filename);
     if env::var_os("ROBOT_ARM_UPDATE_PNGS").is_some() {
         write_png(&expected_path, canvas)?;
@@ -296,7 +297,7 @@ pub(super) fn assert_png_matches_expected(
     Ok(())
 }
 
-fn write_png(path: &Path, canvas: &Canvas) -> Result<(), Box<dyn Error>> {
+fn write_png(path: &Path, canvas: &Canvas) -> Result<(), Box<dyn StdError>> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
