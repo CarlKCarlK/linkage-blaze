@@ -2,8 +2,37 @@
 
 pub mod bvh;
 
-use linkage_blaze_core::{DrawItem3d, LinkageBuf, RgbColor};
+use linkage_blaze_core::{DrawItem3d, Error as LinkageError, LinkageBuf, RgbColor};
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
+
+#[derive(Debug)]
+enum RenderError {
+    Parse(String),
+    Evaluation(LinkageError),
+}
+
+impl From<String> for RenderError {
+    fn from(error: String) -> Self {
+        Self::Parse(error)
+    }
+}
+
+impl From<LinkageError> for RenderError {
+    fn from(error: LinkageError) -> Self {
+        Self::Evaluation(error)
+    }
+}
+
+impl core::fmt::Display for RenderError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Parse(error) => formatter.write_str(error),
+            Self::Evaluation(error) => write!(formatter, "linkage evaluation failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for RenderError {}
 
 #[wasm_bindgen]
 pub fn default_program() -> String {
@@ -12,7 +41,7 @@ pub fn default_program() -> String {
 
 #[wasm_bindgen]
 pub fn render_program_json(source: &str) -> Result<String, JsValue> {
-    render_program(source, &[]).map_err(|error| JsValue::from_str(&error))
+    render_program(source, &[]).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 /// Re-render the program using caller-supplied param values (by name).
@@ -26,10 +55,10 @@ pub fn render_program_with_params_json(
     overrides_json: &str,
 ) -> Result<String, JsValue> {
     let overrides = parse_overrides(overrides_json);
-    render_program(source, &overrides).map_err(|error| JsValue::from_str(&error))
+    render_program(source, &overrides).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
-fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, String> {
+fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, RenderError> {
     let linkage = LinkageBuf::<256, 64>::from_lb_rs(source)?;
     let view = linkage.view();
     let mut params = [0.0; 256];
@@ -51,7 +80,7 @@ fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, S
     }
 
     let mut primitives = Vec::new();
-    for draw_item_3d in view.draw_items_3d(&params) {
+    for draw_item_3d in view.draw_items_3d(&params)? {
         primitives.push(Primitive::from(draw_item_3d));
     }
 

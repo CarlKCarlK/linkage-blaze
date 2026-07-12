@@ -16,8 +16,8 @@
 
 #![allow(dead_code)]
 
-use embedded_graphics::{pixelcolor::Rgb565, primitives::PrimitiveStyle};
 use crate::{Rgb888, WebColors};
+use embedded_graphics::{pixelcolor::Rgb565, primitives::PrimitiveStyle};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ControlledKnob {

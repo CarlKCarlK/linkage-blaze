@@ -851,7 +851,7 @@ Frame Time: 0.0333333
     }
 
     #[test]
-    fn builds_bvh_linkage_buf_and_sample_params() {
+    fn builds_bvh_linkage_buf_and_sample_params() -> Result<(), linkage_blaze_core::Error> {
         let clip = parse_bvh(BVH).expect("BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
@@ -864,11 +864,12 @@ Frame Time: 0.0333333
         assert_eq!(params[1], 0.5);
         assert_eq!(params[2], 0.5);
         assert!(params[6] > 0.5);
-        assert!(linkage.view().draw_items_3d(&params).count() >= 5);
+        assert!(linkage.view().draw_items_3d(&params)?.count() >= 5);
+        Ok(())
     }
 
     #[test]
-    fn converts_bvh_to_lb_rs_source() {
+    fn converts_bvh_to_lb_rs_source() -> Result<(), linkage_blaze_core::Error> {
         let source = bvh_to_lb_rs::<32, 8>(BVH, &[]).expect("BVH should serialize");
         let linkage =
             LinkageBuf::<32, 8>::from_lb_rs(&source).expect("generated source should parse");
@@ -883,7 +884,8 @@ Frame Time: 0.0333333
         );
         assert!(source.contains(".mark(\"depth 1\") // chest"));
         assert!(source.contains(".restore(\"depth 1\") // chest"));
-        assert!(linkage.view().draw_items_3d(&[0.5; 32]).count() >= 5);
+        assert!(linkage.view().draw_items_3d(&[0.5; 32])?.count() >= 5);
+        Ok(())
     }
 
     #[test]
@@ -915,7 +917,7 @@ Frame Time: 0.0333333
     }
 
     #[test]
-    fn bvh_rotation_axes_are_remapped_to_linkage_axes() {
+    fn bvh_rotation_axes_are_remapped_to_linkage_axes() -> Result<(), linkage_blaze_core::Error> {
         let clip = parse_bvh(BVH_X_ROTATION).expect("BVH should parse");
         let layout = discover_bvh_parameters(&clip).expect("BVH layout should parse");
         let linkage =
@@ -924,7 +926,7 @@ Frame Time: 0.0333333
             bvh_sample_params::<1>(&layout, &clip.samples[0]).expect("params should build");
         let stroke = linkage
             .view()
-            .draw_items_3d(&params)
+            .draw_items_3d(&params)?
             .find_map(|draw_item_3d| match draw_item_3d {
                 linkage_blaze_core::DrawItem3d::Stroke(stroke) => Some(stroke),
                 _ => None,
@@ -937,6 +939,7 @@ Frame Time: 0.0333333
                 .position()
                 .is_close_to(&linkage_blaze_core::Vec3::from([10.0, 0.0, 0.0]), 1e-4)
         );
+        Ok(())
     }
 
     const REAL_PIROUETTE_BVH_PATH: &str = "../linkage-blaze-core/src/assets/mocap/pirouette.bvh";
@@ -948,7 +951,7 @@ Frame Time: 0.0333333
     }
 
     #[test]
-    fn builds_real_bvh_linkage() {
+    fn builds_real_bvh_linkage() -> Result<(), linkage_blaze_core::Error> {
         let bvh = read_real_pirouette_bvh();
 
         let clip = parse_bvh(&bvh).expect("real BVH should parse");
@@ -961,11 +964,12 @@ Frame Time: 0.0333333
         assert!(clip.joints.len() > 40);
         assert!(clip.samples.len() > 500);
         assert!(layout.len() > 120);
-        assert!(linkage.view().draw_items_3d(&params).count() > 40);
+        assert!(linkage.view().draw_items_3d(&params)?.count() > 40);
+        Ok(())
     }
 
     #[test]
-    fn converts_real_bvh_to_lb_rs() {
+    fn converts_real_bvh_to_lb_rs() -> Result<(), linkage_blaze_core::Error> {
         let bvh = read_real_pirouette_bvh();
 
         let source = bvh_to_lb_rs::<256, 64>(&bvh, &[]).expect("real BVH should serialize");
@@ -974,7 +978,8 @@ Frame Time: 0.0333333
 
         assert!(source.contains("\nlinkage![\n"));
         assert!(source.trim_end().ends_with(']'));
-        assert!(linkage.view().draw_items_3d(&[0.5; 256]).count() > 40);
+        assert!(linkage.view().draw_items_3d(&[0.5; 256])?.count() > 40);
+        Ok(())
     }
 
     /// Golden-file regression test: converting the real pirouette motion capture

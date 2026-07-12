@@ -4,8 +4,7 @@ use linkage_blaze_core::{DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
 // 538 steps.
-const PIROUETTE: LinkageFixed<132, 6, 538> =
-    linkage_fixed!("../src/assets/mocap/pirouette.lb.rs");
+const PIROUETTE: LinkageFixed<132, 6, 538> = linkage_fixed!("../src/assets/mocap/pirouette.lb.rs");
 
 // Freeze l_shin_yrotation first (DOF 132 → 131), then retain the four joints
 // of interest (DOF 131 → 4).  Retained param order follows the original linkage:
@@ -42,14 +41,14 @@ fn pirouette_body_param_names_follow_original_linkage_order() {
 }
 
 #[test]
-fn pirouette_body_evaluates_without_alloc_storage() {
+fn pirouette_body_evaluates_without_alloc_storage() -> Result<(), linkage_blaze_core::Error> {
     let params = [0.5, 0.5, 0.5, 0.5];
     let view = PIROUETTE_BODY.view();
-    let pose = view.final_pose(&params);
+    let pose = view.final_pose(&params)?;
     assert_pose_finite(pose);
 
     let mut item_count = 0;
-    for draw_item_3d in view.draw_items_3d(&params) {
+    for draw_item_3d in view.draw_items_3d(&params)? {
         item_count += 1;
         match draw_item_3d {
             DrawItem3d::Stroke(stroke_segment) => {
@@ -68,10 +67,12 @@ fn pirouette_body_evaluates_without_alloc_storage() {
     }
 
     assert!(item_count > 0);
+    Ok(())
 }
 
 #[test]
-fn pirouette_body_matches_full_linkage_with_frozen_defaults() {
+fn pirouette_body_matches_full_linkage_with_frozen_defaults()
+-> Result<(), linkage_blaze_core::Error> {
     let body_params = [0.62, 0.37, 0.81, 0.18];
     let mut full_params = full_pirouette_defaults();
     let full_view = PIROUETTE.view();
@@ -84,13 +85,13 @@ fn pirouette_body_matches_full_linkage_with_frozen_defaults() {
 
     let body_view = PIROUETTE_BODY.view();
     assert_pose_close(
-        full_view.final_pose(&full_params),
-        body_view.final_pose(&body_params),
+        full_view.final_pose(&full_params)?,
+        body_view.final_pose(&body_params)?,
         1e-3,
     );
 
-    let mut full_draw_items_3d = full_view.draw_items_3d(&full_params);
-    let mut body_draw_items_3d = body_view.draw_items_3d(&body_params);
+    let mut full_draw_items_3d = full_view.draw_items_3d(&full_params)?;
+    let mut body_draw_items_3d = body_view.draw_items_3d(&body_params)?;
     let mut item_count = 0;
     loop {
         match (full_draw_items_3d.next(), body_draw_items_3d.next()) {
@@ -105,10 +106,11 @@ fn pirouette_body_matches_full_linkage_with_frozen_defaults() {
     }
 
     assert!(item_count > 0);
+    Ok(())
 }
 
 #[test]
-fn pirouette_body_optimized_matches_original() {
+fn pirouette_body_optimized_matches_original() -> Result<(), linkage_blaze_core::Error> {
     // PIROUETTE_BODY_OPT has fewer steps but must evaluate identically to
     // PIROUETTE_BODY at every input.
     let full = PIROUETTE_BODY.view();
@@ -122,20 +124,24 @@ fn pirouette_body_optimized_matches_original() {
         [1.0, 1.0, 1.0, 1.0],
         [0.25, 0.75, 0.1, 0.9],
     ] {
-        assert_pose_close(full.final_pose(&params), opt.final_pose(&params), 1e-4);
+        assert_pose_close(full.final_pose(&params)?, opt.final_pose(&params)?, 1e-4);
 
         let mut n = 0;
-        for (u, o) in full.draw_items_3d(&params).zip(opt.draw_items_3d(&params)) {
+        for (u, o) in full
+            .draw_items_3d(&params)?
+            .zip(opt.draw_items_3d(&params)?)
+        {
             assert_draw_item_3d_close(u, o, 1e-4);
             n += 1;
         }
         assert!(n > 0);
     }
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn pirouette_body_const_opt_matches_buf_opt() {
+fn pirouette_body_const_opt_matches_buf_opt() -> Result<(), linkage_blaze_core::Error> {
     // Build the same pipeline through LinkageBuf and verify identical evaluation.
     let buf_result = LinkageBuf::<4, 6>::from(&PIROUETTE_BODY).compact();
 
@@ -148,16 +154,18 @@ fn pirouette_body_const_opt_matches_buf_opt() {
         [0.62, 0.37, 0.81, 0.18],
     ] {
         assert_pose_close(
-            PIROUETTE_BODY_OPT.view().final_pose(&params),
-            buf_result.view().final_pose(&params),
+            PIROUETTE_BODY_OPT.view().final_pose(&params)?,
+            buf_result.view().final_pose(&params)?,
             1e-4,
         );
     }
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn pirouette_fixed_and_buf_freeze_retain_produce_same_result() {
+fn pirouette_fixed_and_buf_freeze_retain_produce_same_result()
+-> Result<(), linkage_blaze_core::Error> {
     // Load the full pirouette as a LinkageBuf, apply the same freeze+retain
     // pipeline as the const PIROUETTE_BODY, and verify the two paths agree.
     let buf_body = LinkageBuf::<132, 6>::from(&PIROUETTE)
@@ -179,11 +187,12 @@ fn pirouette_fixed_and_buf_freeze_retain_produce_same_result() {
         [0.62, 0.37, 0.81, 0.18],
     ] {
         assert_pose_close(
-            PIROUETTE_BODY.view().final_pose(&params),
-            buf_body.view().final_pose(&params),
+            PIROUETTE_BODY.view().final_pose(&params)?,
+            buf_body.view().final_pose(&params)?,
             1e-4,
         );
     }
+    Ok(())
 }
 
 fn full_pirouette_defaults() -> [f32; 132] {

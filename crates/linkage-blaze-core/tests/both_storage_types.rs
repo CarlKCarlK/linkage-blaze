@@ -30,40 +30,43 @@ const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 128> =
     linkage_fixed!("linkages/clock.lb.rs", 2, 2, 128);
 
 #[test]
-fn linkage_fixed_include_works_in_function_body() {
+fn linkage_fixed_include_works_in_function_body() -> Result<(), linkage_blaze_core::Error> {
     let clock: LinkageFixed<2, 2, 128> = linkage_fixed!("linkages/clock.lb.rs");
     let clock_explicit = linkage_fixed!("linkages/clock.lb.rs", 2, 2, 128);
 
     assert_eq!(clock.view().dof(), 2);
     assert_eq!(clock_explicit.view().dof(), 2);
     let params = [0.25_f32, 0.5];
-    let p_ref = CLOCK_FIXED.view().final_pose(&params).position();
-    let p_const_explicit = CLOCK_FIXED_EXPLICIT.view().final_pose(&params).position();
-    let p_local = clock.view().final_pose(&params).position();
+    let p_ref = CLOCK_FIXED.view().final_pose(&params)?.position();
+    let p_const_explicit = CLOCK_FIXED_EXPLICIT.view().final_pose(&params)?.position();
+    let p_local = clock.view().final_pose(&params)?.position();
     assert!(p_ref.is_close_to(&p_const_explicit, 1e-5));
     assert!(p_ref.is_close_to(&p_local, 1e-5));
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn linkage_buf_include_works() {
+fn linkage_buf_include_works() -> Result<(), linkage_blaze_core::Error> {
     let clock = linkage_buf!("linkages/clock.lb.rs", 2, 2);
     let clock_explicit = linkage_buf!("linkages/clock.lb.rs", 2, 2);
 
     assert_eq!(clock.view().dof(), 2);
     assert_eq!(clock_explicit.view().dof(), 2);
     let params = [0.25_f32, 0.5];
-    let p_fixed = CLOCK_FIXED.view().final_pose(&params).position();
-    let p_buf = clock.view().final_pose(&params).position();
+    let p_fixed = CLOCK_FIXED.view().final_pose(&params)?.position();
+    let p_buf = clock.view().final_pose(&params)?.position();
     assert!(p_fixed.is_close_to(&p_buf, 1e-5));
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn clock_from_file_both_storage_types() {
+fn clock_from_file_both_storage_types() -> Result<(), linkage_blaze_core::Error> {
     let buf = linkage_buf!("linkages/clock.lb.rs", 2, 2);
     let params = [0.25, 0.5];
-    assert_linkages_equivalent(&CLOCK_FIXED, &buf, &params);
+    assert_linkages_equivalent(&CLOCK_FIXED, &buf, &params)?;
+    Ok(())
 }
 
 // ── Application-level linkage tests ──────────────────────────────────────────
@@ -75,10 +78,11 @@ fn clock_hands_fixed_dims() {
 }
 
 #[test]
-fn clock_hands_fixed_and_buf_equivalent() {
+fn clock_hands_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let buf = LinkageBuf::from(&CLOCK_HANDS);
     let params = [0.3_f32, 0.7];
-    assert_linkages_equivalent(&CLOCK_HANDS, &buf, &params);
+    assert_linkages_equivalent(&CLOCK_HANDS, &buf, &params)?;
+    Ok(())
 }
 
 #[test]
@@ -102,26 +106,28 @@ fn armatron_component_linkages_fixed_dims() {
 }
 
 #[test]
-fn armatron_component_linkages_fixed_and_buf_equivalent() {
+fn armatron_component_linkages_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let camera_control_buf = linkage_buf!("linkages/camera_control.lb.rs", 3, 1);
     let armatron1_buf = linkage_buf!("linkages/armatron1.lb.rs", 6, 1);
 
     let vc_params = [0.5_f32, 0.4, 0.6];
-    assert_linkages_equivalent(&CAMERA_CONTROL, &camera_control_buf, &vc_params);
+    assert_linkages_equivalent(&CAMERA_CONTROL, &camera_control_buf, &vc_params)?;
 
     let arm_params = [0.5_f32, 0.5, 0.0, 0.5, 0.5, 0.5];
-    assert_linkages_equivalent(&ARMATRON1, &armatron1_buf, &arm_params);
+    assert_linkages_equivalent(&ARMATRON1, &armatron1_buf, &arm_params)?;
+    Ok(())
 }
 
 #[test]
-fn armatron_grid_fixed_and_buf_equivalent() {
+fn armatron_grid_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let grid_buf = linkage_buf!("linkages/grid_9x9.lb.rs", 0, 1);
     let params: [f32; 0] = [];
-    assert_linkages_equivalent(&GRID_9X9, &grid_buf, &params);
+    assert_linkages_equivalent(&GRID_9X9, &grid_buf, &params)?;
+    Ok(())
 }
 
 #[test]
-fn armatron_combined_linkages_fixed_and_buf_equivalent() {
+fn armatron_combined_linkages_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let full_buf = LinkageBuf::from(&ARMATRON_LINKAGE);
     let rk_buf = LinkageBuf::from(&ARMATRON_RK_LINKAGE);
 
@@ -130,12 +136,13 @@ fn armatron_combined_linkages_fixed_and_buf_equivalent() {
 
     assert_eq!(full_buf.view().dof(), 15);
     assert_eq!(full_buf.view().len(), ARMATRON_LINKAGE.view().len());
-    assert_linkages_equivalent(&ARMATRON_LINKAGE, &full_buf, &full_params);
-    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_buf, &rk_params);
+    assert_linkages_equivalent(&ARMATRON_LINKAGE, &full_buf, &full_params)?;
+    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_buf, &rk_params)?;
+    Ok(())
 }
 
 #[test]
-fn armatron_full_scene_linkage_built_with_buf() {
+fn armatron_full_scene_linkage_built_with_buf() -> Result<(), linkage_blaze_core::Error> {
     // Each file loaded exactly once; DOF is in the macro, not the binding.
     let armatron1 = linkage_buf!("linkages/armatron1.lb.rs", 6, 1);
     let camera_control = linkage_buf!("linkages/camera_control.lb.rs", 3, 1);
@@ -160,13 +167,14 @@ fn armatron_full_scene_linkage_built_with_buf() {
 
     let full_params = [0.5_f32; 15];
     let rk_params = [0.5_f32; 9];
-    assert_linkages_equivalent(&ARMATRON_LINKAGE, &full_linkage, &full_params);
-    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_linkage, &rk_params);
+    assert_linkages_equivalent(&ARMATRON_LINKAGE, &full_linkage, &full_params)?;
+    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_linkage, &rk_params)?;
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn conversion_linkage_fixed_to_buf() {
+fn conversion_linkage_fixed_to_buf() -> Result<(), linkage_blaze_core::Error> {
     const FIXED: LinkageFixed<2, 0, 16> = LinkageFixed::start()
         .define_param("x", 0.5)
         .define_param("y", 0.75)
@@ -176,8 +184,8 @@ fn conversion_linkage_fixed_to_buf() {
     let buf = LinkageBuf::from(&FIXED);
 
     let params = [0.5, 0.75];
-    let fixed_result = FIXED.view().final_pose(&params);
-    let buf_result = buf.view().final_pose(&params);
+    let fixed_result = FIXED.view().final_pose(&params)?;
+    let buf_result = buf.view().final_pose(&params)?;
 
     assert!(
         fixed_result
@@ -185,11 +193,12 @@ fn conversion_linkage_fixed_to_buf() {
             .is_close_to(&buf_result.position(), 1e-5),
         "Converted linkage should produce same results"
     );
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn linkage_buf_combine_combines_params_and_steps() {
+fn linkage_buf_combine_combines_params_and_steps() -> Result<(), linkage_blaze_core::Error> {
     let a = LinkageBuf::<1, 0>::start()
         .define_param("x", 0.5)
         .forward_param("x", 0.0, 10.0);
@@ -202,7 +211,7 @@ fn linkage_buf_combine_combines_params_and_steps() {
     let c: LinkageBuf<2, 0> = a.combine(b);
 
     let params = [0.5, 0.75];
-    let final_pose = c.view().final_pose(&params);
+    let final_pose = c.view().final_pose(&params)?;
 
     assert!(
         final_pose
@@ -211,11 +220,12 @@ fn linkage_buf_combine_combines_params_and_steps() {
         "Combined linkage should produce correct pose: got {:?}",
         final_pose.position()
     );
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn linkage_buf_combine_ref_combines_from_view() {
+fn linkage_buf_combine_ref_combines_from_view() -> Result<(), linkage_blaze_core::Error> {
     const FIXED_A: LinkageFixed<1, 0, 8> = LinkageFixed::start()
         .define_param("x", 0.5)
         .forward_param("x", 0.0, 10.0);
@@ -231,18 +241,19 @@ fn linkage_buf_combine_ref_combines_from_view() {
     let combined: LinkageBuf<2, 0> = buf_a.combine_ref(view_b);
 
     let params = [0.5, 0.75];
-    let pose = combined.view().final_pose(&params);
+    let pose = combined.view().final_pose(&params)?;
 
     assert!(
         pose.position()
             .is_close_to(&linkage_blaze_core::Vec3::from([5.0, 3.75, 0.0]), 1e-5),
         "Extended linkage should produce correct pose"
     );
+    Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn armatron_buf_combine_combines_limbs() {
+fn armatron_buf_combine_combines_limbs() -> Result<(), linkage_blaze_core::Error> {
     // Build arm limbs separately as LinkageBuf instances
     // Upper arm: rotate with spin_whole_arm, move forward
     let upper_arm: LinkageBuf<2, 0> = LinkageBuf::start()
@@ -265,7 +276,7 @@ fn armatron_buf_combine_combines_limbs() {
     let combined_arm: LinkageBuf<3, 0> = upper_arm.combine(forearm);
 
     let params = [0.5, 0.5, 0.5]; // spin_whole_arm, lower_arm, bend_elbow
-    let pose = combined_arm.view().final_pose(&params);
+    let pose = combined_arm.view().final_pose(&params)?;
 
     let steps = combined_arm.view().len();
     // 1 Start + 1 yaw + 1 pen_color + 1 pen_width + 1 up + 1 pitch + 1 forward (from upper_arm)
@@ -281,4 +292,5 @@ fn armatron_buf_combine_combines_limbs() {
         final_position[2] >= 2.0, // Should be up by at least 2.5
         "Combined arm should maintain height from upper arm"
     );
+    Ok(())
 }

@@ -4,13 +4,19 @@
 
 use core::{convert::Infallible, fmt, iter};
 
-use device_envoy_core::UnwrapInfallible;
-use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
-use device_envoy_core::cyd::{
-    CydDisplay,
-    display::{
-        CydFrame, DrawItem, Image565Fixed, Image565View, Orientation, tga,
-        tiling::max_rectangle_pixel_count,
+use crate::{
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Projection, linkage,
+    linkage_fixed,
+};
+use device_envoy_core::{
+    UnwrapInfallible,
+    clock_sync::{ClockSync, h12_m_s},
+    cyd::{
+        CydDisplay,
+        display::{
+            CydFrame, DrawItem, Image565Fixed, Image565View, Orientation, tga,
+            tiling::max_rectangle_pixel_count,
+        },
     },
 };
 use embedded_graphics::{
@@ -21,9 +27,6 @@ use embedded_graphics::{
     prelude::{Point, Size},
     primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder},
-};
-use crate::{
-    DrawItem3dExt, LinkageFixed, LinkageView, Projection, linkage, linkage_fixed,
 };
 use log::info;
 use profont::PROFONT_18_POINT;
@@ -107,7 +110,7 @@ where
         // 3D draw items into pixel-space 2D draw items.
         let params = linkage_params(local_time);
         let draw_items_2d = LINKAGE
-            .draw_items_3d(&params)
+            .draw_items_3d(&params)?
             .map(|draw_item_3d| draw_item_3d.project(&PROJECTION));
 
         // Stream the pixels row-major straight to the display with no frame or
@@ -142,6 +145,8 @@ where
 /// [`skeleton_clock::Error`](crate::skeleton_clock::Error).
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
+    /// A runtime linkage parameter was invalid.
+    Linkage(LinkageError),
     /// Formatting the time string failed.
     Text(fmt::Error),
     /// Flushing a frame to the display failed.

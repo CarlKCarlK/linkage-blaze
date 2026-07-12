@@ -7,8 +7,8 @@ use core::{
 };
 
 use crate::{
-    DrawItem3dExt, LinkageFixed, LinkageView, Point, Projection, Rgb888, bvh_motion,
-    bvh_parse::BvhMotion, linkage, linkage_fixed,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
+    bvh_motion, bvh_parse::BvhMotion, linkage, linkage_fixed,
 };
 use device_envoy_core::cyd::{
     CydDisplay,
@@ -78,7 +78,7 @@ where
             BACKGROUND_BITMAP.copy_to(&mut cyd_frame)?;
 
             // Apply the mocap params to the linkage and draw everything to the frame.
-            for draw_item_3d in LINKAGE.draw_items_3d(&params) {
+            for draw_item_3d in LINKAGE.draw_items_3d(&params)? {
                 draw_item_3d.project(&PROJECTION).draw(&mut cyd_frame);
             }
 
@@ -133,6 +133,8 @@ pub struct StatusTextError(pub fmt::Error);
 /// Errors from the generic ballet loop.
 #[derive(Debug, derive_more::From)]
 pub enum Error<FlushError> {
+    /// A runtime linkage parameter was invalid.
+    Linkage(LinkageError),
     /// Formatting the status line failed.
     StatusText(StatusTextError),
     /// A device-envoy-core operation failed (for example, the background bitmap's

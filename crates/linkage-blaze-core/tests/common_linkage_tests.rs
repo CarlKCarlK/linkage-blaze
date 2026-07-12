@@ -7,7 +7,7 @@ pub fn assert_linkages_equivalent<const DOF: usize, const MARKS: usize>(
     linkage_fixed: &impl Linkage<DOF, MARKS>,
     linkage_buf: &impl Linkage<DOF, MARKS>,
     params: &[f32; DOF],
-) {
+) -> Result<(), linkage_blaze_core::Error> {
     // Compare basic properties
     assert_eq!(
         linkage_fixed.view().dof(),
@@ -21,8 +21,8 @@ pub fn assert_linkages_equivalent<const DOF: usize, const MARKS: usize>(
     );
 
     // Compare evaluation results
-    let fixed_final = linkage_fixed.view().final_pose(params);
-    let buf_final = linkage_buf.view().final_pose(params);
+    let fixed_final = linkage_fixed.view().final_pose(params)?;
+    let buf_final = linkage_buf.view().final_pose(params)?;
 
     assert!(
         fixed_final
@@ -41,11 +41,12 @@ pub fn assert_linkages_equivalent<const DOF: usize, const MARKS: usize>(
     );
 
     // Count draw items - both should produce the same number
-    let fixed_items: Vec<_> = linkage_fixed.view().draw_items_3d(params).collect();
-    let buf_items: Vec<_> = linkage_buf.view().draw_items_3d(params).collect();
+    let fixed_items: Vec<_> = linkage_fixed.view().draw_items_3d(params)?.collect();
+    let buf_items: Vec<_> = linkage_buf.view().draw_items_3d(params)?.collect();
     assert_eq!(
         fixed_items.len(),
         buf_items.len(),
         "Number of draw items should match"
     );
+    Ok(())
 }

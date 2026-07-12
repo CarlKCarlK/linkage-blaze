@@ -5,10 +5,13 @@
 use core::{array::from_fn, convert::Infallible, fmt};
 
 use crate::{
-    DrawItem3dExt, LinkageFixed, LinkageView, MarkError, Projection, Rgb888, linkage, linkage_fixed,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, MarkError, Projection, Rgb888,
+    linkage, linkage_fixed,
 };
-use device_envoy_core::UnwrapInfallible;
-use device_envoy_core::clock_sync::{ClockSync, h12_m_s};
+use device_envoy_core::{
+    UnwrapInfallible,
+    clock_sync::{ClockSync, h12_m_s},
+};
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_7X13, ascii::FONT_10X20},
@@ -143,7 +146,7 @@ where
         let params = linkage_params(local_time);
 
         // Create an iterator that will list every 3D item and its pose.
-        let mut draw_items_3d = LINKAGE.draw_items_3d(&params);
+        let mut draw_items_3d = LINKAGE.draw_items_3d(&params)?;
 
         // // Iterate 3d items, project to 2D, and collect 2D items and poses.
         let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_3d_count() }>::new();
@@ -440,6 +443,8 @@ fn mark_lookup<T>(result: Result<T, MarkError>) -> Result<T, MarkLookupError> {
 /// be greedy enough to collide with that concrete `From` under coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
+    /// A runtime linkage parameter was invalid.
+    Linkage(LinkageError),
     /// Flushing a frame to the display failed.
     #[from(ignore)]
     Flush(F),

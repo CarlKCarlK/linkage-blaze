@@ -1,4 +1,4 @@
-use crate::{LinkageFixed, Pose, Vec3};
+use crate::{Error, LinkageFixed, Pose, Vec3};
 use core::convert::Infallible;
 use embedded_graphics::{
     draw_target::DrawTarget,
@@ -12,8 +12,8 @@ use std::{
     boxed::Box,
     env,
     error::Error,
-    format, fs,
-    fs::File,
+    format,
+    fs::{self, File},
     io::BufWriter,
     path::{Path, PathBuf},
     println, process,
@@ -207,8 +207,10 @@ impl OriginDimensions for Canvas {
 pub(super) fn draw_linkage_xy_canvas<const DOF: usize, const MARKS: usize, const N: usize>(
     linkage: &LinkageFixed<DOF, MARKS, N>,
     params: &[f32; DOF],
-) -> Canvas {
-    draw_linkage_xy_canvas_from_poses(linkage.view().poses(params))
+) -> Result<Canvas, Error> {
+    let view = linkage.view();
+    let poses = view.poses(params)?;
+    Ok(draw_linkage_xy_canvas_from_poses(poses))
 }
 
 fn draw_linkage_xy_canvas_from_poses<I>(poses: I) -> Canvas

@@ -10,12 +10,15 @@ mod controls;
 pub mod reverse_kinematics;
 
 use crate::{
-    DrawItem3dExt, LinkageFixed, LinkageView, Projection, Rgb888, Vec3, linkage, linkage_fixed,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Projection, Rgb888, Vec3,
+    linkage, linkage_fixed,
 };
-use device_envoy_core::button::Button;
-use device_envoy_core::cyd::{
-    Cyd, CydDisplay, CydTouch,
-    display::{CydFrame, Orientation},
+use device_envoy_core::{
+    button::Button,
+    cyd::{
+        Cyd, CydDisplay, CydTouch,
+        display::{CydFrame, Orientation},
+    },
 };
 use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
@@ -138,7 +141,7 @@ where
         // Scene first, UI on top: params here were updated by last frame's
         // widgets, so input affects the scene with the standard one-frame
         // immediate-mode latency.
-        for draw_item_3d in LINKAGE.draw_items_3d(&params) {
+        for draw_item_3d in LINKAGE.draw_items_3d(&params)? {
             draw_item_3d.project(&PROJECTION).draw(&mut frame);
         }
 
@@ -170,7 +173,7 @@ where
         }
 
         if ui.icon_button(&mut frame, reverse_kinematics.run_button())? {
-            reverse_kinematics.toggle(&params);
+            reverse_kinematics.toggle(&params)?;
         }
         let hold_button_state = ui.hold_button(&mut frame, &RK_STEP_BUTTON)?;
 
@@ -185,15 +188,15 @@ where
                 .as_micros() as f32
                 / 1_000_000.0
         });
-        reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds);
-        reverse_kinematics.tick(&mut params, dt_seconds);
+        reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds)?;
+        reverse_kinematics.tick(&mut params, dt_seconds)?;
 
         ui.label(
             &mut frame,
             &TARGET_LABEL,
             format_args!("target #{target_seed}"),
         )?;
-        let distance_hundredths = target_distance_hundredths(&params);
+        let distance_hundredths = target_distance_hundredths(&params)?;
         ui.label(
             &mut frame,
             &DISTANCE_LABEL,
@@ -301,6 +304,8 @@ mod tests {
 /// coherence.
 #[derive(Debug, derive_more::From)]
 pub enum Error<F> {
+    /// A runtime linkage parameter was invalid.
+    Linkage(LinkageError),
     /// A UI widget failed (text formatting; draw is infallible here).
     Ui(UiError<core::convert::Infallible>),
     /// Reading touch events or flushing a frame failed.
@@ -317,9 +322,9 @@ fn randomize_target_from_seed(target_seed: u8, params: &mut [f32; DOF]) {
     }
 }
 
-fn target_distance_hundredths(params: &[f32; DOF]) -> u32 {
+fn target_distance_hundredths(params: &[f32; DOF]) -> Result<u32, LinkageError> {
     // Display bound: the label format only has room for "distance 99.99".
-    libm::roundf(target_distance(params).clamp(0.0, 99.99) * 100.0) as u32
+    Ok(libm::roundf(target_distance(params)?.clamp(0.0, 99.99) * 100.0) as u32)
 }
 
 fn next_fps_label(previous_tick: Option<Instant>, current_tick: Instant) -> Option<(u32, u32)> {
@@ -346,24 +351,27 @@ fn display_fps_since(previous_tick: Instant, current_tick: Instant) -> Option<(u
     })
 }
 
-fn arm_tip(rk_linkage: LinkageView<'_, 9, 2>, params: &[f32; DOF]) -> Vec3 {
+fn arm_tip(rk_linkage: LinkageView<'_, 9, 2>, params: &[f32; DOF]) -> Result<Vec3, LinkageError> {
     let mut arm_params = [0.0f32; TARGET_PARAM_START];
     arm_params.copy_from_slice(&params[..TARGET_PARAM_START]);
-    rk_linkage.final_pose(&arm_params).position()
+    Ok(rk_linkage.final_pose(&arm_params)?.position())
 }
 
-fn target_center(linkage: LinkageView<'_, 15, 4>, params: &[f32; DOF]) -> Vec3 {
-    linkage.final_pose(params).position()
+fn target_center(
+    linkage: LinkageView<'_, 15, 4>,
+    params: &[f32; DOF],
+) -> Result<Vec3, LinkageError> {
+    Ok(linkage.final_pose(params)?.position())
 }
 
 pub(super) fn compute_target_distance(
     rk_linkage: LinkageView<'_, 9, 2>,
     linkage: LinkageView<'_, 15, 4>,
     params: &[f32; DOF],
-) -> f32 {
-    arm_tip(rk_linkage, params).distance_to(target_center(linkage, params))
+) -> Result<f32, LinkageError> {
+    Ok(arm_tip(rk_linkage, params)?.distance_to(target_center(linkage, params)?))
 }
 
-fn target_distance(params: &[f32; DOF]) -> f32 {
+fn target_distance(params: &[f32; DOF]) -> Result<f32, LinkageError> {
     compute_target_distance(ARM_TIP_LINKAGE, LINKAGE, params)
 }

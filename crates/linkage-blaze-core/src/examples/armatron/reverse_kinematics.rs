@@ -13,7 +13,10 @@
 
 use crate::examples::ui::{HoldButtonState, IconButton};
 
-use super::controls::{RK_RUN_BUTTON, RK_STOP_BUTTON};
+use super::{
+    LinkageError,
+    controls::{RK_RUN_BUTTON, RK_STOP_BUTTON},
+};
 
 const INITIAL_STEP: f32 = 0.125;
 const MIN_STEP: f32 = 0.001;
@@ -47,17 +50,18 @@ impl ReverseKinematics {
     }
 
     /// Play/stop. Starting seeds the search from the current params.
-    pub(super) fn toggle(&mut self, params: &[f32; super::DOF]) {
+    pub(super) fn toggle(&mut self, params: &[f32; super::DOF]) -> Result<(), LinkageError> {
         self.search_candidate_budget = 0.0;
         self.hold_step_budget = 0.0;
 
         if self.playing {
             self.playing = false;
-            return;
+            return Ok(());
         }
 
-        self.ensure_run(params);
+        self.ensure_run(params)?;
         self.playing = true;
+        Ok(())
     }
 
     /// Called once per frame with the step button's hold state.
@@ -66,23 +70,24 @@ impl ReverseKinematics {
         params: &mut [f32; super::DOF],
         hold: HoldButtonState,
         dt_seconds: f32,
-    ) {
+    ) -> Result<(), LinkageError> {
         match hold {
             HoldButtonState::Idle => {
                 self.hold_step_budget = 0.0;
             }
             HoldButtonState::Pressed => {
                 self.playing = false;
-                self.ensure_run(params);
+                self.ensure_run(params)?;
                 self.hold_step_budget = 1.0;
-                self.consume_hold_steps(params);
+                self.consume_hold_steps(params)?;
             }
             HoldButtonState::Held => {
                 let dt_seconds = dt_seconds.clamp(0.0, MAX_TICK_SECONDS);
                 self.hold_step_budget += dt_seconds * HOLD_STEPS_PER_SECOND;
-                self.consume_hold_steps(params);
+                self.consume_hold_steps(params)?;
             }
         }
+        Ok(())
     }
 
     /// Forget the run and stop playing (manual interference, target change).
@@ -94,14 +99,18 @@ impl ReverseKinematics {
     }
 
     /// Per-frame advance while playing.
-    pub(super) fn tick(&mut self, params: &mut [f32; super::DOF], dt_seconds: f32) {
+    pub(super) fn tick(
+        &mut self,
+        params: &mut [f32; super::DOF],
+        dt_seconds: f32,
+    ) -> Result<(), LinkageError> {
         if !self.playing {
-            return;
+            return Ok(());
         }
 
         let Some(run) = self.run.as_mut() else {
             self.playing = false;
-            return;
+            return Ok(());
         };
 
         let dt_seconds = dt_seconds.clamp(0.0, MAX_TICK_SECONDS);
@@ -109,7 +118,7 @@ impl ReverseKinematics {
 
         while self.search_candidate_budget >= 1.0 {
             self.search_candidate_budget -= 1.0;
-            if !run.tick_search_candidate() {
+            if !run.tick_search_candidate()? {
                 self.search_candidate_budget = 0.0;
                 break;
             }
@@ -123,6 +132,7 @@ impl ReverseKinematics {
         if run.search_exhausted && !visible_moving {
             self.playing = false;
         }
+        Ok(())
     }
 
     /// The play or stop `IconButton` matching the current playing state.
@@ -134,21 +144,22 @@ impl ReverseKinematics {
         }
     }
 
-    fn ensure_run(&mut self, params: &[f32; super::DOF]) {
+    fn ensure_run(&mut self, params: &[f32; super::DOF]) -> Result<(), LinkageError> {
         if self.run.is_none() {
-            self.run = Some(Run::new(params));
+            self.run = Some(Run::new(params)?);
         }
+        Ok(())
     }
 
-    fn consume_hold_steps(&mut self, params: &mut [f32; super::DOF]) {
+    fn consume_hold_steps(&mut self, params: &mut [f32; super::DOF]) -> Result<(), LinkageError> {
         let Some(run) = self.run.as_mut() else {
             self.hold_step_budget = 0.0;
-            return;
+            return Ok(());
         };
 
         while self.hold_step_budget >= 1.0 {
             self.hold_step_budget -= 1.0;
-            run.tick_search_candidate();
+            run.tick_search_candidate()?;
             let visible_moving =
                 move_params_toward(params, &run.best_params, SINGLE_STEP_VISIBLE_PARAM_STEP);
             if run.search_exhausted && !visible_moving {
@@ -157,6 +168,7 @@ impl ReverseKinematics {
                 break;
             }
         }
+        Ok(())
     }
 }
 
@@ -190,48 +202,48 @@ enum Phase {
 }
 
 impl Run {
-    fn new(params: &[f32; super::DOF]) -> Self {
-        Self {
+    fn new(params: &[f32; super::DOF]) -> Result<Self, LinkageError> {
+        Ok(Self {
             search_params: *params,
             best_params: *params,
             best_distance: super::compute_target_distance(
                 super::ARM_TIP_LINKAGE,
                 super::LINKAGE,
                 params,
-            ),
+            )?,
             step: INITIAL_STEP,
             search_exhausted: false,
             candidate_index: 0,
             sweep_improved: false,
             phase: Phase::BeginCandidate,
-        }
+        })
     }
 
-    fn tick_search_candidate(&mut self) -> bool {
+    fn tick_search_candidate(&mut self) -> Result<bool, LinkageError> {
         let candidate_index = self.candidate_index;
         let mut searched = false;
 
         loop {
-            if !self.tick_search() {
+            if !self.tick_search()? {
                 self.search_exhausted = true;
-                return searched;
+                return Ok(searched);
             }
 
             searched = true;
             if matches!(self.phase, Phase::BeginCandidate)
                 && self.candidate_index != candidate_index
             {
-                return true;
+                return Ok(true);
             }
         }
     }
 
-    fn tick_search(&mut self) -> bool {
+    fn tick_search(&mut self) -> Result<bool, LinkageError> {
         loop {
             match self.phase {
                 Phase::BeginCandidate => {
                     if !self.prepare_next_candidate() {
-                        return false;
+                        return Ok(false);
                     }
 
                     if self.candidate_index >= super::ARM_PARAM_INDEXES.len() {
@@ -243,7 +255,7 @@ impl Run {
                                 bend_original,
                                 spin_original,
                             };
-                            return true;
+                            return Ok(true);
                         }
 
                         self.finish_candidate();
@@ -256,15 +268,15 @@ impl Run {
                     if high != original {
                         self.search_params[index] = high;
                         self.phase = Phase::EvaluateSingleHigh { index, original };
-                        return true;
+                        return Ok(true);
                     }
 
                     self.phase = Phase::EvaluateSingleHigh { index, original };
                 }
                 Phase::EvaluateSingleHigh { index, original } => {
-                    if self.keep_if_improved() {
+                    if self.keep_if_improved()? {
                         self.finish_candidate();
-                        return true;
+                        return Ok(true);
                     }
 
                     self.search_params[index] = original;
@@ -272,29 +284,29 @@ impl Run {
                     if low != original {
                         self.search_params[index] = low;
                         self.phase = Phase::EvaluateSingleLow { index, original };
-                        return true;
+                        return Ok(true);
                     }
 
                     self.finish_candidate();
-                    return true;
+                    return Ok(true);
                 }
                 Phase::EvaluateSingleLow { index, original } => {
-                    if !self.keep_if_improved() {
+                    if !self.keep_if_improved()? {
                         self.search_params[index] = original;
                     }
                     self.finish_candidate();
-                    return true;
+                    return Ok(true);
                 }
                 Phase::EvaluatePair {
                     bend_original,
                     spin_original,
                 } => {
-                    if !self.keep_if_improved() {
+                    if !self.keep_if_improved()? {
                         self.search_params[BEND_ELBOW_PARAM_INDEX] = bend_original;
                         self.search_params[SPIN_WHOLE_ARM_PARAM_INDEX] = spin_original;
                     }
                     self.finish_candidate();
-                    return true;
+                    return Ok(true);
                 }
             }
         }
@@ -316,19 +328,19 @@ impl Run {
         true
     }
 
-    fn keep_if_improved(&mut self) -> bool {
+    fn keep_if_improved(&mut self) -> Result<bool, LinkageError> {
         let distance = super::compute_target_distance(
             super::ARM_TIP_LINKAGE,
             super::LINKAGE,
             &self.search_params,
-        );
+        )?;
         if distance < self.best_distance {
             self.best_distance = distance;
             self.best_params = self.search_params;
             self.sweep_improved = true;
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 

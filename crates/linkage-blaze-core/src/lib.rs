@@ -47,26 +47,21 @@ pub mod examples {
 }
 
 #[cfg(feature = "alloc")]
-use alloc::borrow::ToOwned;
-#[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-#[cfg(feature = "alloc")]
-use alloc::format;
-#[cfg(feature = "alloc")]
-use alloc::string::String;
-#[cfg(feature = "alloc")]
-use alloc::vec::Vec;
+use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
 
-use core::convert::Infallible;
+use core::{convert::Infallible, fmt};
 
-use device_envoy_core::cyd::display::DrawItem as DrawItem2d;
-use device_envoy_core::pixel_target::{PixelTarget, fill_ellipse_pixels, pixel_put};
+use device_envoy_core::{
+    cyd::display::DrawItem as DrawItem2d,
+    pixel_target::{PixelTarget, fill_ellipse_pixels, pixel_put},
+};
 
-pub use math::{Mat3, Vec3};
-
-pub use embedded_graphics::pixelcolor::{Rgb565, Rgb888, WebColors};
-pub use embedded_graphics::prelude::{Point, RgbColor};
+pub use embedded_graphics::{
+    pixelcolor::{Rgb565, Rgb888, WebColors},
+    prelude::{Point, RgbColor},
+};
 use math::degrees_to_radians;
+pub use math::{Mat3, Vec3};
 
 /// A step in the robot arm linkage description.
 ///
@@ -234,7 +229,11 @@ impl VariableArg {
 ///     .forward_param("distance", 1.0, 5.0);
 ///
 /// // Get a view and evaluate
-/// let pose = LINKAGE.view().final_pose(&[0.5]);
+/// # fn example() -> Result<(), linkage_blaze_core::Error> {
+/// let pose = LINKAGE.view().final_pose(&[0.5])?;
+/// # let _ = pose;
+/// # Ok(())
+/// # }
 /// ```
 pub trait Linkage<const DOF: usize, const MARKS: usize> {
     /// Create a borrowed view for evaluation and rendering.
@@ -280,6 +279,29 @@ pub trait Linkage<const DOF: usize, const MARKS: usize> {
     }
 }
 
+/// Error returned when evaluating a linkage fails.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Error {
+    /// A parameter was outside the normalized range `0.0..=1.0`.
+    InvalidParameter { index: usize, value: f32 },
+    /// The linkage did not produce its required implicit start pose.
+    EmptyLinkage,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidParameter { index, value } => {
+                write!(formatter, "parameter {index} is out of range: {value}")
+            }
+            Self::EmptyLinkage => formatter.write_str("linkage produced no poses"),
+        }
+    }
+}
+
+#[cfg(test)]
+impl std::error::Error for Error {}
+
 /// A borrowed view of a linkage for evaluation and rendering.
 ///
 /// `LinkageView` erases the step capacity `N` while preserving the degree-of-freedom `DOF`.
@@ -293,9 +315,12 @@ pub trait Linkage<const DOF: usize, const MARKS: usize> {
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
-/// let view = LINKAGE.view();
-/// let pose = view.final_pose(&[0.5]);
+/// # fn example() -> Result<(), linkage_blaze_core::Error> {
+/// # let view = LINKAGE.view();
+/// let pose = view.final_pose(&[0.5])?;
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+/// # Ok(())
+/// # }
 /// ```
 /// A borrowed view of a linkage for evaluation and rendering.
 ///
@@ -596,14 +621,15 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .yaw_param("yaw", -90.0, 90.0)
     ///     .forward_param("distance", 1.0, 5.0);
     ///
-    /// let view = LINKAGE.view();
-    /// let pose = view.final_pose(&[0.5, 0.6]);
+    /// # fn example() -> Result<(), linkage_blaze_core::Error> {
+    /// # let view = LINKAGE.view();
+    /// let pose = view.final_pose(&[0.5, 0.6])?;
     /// assert!(pose.position().is_close_to(&Vec3::from([3.4, 0.0, 0.0]), 1e-5));
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn final_pose(&self, params: &[f32; DOF]) -> Pose {
-        self.poses(params)
-            .last()
-            .expect("linkage must yield at least the implicit start pose")
+    pub fn final_pose(&self, params: &[f32; DOF]) -> Result<Pose, Error> {
+        self.poses(params)?.last().ok_or(Error::EmptyLinkage)
     }
 
     /// Iterate over all intermediate poses produced by evaluating this linkage.
@@ -616,15 +642,21 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .define_param("distance", 0.5)
     ///     .forward_param("distance", 1.0, 5.0);
     ///
-    /// let view = LINKAGE.view();
-    /// let mut poses = view.poses(&[0.5]);
+    /// # fn example() -> Result<(), linkage_blaze_core::Error> {
+    /// # let view = LINKAGE.view();
+    /// let mut poses = view.poses(&[0.5])?;
     /// let start = poses.next().expect("linkage always has start pose");
     /// assert!(start.position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
     /// let end = poses.next().expect("forward step exists");
     /// assert!(end.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn poses<'b>(&'b self, params: &'b [f32; DOF]) -> impl Iterator<Item = Pose> + 'b {
-        self.styled_poses(params).map(|sp| sp.pose())
+    pub fn poses<'b>(
+        &'b self,
+        params: &'b [f32; DOF],
+    ) -> Result<impl Iterator<Item = Pose> + 'b, Error> {
+        Ok(self.styled_poses(params)?.map(|sp| sp.pose()))
     }
 
     /// Iterate over all styled poses with their pen state.
@@ -637,19 +669,22 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
-    /// let view = LINKAGE.view();
-    /// let mut styled = view.styled_poses(&[]);
+    /// # fn example() -> Result<(), linkage_blaze_core::Error> {
+    /// # let view = LINKAGE.view();
+    /// let mut styled = view.styled_poses(&[])?;
     /// let start = styled.next().expect("has start");
     /// assert!(start.pose().position().is_close_to(&Vec3::from([0.0, 0.0, 0.0]), 1e-5));
     /// assert_eq!(start.pen(), PenState::Down);
     /// styled.next().expect("has first forward");
     /// let end = styled.next().expect("has second forward");
     /// assert!(end.pose().position()[0] > 2.9);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn styled_poses<'b>(
         &'b self,
         params: &'b [f32; DOF],
-    ) -> impl Iterator<Item = StyledPose> + 'b {
+    ) -> Result<impl Iterator<Item = StyledPose> + 'b, Error> {
         StyledPosesView::<DOF, MARKS>::new(self.steps, params)
     }
 
@@ -663,12 +698,18 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
-    /// let view = LINKAGE.view();
-    /// let has_stroke = view.draw_items_3d(&[])
+    /// # fn example() -> Result<(), linkage_blaze_core::Error> {
+    /// # let view = LINKAGE.view();
+    /// let has_stroke = view.draw_items_3d(&[])?
     ///     .any(|item| matches!(item, DrawItem3d::Stroke(_)));
     /// assert!(has_stroke);
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn draw_items_3d<'b>(&'b self, params: &'b [f32; DOF]) -> DrawItem3dIter<'b, DOF, MARKS> {
+    pub fn draw_items_3d<'b>(
+        &'b self,
+        params: &'b [f32; DOF],
+    ) -> Result<DrawItem3dIter<'b, DOF, MARKS>, Error> {
         DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
     }
 
@@ -2276,7 +2317,7 @@ impl<'a, const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageVi
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
-/// let pose = linkage.view().final_pose(&[0.5]);
+/// let pose = linkage.view().final_pose(&[0.5])?;
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
 /// # }
 /// ```
@@ -2292,7 +2333,7 @@ impl<'a, const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageVi
 ///     .forward_param("distance", 1.0, 5.0);
 ///
 /// let buf = LinkageBuf::from(&FIXED);
-/// let pose = buf.view().final_pose(&[0.5]);
+/// let pose = buf.view().final_pose(&[0.5])?;
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
 /// # }
 /// ```
@@ -2493,7 +2534,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// // The output annotation supplies the combined DOF and mark capacities.
     /// let c: LinkageBuf<2, 0> = a.combine(b);
     /// let params = [0.5, 0.5];
-    /// let pose = c.view().final_pose(&params);
+    /// let pose = c.view().final_pose(&params)?;
     /// # }
     /// ```
     pub fn combine<
@@ -3277,14 +3318,14 @@ const fn assert_raw_value_in_range(variable_arg: VariableArg, physical: f32) {
     );
 }
 
-fn validate_params<const DOF: usize>(params: &[f32; DOF]) {
-    for param_index in 0..DOF {
-        //todo0 review whether panicking is the right long-term out-of-range behavior.
-        assert!(
-            (0.0..=1.0).contains(&params[param_index]),
-            "parameter is out of range"
-        );
+fn validate_params<const DOF: usize>(params: &[f32; DOF]) -> Result<(), Error> {
+    for (index, &value) in params.iter().enumerate() {
+        if !(0.0..=1.0).contains(&value) {
+            return Err(Error::InvalidParameter { index, value });
+        }
     }
+
+    Ok(())
 }
 
 fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
@@ -3577,9 +3618,9 @@ struct StyledPosesView<'a, const DOF: usize, const MARKS: usize> {
 }
 
 impl<'a, const DOF: usize, const MARKS: usize> StyledPosesView<'a, DOF, MARKS> {
-    fn new(steps: &'a [Step], params_values: &'a [f32; DOF]) -> Self {
-        validate_params(params_values);
-        Self {
+    fn new(steps: &'a [Step], params_values: &'a [f32; DOF]) -> Result<Self, Error> {
+        validate_params(params_values)?;
+        Ok(Self {
             steps,
             params: params_values,
             index: 0,
@@ -3589,7 +3630,7 @@ impl<'a, const DOF: usize, const MARKS: usize> StyledPosesView<'a, DOF, MARKS> {
                 pose: Pose::start(),
                 pen_style: PenStyle::new(),
             }; MARKS],
-        }
+        })
     }
 }
 
@@ -3652,9 +3693,9 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItem3dIter<'a, DOF, MARKS> {
         steps: &'a [Step],
         mark_names: &'a [&'static str; MARKS],
         params_values: &'a [f32; DOF],
-    ) -> Self {
-        validate_params(params_values);
-        Self {
+    ) -> Result<Self, Error> {
+        validate_params(params_values)?;
+        Ok(Self {
             steps,
             mark_names,
             params: params_values,
@@ -3665,7 +3706,7 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItem3dIter<'a, DOF, MARKS> {
                 pose: Pose::start(),
                 pen_style: PenStyle::new(),
             }; MARKS],
-        }
+        })
     }
 
     /// Return the pose recorded at the named mark at the current point in iteration.
@@ -4266,7 +4307,8 @@ mod tests {
     #[cfg(feature = "alloc")]
     use super::LinkageBuf;
     use super::{
-        Arg, DrawItem3d, LinkageFixed, Mat3, Point, Pose, Projection, Rgb565, Rgb888, Step, Vec3,
+        Arg, DrawItem3d, Error, LinkageFixed, Mat3, Point, Pose, Projection, Rgb565, Rgb888, Step,
+        Vec3,
     };
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
@@ -4275,7 +4317,7 @@ mod tests {
     use device_envoy_core::pixel_target::{
         rgb565_from_rgb888, rgb565_from_rgb888_components, rgb888_from_rgb565,
     };
-    use std::{boxed::Box, error::Error};
+    use std::{boxed::Box, error::Error as StdError};
 
     const LINKAGE0: LinkageFixed<6, 0, 24> = LinkageFixed::start()
         .define_param("raise hand", 0.5)
@@ -4389,13 +4431,13 @@ mod tests {
     }
 
     #[test]
-    fn zero_pen_width_still_draws() {
+    fn zero_pen_width_still_draws() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<0, 0, 4> = LinkageFixed::start().pen_width(0.0).forward(1.0);
 
         let params = [];
         let draw_item_3d = LINKAGE
             .view()
-            .draw_items_3d(&params)
+            .draw_items_3d(&params)?
             .next()
             .expect("zero-width pen should still produce a stroke");
 
@@ -4405,6 +4447,7 @@ mod tests {
             }
             _ => panic!("expected stroke from zero-width pen"),
         }
+        Ok(())
     }
 
     #[cfg(feature = "alloc")]
@@ -4433,7 +4476,7 @@ mod tests {
 
     #[cfg(feature = "alloc")]
     #[test]
-    fn parses_lb_rs_into_linkage_buf() {
+    fn parses_lb_rs_into_linkage_buf() -> Result<(), Box<dyn StdError>> {
         let source = r#"linkage![
     .define_param("distance", 0.5)
     .pen_color(Rgb888::new(10, 20, 30))
@@ -4441,12 +4484,13 @@ mod tests {
 ]"#;
 
         let linkage = LinkageBuf::<1, 0>::from_lb_rs(source).expect("source should parse");
-        let pose = linkage.view().final_pose(&[0.5]);
+        let pose = linkage.view().final_pose(&[0.5])?;
 
         assert!(
             pose.position()
                 .is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5)
         );
+        Ok(())
     }
 
     #[cfg(feature = "alloc")]
@@ -4461,47 +4505,51 @@ mod tests {
     }
 
     #[test]
-    fn forward_moves_along_positive_x() {
+    fn forward_moves_along_positive_x() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<0, 0, 2> = LinkageFixed::start().forward(10.0);
 
         let params = [];
-        let actual = LINKAGE.view().final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params)?.position();
 
         assert!(actual.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-6));
+        Ok(())
     }
 
     #[test]
-    fn yaw_then_forward_moves_along_positive_y() {
+    fn yaw_then_forward_moves_along_positive_y() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<0, 0, 3> = LinkageFixed::start().yaw(90.0).forward(10.0);
 
         let params = [];
-        let actual = LINKAGE.view().final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params)?.position();
 
         assert!(actual.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-5));
+        Ok(())
     }
 
     #[test]
-    fn left_moves_along_positive_y() {
+    fn left_moves_along_positive_y() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<0, 0, 2> = LinkageFixed::start().left(10.0);
 
         let params = [];
-        let actual = LINKAGE.view().final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params)?.position();
 
         assert!(actual.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-6));
+        Ok(())
     }
 
     #[test]
-    fn up_moves_along_positive_z() {
+    fn up_moves_along_positive_z() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<0, 0, 2> = LinkageFixed::start().up(10.0);
 
         let params = [];
-        let actual = LINKAGE.view().final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params)?.position();
 
         assert!(actual.is_close_to(&Vec3::from([0.0, 0.0, 10.0]), 1e-6));
+        Ok(())
     }
 
     #[test]
-    fn translation_params_move_along_named_axes() {
+    fn translation_params_move_along_named_axes() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<3, 0, 7> = LinkageFixed::start()
             .define_param("forward", 0.5)
             .define_param("left", 0.5)
@@ -4511,13 +4559,14 @@ mod tests {
             .up_param("up", 0.0, 30.0);
 
         let params = [0.2, 0.3, 0.4];
-        let actual = LINKAGE.view().final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params)?.position();
 
         assert!(actual.is_close_to(&Vec3::from([2.0, 6.0, 12.0]), 1e-6));
+        Ok(())
     }
 
     #[test]
-    fn planar_two_link_arm_uses_yaw_then_forward() {
+    fn planar_two_link_arm_uses_yaw_then_forward() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
             .yaw(0.0)
             .forward(10.0)
@@ -4525,28 +4574,29 @@ mod tests {
             .forward(5.0);
 
         let params = [];
-        let actual = LINKAGE.view().final_pose(&params).position();
+        let actual = LINKAGE.view().final_pose(&params)?.position();
 
         assert!(actual.is_close_to(&Vec3::from([10.0, 5.0, 0.0]), 1e-5));
+        Ok(())
     }
 
     #[test]
-    fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn Error>> {
+    fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn StdError>> {
         // Fractions for [raise hand, bend elbow, close hand,
         //  lower arm, spin whole arm, spin hand].
         let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
-        assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.view().poses(&params))
+        assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.view().poses(&params)?)
     }
 
     #[test]
-    fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn Error>> {
+    fn test_excel_pose_trace1_matches_expected() -> Result<(), Box<dyn StdError>> {
         // [spin whole arm, bend elbow, close hand]
         let params = [0.30, 0.02, 0.10];
-        assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.view().poses(&params))
+        assert_pose_trace_matches_expected("excel_pose_trace1.csv", LINKAGE1.view().poses(&params)?)
     }
 
     #[test]
-    fn test_setting0_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
+    fn test_setting0_matches_excel_final_pose() -> Result<(), Box<dyn StdError>> {
         let params = [
             0.7514501463, // raise hand
             0.49,         // bend elbow
@@ -4555,7 +4605,7 @@ mod tests {
             0.6254387123, // spin whole arm
             1.0,          // spin hand
         ];
-        let pose = LINKAGE0.view().final_pose(&params);
+        let pose = LINKAGE0.view().final_pose(&params)?;
         let expected = Pose::new(
             [
                 [0.48325038, 0.7270788, 0.48767346],
@@ -4571,13 +4621,13 @@ mod tests {
     }
 
     #[test]
-    fn test_setting1_matches_excel_final_pose() -> Result<(), Box<dyn Error>> {
+    fn test_setting1_matches_excel_final_pose() -> Result<(), Box<dyn StdError>> {
         let params = [
             0.30, // spin whole arm
             0.02, // bend elbow
             0.10, // close hand
         ];
-        let pose = LINKAGE1.view().final_pose(&params);
+        let pose = LINKAGE1.view().final_pose(&params)?;
         let expected = Pose::new(
             [
                 [-0.368124515, 0.929776430, 0.0],
@@ -4593,7 +4643,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mid_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn Error>> {
+    fn test_mid_setting0_matches_excel_final_pose_and_png() -> Result<(), Box<dyn StdError>> {
         let params = [
             0.5, // raise hand
             0.3, // bend elbow
@@ -4602,7 +4652,7 @@ mod tests {
             0.5, // spin whole arm
             0.5, // spin hand
         ];
-        let pose = LINKAGE0.view().final_pose(&params);
+        let pose = LINKAGE0.view().final_pose(&params)?;
         let expected = Pose::new(
             [
                 [-0.5877855, -0.80901694, 0.0],
@@ -4615,31 +4665,30 @@ mod tests {
 
         assert_pose_approx_eq(pose, expected);
 
-        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params);
+        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params)?;
         assert_png_matches_expected("linkage0_xy_mid_fraction.png", &canvas)
     }
 
     #[test]
-    fn test_linkage0_png_matches_expected() -> Result<(), Box<dyn Error>> {
+    fn test_linkage0_png_matches_expected() -> Result<(), Box<dyn StdError>> {
         // Fractions for [raise hand, bend elbow, close hand,
         //  lower arm, spin whole arm, spin hand].
         let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
 
-        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params);
+        let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params)?;
         assert_png_matches_expected("linkage0_xy.png", &canvas)
     }
 
     #[test]
-    fn test_linkage1_png_matches_expected() -> Result<(), Box<dyn Error>> {
+    fn test_linkage1_png_matches_expected() -> Result<(), Box<dyn StdError>> {
         // [spin whole arm, bend elbow, close hand]
         let params = [0.30, 0.02, 0.10];
 
-        let canvas = draw_linkage_xy_canvas(&LINKAGE1, &params);
+        let canvas = draw_linkage_xy_canvas(&LINKAGE1, &params)?;
         assert_png_matches_expected("linkage1_xy.png", &canvas)
     }
 
     #[test]
-    #[should_panic(expected = "parameter is out of range")]
     fn test_params_are_range_checked() {
         let params = [
             0.0, // raise hand
@@ -4650,7 +4699,10 @@ mod tests {
             0.5, // spin hand
         ];
 
-        LINKAGE0.view().final_pose(&params);
+        assert!(matches!(
+            LINKAGE0.view().final_pose(&params),
+            Err(Error::InvalidParameter { index: 2, .. })
+        ));
     }
 
     // ── Shadowing semantics ───────────────────────────────────────────────────
@@ -4670,7 +4722,7 @@ mod tests {
     }
 
     #[test]
-    fn shadowing_builder_binds_to_most_recent_definition() {
+    fn shadowing_builder_binds_to_most_recent_definition() -> Result<(), Box<dyn StdError>> {
         // "angle" is defined twice.  yaw_param("angle") bakes in the index of
         // the second definition (index 1), not the first (index 0).
         //
@@ -4684,15 +4736,16 @@ mod tests {
             .forward(10.0);
 
         let params = [1.0, 0.0]; // index 0 = full, index 1 = zero
-        let pos = LINKAGE.view().final_pose(&params).position();
+        let pos = LINKAGE.view().final_pose(&params)?.position();
         // yaw driven by index 1 = 0.0 → 0° → moves along +X
         assert!(pos.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-5));
+        Ok(())
     }
 
     // ── freeze_param / retain_params ─────────────────────────────────────────
 
     #[test]
-    fn freeze_param_index_uses_raw_rotation_degrees() {
+    fn freeze_param_index_uses_raw_rotation_degrees() -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<2, 0, 5> = LinkageFixed::start()
             .define_param("angle", 0.5)
             .define_param("len", 0.5)
@@ -4701,13 +4754,14 @@ mod tests {
 
         const FROZEN: LinkageFixed<1, 0, 5> = BASE.freeze_param_index(0, 90.0);
 
-        assert_specialized_matches_original(BASE, &[0.75, 1.0], FROZEN, &[1.0]);
-        let pos = FROZEN.view().final_pose(&[1.0]).position();
+        assert_specialized_matches_original(BASE, &[0.75, 1.0], FROZEN, &[1.0])?;
+        let pos = FROZEN.view().final_pose(&[1.0])?.position();
         assert!(pos.is_close_to(&Vec3::from([0.0, 10.0, 0.0]), 1e-4));
+        Ok(())
     }
 
     #[test]
-    fn freeze_param_name_matches_unique_slot() {
+    fn freeze_param_name_matches_unique_slot() -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<2, 0, 5> = LinkageFixed::start()
             .define_param("yaw", 0.25)
             .define_param("dist", 0.5)
@@ -4717,13 +4771,14 @@ mod tests {
         const FROZEN_BY_NAME: LinkageFixed<1, 0, 5> = BASE.freeze_param_name("yaw", 45.0);
         const FROZEN_BY_DEFAULT: LinkageFixed<1, 0, 5> = BASE.freeze_param_index_at_default(0);
 
-        let pos_by_name = FROZEN_BY_NAME.view().final_pose(&[0.5]).position();
-        let pos_by_default = FROZEN_BY_DEFAULT.view().final_pose(&[0.5]).position();
+        let pos_by_name = FROZEN_BY_NAME.view().final_pose(&[0.5])?.position();
+        let pos_by_default = FROZEN_BY_DEFAULT.view().final_pose(&[0.5])?.position();
         assert!(pos_by_name.is_close_to(&pos_by_default, 1e-6));
+        Ok(())
     }
 
     #[test]
-    fn retain_param_names_freezes_unlisted_at_default() {
+    fn retain_param_names_freezes_unlisted_at_default() -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<2, 0, 5> = LinkageFixed::start()
             .define_param("angle", 0.5)
             .define_param("dist", 0.5)
@@ -4732,13 +4787,14 @@ mod tests {
 
         const RETAINED: LinkageFixed<1, 0, 5> = BASE.retain_param_names(&["dist"]);
 
-        assert_specialized_matches_original(BASE, &[0.5, 1.0], RETAINED, &[1.0]);
-        let pos = RETAINED.view().final_pose(&[1.0]).position();
+        assert_specialized_matches_original(BASE, &[0.5, 1.0], RETAINED, &[1.0])?;
+        let pos = RETAINED.view().final_pose(&[1.0])?.position();
         assert!(pos.is_close_to(&Vec3::from([4.0, 0.0, 0.0]), 1e-4));
+        Ok(())
     }
 
     #[test]
-    fn freeze_param_index_freezes_only_that_shadowed_slot() {
+    fn freeze_param_index_freezes_only_that_shadowed_slot() -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
             .define_param("x", 0.1)
             .forward_param("x", 0.0, 10.0)
@@ -4750,12 +4806,14 @@ mod tests {
         const FIRST_X: LinkageFixed<2, 0, 5> = BASE.freeze_param_index(0, 4.0);
         const SECOND_X: LinkageFixed<2, 0, 5> = BASE.freeze_param_index(2, 6.0);
 
-        assert_specialized_matches_original(BASE, &[0.4, 0.8, 0.6], FIRST_X, &[0.8, 0.6]);
-        assert_specialized_matches_original(BASE, &[0.4, 0.8, 0.6], SECOND_X, &[0.4, 0.8]);
+        assert_specialized_matches_original(BASE, &[0.4, 0.8, 0.6], FIRST_X, &[0.8, 0.6])?;
+        assert_specialized_matches_original(BASE, &[0.4, 0.8, 0.6], SECOND_X, &[0.4, 0.8])?;
+        Ok(())
     }
 
     #[test]
-    fn retain_param_names_retains_every_shadowed_slot_in_original_order() {
+    fn retain_param_names_retains_every_shadowed_slot_in_original_order()
+    -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
             .define_param("x", 0.25)
             .forward_param("x", 0.0, 10.0)
@@ -4771,11 +4829,12 @@ mod tests {
         assert_eq!(params[1].name(), "x");
         assert_eq!(params[1].default(), 0.75);
 
-        assert_specialized_matches_original(BASE, &[1.0, 0.5, 0.0], RETAINED, &[1.0, 0.0]);
+        assert_specialized_matches_original(BASE, &[1.0, 0.5, 0.0], RETAINED, &[1.0, 0.0])?;
+        Ok(())
     }
 
     #[test]
-    fn retain_param_indexes_keeps_exact_shadowed_slots() {
+    fn retain_param_indexes_keeps_exact_shadowed_slots() -> Result<(), Box<dyn StdError>> {
         const RETAINED: LinkageFixed<2, 0, 8> = BRUCE.retain_param_indexes(&[0, 2]);
 
         let params = RETAINED.view().params();
@@ -4789,11 +4848,13 @@ mod tests {
             &[0.11, 0.20, 0.33, 0.40],
             RETAINED,
             &[0.11, 0.33],
-        );
+        )?;
+        Ok(())
     }
 
     #[test]
-    fn retain_param_names_freezes_non_retained_shadowed_slots_at_their_own_defaults() {
+    fn retain_param_names_freezes_non_retained_shadowed_slots_at_their_own_defaults()
+    -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
             .define_param("x", 0.25)
             .forward_param("x", 0.0, 10.0)
@@ -4804,11 +4865,13 @@ mod tests {
 
         const RETAINED: LinkageFixed<1, 0, 5> = BASE.retain_param_names(&["y"]);
 
-        assert_specialized_matches_original(BASE, &[0.25, 1.0, 0.75], RETAINED, &[1.0]);
+        assert_specialized_matches_original(BASE, &[0.25, 1.0, 0.75], RETAINED, &[1.0])?;
+        Ok(())
     }
 
     #[test]
-    fn specialization_matches_original_for_index_and_name_selectors() {
+    fn specialization_matches_original_for_index_and_name_selectors()
+    -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<3, 0, 5> = LinkageFixed::start()
             .define_param("x", 0.25)
             .forward_param("x", 0.0, 10.0)
@@ -4821,7 +4884,8 @@ mod tests {
             .freeze_param_index::<2>(0, 4.0)
             .retain_param_names(&["y"]);
 
-        assert_specialized_matches_original(BASE, &[0.4, 0.8, 0.75], SPECIALIZED, &[0.8]);
+        assert_specialized_matches_original(BASE, &[0.4, 0.8, 0.75], SPECIALIZED, &[0.8])?;
+        Ok(())
     }
 
     const BRUCE: LinkageFixed<4, 0, 8> = LinkageFixed::start()
@@ -4836,18 +4900,20 @@ mod tests {
         .yaw_param("Bruce", -180.0, 180.0);
 
     #[test]
-    fn bruce_full_evaluation_uses_each_slot_bound_at_step_creation() {
-        let pose = BRUCE.view().final_pose(&[0.11, 0.22, 0.33, 0.44]);
+    fn bruce_full_evaluation_uses_each_slot_bound_at_step_creation() -> Result<(), Box<dyn StdError>>
+    {
+        let pose = BRUCE.view().final_pose(&[0.11, 0.22, 0.33, 0.44])?;
 
         assert_pose_close(
             pose,
             Pose::new(pose.orientation(), Vec3::from([11.0, 22.0, 33.0])),
             1e-4,
         );
+        Ok(())
     }
 
     #[test]
-    fn bruce_freeze_param_index_freezes_one_slot() {
+    fn bruce_freeze_param_index_freezes_one_slot() -> Result<(), Box<dyn StdError>> {
         const FROZEN: LinkageFixed<3, 0, 8> = BRUCE.freeze_param_index(2, 33.0);
 
         assert_specialized_matches_original(
@@ -4855,11 +4921,12 @@ mod tests {
             &[0.11, 0.22, 0.33, 0.44],
             FROZEN,
             &[0.11, 0.22, 0.44],
-        );
+        )?;
+        Ok(())
     }
 
     #[test]
-    fn bruce_freeze_param_index_at_default_freezes_one_slot() {
+    fn bruce_freeze_param_index_at_default_freezes_one_slot() -> Result<(), Box<dyn StdError>> {
         const FROZEN: LinkageFixed<3, 0, 8> = BRUCE.freeze_param_index_at_default(2);
 
         assert_specialized_matches_original(
@@ -4867,11 +4934,12 @@ mod tests {
             &[0.11, 0.22, 0.30, 0.44],
             FROZEN,
             &[0.11, 0.22, 0.44],
-        );
+        )?;
+        Ok(())
     }
 
     #[test]
-    fn bruce_retain_param_names_retains_all_slots_named_bruce() {
+    fn bruce_retain_param_names_retains_all_slots_named_bruce() -> Result<(), Box<dyn StdError>> {
         const RETAINED: LinkageFixed<4, 0, 8> = BRUCE.retain_param_names(&["Bruce"]);
 
         let params = RETAINED.view().params();
@@ -4885,11 +4953,13 @@ mod tests {
             &[0.11, 0.22, 0.33, 0.44],
             RETAINED,
             &[0.11, 0.22, 0.33, 0.44],
-        );
+        )?;
+        Ok(())
     }
 
     #[test]
-    fn bruce_retain_param_names_freezes_non_bruce_at_own_default() {
+    fn bruce_retain_param_names_freezes_non_bruce_at_own_default() -> Result<(), Box<dyn StdError>>
+    {
         const BASE: LinkageFixed<3, 0, 7> = LinkageFixed::start()
             .define_param("Bruce", 0.10)
             .pen_down()
@@ -4901,12 +4971,13 @@ mod tests {
 
         const RETAINED: LinkageFixed<2, 0, 7> = BASE.retain_param_names(&["Bruce"]);
 
-        assert_specialized_matches_original(BASE, &[0.11, 0.77, 0.33], RETAINED, &[0.11, 0.33]);
+        assert_specialized_matches_original(BASE, &[0.11, 0.77, 0.33], RETAINED, &[0.11, 0.33])?;
+        Ok(())
     }
 
     #[cfg(feature = "alloc")]
     #[test]
-    fn linkage_buf_retain_param_indexes_drops_multiple_params() {
+    fn linkage_buf_retain_param_indexes_drops_multiple_params() -> Result<(), Box<dyn StdError>> {
         // Mirror of the const test above but using LinkageBuf.
         let base: LinkageBuf<3, 0> = LinkageBuf::start()
             .define_param("yaw", 0.5)
@@ -4918,13 +4989,15 @@ mod tests {
 
         let frozen: LinkageBuf<1, 0> = base.retain_param_indexes(&[2]);
 
-        let pos = frozen.view().final_pose(&[1.0]).position();
+        let pos = frozen.view().final_pose(&[1.0])?.position();
         assert!(pos.is_close_to(&Vec3::from([6.0, 0.0, 0.0]), 1e-4));
+        Ok(())
     }
 
     #[cfg(feature = "alloc")]
     #[test]
-    fn linkage_buf_retain_params_handles_shadowed_non_retained_params_by_slot() {
+    fn linkage_buf_retain_params_handles_shadowed_non_retained_params_by_slot()
+    -> Result<(), Box<dyn StdError>> {
         let base: LinkageBuf<3, 0> = LinkageBuf::start()
             .define_param("x", 0.25)
             .forward_param("x", 0.0, 10.0)
@@ -4935,13 +5008,15 @@ mod tests {
 
         let retained: LinkageBuf<1, 0> = base.retain_param_names(&["y"]);
 
-        let pos = retained.view().final_pose(&[1.0]).position();
+        let pos = retained.view().final_pose(&[1.0])?.position();
         assert!(pos.is_close_to(&Vec3::from([2.5, 10.0, 7.5]), 1e-4));
+        Ok(())
     }
 
     #[cfg(feature = "alloc")]
     #[test]
-    fn linkage_buf_retain_param_names_uses_each_shadowed_slots_own_default() {
+    fn linkage_buf_retain_param_names_uses_each_shadowed_slots_own_default()
+    -> Result<(), Box<dyn StdError>> {
         let base: LinkageBuf<3, 0> = LinkageBuf::start()
             .define_param("x", 0.25)
             .forward_param("x", 0.0, 10.0)
@@ -4952,8 +5027,9 @@ mod tests {
 
         let frozen: LinkageBuf<1, 0> = base.retain_param_names(&["y"]);
 
-        let pos = frozen.view().final_pose(&[1.0]).position();
+        let pos = frozen.view().final_pose(&[1.0])?.position();
         assert!(pos.is_close_to(&Vec3::from([2.5, 10.0, 7.5]), 1e-4));
+        Ok(())
     }
 
     // ── freeze/retain validation: unknown names, duplicates, out-of-range ─────
@@ -5039,7 +5115,7 @@ mod tests {
     }
 
     #[test]
-    fn retain_params_output_follows_original_param_order() {
+    fn retain_params_output_follows_original_param_order() -> Result<(), Box<dyn StdError>> {
         // Define params in order [x, y, z].  Retain in reverse order ["z", "x"].
         // Output should still be [x, z] — original order, not retain-list order.
         const BASE: LinkageFixed<3, 0, 6> = LinkageFixed::start()
@@ -5053,16 +5129,17 @@ mod tests {
 
         // Output param 0 is "x" (original order), param 1 is "z".
         // forward("x") at 1.0 = 3 units along +X; left("z") at 0.0 = 0 lateral.
-        let pos = RETAINED.view().final_pose(&[1.0, 0.0]).position();
+        let pos = RETAINED.view().final_pose(&[1.0, 0.0])?.position();
         assert!(pos.is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-4));
 
         // left("z") at 1.0 = 7 units left from where x took us.
-        let pos2 = RETAINED.view().final_pose(&[1.0, 1.0]).position();
+        let pos2 = RETAINED.view().final_pose(&[1.0, 1.0])?.position();
         assert!(pos2.is_close_to(&Vec3::from([3.0, 7.0, 0.0]), 1e-4));
+        Ok(())
     }
 
     #[test]
-    fn freeze_covers_all_translation_and_rotation_step_types() {
+    fn freeze_covers_all_translation_and_rotation_step_types() -> Result<(), Box<dyn StdError>> {
         // One param used across move/left/up/yaw/pitch/roll with distinct ranges.
         // Retain none freezes it at its normalized default, which resolves through
         // each step's own range.
@@ -5078,12 +5155,14 @@ mod tests {
         const FROZEN: LinkageFixed<0, 0, 8> = BASE.retain_param_indexes(&[]);
 
         // Zero rotations, then move(0.5) + left(1) + up(1.5).
-        let pos = FROZEN.view().final_pose(&[]).position();
+        let pos = FROZEN.view().final_pose(&[])?.position();
         assert!(pos.is_close_to(&Vec3::from([0.5, 1.0, 1.5]), 1e-4));
+        Ok(())
     }
 
     #[test]
-    fn freeze_param_index_at_default_supports_multiple_step_ranges() {
+    fn freeze_param_index_at_default_supports_multiple_step_ranges() -> Result<(), Box<dyn StdError>>
+    {
         // "t" appears twice with completely different low/high.
         // Frozen at 0.5 must use each step's own span, not a shared physical value.
         const BASE: LinkageFixed<1, 0, 4> = LinkageFixed::start()
@@ -5093,8 +5172,9 @@ mod tests {
 
         const FROZEN: LinkageFixed<0, 0, 4> = BASE.freeze_param_index_at_default(0);
 
-        let pos = FROZEN.view().final_pose(&[]).position();
+        let pos = FROZEN.view().final_pose(&[])?.position();
         assert!(pos.is_close_to(&Vec3::from([5.0, 10.0, 0.0]), 1e-4));
+        Ok(())
     }
 
     #[test]
@@ -5115,7 +5195,7 @@ mod tests {
     }
 
     #[test]
-    fn linkage_fixed_freeze_runs_cleanup_passes() {
+    fn linkage_fixed_freeze_runs_cleanup_passes() -> Result<(), Box<dyn StdError>> {
         const BASE: LinkageFixed<1, 0, 6> = LinkageFixed::start()
             .define_param("t", 0.5)
             .yaw_param("t", -90.0, 90.0)
@@ -5132,14 +5212,15 @@ mod tests {
         assert_fixed_move(steps[1], 8.0);
         assert_fixed_up(steps[2], 1.0);
 
-        let original_pose = BASE.view().final_pose(&[0.5]);
-        let frozen_pose = FROZEN.view().final_pose(&[]);
+        let original_pose = BASE.view().final_pose(&[0.5])?;
+        let frozen_pose = FROZEN.view().final_pose(&[])?;
         assert_pose_close(original_pose, frozen_pose, 1e-5);
+        Ok(())
     }
 
     #[cfg(feature = "alloc")]
     #[test]
-    fn linkage_buf_freeze_runs_cleanup_passes() {
+    fn linkage_buf_freeze_runs_cleanup_passes() -> Result<(), Box<dyn StdError>> {
         let base: LinkageBuf<1, 0> = LinkageBuf::start()
             .define_param("t", 0.5)
             .yaw_param("t", -90.0, 90.0)
@@ -5156,9 +5237,10 @@ mod tests {
         assert_fixed_move(steps[1], 8.0);
         assert_fixed_up(steps[2], 1.0);
 
-        let original_pose = base.view().final_pose(&[0.5]);
-        let frozen_pose = frozen.view().final_pose(&[]);
+        let original_pose = base.view().final_pose(&[0.5])?;
+        let frozen_pose = frozen.view().final_pose(&[])?;
         assert_pose_close(original_pose, frozen_pose, 1e-5);
+        Ok(())
     }
 
     #[cfg(feature = "alloc")]
@@ -5197,7 +5279,8 @@ mod tests {
 
     #[cfg(feature = "alloc")]
     #[test]
-    fn linkage_buf_freeze_output_matches_linkage_fixed_freeze_output() {
+    fn linkage_buf_freeze_output_matches_linkage_fixed_freeze_output()
+    -> Result<(), Box<dyn StdError>> {
         // Verify LinkageBuf::freeze_param_name produces identical poses
         // to the equivalent LinkageFixed specialization.
         const FIXED_BASE: LinkageFixed<2, 0, 5> = LinkageFixed::start()
@@ -5216,10 +5299,11 @@ mod tests {
         let buf_frozen: LinkageBuf<1, 0> = buf_base.freeze_param_name("angle", -90.0);
 
         for t in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
-            let pos_fixed = FIXED_FROZEN.view().final_pose(&[t]).position();
-            let pos_buf = buf_frozen.view().final_pose(&[t]).position();
+            let pos_fixed = FIXED_FROZEN.view().final_pose(&[t])?.position();
+            let pos_buf = buf_frozen.view().final_pose(&[t])?.position();
             assert!(pos_fixed.is_close_to(&pos_buf, 1e-5));
         }
+        Ok(())
     }
 
     fn assert_specialized_matches_original<
@@ -5232,17 +5316,18 @@ mod tests {
         original_params: &[f32; DOF],
         specialized: LinkageFixed<OUT_DOF, MARKS, N>,
         specialized_params: &[f32; OUT_DOF],
-    ) {
+    ) -> Result<(), Box<dyn StdError>> {
         assert_pose_close(
-            original.view().final_pose(original_params),
-            specialized.view().final_pose(specialized_params),
+            original.view().final_pose(original_params)?,
+            specialized.view().final_pose(specialized_params)?,
             1e-4,
         );
         assert_draw_items_3d_close(
-            original.view().draw_items_3d(original_params),
-            specialized.view().draw_items_3d(specialized_params),
+            original.view().draw_items_3d(original_params)?,
+            specialized.view().draw_items_3d(specialized_params)?,
             1e-4,
         );
+        Ok(())
     }
 
     fn assert_draw_items_3d_close(
