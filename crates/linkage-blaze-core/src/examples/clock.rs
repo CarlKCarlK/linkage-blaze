@@ -55,9 +55,9 @@ const TIME_TEXT_CAPACITY: usize = 16;
 const TIME_TEXT_TOP_PADDING: i32 = -1;
 
 const CLOCK_BOUNDS: Rectangle = Rectangle::new(Point::new(50, 20), Size::new(220, 220));
-const BACKGROUND_BITMAP_RECTANGLE: Rectangle = Rectangle::new(Point::zero(), Size::new(320, 240));
 const BACKGROUND_BITMAP: Image565Fixed<320, 240, { 320 * 240 }> =
     tga!("../assets/astronomy_window_background.tga").to_565();
+const BACKGROUND_BITMAP_VIEW: Image565View = BACKGROUND_BITMAP.view();
 const PROJECTION: Projection = Projection::top_orthographic(
     Point::new(160, 130), // target origin
     1.375,                // scale
@@ -133,7 +133,7 @@ where
     CydDisplayDevice: CydDisplay,
 {
     display
-        .fill_contiguous(BACKGROUND_BITMAP_RECTANGLE, BACKGROUND_BITMAP.rgb565_iter())
+        .fill_contiguous_full(BACKGROUND_BITMAP_VIEW.rgb565_iter())
         .map_err(Error::Flush)?;
     Ok(())
 }
