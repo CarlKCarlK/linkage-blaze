@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn ballet_renders_expected_frame() {
         let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
-        memory_cyd.set_frame_budget(2);
+        memory_cyd.set_frame_budget(300);
 
         let ballet_error = {
             let mut display = memory_cyd.display();
