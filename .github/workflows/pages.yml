@@ -37,6 +37,19 @@ jobs:
       - name: Build Pages
         run: cargo xtask build-pages
 
+      - name: Verify canonical CYD simulator assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          canonical="device-envoy-src/crates/device-envoy-core/www"
+          while IFS= read -r -d '' simulator_javascript; do
+            page_directory="${simulator_javascript%/*}"
+            cmp "$canonical/cyd-simulator.js" "$page_directory/cyd-simulator.js"
+            cmp "$canonical/cyd-simulator.css" "$page_directory/cyd-simulator.css"
+            cmp "$canonical/case.png" "$page_directory/case.png"
+            cmp "$canonical/desk.jpg" "$page_directory/desk.jpg"
+          done < <(find target/pages/demos -type f -name cyd-simulator.js -print0)
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

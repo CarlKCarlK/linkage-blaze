@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "playwright": "playwright"
+    "playwright": "playwright",
+    "test:cyd": "just test-cyd-browser"
   },
   "keywords": [],
   "author": "",

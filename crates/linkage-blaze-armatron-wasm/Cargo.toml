@@ -1,0 +1,20 @@
+[package]
+name = "linkage-blaze-armatron-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[dependencies]
+device-envoy-core = { path = "../../../mcu/device-envoy/crates/device-envoy-core", features = ["wasm"] }
+embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
+linkage-blaze-core = { path = "../linkage-blaze-core", features = ["examples-armatron"] }
+embedded-graphics = { version = "0.8", default-features = false }
+wasm-bindgen = "=0.2.118"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Document", "HtmlCanvasElement", "Window", "console"] }

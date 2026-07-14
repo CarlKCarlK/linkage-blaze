@@ -66,6 +66,21 @@ build-all:
 build-pages demo='':
     cargo run --quiet -p linkage-blaze-xtask -- build-pages "{{demo}}"
 
+# Verify that generated CYD shell assets match the Device Envoy canonical source.
+check-cyd-shell:
+    just build-pages
+    for page in target/pages/demos/*/*; do if test -f "$page/cyd-simulator.js"; then cmp ../mcu/device-envoy/crates/device-envoy-core/www/cyd-simulator.js "$page/cyd-simulator.js"; cmp ../mcu/device-envoy/crates/device-envoy-core/www/cyd-simulator.css "$page/cyd-simulator.css"; cmp ../mcu/device-envoy/crates/device-envoy-core/www/case.png "$page/case.png"; cmp ../mcu/device-envoy/crates/device-envoy-core/www/desk.jpg "$page/desk.jpg"; fi; done
+
+# Build Pages and run the shared CYD browser contract tests.
+test-cyd-browser:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just build-pages
+    python3 -m http.server 8092 --bind 127.0.0.1 --directory target/pages &
+    server_process_id=$!
+    trap 'kill "$server_process_id"' EXIT
+    npx playwright test
+
 _pages_port := "8090"
 
 # Build and serve the local Pages gallery for browser review.

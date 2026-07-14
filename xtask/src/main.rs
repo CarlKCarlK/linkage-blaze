@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::fmt::{self, Display, Formatter};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 mod linkage_esp_examples_generated;
@@ -212,7 +212,9 @@ fn bump_demo_version(demo_slug: &str, requested_version: Option<&str>) -> Result
         )));
     }
 
-    let source_dir = Path::new(&demo_record.source_dir);
+    let source_dir = Path::new("pages/demos")
+        .join(&demo_record.slug)
+        .join(&demo_record.current_version);
     if !source_dir.is_dir() {
         return Err(Error::message(format!(
             "missing source dir: {}",
@@ -221,7 +223,7 @@ fn bump_demo_version(demo_slug: &str, requested_version: Option<&str>) -> Result
     }
 
     fs::create_dir_all(&new_snapshot_dir)?;
-    copy_directory_contents_filtered(source_dir, &new_snapshot_dir, |entry_name| {
+    copy_directory_contents_filtered(&source_dir, &new_snapshot_dir, |entry_name| {
         entry_name != OsStr::new("pkg") && entry_name != OsStr::new("node_modules")
     })?;
 
@@ -308,6 +310,7 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         let output_dir = demo_dir.join(version);
         fs::create_dir_all(&output_dir)?;
         copy_directory_contents(&source_dir, &output_dir)?;
+        copy_cyd_simulator_assets(&repo_root, &source_dir, &output_dir)?;
 
         let out_name = find_pkg_out_name(&output_dir).map_err(|error| {
             Error::message(format!("{} ({version}): {error}", output_dir.display()))
@@ -330,6 +333,46 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         )?;
     }
 
+    Ok(())
+}
+
+/// Bundle the canonical Device Envoy CYD shell into each simulator page.
+///
+/// The source repository is intentionally outside Linkage Blaze because the
+/// shell is a Device Envoy platform asset. Local builds use the sibling
+/// checkout; release builds may override that checkout with the same layout.
+fn copy_cyd_simulator_assets(repo_root: &Path, source_dir: &Path, output_dir: &Path) -> Result<()> {
+    let index_path = source_dir.join("index.html");
+    if !index_path.is_file() || !fs::read_to_string(index_path)?.contains("cyd-simulator.css") {
+        return Ok(());
+    }
+
+    let canonical_dir = env::var_os("DEVICE_ENVOY_CORE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_root.join("../mcu/device-envoy/crates/device-envoy-core"))
+        .join("www");
+    if !canonical_dir.is_dir() {
+        return Err(Error::message(format!(
+            "canonical CYD simulator assets not found at {}; set DEVICE_ENVOY_CORE_DIR to the Device Envoy core directory",
+            canonical_dir.display()
+        )));
+    }
+    for file_name in [
+        "cyd-simulator.js",
+        "cyd-simulator.css",
+        "case.png",
+        "desk.jpg",
+    ] {
+        let source_path = canonical_dir.join(file_name);
+        let destination_path = output_dir.join(file_name);
+        fs::copy(&source_path, &destination_path).map_err(|error| {
+            Error::message(format!(
+                "copy CYD simulator asset {} to {}: {error}",
+                source_path.display(),
+                destination_path.display()
+            ))
+        })?;
+    }
     Ok(())
 }
 
@@ -401,7 +444,7 @@ fn capture_demo_preview(
     match preview_spec.source {
         PreviewSource::RenderTest { feature, test_name } => {
             let mut command = Command::new("cargo");
-            command.env("LINKAGE_BLAZE_PREVIEW_OUTPUT_PATH", &preview_path);
+            command.env("DEVICE_ENVOY_PREVIEW_OUTPUT_PATH", &preview_path);
             command.arg("test");
             command.arg("--quiet");
             command.arg("-p");
@@ -692,11 +735,17 @@ impl DemoRecord {
                 },
                 orientation: PreviewOrientation::Landscape,
             },
+            "ballet" => PreviewSpec {
+                source: PreviewSource::RenderTest {
+                    feature: "examples-ballet",
+                    test_name: "examples::ballet::tests::ballet_renders_expected_frame",
+                },
+                orientation: PreviewOrientation::Portrait,
+            },
             "skeleton-clock" => PreviewSpec {
                 source: PreviewSource::RenderTest {
                     feature: "examples-skeleton-clock",
-                    test_name:
-                        "examples::skeleton_clock::tests::skeleton_clock_renders_expected_frame",
+                    test_name: "examples::skeleton_clock::tests::skeleton_clock_renders_expected_frame",
                 },
                 orientation: PreviewOrientation::Portrait,
             },

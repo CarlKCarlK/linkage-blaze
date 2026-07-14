@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[path = "../../../mcu/device-envoy/crates/device-envoy-esp/xtask/src/boards.rs"]
+#[path = "../../../mcu/device-envoy/crates/device-envoy-examples-esp/xtask/src/boards.rs"]
 mod device_envoy_esp_boards;
 
 use device_envoy_esp_boards::{AudioWiring, BOARD_PROFILES, BoardProfile, validate_board_profiles};

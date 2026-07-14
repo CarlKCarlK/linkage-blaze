@@ -97,8 +97,14 @@ where
     }
 }
 
+#[cfg(not(test))]
 fn sample_duration(started: Instant) -> Duration {
     Instant::now() - started
+}
+
+#[cfg(test)]
+fn sample_duration(_started: Instant) -> Duration {
+    Duration::from_millis(1)
 }
 
 fn status_text(
@@ -143,4 +149,32 @@ pub enum Error<FlushError> {
     /// Flushing a frame to the display failed.
     #[from(ignore)]
     Flush(FlushError),
+}
+
+#[cfg(test)]
+mod tests {
+    use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
+    use futures_executor::block_on;
+
+    use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
+
+    #[test]
+    fn ballet_renders_expected_frame() {
+        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        memory_cyd.set_frame_budget(2);
+
+        let ballet_error = {
+            let mut display = memory_cyd.display();
+            block_on(ballet(&mut display))
+        }
+        .expect_err("the free-running loop should stop at the frame budget");
+        drop(ballet_error);
+
+        assert_framebuffer_matches_expected_png(
+            &memory_cyd,
+            env!("CARGO_MANIFEST_DIR"),
+            "ballet.png",
+        )
+        .expect("rendered frame should match the golden image");
+    }
 }
