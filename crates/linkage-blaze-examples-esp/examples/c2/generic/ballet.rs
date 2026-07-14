@@ -6,6 +6,7 @@
 
 use core::convert::Infallible;
 
+use device_envoy_esp::button::{ButtonEsp, PressedTo};
 use device_envoy_esp::cyd::{
     CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
 };
@@ -50,7 +51,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
-    Ok(ballet(&mut display).await?)
+    let button = ButtonEsp::new(p.GPIO18, PressedTo::Ground);
+    Ok(ballet(&mut display, &button).await?)
 }
 
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores

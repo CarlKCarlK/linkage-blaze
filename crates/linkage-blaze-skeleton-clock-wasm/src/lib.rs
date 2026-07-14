@@ -72,9 +72,18 @@ mod clock_sync {
     }
 }
 
-use device_envoy_core::wasm::{CydSimulatorControlWasm, CydSimulatorWasm};
+use device_envoy_core::{
+    button::Button,
+    cyd::{CydDisplay, display::CydFrame},
+    wasm::{
+        ButtonWasm, CydSimulatorControlWasm, CydSimulatorWasm, SimulatorNoticeDisposition,
+        SimulatorNoticeRequest, WifiConnectEvent, WifiConnectOutcome, next_animation_frame,
+        simulate_wifi_connect, simulator_notice_disposition,
+    },
+};
 use linkage_blaze_core::examples::skeleton_clock::{
-    BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, skeleton_clock, skeleton_clock_splash,
+    BACKGROUND, Exit, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE, skeleton_clock,
+    skeleton_clock_splash,
 };
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
 use web_sys::{HtmlCanvasElement, window};
@@ -107,7 +116,7 @@ pub fn start(canvas_id: &str) -> Result<CydSimulatorControlWasm, wasm_bindgen::J
         .dyn_into::<HtmlCanvasElement>()?;
     let simulator =
         CydSimulatorWasm::new_with_style(canvas, ORIENTATION, BACKGROUND, FOREGROUND, &TOP_FONT)?;
-    let (cyd, _, control) = simulator.into_parts();
+    let (cyd, mut button, control) = simulator.into_parts();
     wasm_bindgen_futures::spawn_local(async move {
         let mut display = cyd.display();
         let clock_sync = clock_sync::BrowserClockSync::new();
@@ -118,15 +127,73 @@ pub fn start(canvas_id: &str) -> Result<CydSimulatorControlWasm, wasm_bindgen::J
             ));
             return;
         }
-        match skeleton_clock(&mut display, &clock_sync).await {
-            Ok(never) => match never {},
-            Err(error) => {
-                drop(error);
-                web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(
-                    "skeleton clock stopped",
-                ));
+        loop {
+            let wifi_outcome = simulate_wifi_connect(&mut button, async |event| {
+                let (notice_request, status) = match event {
+                    WifiConnectEvent::CaptivePortalReady => (
+                        SimulatorNoticeRequest::wifi_setup(),
+                        "WiFi: setup SkelClock",
+                    ),
+                    WifiConnectEvent::Connecting { .. } => (
+                        SimulatorNoticeRequest::wifi_connecting(),
+                        "WiFi: connecting",
+                    ),
+                    WifiConnectEvent::ConnectionFailed => (
+                        SimulatorNoticeRequest::wifi_unavailable(),
+                        "WiFi: connect failed",
+                    ),
+                };
+                if matches!(
+                    simulator_notice_disposition(notice_request),
+                    SimulatorNoticeDisposition::Terminate
+                ) {
+                    return Ok::<(), wasm_bindgen::JsValue>(());
+                }
+                display
+                    .frame_mut(WIFI_STATUS_RECTANGLE)
+                    .clear()
+                    .write_text(status)
+                    .flush()
+                    .await
+                    .map_err(|_error| wasm_bindgen::JsValue::from_str("Wi-Fi status failed"))
+            })
+            .await;
+            let wifi_outcome = match wifi_outcome {
+                Ok(wifi_outcome) => wifi_outcome,
+                Err(error) => {
+                    web_sys::console::error_1(&error);
+                    return;
+                }
+            };
+            if matches!(wifi_outcome, WifiConnectOutcome::ResetRequested) {
+                wait_for_button_release(&button).await;
+                continue;
+            }
+            if let Err(error) = display
+                .frame_mut(WIFI_STATUS_RECTANGLE)
+                .clear()
+                .write_text("WiFi: OK")
+                .flush()
+                .await
+            {
+                match error {}
+            }
+            match skeleton_clock(&mut display, &clock_sync, &mut button).await {
+                Ok(Exit::ResetWifi) => wait_for_button_release(&button).await,
+                Err(_error) => {
+                    web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(
+                        "skeleton clock stopped",
+                    ));
+                    return;
+                }
             }
         }
     });
     Ok(control)
+}
+
+async fn wait_for_button_release(button: &ButtonWasm) {
+    while button.is_pressed() {
+        next_animation_frame().await;
+    }
 }

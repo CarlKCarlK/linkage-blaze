@@ -2,7 +2,7 @@
 //! tiny [`linkage`](crate::linkage), with a digital time read-out
 //! above it.
 
-use core::{convert::Infallible, fmt, iter};
+use core::{fmt, iter};
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Projection, linkage,
@@ -10,6 +10,7 @@ use crate::{
 };
 use device_envoy_core::{
     UnwrapInfallible,
+    button::Button,
     clock_sync::{ClockSync, h12_m_s},
     cyd::{
         CydDisplay,
@@ -19,6 +20,7 @@ use device_envoy_core::{
         },
     },
 };
+use embassy_futures::select::{Either, select};
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_6X10},
@@ -75,7 +77,8 @@ const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 pub async fn clock<CydDisplayDevice, ClockSyncDevice>(
     display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
-) -> Result<Infallible, Error<CydDisplayDevice::Error>>
+    button: &mut impl Button,
+) -> Result<Exit, Error<CydDisplayDevice::Error>>
 where
     CydDisplayDevice: CydDisplay,
     ClockSyncDevice: ClockSync,
@@ -85,7 +88,10 @@ where
 
     loop {
         // ── Wait for a tick and get the time. ────────────────────────────────────────
-        let tick = clock_sync.wait_for_tick().await;
+        let tick = match select(button.wait_for_press(), clock_sync.wait_for_tick()).await {
+            Either::First(()) => return Ok(Exit::ResetWifi),
+            Either::Second(tick) => tick,
+        };
         let local_time = &tick.local_time;
         let time_text = text_12h(local_time)?;
         info!("tick {}", time_text.as_str());
@@ -136,6 +142,13 @@ where
         .fill_contiguous_full(BACKGROUND_BITMAP_VIEW.rgb565_iter())
         .map_err(Error::Flush)?;
     Ok(())
+}
+
+/// Actions requested by the Clock's physical BOOT button.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Exit {
+    /// Return to Wi-Fi setup before resuming the clock.
+    ResetWifi,
 }
 
 /// Error from the generic clock loop, generic over the surface's flush error `F`.
@@ -235,6 +248,7 @@ mod tests {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
                 .expect("valid fixed timestamp"),
         };
+        let mut memory_button = memory_cyd.button_memory();
 
         {
             let mut display = memory_cyd.display();
@@ -252,7 +266,7 @@ mod tests {
 
         let clock_result = {
             let mut display = memory_cyd.display();
-            block_on(clock(&mut display, &clock_sync))
+            block_on(clock(&mut display, &clock_sync, &mut memory_button))
         };
         clock_result.expect_err("the free-running loop should stop at the frame budget");
 

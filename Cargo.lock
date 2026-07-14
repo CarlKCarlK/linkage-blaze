@@ -2169,6 +2169,7 @@ version = "0.1.4"
 dependencies = [
  "derive_more",
  "device-envoy-core",
+ "embassy-futures",
  "embassy-time",
  "embedded-graphics",
  "futures-executor",

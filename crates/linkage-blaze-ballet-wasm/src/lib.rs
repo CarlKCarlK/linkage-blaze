@@ -22,10 +22,10 @@ pub fn start(canvas_id: &str) -> Result<CydSimulatorControlWasm, wasm_bindgen::J
         .dyn_into::<HtmlCanvasElement>()?;
     let simulator =
         CydSimulatorWasm::new_with_style(canvas, ORIENTATION, BACKGROUND, FOREGROUND, &TOP_FONT)?;
-    let (cyd, _, control) = simulator.into_parts();
+    let (cyd, button, control) = simulator.into_parts();
     wasm_bindgen_futures::spawn_local(async move {
         let mut display = cyd.display();
-        match ballet(&mut display).await {
+        match ballet(&mut display, &button).await {
             Ok(never) => match never {},
             Err(error) => web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(&format!(
                 "ballet stopped: {error:?}"

@@ -6,6 +6,7 @@ use core::convert::Infallible;
 
 use defmt::info;
 use defmt_rtt as _;
+use device_envoy_rp::button::{ButtonRp, PressedTo};
 use device_envoy_rp::{
     Result,
     cyd::{CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ},
@@ -46,7 +47,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
-    Ok(ballet(&mut display).await?)
+    let button = ButtonRp::new(p.PIN_15, PressedTo::Ground);
+    Ok(ballet(&mut display, &button).await?)
 }
 
 #[derive(Debug)]

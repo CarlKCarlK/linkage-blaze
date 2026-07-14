@@ -124,7 +124,13 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("clock sync ready; entering clock loop");
 
-    Ok(clock(&mut display, &clock_sync).await?)
+    match clock(&mut display, &clock_sync, &mut button_watch15).await? {
+        clock::Exit::ResetWifi => {
+            wifi_auto.reset_to_captive_portal()?;
+            cortex_m::peripheral::SCB::sys_reset();
+            unreachable!("sys_reset does not return");
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -120,7 +120,13 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("clock sync ready; entering clock loop");
 
-    Ok(clock(&mut display, &clock_sync).await?)
+    match clock(&mut display, &clock_sync, &mut force_portal_button).await? {
+        clock::Exit::ResetWifi => {
+            wifi_auto.reset_to_captive_portal()?;
+            device_envoy_esp::esp_hal::system::software_reset();
+            unreachable!("software_reset does not return");
+        }
+    }
 }
 
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores

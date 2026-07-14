@@ -9,8 +9,10 @@ use crate::{
 };
 use device_envoy_core::{
     UnwrapInfallible,
+    button::Button,
     clock_sync::{ClockSync, h12_m_s},
 };
+use embassy_futures::select::{Either, select};
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_7X13, ascii::FONT_10X20},
@@ -120,14 +122,18 @@ pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
 pub async fn skeleton_clock<CydDisplayDevice, ClockSyncDevice>(
     display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
-) -> Result<Infallible, Error<CydDisplayDevice::Error>>
+    button: &mut impl Button,
+) -> Result<Exit, Error<CydDisplayDevice::Error>>
 where
     CydDisplayDevice: CydDisplay,
     ClockSyncDevice: ClockSync,
 {
     loop {
         // Wait for a tick and get the time.
-        let tick = clock_sync.wait_for_tick().await;
+        let tick = match select(button.wait_for_press(), clock_sync.wait_for_tick()).await {
+            Either::First(()) => return Ok(Exit::ResetWifi),
+            Either::Second(tick) => tick,
+        };
         let local_time = &tick.local_time;
         let (hour_12, minute, _) = h12_m_s(local_time);
         info!("tick {}", text_24h(local_time));
@@ -247,6 +253,13 @@ where
     }
 
     Ok(())
+}
+
+/// Actions requested by the Skeleton Clock's physical BOOT button.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Exit {
+    /// Return to Wi-Fi setup before resuming the clock.
+    ResetWifi,
 }
 
 // ── Clock time ────────────────────────────────────────────────────────────────
@@ -506,10 +519,15 @@ mod tests {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
                 .expect("valid fixed timestamp"),
         };
+        let mut memory_button = memory_cyd.button_memory();
 
         let skeleton_clock_result = {
             let mut display = memory_cyd.display();
-            block_on(skeleton_clock(&mut display, &clock_sync))
+            block_on(skeleton_clock(
+                &mut display,
+                &clock_sync,
+                &mut memory_button,
+            ))
         };
         skeleton_clock_result.expect_err("the free-running loop should stop at the frame budget");
 

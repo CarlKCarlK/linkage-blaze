@@ -4,6 +4,11 @@ This file contains shared workspace rules for this repository.
 
 ## General Policies
 
+- When autonomous work is interrupted or reaches a stopping point, report the
+  current status, what remains, and the recommended next step. If the next
+  step is within the current task and safe to perform, perform it rather than
+  stopping merely to recommend it.
+
 - Avoid introducing `unsafe` blocks. If a change truly requires `unsafe`, call it out explicitly and explain the justification so the user can review it carefully.
 - Do not "fix" warnings or errors by suppressing lints (for example `#[allow(...)]`, crate-level allow attributes, or similar) unless the human explicitly requests that suppression.
 - If warnings are caused by obsolete code, delete or refactor the obsolete code instead of hiding the warning.

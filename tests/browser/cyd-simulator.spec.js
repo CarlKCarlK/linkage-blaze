@@ -84,7 +84,59 @@ for (const slug of ["clock", "skeleton-clock"]) {
     await liveButton.click();
     await expect(timeChip).toContainText("LIVE");
   });
+
+  test(`${slug} routes main-state BOOT back through simulated Wi-Fi setup`, async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(String(error)));
+    await page.goto(`/demos/${slug}/v4/`);
+    await page.waitForTimeout(2200);
+
+    const canvas = page.locator("#screen");
+    const frameBeforeBoot = await canvas.evaluate((element) => element.toDataURL());
+    const bootBounds = await page.locator("#boot-button").boundingBox();
+    expect(bootBounds).not.toBeNull();
+    if (!bootBounds) {
+      return;
+    }
+    const bootCenterX = bootBounds.x + bootBounds.width / 2;
+    const bootCenterY = bootBounds.y + bootBounds.height / 2;
+    await page.mouse.move(bootCenterX, bootCenterY);
+    await page.mouse.down();
+    await page.waitForTimeout(60);
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+
+    expect(pageErrors).toEqual([]);
+    const frameAfterBoot = await canvas.evaluate((element) => element.toDataURL());
+    expect(frameAfterBoot).not.toEqual(frameBeforeBoot);
+  });
 }
+
+test("Ballet routes BOOT back to the start of its animation", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(String(error)));
+  await page.goto("/demos/ballet/v4/");
+  await page.waitForTimeout(250);
+
+  const canvas = page.locator("#screen");
+  const frameBeforeBoot = await canvas.evaluate((element) => element.toDataURL());
+  const bootBounds = await page.locator("#boot-button").boundingBox();
+  expect(bootBounds).not.toBeNull();
+  if (!bootBounds) {
+    return;
+  }
+  const bootCenterX = bootBounds.x + bootBounds.width / 2;
+  const bootCenterY = bootBounds.y + bootBounds.height / 2;
+  await page.mouse.move(bootCenterX, bootCenterY);
+  await page.mouse.down();
+  await page.waitForTimeout(60);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+
+  expect(pageErrors).toEqual([]);
+  const frameAfterBoot = await canvas.evaluate((element) => element.toDataURL());
+  expect(frameAfterBoot).not.toEqual(frameBeforeBoot);
+});
 
 test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
   const consoleErrors = [];

@@ -10,9 +10,12 @@ use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
     bvh_motion, bvh_parse::BvhMotion, linkage, linkage_fixed,
 };
-use device_envoy_core::cyd::{
-    CydDisplay,
-    display::{CydFrame, Image565Fixed, Orientation, tga},
+use device_envoy_core::{
+    button::Button,
+    cyd::{
+        CydDisplay,
+        display::{CydFrame, Image565Fixed, Orientation, tga},
+    },
 };
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
@@ -59,15 +62,23 @@ const PROJECTION: Projection = Projection::front_orthographic(
 /// Run the ballet example forever on a [`Cyd`] implementation (for example `CydEsp` or `CydWasm`).
 pub async fn ballet<CydDisplayDevice>(
     display: &mut CydDisplayDevice,
+    button: &impl Button,
 ) -> Result<Infallible, Error<CydDisplayDevice::Error>>
 where
     CydDisplayDevice: CydDisplay,
 {
     let mut last_sample_duration: Option<Duration> = None;
+    let mut boot_was_pressed = false;
 
     // Loop the motion control samples forever.
     loop {
         for (sample_index, params) in MOTION.samples().enumerate() {
+            let boot_is_pressed = button.is_pressed();
+            if boot_is_pressed && !boot_was_pressed {
+                boot_was_pressed = true;
+                break;
+            }
+            boot_was_pressed = boot_is_pressed;
             let started = Instant::now();
 
             // Create a frame to draw into. It uses preallocated memory.
@@ -164,10 +175,11 @@ mod tests {
 
         let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
         memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
+        let memory_button = memory_cyd.button_memory();
 
         let ballet_error = {
             let mut display = memory_cyd.display();
-            block_on(ballet(&mut display))
+            block_on(ballet(&mut display, &memory_button))
         }
         .expect_err("the free-running loop should stop at the frame budget");
         drop(ballet_error);
