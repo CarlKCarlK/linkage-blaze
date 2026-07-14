@@ -42,10 +42,11 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
   expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
 
   // Wi-Fi control requests the simulated captive-portal reset and uses the
-  // shared browser notice facility.
+  // shared browser notice facility. The connecting notice may replace the
+  // short-lived setup notice before the browser observes it.
   await page.mouse.click(...screenPoint(160, 216));
   await expect(page.locator(".cyd-simulator-notice")).toContainText(
-    "Wi-Fi setup is simulated",
+    "Wi-Fi connection is simulated",
   );
 
   // BOOT during the simulated connect must release cleanly and restart rather
