@@ -108,6 +108,8 @@ test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
     canvasBounds.x + canvasBounds.width * (202 / 320),
     canvasBounds.y + canvasBounds.height * (24 / 240),
   );
+  await page.waitForTimeout(100);
+  const frameBeforeBoot = await canvas.evaluate((element) => element.toDataURL());
 
   // Drive BOOT with real mouse events (not locator.dispatchEvent), which
   // carry a genuine active pointer. A synthetic dispatchEvent's pointerId
@@ -125,26 +127,17 @@ test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
   await page.mouse.down();
   await page.waitForTimeout(50);
   await page.mouse.up();
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(300);
 
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 
-  // BOOT requests calibration, which restarts the app loop rather than
-  // stopping it silently. Confirm the canvas is still actively rendering
-  // (not frozen) after the restart. A single pair of samples is flaky here:
-  // the on-screen FPS text only changes when its rounded tenths digit ticks
-  // over, so two adjacent frames can be pixel-identical even while healthy,
-  // so poll for the first observed change instead.
+  // BOOT requests calibration, which re-enters the shared four-tap
+  // calibration exercise rather than stopping the app silently. That
+  // exercise's crosshair screen is mostly static (unlike the game loop's
+  // continuously ticking FPS counter), so confirm the app actually
+  // transitioned by comparing against the pre-BOOT frame instead of
+  // polling for continuous animation.
   const frameAfterBoot = await canvas.evaluate((element) => element.toDataURL());
-  let sawChange = false;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    await page.waitForTimeout(150);
-    const laterFrame = await canvas.evaluate((element) => element.toDataURL());
-    if (laterFrame !== frameAfterBoot) {
-      sawChange = true;
-      break;
-    }
-  }
-  expect(sawChange).toBe(true);
+  expect(frameAfterBoot).not.toEqual(frameBeforeBoot);
 });
