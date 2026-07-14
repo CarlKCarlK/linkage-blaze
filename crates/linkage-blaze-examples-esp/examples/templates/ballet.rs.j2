@@ -7,7 +7,7 @@
 
 use core::convert::Infallible;
 
-use device_envoy_esp::button::{ButtonEsp, PressedTo};
+use device_envoy_esp::{Error, button::PressedTo, button_watch};
 use device_envoy_esp::cyd::{DEFAULT_DISPLAY_SPI_HZ, CydDisplayEsp, CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
@@ -19,13 +19,19 @@ use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+button_watch! {
+    BalletButtonWatch {
+        pin: GPIO{{ button_pin }},
+    }
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
     panic!("{err:?}");
 }
 
-async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
 
@@ -50,8 +56,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("CYD display initialized");
 
-    let button = ButtonEsp::new(p.GPIO{{ button_pin }}, PressedTo::Ground);
-    Ok(ballet(&mut display, &button).await?)
+    let button = BalletButtonWatch::new(p.GPIO{{ button_pin }}, PressedTo::Ground, spawner).await?;
+    Ok(ballet(&mut display, &*button).await?)
 }
 
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores
@@ -59,6 +65,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 #[allow(dead_code)]
 #[derive(Debug, derive_more::From)]
 enum MainError {
+    DeviceEnvoy(Error),
     CydEsp(CydError),
     Ballet(ballet::Error<CydError>),
 }

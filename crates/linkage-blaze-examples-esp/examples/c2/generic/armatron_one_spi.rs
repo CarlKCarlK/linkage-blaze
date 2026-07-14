@@ -6,7 +6,8 @@ use core::convert::Infallible;
 use device_envoy_core::cyd::{Cyd as _, CydDisplay, display::CydFrame};
 use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_esp::{
-    button::{ButtonEsp, PressedTo},
+    button::PressedTo,
+    button_watch,
     cyd::{CydError, CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
@@ -20,19 +21,26 @@ use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+button_watch! {
+    CalibrationButtonWatch {
+        pin: GPIO18,
+    }
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     let err = inner_main(spawner).await.unwrap_err();
     panic!("{err:?}");
 }
 
-async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD armatron loop (one-SPI) on ESP32-C2 / generic");
 
     let [mut calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
-    let mut calibration_button = ButtonEsp::new(p.GPIO18, PressedTo::Ground);
+    let calibration_button =
+        CalibrationButtonWatch::new(p.GPIO18, PressedTo::Ground, spawner).await?;
 
     static CYD_STATIC: CydStaticEsp<{ CydEspOneSpi::SCREEN_PIXELS }> = CydEspOneSpi::new_static();
     let (mut cyd, calibration_outcome) = CydEspOneSpi::new(
@@ -53,7 +61,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         FOREGROUND,                   // foreground
         &DEFAULT_FONT,                // font
         &mut calibration_flash_block, // calibration_flash_block
-        &mut calibration_button,      // recalibration_button
+        &mut *calibration_button,     // recalibration_button
         Some("rebooting"),            // confirmed_message
     )
     .await?;
@@ -63,7 +71,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         esp_hal::system::software_reset();
     }
 
-    match armatron(&mut cyd, &mut calibration_button).await? {
+    match armatron(&mut cyd, &mut *calibration_button).await? {
         ArmatronExit::CalibrationRequested => {
             clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
         }

@@ -9,7 +9,8 @@ use device_envoy_esp::cyd::{
 };
 use device_envoy_esp::{
     Error,
-    button::{ButtonEsp, PressedTo},
+    button::PressedTo,
+    button_watch,
     clock_sync::{ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
     flash_block::FlashBlockEsp,
     init_and_start,
@@ -27,6 +28,12 @@ use linkage_blaze_core::examples::clock::{
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
+
+button_watch! {
+    ForcePortalButtonWatch {
+        pin: GPIO0,
+    }
+}
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
@@ -64,7 +71,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
     let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
-    let mut force_portal_button = ButtonEsp::new(p.GPIO0, PressedTo::Ground);
+    let force_portal_button =
+        ForcePortalButtonWatch::new(p.GPIO0, PressedTo::Ground, spawner).await?;
 
     let wifi_auto = WifiAutoEsp::new(
         p.WIFI,
@@ -77,7 +85,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
         .connect(
-            &mut force_portal_button,
+            &mut *force_portal_button,
             async |wifi_auto_event| -> Result<(), Error> {
                 let message = match wifi_auto_event {
                     WifiAutoEvent::CaptivePortalReady => "WiFi setup",
@@ -120,7 +128,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     )?;
     info!("clock sync ready; entering clock loop");
 
-    match clock(&mut display, &clock_sync, &mut force_portal_button).await? {
+    match clock(&mut display, &clock_sync, &mut *force_portal_button).await? {
         clock::Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             device_envoy_esp::esp_hal::system::software_reset();
