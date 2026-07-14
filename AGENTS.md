@@ -26,6 +26,24 @@ This file contains shared workspace rules for this repository.
 - Any time a color is defined with numeric components, add a nearby comment with its approximate color name.
 - Put primary entry points (`main`, `inner_main`, public run/game-loop functions) near the top of the file before helper types and functions. Do not bury them at the bottom. Concretely, order top-level items as: includes and constants; then the entry point(s); then error types, other helper types, and helper functions. In particular, error enums (e.g. `MainError`) and their `From` impls belong after the entry point, not before it.
 
+## Workspace Dependencies
+
+This workspace commonly includes the sibling Device Envoy repository at
+`../mcu/device-envoy`. When a task touches CYD/WASM simulator behavior,
+browser integration, generated Device Envoy assets, or any cross-repository
+interface, read that repository's `AGENTS.md` before acting; its rules are
+part of the task context.
+
+## Development Tools
+
+Assume the repository's normal development tools are available, including
+Rust/Cargo, `just`, Node.js/npm, Python 3, Playwright, `wasm-pack`, and the
+required Rust/WASM targets. If a required tool is missing, use the repository's
+documented or project-local installation path when available. Do not silently
+install system-wide packages or alter unrelated global configuration. For
+Playwright, install its browser binaries when needed before diagnosing browser
+test failures.
+
 ## Specs
 
 Put implementation specs (`*_SPEC.md` and similar planning documents) in the `specs/` directory, not the repo root. Every spec must include a `todo0` comment near the top reminding readers to consider deleting the spec once the work it describes is complete, for example:
@@ -36,7 +54,7 @@ Put implementation specs (`*_SPEC.md` and similar planning documents) in the `sp
 
 ## Local CI
 
-`just check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite.
+`just check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite. When a task depends on Device Envoy, also run its `cargo check-all` command from the Device Envoy repository.
 
 ## Module Structure Convention
 

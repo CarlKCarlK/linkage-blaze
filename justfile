@@ -76,10 +76,11 @@ test-cyd-browser:
     #!/usr/bin/env bash
     set -euo pipefail
     just build-pages
-    python3 -m http.server 8092 --bind 127.0.0.1 --directory target/pages &
+    server_port=$(python3 -c 'import socket; socket_ = socket.socket(); socket_.bind(("127.0.0.1", 0)); print(socket_.getsockname()[1]); socket_.close()')
+    python3 scripts/cyd-test-server.py "$server_port" &
     server_process_id=$!
     trap 'kill "$server_process_id"' EXIT
-    npx playwright test
+    CYD_TEST_BASE_URL="http://127.0.0.1:$server_port" npx playwright test
 
 _pages_port := "8090"
 
