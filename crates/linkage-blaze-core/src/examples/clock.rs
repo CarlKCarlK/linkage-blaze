@@ -193,6 +193,8 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use device_envoy_core::button::{__ButtonMonitor, Button};
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
     use device_envoy_core::cyd::{CydDisplay, display::CydFrame};
@@ -276,6 +278,36 @@ mod tests {
     }
 
     #[test]
+    fn boot_requests_wifi_reset_after_a_rendered_tick() {
+        let mut memory_cyd = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND,
+            FOREGROUND,
+            &WIFI_STATUS_FONT,
+        );
+        memory_cyd.set_frame_budget(100);
+        let clock_sync = OneTickClockSync {
+            local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
+                .expect("valid fixed timestamp"),
+            ticks: Cell::new(0),
+        };
+        let mut button = AfterTickButton {
+            waits: Cell::new(0),
+        };
+
+        let result = {
+            let mut display = memory_cyd.display();
+            block_on(clock(&mut display, &clock_sync, &mut button))
+        };
+
+        assert_eq!(
+            result.expect("BOOT should exit after a rendered tick"),
+            super::Exit::ResetWifi
+        );
+        assert!(memory_cyd.flush_count() > 0);
+    }
+
+    #[test]
     fn clock_renders_expected_frame() {
         let mut memory_cyd = CydMemory::new(
             ORIENTATION.size(),
@@ -332,5 +364,61 @@ mod tests {
         async fn wait_for_press(&mut self) {
             core::future::pending().await
         }
+    }
+
+    struct AfterTickButton {
+        waits: Cell<u8>,
+    }
+
+    impl __ButtonMonitor for AfterTickButton {
+        fn is_pressed_raw(&self) -> bool {
+            false
+        }
+
+        async fn wait_until_pressed_state(&mut self, _pressed: bool) {}
+    }
+
+    impl Button for AfterTickButton {
+        async fn wait_for_press(&mut self) {
+            let wait_number = self.waits.get();
+            self.waits.set(wait_number + 1);
+            if wait_number == 0 {
+                core::future::pending().await
+            }
+        }
+    }
+
+    struct OneTickClockSync {
+        local_time: OffsetDateTime,
+        ticks: Cell<u8>,
+    }
+
+    impl ClockSync for OneTickClockSync {
+        async fn wait_for_tick(&self) -> ClockSyncTick {
+            if self.ticks.replace(1) == 0 {
+                ClockSyncTick {
+                    local_time: self.local_time,
+                    since_last_sync: embassy_time::Duration::from_secs(0),
+                }
+            } else {
+                core::future::pending().await
+            }
+        }
+
+        fn now_local(&self) -> OffsetDateTime {
+            self.local_time
+        }
+
+        fn set_offset_minutes(&self, _minutes: i32) {}
+
+        fn offset_minutes(&self) -> i32 {
+            0
+        }
+
+        fn set_tick_interval(&self, _interval: Option<embassy_time::Duration>) {}
+
+        fn set_speed(&self, _speed_multiplier: f32) {}
+
+        fn set_utc_time(&self, _unix_seconds: UnixSeconds) {}
     }
 }

@@ -382,3 +382,57 @@ fn apply_paired_candidate(params: &mut [f32; super::DOF], pair_index: usize, ste
     params[BEND_ELBOW_PARAM_INDEX] != bend_original
         || params[SPIN_WHOLE_ARM_PARAM_INDEX] != spin_original
 }
+
+#[cfg(test)]
+mod tests {
+    use core::ptr;
+
+    use super::*;
+
+    fn default_params() -> [f32; super::super::DOF] {
+        super::super::LINKAGE.param_defaults()
+    }
+
+    #[test]
+    fn toggle_switches_between_play_and_stop() -> Result<(), LinkageError> {
+        let params = default_params();
+        let mut reverse_kinematics = ReverseKinematics::new();
+
+        assert!(ptr::eq(reverse_kinematics.run_button(), &RK_RUN_BUTTON));
+        reverse_kinematics.toggle(&params)?;
+        assert!(reverse_kinematics.playing);
+        assert!(ptr::eq(reverse_kinematics.run_button(), &RK_STOP_BUTTON));
+
+        reverse_kinematics.toggle(&params)?;
+        assert!(!reverse_kinematics.playing);
+        assert!(ptr::eq(reverse_kinematics.run_button(), &RK_RUN_BUTTON));
+        Ok(())
+    }
+
+    #[test]
+    fn pressed_step_stops_playback_and_starts_a_run() -> Result<(), LinkageError> {
+        let mut params = default_params();
+        let mut reverse_kinematics = ReverseKinematics::new();
+        reverse_kinematics.toggle(&params)?;
+
+        reverse_kinematics.hold_step(&mut params, HoldButtonState::Pressed, 0.0)?;
+
+        assert!(!reverse_kinematics.playing);
+        assert!(reverse_kinematics.run.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn clear_stops_and_forgets_the_current_run() -> Result<(), LinkageError> {
+        let params = default_params();
+        let mut reverse_kinematics = ReverseKinematics::new();
+        reverse_kinematics.toggle(&params)?;
+
+        reverse_kinematics.clear();
+
+        assert!(!reverse_kinematics.playing);
+        assert!(reverse_kinematics.run.is_none());
+        assert!(ptr::eq(reverse_kinematics.run_button(), &RK_RUN_BUTTON));
+        Ok(())
+    }
+}

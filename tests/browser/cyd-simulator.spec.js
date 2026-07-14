@@ -68,6 +68,26 @@ test("the shared details card opens, focuses, and closes with Escape", async ({ 
   await expect(cardButton).toBeFocused();
 });
 
+test("full-screen mode keeps the shared BOOT input available", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(String(error)));
+  await page.goto("/demos/ballet/v4/");
+
+  const deviceModeButton = page.locator(".demo-ux-device-button");
+  const overlay = page.locator(".demo-ux-device-overlay");
+  await deviceModeButton.click();
+  await expect(overlay).toBeVisible();
+
+  const fullScreenBoot = overlay.locator("#boot-button");
+  await expect(fullScreenBoot).toBeVisible();
+  await fullScreenBoot.click();
+  expect(pageErrors).toEqual([]);
+
+  await overlay.locator(".demo-ux-device-close").click();
+  await expect(overlay).toBeHidden();
+  await expect(page.locator(".stage > #boot-button")).toBeVisible();
+});
+
 for (const slug of ["clock", "skeleton-clock"]) {
   test(`${slug} time control supports override and live reset`, async ({ page }) => {
     await page.goto(`/demos/${slug}/v4/`);
@@ -221,4 +241,48 @@ test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
   // polling for continuous animation.
   const frameAfterBoot = await canvas.evaluate((element) => element.toDataURL());
   expect(frameAfterBoot).not.toEqual(frameBeforeBoot);
+});
+
+test("Armatron on-screen controls accept target and solver actions", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(String(error)));
+  await page.goto("/demos/armatron/v4/");
+  await page.waitForTimeout(250);
+
+  const canvas = page.locator("#screen");
+  const canvasBounds = await canvas.boundingBox();
+  expect(canvasBounds).not.toBeNull();
+  if (!canvasBounds) {
+    return;
+  }
+
+  const screenPoint = async (x, y) => {
+    await page.mouse.click(
+      canvasBounds.x + canvasBounds.width * (x / 320),
+      canvasBounds.y + canvasBounds.height * (y / 240),
+    );
+    await page.waitForTimeout(100);
+  };
+  const frame = async () => canvas.evaluate((element) => element.toDataURL());
+
+  const initialFrame = await frame();
+  await screenPoint(86, 24); // prev
+  const previousTargetFrame = await frame();
+  expect(previousTargetFrame).not.toEqual(initialFrame);
+
+  await screenPoint(202, 24); // next
+  const nextTargetFrame = await frame();
+  expect(nextTargetFrame).not.toEqual(previousTargetFrame);
+
+  await screenPoint(36, 95); // play
+  await page.waitForTimeout(250);
+  const playingFrame = await frame();
+  expect(playingFrame).not.toEqual(nextTargetFrame);
+
+  await screenPoint(36, 95); // stop
+  await screenPoint(64, 95); // step
+  const steppedFrame = await frame();
+  expect(steppedFrame).not.toEqual(playingFrame);
+
+  expect(pageErrors).toEqual([]);
 });
