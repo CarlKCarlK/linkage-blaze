@@ -193,6 +193,7 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
 
 #[cfg(test)]
 mod tests {
+    use device_envoy_core::button::{__ButtonMonitor, Button};
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
     use device_envoy_core::cyd::{CydDisplay, display::CydFrame};
     use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
@@ -235,6 +236,45 @@ mod tests {
         fn set_utc_time(&self, _unix_seconds: UnixSeconds) {}
     }
 
+    struct ImmediateButton;
+
+    impl __ButtonMonitor for ImmediateButton {
+        fn is_pressed_raw(&self) -> bool {
+            false
+        }
+
+        async fn wait_until_pressed_state(&mut self, _pressed: bool) {}
+    }
+
+    impl Button for ImmediateButton {
+        async fn wait_for_press(&mut self) {}
+    }
+
+    #[test]
+    fn boot_requests_wifi_reset_before_rendering_the_next_tick() {
+        let memory_cyd = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND,
+            FOREGROUND,
+            &WIFI_STATUS_FONT,
+        );
+        let clock_sync = FixedClockSync {
+            local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
+                .expect("valid fixed timestamp"),
+        };
+        let mut button = ImmediateButton;
+
+        let result = {
+            let mut display = memory_cyd.display();
+            block_on(clock(&mut display, &clock_sync, &mut button))
+        };
+
+        assert_eq!(
+            result.expect("BOOT should be a typed exit"),
+            super::Exit::ResetWifi
+        );
+    }
+
     #[test]
     fn clock_renders_expected_frame() {
         let mut memory_cyd = CydMemory::new(
@@ -248,7 +288,7 @@ mod tests {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
                 .expect("valid fixed timestamp"),
         };
-        let mut memory_button = memory_cyd.button_memory();
+        let mut memory_button = NeverButton;
 
         {
             let mut display = memory_cyd.display();
@@ -276,5 +316,21 @@ mod tests {
             "clock.png",
         )
         .expect("rendered frame should match the golden image");
+    }
+
+    struct NeverButton;
+
+    impl __ButtonMonitor for NeverButton {
+        fn is_pressed_raw(&self) -> bool {
+            false
+        }
+
+        async fn wait_until_pressed_state(&mut self, _pressed: bool) {}
+    }
+
+    impl Button for NeverButton {
+        async fn wait_for_press(&mut self) {
+            core::future::pending().await
+        }
     }
 }

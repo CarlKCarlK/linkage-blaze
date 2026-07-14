@@ -41,6 +41,11 @@ examples-clock = ["device-envoy-core/wifi"]
 
 [dev-dependencies]
 embassy-time = { version = "0.5.1", features = ["std"] }
+# Provides Embassy's host-test pender symbol for the feature-complete example
+# test binary. Example tests override timer-based button debounce with
+# deterministic test doubles; embedded consumers do not receive this dev-only
+# dependency.
+embassy-executor = { version = "0.10.0", default-features = false, features = ["platform-spin", "executor-thread"] }
 futures-executor = "0.3"
 png = "0.18"
 trybuild = "1.0"

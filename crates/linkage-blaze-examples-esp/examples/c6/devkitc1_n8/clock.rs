@@ -124,7 +124,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         clock::Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             device_envoy_esp::esp_hal::system::software_reset();
-            unreachable!("software_reset does not return");
         }
     }
 }

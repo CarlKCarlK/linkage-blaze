@@ -169,6 +169,36 @@ mod tests {
 
     use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
 
+    fn render_ballet(memory_cyd: &mut CydMemory, button: &impl device_envoy_core::button::Button) {
+        let mut display = memory_cyd.display();
+        block_on(ballet(&mut display, button))
+            .expect_err("the free-running loop should stop at the frame budget");
+    }
+
+    #[test]
+    fn boot_restarts_the_motion_sequence_at_the_initial_frame() {
+        let mut baseline = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        baseline.set_frame_budget(2);
+        let baseline_button = baseline.button_memory();
+        render_ballet(&mut baseline, &baseline_button);
+
+        let mut restarted = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        restarted.set_frame_budget(4);
+        let mut restarted_button = restarted.button_memory();
+        restarted_button.set_pressed_for_frame(2, true);
+        render_ballet(&mut restarted, &restarted_button);
+
+        for position_y in 0..ORIENTATION.height() as usize {
+            for position_x in 0..ORIENTATION.width() as usize {
+                assert_eq!(
+                    restarted.pixel(position_x, position_y),
+                    baseline.pixel(position_x, position_y),
+                    "restarted frame differs at ({position_x}, {position_y})",
+                );
+            }
+        }
+    }
+
     #[test]
     fn ballet_renders_expected_frame() {
         const GOLDEN_TEST_FRAME_BUDGET: usize = 225;

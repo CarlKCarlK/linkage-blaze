@@ -41,6 +41,34 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
   await page.waitForTimeout(5_000);
   expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
 
+  // Start a lookup and immediately press BOOT. The shared DNS loop must
+  // finish or safely leave the lookup, then return through calibration rather
+  // than dropping the BOOT action or spawning a second dashboard loop.
+  await page.mouse.click(...screenPoint(160, 120));
+  const activeLookupBootBounds = await page.locator("#boot-button").boundingBox();
+  expect(activeLookupBootBounds).not.toBeNull();
+  if (!activeLookupBootBounds) {
+    return;
+  }
+  await page.mouse.move(
+    activeLookupBootBounds.x + activeLookupBootBounds.width / 2,
+    activeLookupBootBounds.y + activeLookupBootBounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.waitForTimeout(60);
+  await page.mouse.up();
+  await page.waitForTimeout(1_000);
+  expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
+
+  // BOOT during the lookup must have entered the same calibration path as a
+  // main-state BOOT. Complete it before continuing with the settings checks.
+  for (const target of [[40, 40], [279, 40], [279, 199], [40, 199]]) {
+    await page.mouse.click(...screenPoint(...target));
+    await page.waitForTimeout(500);
+  }
+  await page.mouse.click(...screenPoint(160, 120));
+  await page.waitForTimeout(5_000);
+
   // Wi-Fi control requests the simulated captive-portal reset and uses the
   // shared browser notice facility. The connecting notice may replace the
   // short-lived setup notice before the browser observes it.
@@ -90,5 +118,18 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
   await page.reload();
   await page.waitForTimeout(3_000);
   await expect(canvas).toHaveAttribute("height", "320");
+
+  // CAL must enter the same calibration transition as BOOT, including after
+  // the dashboard has been rotated into portrait presentation.
+  const portraitCanvasBounds = await canvas.boundingBox();
+  expect(portraitCanvasBounds).not.toBeNull();
+  if (!portraitCanvasBounds) {
+    return;
+  }
+  await page.mouse.click(
+    portraitCanvasBounds.x + portraitCanvasBounds.width * (46 / 240),
+    portraitCanvasBounds.y + portraitCanvasBounds.height * (294 / 320),
+  );
+  await page.waitForTimeout(500);
   expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
 });

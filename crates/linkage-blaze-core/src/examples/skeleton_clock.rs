@@ -469,6 +469,7 @@ pub enum Error<F> {
 
 #[cfg(test)]
 mod tests {
+    use device_envoy_core::button::{__ButtonMonitor, Button};
     use device_envoy_core::clock_sync::{ClockSync, ClockSyncTick, UnixSeconds};
     use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
@@ -507,6 +508,40 @@ mod tests {
         fn set_utc_time(&self, _unix_seconds: UnixSeconds) {}
     }
 
+    struct ImmediateButton;
+
+    impl __ButtonMonitor for ImmediateButton {
+        fn is_pressed_raw(&self) -> bool {
+            false
+        }
+
+        async fn wait_until_pressed_state(&mut self, _pressed: bool) {}
+    }
+
+    impl Button for ImmediateButton {
+        async fn wait_for_press(&mut self) {}
+    }
+
+    #[test]
+    fn boot_requests_wifi_reset_before_rendering_the_next_tick() {
+        let memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let clock_sync = FixedClockSync {
+            local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
+                .expect("valid fixed timestamp"),
+        };
+        let mut button = ImmediateButton;
+
+        let result = {
+            let mut display = memory_cyd.display();
+            block_on(skeleton_clock(&mut display, &clock_sync, &mut button))
+        };
+
+        assert_eq!(
+            result.expect("BOOT should be a typed exit"),
+            super::Exit::ResetWifi
+        );
+    }
+
     // 1 flush for the digital time strip + 9 flushes for the 3x3 FIGURE_TILE_GRID
     // = one complete rendered frame.
     const ONE_COMPLETE_FRAME_BUDGET: usize = 10;
@@ -519,7 +554,7 @@ mod tests {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
                 .expect("valid fixed timestamp"),
         };
-        let mut memory_button = memory_cyd.button_memory();
+        let mut memory_button = NeverButton;
 
         let skeleton_clock_result = {
             let mut display = memory_cyd.display();
@@ -537,5 +572,21 @@ mod tests {
             "skeleton_clock.png",
         )
         .expect("rendered frame should match the golden image");
+    }
+
+    struct NeverButton;
+
+    impl __ButtonMonitor for NeverButton {
+        fn is_pressed_raw(&self) -> bool {
+            false
+        }
+
+        async fn wait_until_pressed_state(&mut self, _pressed: bool) {}
+    }
+
+    impl Button for NeverButton {
+        async fn wait_for_press(&mut self) {
+            core::future::pending().await
+        }
     }
 }

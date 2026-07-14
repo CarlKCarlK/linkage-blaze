@@ -274,6 +274,20 @@ mod tests {
     }
 
     #[test]
+    fn boot_requests_calibration() {
+        let mut memory_cyd = test_memory_cyd();
+        memory_cyd.set_frame_budget(1);
+        let mut memory_button = memory_cyd.button_memory();
+        memory_button.set_pressed_for_frame(0, true);
+
+        let armatron_exit = block_on(armatron(&mut memory_cyd, &mut memory_button))
+            .expect("BOOT should request calibration cleanly, not error");
+
+        assert!(matches!(armatron_exit, ArmatronExit::CalibrationRequested));
+        assert_eq!(memory_cyd.flush_count(), 0);
+    }
+
+    #[test]
     fn armatron_renders_expected_frame() {
         let mut memory_cyd = test_memory_cyd();
         memory_cyd.set_frame_budget(1);

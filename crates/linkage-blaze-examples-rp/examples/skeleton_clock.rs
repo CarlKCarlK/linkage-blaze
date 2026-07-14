@@ -8,6 +8,7 @@ use core::{cell::RefCell, convert::Infallible};
 use defmt::info;
 use defmt_rtt as _;
 use device_envoy_core::cyd::display::CydFrame;
+use device_envoy_core::wifi_auto::WifiAuto;
 use device_envoy_rp::{
     Error, Result,
     button::{ButtonRp, PressedTo},
@@ -135,7 +136,6 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         skeleton_clock::Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             cortex_m::peripheral::SCB::sys_reset();
-            unreachable!("sys_reset does not return");
         }
     }
 }

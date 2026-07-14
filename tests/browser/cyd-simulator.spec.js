@@ -138,6 +138,33 @@ test("Ballet routes BOOT back to the start of its animation", async ({ page }) =
   expect(frameAfterBoot).not.toEqual(frameBeforeBoot);
 });
 
+test("Armatron consumes BOOT during calibration without leaking into the app", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(String(error)));
+  await page.goto("/demos/armatron/v4/");
+  await page.waitForTimeout(300);
+
+  const canvas = page.locator("#screen");
+  const calibrationFrame = await canvas.evaluate((element) => element.toDataURL());
+  const bootBounds = await page.locator("#boot-button").boundingBox();
+  expect(bootBounds).not.toBeNull();
+  if (!bootBounds) {
+    return;
+  }
+  await page.mouse.move(
+    bootBounds.x + bootBounds.width / 2,
+    bootBounds.y + bootBounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+
+  expect(pageErrors).toEqual([]);
+  const restartedCalibrationFrame = await canvas.evaluate((element) => element.toDataURL());
+  expect(restartedCalibrationFrame).not.toEqual(calibrationFrame);
+});
+
 test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
   const consoleErrors = [];
   page.on("console", (message) => {
@@ -177,7 +204,9 @@ test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
   const bootCenterY = bootBounds.y + bootBounds.height / 2;
   await page.mouse.move(bootCenterX, bootCenterY);
   await page.mouse.down();
-  await page.waitForTimeout(50);
+  // Hold long enough to exercise the release/debounce path, not just the
+  // short-click path used by the other simulator examples.
+  await page.waitForTimeout(700);
   await page.mouse.up();
   await page.waitForTimeout(300);
 
