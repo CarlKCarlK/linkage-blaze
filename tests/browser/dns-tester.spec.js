@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistence", async ({ page }) => {
-  test.setTimeout(20_000);
+  test.setTimeout(30_000);
   const pageErrors = [];
   const consoleErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.stack ?? String(error)));
@@ -63,6 +63,15 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
   );
   await page.waitForTimeout(3_000);
   expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
+
+  // BOOT cleared calibration before restarting, so complete the real flow
+  // again before testing the dashboard controls.
+  for (const target of [[40, 40], [279, 40], [279, 199], [40, 199]]) {
+    await page.mouse.click(...screenPoint(...target));
+    await page.waitForTimeout(500);
+  }
+  await page.mouse.click(...screenPoint(160, 120));
+  await page.waitForTimeout(500);
 
   const latestCanvasBounds = await canvas.boundingBox();
   expect(latestCanvasBounds).not.toBeNull();
