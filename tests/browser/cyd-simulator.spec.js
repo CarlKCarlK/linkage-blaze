@@ -93,6 +93,8 @@ test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
       consoleErrors.push(message.text());
     }
   });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(String(error)));
   await page.goto("/demos/armatron/v4/");
 
   const canvas = page.locator("#screen");
@@ -106,10 +108,43 @@ test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
     canvasBounds.x + canvasBounds.width * (202 / 320),
     canvasBounds.y + canvasBounds.height * (24 / 240),
   );
-  const bootButton = page.locator("#boot-button");
-  await bootButton.dispatchEvent("pointerdown");
-  await bootButton.dispatchEvent("pointerup");
+
+  // Drive BOOT with real mouse events (not locator.dispatchEvent), which
+  // carry a genuine active pointer. A synthetic dispatchEvent's pointerId
+  // has no active pointer, so `setPointerCapture` throws and BOOT silently
+  // never reaches the WASM handle - exactly the failure mode this test
+  // must catch.
+  const bootBounds = await page.locator("#boot-button").boundingBox();
+  expect(bootBounds).not.toBeNull();
+  if (!bootBounds) {
+    return;
+  }
+  const bootCenterX = bootBounds.x + bootBounds.width / 2;
+  const bootCenterY = bootBounds.y + bootBounds.height / 2;
+  await page.mouse.move(bootCenterX, bootCenterY);
+  await page.mouse.down();
+  await page.waitForTimeout(50);
+  await page.mouse.up();
   await page.waitForTimeout(100);
 
+  expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
+
+  // BOOT requests calibration, which restarts the app loop rather than
+  // stopping it silently. Confirm the canvas is still actively rendering
+  // (not frozen) after the restart. A single pair of samples is flaky here:
+  // the on-screen FPS text only changes when its rounded tenths digit ticks
+  // over, so two adjacent frames can be pixel-identical even while healthy,
+  // so poll for the first observed change instead.
+  const frameAfterBoot = await canvas.evaluate((element) => element.toDataURL());
+  let sawChange = false;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await page.waitForTimeout(150);
+    const laterFrame = await canvas.evaluate((element) => element.toDataURL());
+    if (laterFrame !== frameAfterBoot) {
+      sawChange = true;
+      break;
+    }
+  }
+  expect(sawChange).toBe(true);
 });
