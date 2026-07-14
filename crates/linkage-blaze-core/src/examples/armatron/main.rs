@@ -163,12 +163,12 @@ where
 
         if ui.button(&mut frame, &PREVIOUS_TARGET_BUTTON)? {
             reverse_kinematics.clear();
-            target_seed = target_seed.wrapping_sub(1);
+            target_seed = previous_target_seed(target_seed);
             randomize_target_from_seed(target_seed, &mut params);
         }
         if ui.button(&mut frame, &NEXT_TARGET_BUTTON)? {
             reverse_kinematics.clear();
-            target_seed = target_seed.wrapping_add(1);
+            target_seed = next_target_seed(target_seed);
             randomize_target_from_seed(target_seed, &mut params);
         }
 
@@ -307,6 +307,14 @@ mod tests {
         )
         .expect("rendered frame should match the golden image");
     }
+
+    #[test]
+    fn target_navigation_wraps_at_the_seed_boundaries() {
+        assert_eq!(super::previous_target_seed(0), u8::MAX);
+        assert_eq!(super::next_target_seed(u8::MAX), 0);
+        assert_eq!(super::previous_target_seed(42), 41);
+        assert_eq!(super::next_target_seed(42), 43);
+    }
 }
 
 /// Error from the generic armatron loop, generic over the CYD device error `F`.
@@ -334,6 +342,14 @@ fn randomize_target_from_seed(target_seed: u8, params: &mut [f32; DOF]) {
     for param in params[TARGET_PARAM_START..].iter_mut() {
         *param = rng.generate::<u32>() as f32 / (u32::MAX as f32 + 1.0);
     }
+}
+
+fn previous_target_seed(target_seed: u8) -> u8 {
+    target_seed.wrapping_sub(1)
+}
+
+fn next_target_seed(target_seed: u8) -> u8 {
+    target_seed.wrapping_add(1)
 }
 
 fn target_distance_hundredths(params: &[f32; DOF]) -> Result<u32, LinkageError> {
