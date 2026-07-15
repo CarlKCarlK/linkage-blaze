@@ -43,7 +43,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         CalibrationButtonWatch::new(p.GPIO0, PressedTo::Ground, spawner).await?;
 
     static CYD_STATIC: CydStaticEsp<{ CydEspOneSpi::SCREEN_PIXELS }> = CydEspOneSpi::new_static();
-    let (mut cyd, calibration_outcome) = CydEspOneSpi::new(
+    let mut cyd = CydEspOneSpi::new(
         &CYD_STATIC, // statics
         p.SPI2,      // spi
         p.GPIO14,    // sck_pin
@@ -62,15 +62,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         &DEFAULT_FONT,                // font
         &mut calibration_flash_block, // calibration_flash_block
         &mut *calibration_button,     // recalibration_button
-        Some("rebooting"),            // confirmed_message
     )
     .await?;
     info!("CYD display and touch initialized");
-    if calibration_outcome.was_saved() {
-        info!("Restarting");
-        esp_hal::system::software_reset();
-    }
-
     match armatron(&mut cyd, &mut *calibration_button).await? {
         ArmatronExit::CalibrationRequested => {
             clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
@@ -137,6 +131,7 @@ impl From<CydError> for MainError {
                 }
             },
             CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
+            CydError::DisplaySetOrientation(_) => MainError::FlushFrameBuffer,
         }
     }
 }

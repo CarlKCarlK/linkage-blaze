@@ -16,7 +16,7 @@ use crate::{
 use device_envoy_core::{
     button::Button,
     cyd::{
-        Cyd, CydDisplay, CydTouch,
+        Cyd, CydDisplay,
         display::{CydFrame, Orientation},
     },
 };
@@ -117,7 +117,6 @@ where
     C: Cyd,
     R: Button,
 {
-    let (display, touch) = cyd.parts();
     // Set the initial params including a random target.
     let mut params = LINKAGE.param_defaults();
     let mut target_seed: u8 = 0;
@@ -128,13 +127,13 @@ where
     let mut reverse_kinematics = ReverseKinematics::new();
     let mut previous_tick = None;
 
-    // Set up buffers
-    let mut frame = display.full_frame_mut();
     loop {
         if recalibration_button.is_pressed() {
             return Ok(ArmatronExit::CalibrationRequested);
         }
 
+        let touch_event = cyd.read_touch().map_err(Error::Cyd)?;
+        let mut frame = cyd.display().full_frame_mut();
         let current_tick = Instant::now();
         frame.clear();
 
@@ -145,8 +144,7 @@ where
             draw_item_3d.project(&PROJECTION).draw(&mut frame);
         }
 
-        // todo It's weird this doesn't return an error of the right type already and needs to be converted
-        ui.begin(touch.read().map_err(Error::Cyd)?);
+        ui.begin(touch_event);
 
         ui.slider(&mut frame, &TILT_SLIDER, &mut params[TILT_PARAM_INDEX])?;
         ui.slider(&mut frame, &DOLLY_SLIDER, &mut params[DOLLY_PARAM_INDEX])?;

@@ -36,7 +36,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 
     static CYD_STATIC: CydRpOneSpiStatic<SPI0, { CydRpOneSpi::<SPI0>::SCREEN_PIXELS }> =
         CydRpOneSpi::new_static();
-    let (mut cyd, calibration_outcome) = CydRpOneSpi::new(
+    let mut cyd = CydRpOneSpi::new(
         &CYD_STATIC, // statics
         p.SPI0,      // spi
         p.PIN_18,    // sck_pin
@@ -55,15 +55,9 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
         &DEFAULT_FONT,                // font
         &mut calibration_flash_block, // calibration_flash_block
         &mut calibration_button,      // recalibration_button
-        Some("rebooting"),            // confirmed_message
     )
     .await?;
     info!("CYD display and touch initialized");
-
-    if calibration_outcome.was_saved() {
-        info!("Restarting");
-        cortex_m::peripheral::SCB::sys_reset();
-    }
 
     match armatron(&mut cyd, &mut calibration_button).await? {
         ArmatronExit::CalibrationRequested => {
