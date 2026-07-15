@@ -32,6 +32,8 @@ test-core:
 test-utils:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-utils
 
+# TODO0 Consider moving this orchestration into a Cargo xtask if linkage-blaze
+# and Device Envoy standardize on `cargo check-all` as their shared interface.
 # Check and build all crates
 check-all:
     cargo run --quiet -p linkage-blaze-xtask -- generate-board-examples
