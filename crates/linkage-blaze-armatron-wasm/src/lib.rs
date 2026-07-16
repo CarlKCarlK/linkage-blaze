@@ -1,24 +1,23 @@
 #![no_std]
 
-use device_envoy_core::{
-    cyd::display::Orientation,
-    wasm::{
-        CydWebAppConfig, CydWebAppHandle, CydWebAppWasm, CydWebCommand, CydWebPageInfo,
-        start_cyd_web_app,
-    },
-};
+use core::convert::Infallible;
+
+use device_envoy_core::cyd::display::Orientation;
+use device_envoy_core::wasm::cyd_web;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
-use linkage_blaze_core::examples::armatron::{ArmatronExit, BACKGROUND, FOREGROUND, armatron};
+use linkage_blaze_core::examples::armatron::{
+    ArmatronExit, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
+};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-const WEB_APP: CydWebAppConfig = CydWebAppConfig::new(
+const WEB_APP: cyd_web::Config = cyd_web::Config::new(
     "linkage-blaze/armatron",
     Orientation::Landscape,
     BACKGROUND,
     FOREGROUND,
     &FONT_6X10,
 );
-const PAGE_INFO: CydWebPageInfo = CydWebPageInfo::new(
+const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(
     "Armatron",
     "A six-joint robot arm driven by inverse kinematics.",
     "A robot arm with six joints, modeled as a linkage and driven by inverse kinematics.",
@@ -27,15 +26,16 @@ const PAGE_INFO: CydWebPageInfo = CydWebPageInfo::new(
 );
 
 #[wasm_bindgen]
-pub fn start(canvas_id: &str) -> Result<CydWebAppHandle, wasm_bindgen::JsValue> {
-    start_cyd_web_app(canvas_id, WEB_APP, PAGE_INFO, inner_main)
+pub fn start(canvas_id: &str) -> Result<cyd_web::Handle, wasm_bindgen::JsValue> {
+    cyd_web::start(canvas_id, WEB_APP, PAGE_INFO, inner_main)
 }
 
 async fn inner_main(
-    mut cyd_web_app_wasm: CydWebAppWasm,
-) -> Result<CydWebCommand, linkage_blaze_core::examples::armatron::Error<core::convert::Infallible>>
-{
-    match armatron(&mut cyd_web_app_wasm.cyd, &mut cyd_web_app_wasm.button).await? {
-        ArmatronExit::CalibrationRequested => Ok(CydWebCommand::CalibrationNotNeeded),
+    capabilities: cyd_web::Capabilities,
+) -> Result<cyd_web::Command, ArmatronError<Infallible>> {
+    let mut cyd = capabilities.cyd;
+    let mut button = capabilities.button;
+    match armatron(&mut cyd, &mut button).await? {
+        ArmatronExit::CalibrationRequested => Ok(cyd_web::Command::CalibrationNotNeeded),
     }
 }

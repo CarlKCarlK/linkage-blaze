@@ -3,24 +3,24 @@
 use core::convert::Infallible;
 
 use device_envoy_core::cyd::{CydDisplay, display::CydFrame};
-use device_envoy_core::wasm::{
-    CydWebAppConfig, CydWebAppHandle, CydWebAppWasm, CydWebCommand, CydWebPageInfo,
-    start_cyd_web_app,
+use device_envoy_core::{
+    wasm::{WifiConnectOutcome, cyd_web},
+    wifi_auto::WifiAutoEvent,
 };
 use linkage_blaze_core::examples::clock::{
-    BACKGROUND, Exit, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
-    clock_splash,
+    BACKGROUND, Error as ClockError, Exit, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT,
+    WIFI_STATUS_RECTANGLE, clock, clock_splash,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
-const WEB_APP: CydWebAppConfig = CydWebAppConfig::new(
+const WEB_APP: cyd_web::Config = cyd_web::Config::new(
     "linkage-blaze/clock",
     ORIENTATION,
     BACKGROUND,
     FOREGROUND,
     &WIFI_STATUS_FONT,
 );
-const PAGE_INFO: CydWebPageInfo = CydWebPageInfo::new(
+const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(
     "Clock",
     "An analog linkage clock with a digital strip and WiFi status.",
     "An analog clock whose hands are a tiny linkage posed by the time of day.",
@@ -29,24 +29,27 @@ const PAGE_INFO: CydWebPageInfo = CydWebPageInfo::new(
 );
 
 #[wasm_bindgen]
-pub fn start(canvas_id: &str) -> Result<CydWebAppHandle, wasm_bindgen::JsValue> {
-    start_cyd_web_app(canvas_id, WEB_APP, PAGE_INFO, inner_main)
+pub fn start(canvas_id: &str) -> Result<cyd_web::Handle, wasm_bindgen::JsValue> {
+    cyd_web::start(canvas_id, WEB_APP, PAGE_INFO, inner_main)
 }
 
 async fn inner_main(
-    mut cyd_web_app_wasm: CydWebAppWasm,
-) -> Result<CydWebCommand, linkage_blaze_core::examples::clock::Error<Infallible>> {
-    cyd_web_app_wasm.clock_sync.show();
-    let mut display = cyd_web_app_wasm.cyd.display();
+    capabilities: cyd_web::Capabilities,
+) -> Result<cyd_web::Command, ClockError<Infallible>> {
+    let cyd = capabilities.cyd;
+    let mut button = capabilities.button;
+    let clock_sync = capabilities.clock_sync;
+    let wifi_simulator = capabilities.wifi_simulator;
+    clock_sync.show();
+    let mut display = cyd.display();
     clock_splash(&mut display).await?;
 
-    let wifi_outcome = match cyd_web_app_wasm
-        .wifi_simulator
-        .connect(&mut cyd_web_app_wasm.button, async |event| {
+    let wifi_outcome = match wifi_simulator
+        .connect(&mut button, async |event| {
             let status = match event {
-                device_envoy_core::wifi_auto::WifiAutoEvent::CaptivePortalReady => "WiFi setup",
-                device_envoy_core::wifi_auto::WifiAutoEvent::Connecting { .. } => "WiFi ...",
-                device_envoy_core::wifi_auto::WifiAutoEvent::ConnectionFailed => "WiFi fail",
+                WifiAutoEvent::CaptivePortalReady => "WiFi setup",
+                WifiAutoEvent::Connecting { .. } => "WiFi ...",
+                WifiAutoEvent::ConnectionFailed => "WiFi fail",
             };
             display
                 .frame_mut(WIFI_STATUS_RECTANGLE)
@@ -60,11 +63,8 @@ async fn inner_main(
         Ok(outcome) => outcome,
         Err(error) => match error {},
     };
-    if matches!(
-        wifi_outcome,
-        device_envoy_core::wasm::WifiConnectOutcome::ResetRequested
-    ) {
-        return Ok(CydWebCommand::ResetWifi);
+    if matches!(wifi_outcome, WifiConnectOutcome::ResetRequested) {
+        return Ok(cyd_web::Command::ResetWifi);
     }
 
     let mut wifi_frame = display.frame_mut(WIFI_STATUS_RECTANGLE);
@@ -73,13 +73,7 @@ async fn inner_main(
         Ok(()) => {}
         Err(error) => match error {},
     }
-    match clock(
-        &mut display,
-        &cyd_web_app_wasm.clock_sync,
-        &mut cyd_web_app_wasm.button,
-    )
-    .await?
-    {
-        Exit::ResetWifi => Ok(CydWebCommand::ResetWifi),
+    match clock(&mut display, &clock_sync, &mut button).await? {
+        Exit::ResetWifi => Ok(cyd_web::Command::ResetWifi),
     }
 }
