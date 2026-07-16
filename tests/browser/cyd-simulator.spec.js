@@ -158,14 +158,13 @@ test("Ballet routes BOOT back to the start of its animation", async ({ page }) =
   expect(frameAfterBoot).not.toEqual(frameBeforeBoot);
 });
 
-test("Armatron consumes BOOT during calibration without leaking into the app", async ({ page }) => {
+test("Armatron opens directly and maps calibration exits to the browser policy", async ({ page }) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   await page.goto("/demos/armatron/v4/");
   await page.waitForTimeout(300);
 
   const canvas = page.locator("#screen");
-  const calibrationFrame = await canvas.evaluate((element) => element.toDataURL());
   const bootBounds = await page.locator("#boot-button").boundingBox();
   expect(bootBounds).not.toBeNull();
   if (!bootBounds) {
@@ -181,8 +180,11 @@ test("Armatron consumes BOOT during calibration without leaking into the app", a
   await page.waitForTimeout(300);
 
   expect(pageErrors).toEqual([]);
-  const restartedCalibrationFrame = await canvas.evaluate((element) => element.toDataURL());
-  expect(restartedCalibrationFrame).not.toEqual(calibrationFrame);
+  await expect(canvas).toHaveAttribute("width", "320");
+  await expect(canvas).toHaveAttribute("height", "240");
+  await expect(page.locator(".cyd-simulator-notice")).toContainText(
+    "Calibration is not needed in the browser.",
+  );
 });
 
 test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
@@ -233,12 +235,8 @@ test("Armatron forwards canvas and BOOT input to WASM", async ({ page }) => {
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 
-  // BOOT requests calibration, which re-enters the shared four-tap
-  // calibration exercise rather than stopping the app silently. That
-  // exercise's crosshair screen is mostly static (unlike the game loop's
-  // continuously ticking FPS counter), so confirm the app actually
-  // transitioned by comparing against the pre-BOOT frame instead of
-  // polling for continuous animation.
+  // BOOT requests calibration from the shared core; the browser policy
+  // reports that calibration is unnecessary and restarts the app.
   const frameAfterBoot = await canvas.evaluate((element) => element.toDataURL());
   expect(frameAfterBoot).not.toEqual(frameBeforeBoot);
 });

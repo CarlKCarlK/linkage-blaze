@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistence", async ({ page }) => {
+test("DNS Tester uses intrinsic browser touch, DNS latency, and orientation persistence", async ({ page }) => {
   test.setTimeout(30_000);
   const pageErrors = [];
   const consoleErrors = [];
@@ -12,6 +12,10 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
   });
 
   await page.goto("/dns-tester/");
+  const calibrationKeys = await page.evaluate(() =>
+    Object.keys(localStorage).filter((key) => key.includes("calibration")),
+  );
+  expect(calibrationKeys).toEqual([]);
   const canvas = page.locator("#screen");
   await expect(canvas).toHaveAttribute("width", "320");
   await expect(canvas).toHaveAttribute("height", "240");
@@ -27,47 +31,21 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
     canvasBounds.y + canvasBounds.height * (y / 240),
   ];
 
-  // A fresh browser context has no calibration flash record. Complete the
-  // real four-target flow before exercising the Wi-Fi startup path.
-  await page.waitForTimeout(500);
-  for (const target of [[40, 40], [279, 40], [279, 199], [40, 199]]) {
-    await page.mouse.click(...screenPoint(...target));
-    await page.waitForTimeout(500);
-  }
-  await page.mouse.click(...screenPoint(160, 120));
-  await page.waitForTimeout(500);
-
   // Startup includes the shared simulated captive-portal and connecting phases.
   await page.waitForTimeout(5_000);
   expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
+  await expect(page.locator(".cyd-simulator-notice")).not.toContainText("Calibration");
 
-  // Start a lookup and immediately press BOOT. The shared DNS loop must
-  // finish or safely leave the lookup, then return through calibration rather
-  // than dropping the BOOT action or spawning a second dashboard loop.
-  await page.mouse.click(...screenPoint(160, 120));
-  const activeLookupBootBounds = await page.locator("#boot-button").boundingBox();
-  expect(activeLookupBootBounds).not.toBeNull();
-  if (!activeLookupBootBounds) {
-    return;
-  }
-  await page.mouse.move(
-    activeLookupBootBounds.x + activeLookupBootBounds.width / 2,
-    activeLookupBootBounds.y + activeLookupBootBounds.height / 2,
+  // The dashboard accepts the normal DNS action without a calibration phase.
+  const dashboardImageBeforeLookup = await page.locator("#screen").evaluate(
+    (screen) => screen.toDataURL(),
   );
-  await page.mouse.down();
-  await page.waitForTimeout(60);
-  await page.mouse.up();
-  await page.waitForTimeout(1_000);
-  expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
-
-  // BOOT during the lookup must have entered the same calibration path as a
-  // main-state BOOT. Complete it before continuing with the settings checks.
-  for (const target of [[40, 40], [279, 40], [279, 199], [40, 199]]) {
-    await page.mouse.click(...screenPoint(...target));
-    await page.waitForTimeout(500);
-  }
   await page.mouse.click(...screenPoint(160, 120));
-  await page.waitForTimeout(5_000);
+  await page.waitForTimeout(500);
+  const dashboardImageAfterLookup = await page.locator("#screen").evaluate(
+    (screen) => screen.toDataURL(),
+  );
+  expect(dashboardImageAfterLookup).not.toBe(dashboardImageBeforeLookup);
 
   // Wi-Fi control requests the simulated captive-portal reset and uses the
   // shared browser notice facility. The connecting notice may replace the
@@ -92,15 +70,6 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
   await page.waitForTimeout(3_000);
   expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
 
-  // BOOT cleared calibration before restarting, so complete the real flow
-  // again before testing the dashboard controls.
-  for (const target of [[40, 40], [279, 40], [279, 199], [40, 199]]) {
-    await page.mouse.click(...screenPoint(...target));
-    await page.waitForTimeout(500);
-  }
-  await page.mouse.click(...screenPoint(160, 120));
-  await page.waitForTimeout(500);
-
   const latestCanvasBounds = await canvas.boundingBox();
   expect(latestCanvasBounds).not.toBeNull();
   if (!latestCanvasBounds) {
@@ -119,8 +88,8 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
   await page.waitForTimeout(3_000);
   await expect(canvas).toHaveAttribute("height", "320");
 
-  // CAL must enter the same calibration transition as BOOT, including after
-  // the dashboard has been rotated into portrait presentation.
+  // CAL must show the browser policy notice, including after the dashboard has
+  // been rotated into portrait presentation.
   const portraitCanvasBounds = await canvas.boundingBox();
   expect(portraitCanvasBounds).not.toBeNull();
   if (!portraitCanvasBounds) {
@@ -130,6 +99,8 @@ test("DNS Tester simulates Wi-Fi startup, BOOT reset, and orientation persistenc
     portraitCanvasBounds.x + portraitCanvasBounds.width * (46 / 240),
     portraitCanvasBounds.y + portraitCanvasBounds.height * (294 / 320),
   );
-  await page.waitForTimeout(500);
+  await expect(page.locator(".cyd-simulator-notice")).toContainText(
+    "Calibration is not needed in the browser.",
+  );
   expect({ pageErrors, consoleErrors }).toEqual({ pageErrors: [], consoleErrors: [] });
 });

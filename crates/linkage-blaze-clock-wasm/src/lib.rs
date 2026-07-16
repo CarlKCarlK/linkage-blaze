@@ -1,22 +1,28 @@
 #![no_std]
 
-mod clock_sync;
+use core::convert::Infallible;
 
+use device_envoy_core::wasm::{
+    ButtonWasm, CydDisplayWasm, CydWebAppConfig, CydWebAppHandle, CydWebCommand,
+    WifiSimulatorWasm, start_cyd_display_web_app,
+};
 use device_envoy_core::{
-    button::Button,
     cyd::{CydDisplay, display::CydFrame},
-    wasm::{
-        ButtonWasm, CydSimulatorControlWasm, CydSimulatorWasm, SimulatorNoticeDisposition,
-        SimulatorNoticeRequest, WifiConnectEvent, WifiConnectOutcome, next_animation_frame,
-        simulate_wifi_connect, simulator_notice_disposition,
-    },
+    wasm::clock::ClockSyncWasm,
 };
 use linkage_blaze_core::examples::clock::{
     BACKGROUND, Exit, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
     clock_splash,
 };
-use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
-use web_sys::{HtmlCanvasElement, window};
+use wasm_bindgen::prelude::wasm_bindgen;
+
+const WEB_APP: CydWebAppConfig = CydWebAppConfig::new(
+    "linkage-blaze/clock",
+    ORIENTATION,
+    BACKGROUND,
+    FOREGROUND,
+    &WIFI_STATUS_FONT,
+);
 
 #[wasm_bindgen]
 pub fn show_case_alignment_controls() -> bool {
@@ -30,98 +36,56 @@ pub fn set_time_of_day(seconds_of_day: i32) -> Result<(), wasm_bindgen::JsValue>
             "time of day must be between 0 and 86399 seconds",
         ));
     }
-    clock_sync::set_time_of_day(seconds_of_day);
+    device_envoy_core::wasm::clock::set_time_of_day(seconds_of_day);
     Ok(())
 }
 
 #[wasm_bindgen]
-pub fn start(canvas_id: &str) -> Result<CydSimulatorControlWasm, wasm_bindgen::JsValue> {
-    let document = window()
-        .ok_or_else(|| wasm_bindgen::JsValue::from_str("browser window unavailable"))?
-        .document()
-        .ok_or_else(|| wasm_bindgen::JsValue::from_str("document unavailable"))?;
-    let canvas = document
-        .get_element_by_id(canvas_id)
-        .ok_or_else(|| wasm_bindgen::JsValue::from_str("canvas element unavailable"))?
-        .dyn_into::<HtmlCanvasElement>()?;
-    let simulator = CydSimulatorWasm::new_with_style(
-        canvas,
-        ORIENTATION,
-        BACKGROUND,
-        FOREGROUND,
-        &WIFI_STATUS_FONT,
-    )?;
-    let (cyd, mut button, control) = simulator.into_parts();
-    wasm_bindgen_futures::spawn_local(async move {
-        let mut display = cyd.display();
-        let clock_sync = clock_sync::BrowserClockSync::new();
-        if let Err(error) = clock_splash(&mut display).await {
-            drop(error);
-            web_sys::console::error_1(&wasm_bindgen::JsValue::from_str("clock splash stopped"));
-            return;
-        }
-        loop {
-            let wifi_outcome = simulate_wifi_connect(&mut button, async |event| {
-                let (notice_request, status) = match event {
-                    WifiConnectEvent::CaptivePortalReady => {
-                        (SimulatorNoticeRequest::wifi_setup(), "WiFi setup")
-                    }
-                    WifiConnectEvent::Connecting { .. } => {
-                        (SimulatorNoticeRequest::wifi_connecting(), "WiFi ...")
-                    }
-                    WifiConnectEvent::ConnectionFailed => {
-                        (SimulatorNoticeRequest::wifi_unavailable(), "WiFi fail")
-                    }
-                };
-                if matches!(
-                    simulator_notice_disposition(notice_request),
-                    SimulatorNoticeDisposition::Terminate
-                ) {
-                    return Ok::<(), wasm_bindgen::JsValue>(());
-                }
-                display
-                    .frame_mut(WIFI_STATUS_RECTANGLE)
-                    .clear()
-                    .write_text(status)
-                    .flush()
-                    .await
-                    .map_err(|_error| wasm_bindgen::JsValue::from_str("Wi-Fi status failed"))
-            })
-            .await;
-            let wifi_outcome = match wifi_outcome {
-                Ok(wifi_outcome) => wifi_outcome,
-                Err(error) => {
-                    web_sys::console::error_1(&error);
-                    return;
-                }
-            };
-            if matches!(wifi_outcome, WifiConnectOutcome::ResetRequested) {
-                wait_for_button_release(&button).await;
-                continue;
-            }
-            if let Err(error) = display
-                .frame_mut(WIFI_STATUS_RECTANGLE)
-                .clear()
-                .write_text("WiFi OK")
-                .flush()
-                .await
-            {
-                match error {}
-            }
-            match clock(&mut display, &clock_sync, &mut button).await {
-                Ok(Exit::ResetWifi) => wait_for_button_release(&button).await,
-                Err(_error) => {
-                    web_sys::console::error_1(&wasm_bindgen::JsValue::from_str("clock stopped"));
-                    return;
-                }
-            }
-        }
-    });
-    Ok(control)
+pub fn start(canvas_id: &str) -> Result<CydWebAppHandle, wasm_bindgen::JsValue> {
+    start_cyd_display_web_app(canvas_id, WEB_APP, inner_main)
 }
 
-async fn wait_for_button_release(button: &ButtonWasm) {
-    while button.is_pressed() {
-        next_animation_frame().await;
+async fn inner_main(
+    display: &mut CydDisplayWasm,
+    button: &mut ButtonWasm,
+) -> Result<CydWebCommand, linkage_blaze_core::examples::clock::Error<Infallible>> {
+    let clock_sync = ClockSyncWasm::new();
+    clock_splash(display).await?;
+
+    let wifi_simulator = WifiSimulatorWasm::new(WEB_APP.storage_namespace);
+    let wifi_outcome = match wifi_simulator
+        .connect(button, async |event| {
+            let status = match event {
+                device_envoy_core::wifi_auto::WifiAutoEvent::CaptivePortalReady => "WiFi setup",
+                device_envoy_core::wifi_auto::WifiAutoEvent::Connecting { .. } => "WiFi ...",
+                device_envoy_core::wifi_auto::WifiAutoEvent::ConnectionFailed => "WiFi fail",
+            };
+            display
+                .frame_mut(WIFI_STATUS_RECTANGLE)
+                .clear()
+                .write_text(status)
+                .flush()
+                .await
+        })
+        .await
+    {
+        Ok(outcome) => outcome,
+        Err(error) => match error {},
+    };
+    if matches!(
+        wifi_outcome,
+        device_envoy_core::wasm::WifiConnectOutcome::ResetRequested
+    ) {
+        return Ok(CydWebCommand::ResetWifi);
+    }
+
+    let mut wifi_frame = display.frame_mut(WIFI_STATUS_RECTANGLE);
+    wifi_frame.clear().write_text("WiFi OK");
+    match wifi_frame.flush().await {
+        Ok(()) => {}
+        Err(error) => match error {},
+    }
+    match clock(display, &clock_sync, button).await? {
+        Exit::ResetWifi => Ok(CydWebCommand::ResetWifi),
     }
 }
