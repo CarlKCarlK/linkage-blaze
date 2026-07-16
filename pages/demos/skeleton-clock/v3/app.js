@@ -1,6 +1,5 @@
 import init, {
   start,
-  set_time_of_day,
   show_case_alignment_controls,
 } from "./pkg/linkage_blaze_skeleton_clock_wasm.js";
 import { mountCydSimulator } from "./cyd-simulator.js";
@@ -14,17 +13,8 @@ try {
   await mountCydSimulator({
     wasm: { init, start },
     app: {
-      title: "Skeleton Clock",
       orientation: "portrait",
       galleryUrl: "../../",
-      previewLine: "A motion-captured figure holds the hour and minute on placards.",
-      descriptionHtml:
-        "<p>A clock told by a motion-captured figure: placards hanging from its hands show the hour and minute, and the figure shifts its pose as time passes.</p>",
-      controlsHtml:
-        "<p>It follows your local clock by default. Open the time setter to scrub to any time of day and watch the figure re-pose. Press <strong>Live</strong> to return to real time.</p>",
-      coreCodeUrl:
-        "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-example-core/src/skeleton_clock.rs",
-      timeSetter: { setTimeOfDay: set_time_of_day },
     },
   });
   if (show_case_alignment_controls()) {

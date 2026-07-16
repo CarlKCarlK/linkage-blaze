@@ -1,10 +1,42 @@
 import { expect, test } from "@playwright/test";
 
 const demos = [
-  { slug: "ballet", orientation: "portrait" },
-  { slug: "clock", orientation: "landscape" },
-  { slug: "skeleton-clock", orientation: "portrait" },
-  { slug: "armatron", orientation: "landscape" },
+  {
+    slug: "ballet",
+    orientation: "portrait",
+    title: "Ballet",
+    preview: "A motion-captured pirouette replayed as a linkage skeleton.",
+    description: "A motion-captured pirouette converted into a linkage skeleton and replayed full screen.",
+    controls: "Sit back and watch.",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/ballet.rs",
+  },
+  {
+    slug: "clock",
+    orientation: "landscape",
+    title: "Clock",
+    preview: "An analog linkage clock with a digital strip and WiFi status.",
+    description: "An analog clock whose hands are a tiny linkage posed by the time of day.",
+    controls: "It follows your local clock. Use the shared time control to scrub to any time of day.",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/clock.rs",
+  },
+  {
+    slug: "skeleton-clock",
+    orientation: "portrait",
+    title: "Skeleton Clock",
+    preview: "A motion-captured figure holds the hour and minute on placards.",
+    description: "A clock told by a motion-captured figure whose placards show the hour and minute.",
+    controls: "It follows your local clock. Use the shared time control to scrub to any time of day.",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/skeleton_clock.rs",
+  },
+  {
+    slug: "armatron",
+    orientation: "landscape",
+    title: "Armatron",
+    preview: "A six-joint robot arm driven by inverse kinematics.",
+    description: "A robot arm with six joints, modeled as a linkage and driven by inverse kinematics.",
+    controls: "Drag the controls on the panel to pose the arm or run the solver.",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/armatron/main.rs",
+  },
 ];
 
 for (const demo of demos) {
@@ -21,11 +53,27 @@ for (const demo of demos) {
       demo.orientation,
     );
     await expect(page.locator(".demo-ux-zoom-reset")).toHaveCount(1);
+    await expect(page.locator(".demo-ux-card-tag strong")).toHaveText(demo.title);
+    await expect(page.locator(".demo-ux-card-tag__preview")).toHaveText(demo.preview);
+    await page.locator(".demo-ux-card-tag").click();
+    await expect(page.locator(".demo-ux-card-dialog h2")).toHaveText(demo.title);
+    await expect(page.locator(".demo-ux-card-dialog")).toContainText(demo.description);
+    await expect(page.locator(".demo-ux-card-dialog")).toContainText(demo.controls);
+    await expect(page.locator(".demo-ux-card-dialog a", { hasText: "Core code" }))
+      .toHaveAttribute("href", new RegExp(demo.coreCodeUrl.replaceAll("/", "\\/")));
+    await page.keyboard.press("Escape");
 
     expect(await page.locator(".simulator").count()).toBe(1);
     expect(await page.locator(".stage").count()).toBe(1);
     expect(await page.locator(".case").count()).toBe(1);
     expect(await page.locator(".cord").count()).toBe(1);
+  });
+}
+
+for (const slug of ["ballet", "armatron"]) {
+  test(`${slug} does not expose the clock control`, async ({ page }) => {
+    await page.goto(`/demos/${slug}/v4/`);
+    await expect(page.locator(".demo-ux-time-chip")).toHaveCount(0);
   });
 }
 
@@ -101,8 +149,18 @@ for (const slug of ["clock", "skeleton-clock"]) {
 
     await timeRange.fill("43200");
     await expect(timeChip).toContainText("12:00 PM");
+    await page.waitForTimeout(1_200);
+    const noonFrame = await page.locator("#screen").evaluate((screen) => screen.toDataURL());
+    await timeRange.fill("21600");
+    await expect(timeChip).toContainText("6:00 AM");
+    await page.waitForTimeout(1_200);
+    const morningFrame = await page.locator("#screen").evaluate((screen) => screen.toDataURL());
+    expect(morningFrame).not.toEqual(noonFrame);
     await liveButton.click();
     await expect(timeChip).toContainText("LIVE");
+    await page.waitForTimeout(1_200);
+    const liveFrame = await page.locator("#screen").evaluate((screen) => screen.toDataURL());
+    expect(liveFrame).not.toEqual(morningFrame);
   });
 
   test(`${slug} routes main-state BOOT back through simulated Wi-Fi setup`, async ({ page }) => {

@@ -12,16 +12,8 @@ try {
   await mountCydSimulator({
     wasm: { init, start },
     app: {
-      title: "Ballet",
       orientation: "portrait",
       galleryUrl: "../../",
-      previewLine: "A motion-captured pirouette replayed as a linkage skeleton.",
-      descriptionHtml:
-        "<p>A motion-captured pirouette: a BVH recording converted into a linkage skeleton and replayed full screen. The top line shows the frame counter, frames per second, and the slow-motion factor.</p>",
-      controlsHtml:
-        "<p>Sit back and watch.</p>",
-      coreCodeUrl:
-        "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-example-core/src/ballet.rs",
     },
   });
   if (show_case_alignment_controls()) {

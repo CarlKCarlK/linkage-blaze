@@ -19,6 +19,22 @@ test("DNS Tester uses intrinsic browser touch, DNS latency, and orientation pers
   const canvas = page.locator("#screen");
   await expect(canvas).toHaveAttribute("width", "320");
   await expect(canvas).toHaveAttribute("height", "240");
+  await expect(page.locator(".demo-ux-card-tag strong")).toHaveText("DNS Tester");
+  await expect(page.locator(".demo-ux-card-tag__preview")).toHaveText(
+    "Measure a deterministic simulated DNS lookup on a CYD.",
+  );
+  await page.locator(".demo-ux-card-tag").click();
+  await expect(page.locator(".demo-ux-card-dialog h2")).toHaveText("DNS Tester");
+  await expect(page.locator(".demo-ux-card-dialog")).toContainText(
+    "The DNS tester exercises the shared device abstraction and reports a fixed browser simulation result.",
+  );
+  await expect(page.locator(".demo-ux-card-dialog")).toContainText(
+    "Touch the panel and press BOOT to interact with the tester.",
+  );
+  await expect(page.locator(".demo-ux-card-dialog a", { hasText: "Core code" }))
+    .toHaveAttribute("href", /dns_tester\.rs$/);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".demo-ux-time-chip")).toHaveCount(0);
 
   const canvasBounds = await canvas.boundingBox();
   expect(canvasBounds).not.toBeNull();

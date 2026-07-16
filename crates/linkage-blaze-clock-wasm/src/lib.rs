@@ -2,13 +2,10 @@
 
 use core::convert::Infallible;
 
+use device_envoy_core::cyd::{CydDisplay, display::CydFrame};
 use device_envoy_core::wasm::{
-    ButtonWasm, CydDisplayWasm, CydWebAppConfig, CydWebAppHandle, CydWebCommand,
-    WifiSimulatorWasm, start_cyd_display_web_app,
-};
-use device_envoy_core::{
-    cyd::{CydDisplay, display::CydFrame},
-    wasm::clock::ClockSyncWasm,
+    CydWebAppConfig, CydWebAppHandle, CydWebAppWasm, CydWebCommand, CydWebPageInfo,
+    start_cyd_web_app,
 };
 use linkage_blaze_core::examples::clock::{
     BACKGROUND, Exit, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
@@ -23,6 +20,13 @@ const WEB_APP: CydWebAppConfig = CydWebAppConfig::new(
     FOREGROUND,
     &WIFI_STATUS_FONT,
 );
+const PAGE_INFO: CydWebPageInfo = CydWebPageInfo::new(
+    "Clock",
+    "An analog linkage clock with a digital strip and WiFi status.",
+    "An analog clock whose hands are a tiny linkage posed by the time of day.",
+    "It follows your local clock. Use the shared time control to scrub to any time of day.",
+    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/clock.rs",
+);
 
 #[wasm_bindgen]
 pub fn show_case_alignment_controls() -> bool {
@@ -30,31 +34,20 @@ pub fn show_case_alignment_controls() -> bool {
 }
 
 #[wasm_bindgen]
-pub fn set_time_of_day(seconds_of_day: i32) -> Result<(), wasm_bindgen::JsValue> {
-    if seconds_of_day != -1 && !(0..86_400).contains(&seconds_of_day) {
-        return Err(wasm_bindgen::JsValue::from_str(
-            "time of day must be between 0 and 86399 seconds",
-        ));
-    }
-    device_envoy_core::wasm::clock::set_time_of_day(seconds_of_day);
-    Ok(())
-}
-
-#[wasm_bindgen]
 pub fn start(canvas_id: &str) -> Result<CydWebAppHandle, wasm_bindgen::JsValue> {
-    start_cyd_display_web_app(canvas_id, WEB_APP, inner_main)
+    start_cyd_web_app(canvas_id, WEB_APP, PAGE_INFO, inner_main)
 }
 
 async fn inner_main(
-    display: &mut CydDisplayWasm,
-    button: &mut ButtonWasm,
+    mut cyd_web_app_wasm: CydWebAppWasm,
 ) -> Result<CydWebCommand, linkage_blaze_core::examples::clock::Error<Infallible>> {
-    let clock_sync = ClockSyncWasm::new();
-    clock_splash(display).await?;
+    cyd_web_app_wasm.clock_sync.show();
+    let mut display = cyd_web_app_wasm.cyd.display();
+    clock_splash(&mut display).await?;
 
-    let wifi_simulator = WifiSimulatorWasm::new(WEB_APP.storage_namespace);
-    let wifi_outcome = match wifi_simulator
-        .connect(button, async |event| {
+    let wifi_outcome = match cyd_web_app_wasm
+        .wifi_simulator
+        .connect(&mut cyd_web_app_wasm.button, async |event| {
             let status = match event {
                 device_envoy_core::wifi_auto::WifiAutoEvent::CaptivePortalReady => "WiFi setup",
                 device_envoy_core::wifi_auto::WifiAutoEvent::Connecting { .. } => "WiFi ...",
@@ -85,7 +78,13 @@ async fn inner_main(
         Ok(()) => {}
         Err(error) => match error {},
     }
-    match clock(display, &clock_sync, button).await? {
+    match clock(
+        &mut display,
+        &cyd_web_app_wasm.clock_sync,
+        &mut cyd_web_app_wasm.button,
+    )
+    .await?
+    {
         Exit::ResetWifi => Ok(CydWebCommand::ResetWifi),
     }
 }
