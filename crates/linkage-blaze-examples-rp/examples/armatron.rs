@@ -79,7 +79,7 @@ async fn clear_calibration_and_reset(
 }
 
 async fn reboot_with_message(cyd: &mut CydRp, message: &str) -> Result<(), MainError> {
-    let display = cyd.display();
+    let (display, _) = cyd.parts();
     let mut frame = display.full_frame_mut();
     frame.clear().write_text(message).flush()?;
     info!("Restarting");

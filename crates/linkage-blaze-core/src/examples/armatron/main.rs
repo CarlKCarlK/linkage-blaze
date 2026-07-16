@@ -16,7 +16,7 @@ use crate::{
 use device_envoy_core::{
     button::Button,
     cyd::{
-        Cyd, CydDisplay,
+        Cyd, CydDisplay, CydTouch,
         display::{CydFrame, Orientation},
     },
 };
@@ -132,8 +132,9 @@ where
             return Ok(ArmatronExit::CalibrationRequested);
         }
 
-        let touch_event = cyd.read_touch().map_err(Error::Cyd)?;
-        let mut frame = cyd.display().full_frame_mut();
+        let (display, touch) = cyd.parts();
+        let touch_event = touch.read().map_err(Error::Cyd)?;
+        let mut frame = display.full_frame_mut();
         let current_tick = Instant::now();
         frame.clear();
 
