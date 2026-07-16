@@ -1,7 +1,10 @@
 #![no_std]
 
-use device_envoy_core::cyd::display::Orientation;
-use device_envoy_core::wasm::{CydSimulatorControlWasm, CydSimulatorWasm};
+use device_envoy_core::{
+    button::Button,
+    cyd::display::Orientation,
+    wasm::{ButtonWasm, CydSimulatorControlWasm, CydSimulatorWasm, next_animation_frame},
+};
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use linkage_blaze_core::examples::armatron::{ArmatronExit, BACKGROUND, FOREGROUND, armatron};
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen};
@@ -33,6 +36,7 @@ pub fn start(canvas_id: &str) -> Result<CydSimulatorControlWasm, wasm_bindgen::J
                     web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
                         "calibration is not simulated in the browser",
                     ));
+                    wait_for_button_release(&button).await;
                 }
                 Err(error) => {
                     drop(error);
@@ -43,4 +47,10 @@ pub fn start(canvas_id: &str) -> Result<CydSimulatorControlWasm, wasm_bindgen::J
         }
     });
     Ok(control)
+}
+
+async fn wait_for_button_release(button: &ButtonWasm) {
+    while button.is_pressed() {
+        next_animation_frame().await;
+    }
 }
