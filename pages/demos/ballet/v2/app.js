@@ -1,7 +1,4 @@
-import init, {
-  start,
-  show_case_alignment_controls,
-} from "./pkg/linkage_blaze_classic_wasm.js";
+import init, { start } from "./pkg/linkage_blaze_classic_wasm.js";
 
 try {
   await init();
@@ -10,9 +7,6 @@ try {
   // inside Rust. CSS stretches the canvas over the case's screen area, so no JS
   // animation loop or sizing is needed here.
   start("screen");
-  if (show_case_alignment_controls()) {
-    await import("./controls.js");
-  }
 } catch (error) {
   console.error(error);
   throw error;

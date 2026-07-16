@@ -1,7 +1,6 @@
 import init, {
   start,
   set_time_of_day,
-  show_case_alignment_controls,
 } from "./pkg/linkage_blaze_skeleton_clock_wasm.js";
 
 try {
@@ -13,17 +12,13 @@ try {
   // JS animation loop or sizing is needed here.
   start("screen");
   buildTimeOfDaySlider(set_time_of_day);
-  if (show_case_alignment_controls()) {
-    await import("./controls.js");
-  }
 } catch (error) {
   console.error(error);
   throw error;
 }
 
-// A vertical time-of-day slider pinned to the left edge of the page. It is
-// independent of the case/screen calibration panel (controls.js): it overrides
-// only the simulated clock's time of day from midnight (0) to midnight (86400),
+// A vertical time-of-day slider pinned to the left edge of the page. It overrides
+// the simulated clock's time of day from midnight (0) to midnight (86400),
 // and a "Live" button releases the override back to the real browser clock.
 function buildTimeOfDaySlider(setTimeOfDay) {
   const SECONDS_PER_DAY = 86400;

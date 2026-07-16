@@ -1,7 +1,4 @@
-import init, {
-  start,
-  show_case_alignment_controls,
-} from "./pkg/linkage_blaze_classic_wasm.js";
+import init, { start } from "./pkg/linkage_blaze_classic_wasm.js";
 import { mountCydSimulator } from "./cyd-simulator.js";
 
 try {
@@ -16,9 +13,6 @@ try {
       galleryUrl: "../../",
     },
   });
-  if (show_case_alignment_controls()) {
-    await import("./controls.js");
-  }
 } catch (error) {
   console.error(error);
   throw error;

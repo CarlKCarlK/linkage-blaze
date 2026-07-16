@@ -29,11 +29,6 @@ const PAGE_INFO: CydWebPageInfo = CydWebPageInfo::new(
 );
 
 #[wasm_bindgen]
-pub fn show_case_alignment_controls() -> bool {
-    false
-}
-
-#[wasm_bindgen]
 pub fn start(canvas_id: &str) -> Result<CydWebAppHandle, wasm_bindgen::JsValue> {
     start_cyd_web_app(canvas_id, WEB_APP, PAGE_INFO, inner_main)
 }
