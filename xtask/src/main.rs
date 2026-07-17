@@ -327,6 +327,9 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         command.arg(&output_dir.join("pkg"));
         command.arg("--out-name");
         command.arg(&out_name);
+        if !demo_record.example_name.is_empty() {
+            command.args(["--", "--example", &demo_record.example_name]);
+        }
         run_command(
             &mut command,
             &format!("wasm-pack build {}", demo_record.crate_dir),
@@ -689,6 +692,7 @@ struct DemoRecord {
     title: String,
     current_version: String,
     crate_dir: String,
+    example_name: String,
     source_dir: String,
     out_name: String,
     versions: Vec<String>,
@@ -697,9 +701,9 @@ struct DemoRecord {
 impl DemoRecord {
     fn from_tsv_line(line: &str, line_number: usize) -> Result<Self> {
         let fields: Vec<_> = line.split('\t').collect();
-        if fields.len() != 7 {
+        if fields.len() != 8 {
             return Err(Error::message(format!(
-                "invalid manifest record on line {line_number}: expected 7 tab-separated fields"
+                "invalid manifest record on line {line_number}: expected 8 tab-separated fields"
             )));
         }
 
@@ -708,9 +712,10 @@ impl DemoRecord {
             title: fields[1].to_owned(),
             current_version: fields[2].to_owned(),
             crate_dir: fields[3].to_owned(),
-            source_dir: fields[4].to_owned(),
-            out_name: fields[5].to_owned(),
-            versions: fields[6]
+            example_name: fields[4].to_owned(),
+            source_dir: fields[5].to_owned(),
+            out_name: fields[6].to_owned(),
+            versions: fields[7]
                 .split(',')
                 .filter(|version| !version.is_empty())
                 .map(ToOwned::to_owned)
@@ -720,11 +725,12 @@ impl DemoRecord {
 
     fn to_tsv_line(&self) -> String {
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.slug,
             self.title,
             self.current_version,
             self.crate_dir,
+            self.example_name,
             self.source_dir,
             self.out_name,
             self.versions.join(","),
@@ -1316,9 +1322,11 @@ mod tests {
 
     #[test]
     fn parses_manifest_line() {
-        let demo_record =
-            DemoRecord::from_tsv_line("armatron\tArmatron\tv2\tcrate\twww\toutput\tv1,v2", 1)
-                .expect("manifest line should parse");
+        let demo_record = DemoRecord::from_tsv_line(
+            "armatron\tArmatron\tv2\tcrate\tarmatron\twww\toutput\tv1,v2",
+            1,
+        )
+        .expect("manifest line should parse");
 
         assert_eq!(demo_record.slug, "armatron");
         assert_eq!(demo_record.current_version, "v2");
@@ -1341,8 +1349,9 @@ mod tests {
 
     #[test]
     fn preview_orientation_matches_slug() {
-        let demo_record = DemoRecord::from_tsv_line("clock\tClock\tv2\tcrate\twww\toutput\tv2", 1)
-            .expect("manifest line should parse");
+        let demo_record =
+            DemoRecord::from_tsv_line("clock\tClock\tv2\tcrate\tclock\twww\toutput\tv2", 1)
+                .expect("manifest line should parse");
 
         assert_eq!(
             demo_record
@@ -1356,7 +1365,7 @@ mod tests {
     #[test]
     fn editor_preview_uses_static_file() {
         let demo_record =
-            DemoRecord::from_tsv_line("editor\tEditor\tv1\tcrate\twww\toutput\tv1", 1)
+            DemoRecord::from_tsv_line("editor\tEditor\tv1\tcrate\t\twww\toutput\tv1", 1)
                 .expect("manifest line should parse");
 
         assert_eq!(
@@ -1399,13 +1408,15 @@ mod tests {
     #[test]
     fn renders_gallery_subtitles_for_custom_titles() {
         let clock_demo_record =
-            DemoRecord::from_tsv_line("clock\tClock\tv3\tcrate\twww\toutput\tv2,v3", 1)
+            DemoRecord::from_tsv_line("clock\tClock\tv3\tcrate\tclock\twww\toutput\tv2,v3", 1)
                 .expect("manifest line should parse");
-        let armatron_demo_record =
-            DemoRecord::from_tsv_line("armatron\tArmatron\tv3\tcrate\twww\toutput\tv1,v2,v3", 1)
-                .expect("manifest line should parse");
+        let armatron_demo_record = DemoRecord::from_tsv_line(
+            "armatron\tArmatron\tv3\tcrate\tarmatron\twww\toutput\tv1,v2,v3",
+            1,
+        )
+        .expect("manifest line should parse");
         let editor_demo_record =
-            DemoRecord::from_tsv_line("editor\tEditor\tv2\tcrate\twww\toutput\tv1,v2", 1)
+            DemoRecord::from_tsv_line("editor\tEditor\tv2\tcrate\t\twww\toutput\tv1,v2", 1)
                 .expect("manifest line should parse");
 
         let clock_html = clock_demo_record

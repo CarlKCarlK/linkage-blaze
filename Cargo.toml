@@ -1,11 +1,8 @@
 [workspace]
 members = [
     "xtask",
-    "crates/linkage-blaze-armatron-wasm",
-    "crates/linkage-blaze-ballet-wasm",
-    "crates/linkage-blaze-clock-wasm",
     "crates/linkage-blaze-core",
-    "crates/linkage-blaze-skeleton-clock-wasm",
+    "crates/linkage-blaze-examples-wasm",
     "crates/linkage-blaze-utils",
     "crates/linkage-blaze-examples-esp",
     "crates/linkage-blaze-examples-rp",

@@ -1,21 +1,43 @@
 [package]
-name = "linkage-blaze-skeleton-clock-wasm"
+name = "linkage-blaze-examples-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
+path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
 
+[[example]]
+name = "armatron"
+path = "examples/armatron.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "ballet"
+path = "examples/ballet.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "clock"
+path = "examples/clock.rs"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "skeleton_clock"
+path = "examples/skeleton_clock.rs"
+crate-type = ["cdylib"]
+
 [dependencies]
 device-envoy-core = { path = "../../../mcu/device-envoy/crates/device-envoy-core", features = ["wasm", "wifi"] }
 embassy-executor = { version = "0.10.0", features = ["platform-wasm", "executor-thread"] }
 embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
+embedded-graphics = { version = "0.8", default-features = false }
 js-sys = "0.3"
-linkage-blaze-core = { path = "../linkage-blaze-core", features = ["examples-skeleton-clock"] }
+linkage-blaze-core = { path = "../linkage-blaze-core", features = ["examples-armatron", "examples-ballet", "examples-clock", "examples-skeleton-clock"] }
 time = { version = "0.3.47", default-features = false }
 wasm-bindgen = "=0.2.126"
 wasm-bindgen-futures = "0.4"
