@@ -646,7 +646,12 @@ fn remove_dir_if_exists(path: &Path) -> Result<()> {
 }
 
 fn run_command(command: &mut Command, description: &str) -> Result<()> {
-    let status = command.status()?;
+    let program = command.get_program().to_string_lossy().into_owned();
+    let status = command.status().map_err(|error| {
+        Error::message(format!(
+            "failed to start command ({description}; executable: {program}): {error}"
+        ))
+    })?;
     if status.success() {
         return Ok(());
     }
@@ -1304,8 +1309,10 @@ $body
 mod tests {
     use super::{
         DemoRecord, PreviewOrientation, PreviewSource, gallery_versions_section_html,
-        infer_next_gallery_version, infer_next_version, parse_pkg_out_name, validate_version,
+        infer_next_gallery_version, infer_next_version, parse_pkg_out_name, run_command,
+        validate_version,
     };
+    use std::process::Command;
 
     #[test]
     fn parses_manifest_line() {
@@ -1446,5 +1453,16 @@ mod tests {
     fn rejects_vendor_js_without_relative_pkg_import() {
         let vendor_js = "const path = \"pkg/not-a-wasm-import.js\";";
         assert!(parse_pkg_out_name(vendor_js).is_none());
+    }
+
+    #[test]
+    fn run_command_reports_missing_executable_context() {
+        let mut command = Command::new("__linkage_blaze_missing_test_command__");
+        let error = run_command(&mut command, "missing command test")
+            .expect_err("missing executable should fail");
+        let message = error.to_string();
+
+        assert!(message.contains("failed to start command (missing command test; executable: __linkage_blaze_missing_test_command__)"));
+        assert!(message.contains("No such file") || message.contains("not found"));
     }
 }
