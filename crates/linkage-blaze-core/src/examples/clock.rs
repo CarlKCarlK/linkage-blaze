@@ -74,7 +74,7 @@ const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 
 /// Run the clock render loop forever, driven by `clock_sync` ticks and drawn
 /// onto `cyd`.
-pub async fn clock<CydDisplayDevice, ClockSyncDevice>(
+pub async fn run<CydDisplayDevice, ClockSyncDevice>(
     display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
     button: &mut impl Button,
@@ -132,7 +132,7 @@ where
 }
 
 /// Draw the static full-screen clock background.
-pub async fn clock_splash<CydDisplayDevice>(
+pub async fn splash<CydDisplayDevice>(
     display: &mut CydDisplayDevice,
 ) -> Result<(), Error<CydDisplayDevice::Error>>
 where
@@ -203,8 +203,7 @@ mod tests {
     use time::OffsetDateTime;
 
     use super::{
-        BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, clock,
-        clock_splash,
+        BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, run, splash,
     };
 
     /// A `ClockSync` test double that ticks instantly with a fixed time,
@@ -268,7 +267,7 @@ mod tests {
 
         let result = {
             let mut display = memory_cyd.display();
-            block_on(clock(&mut display, &clock_sync, &mut button))
+            block_on(run(&mut display, &clock_sync, &mut button))
         };
 
         assert_eq!(
@@ -297,7 +296,7 @@ mod tests {
 
         let result = {
             let mut display = memory_cyd.display();
-            block_on(clock(&mut display, &clock_sync, &mut button))
+            block_on(run(&mut display, &clock_sync, &mut button))
         };
 
         assert_eq!(
@@ -324,8 +323,7 @@ mod tests {
 
         {
             let mut display = memory_cyd.display();
-            block_on(clock_splash(&mut display))
-                .expect("clock splash should draw the static background");
+            block_on(splash(&mut display)).expect("clock splash should draw the static background");
             block_on(
                 display
                     .frame_mut(WIFI_STATUS_RECTANGLE)
@@ -338,7 +336,7 @@ mod tests {
 
         let clock_result = {
             let mut display = memory_cyd.display();
-            block_on(clock(&mut display, &clock_sync, &mut memory_button))
+            block_on(run(&mut display, &clock_sync, &mut memory_button))
         };
         clock_result.expect_err("the free-running loop should stop at the frame budget");
 

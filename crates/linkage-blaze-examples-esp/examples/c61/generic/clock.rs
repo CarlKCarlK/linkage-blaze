@@ -23,14 +23,14 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::clock::{
     self, BACKGROUND, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
-    WIFI_STATUS_RECTANGLE, clock, clock_splash,
+    WIFI_STATUS_RECTANGLE, run, splash,
 };
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 button_watch! {
-    ForcePortalButtonWatch {
+    ButtonWatch {
         pin: GPIO6,
     }
 }
@@ -65,14 +65,13 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("CYD display initialized");
 
-    clock_splash(&mut display).await?;
+    splash(&mut display).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
     let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
-    let force_portal_button =
-        ForcePortalButtonWatch::new(p.GPIO6, PressedTo::Ground, spawner).await?;
+    let button_watch = ButtonWatch::new(p.GPIO6, PressedTo::Ground, spawner).await?;
 
     let wifi_auto = WifiAutoEsp::new(
         p.WIFI,
@@ -85,7 +84,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
         .connect(
-            &mut *force_portal_button,
+            &mut *button_watch,
             async |wifi_auto_event| -> Result<(), DeviceEnvoyError> {
                 let message = match wifi_auto_event {
                     WifiAutoEvent::CaptivePortalReady => "WiFi setup",
@@ -128,7 +127,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("clock sync ready; entering clock loop");
 
-    match clock(&mut display, &clock_sync, &mut *force_portal_button).await? {
+    match run(&mut display, &clock_sync, &mut *button_watch).await? {
         clock::Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             device_envoy_esp::esp_hal::system::software_reset();

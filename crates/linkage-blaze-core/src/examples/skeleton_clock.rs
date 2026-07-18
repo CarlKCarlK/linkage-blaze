@@ -119,7 +119,7 @@ pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
 
 /// Run the skeleton-clock render loop forever, driven by `clock_sync` ticks and
 /// drawn onto `cyd`.
-pub async fn skeleton_clock<CydDisplayDevice, ClockSyncDevice>(
+pub async fn run<CydDisplayDevice, ClockSyncDevice>(
     display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
     button: &mut impl Button,
@@ -226,7 +226,7 @@ where
 /// is initialized) so the user sees the framed clock immediately; the per-tick
 /// [`skeleton_clock`] loop then overwrites the WiFi text, time and figure as they
 /// become available.
-pub async fn skeleton_clock_splash<CydDisplayDevice>(
+pub async fn splash<CydDisplayDevice>(
     display: &mut CydDisplayDevice,
 ) -> Result<(), Error<CydDisplayDevice::Error>>
 where
@@ -477,7 +477,7 @@ mod tests {
     use futures_executor::block_on;
     use time::OffsetDateTime;
 
-    use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, skeleton_clock};
+    use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, run};
 
     /// A `ClockSync` test double that ticks instantly with a fixed time,
     /// rather than waiting on real NTP/timer infrastructure.
@@ -535,7 +535,7 @@ mod tests {
 
         let result = {
             let mut display = memory_cyd.display();
-            block_on(skeleton_clock(&mut display, &clock_sync, &mut button))
+            block_on(run(&mut display, &clock_sync, &mut button))
         };
 
         assert_eq!(
@@ -559,7 +559,7 @@ mod tests {
 
         let result = {
             let mut display = memory_cyd.display();
-            block_on(skeleton_clock(&mut display, &clock_sync, &mut button))
+            block_on(run(&mut display, &clock_sync, &mut button))
         };
 
         assert_eq!(
@@ -585,11 +585,7 @@ mod tests {
 
         let skeleton_clock_result = {
             let mut display = memory_cyd.display();
-            block_on(skeleton_clock(
-                &mut display,
-                &clock_sync,
-                &mut memory_button,
-            ))
+            block_on(run(&mut display, &clock_sync, &mut memory_button))
         };
         skeleton_clock_result.expect_err("the free-running loop should stop at the frame budget");
 

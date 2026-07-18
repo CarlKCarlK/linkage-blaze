@@ -8,21 +8,19 @@ use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_esp::{
     button::PressedTo,
     button_watch,
-    cyd::{CydEsp, CydStaticEsp, DEFAULT_FONT, Error as CydError, Orientation},
+    cyd::{CydEsp, CydStaticEsp, DEFAULT_FONT, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::armatron::{
-    ArmatronExit, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
-};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND, FOREGROUND, run};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 button_watch! {
-    CalibrationButtonWatch {
+    ButtonWatch {
         pin: GPIO0,
     }
 }
@@ -39,8 +37,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     info!("Starting CYD armatron loop on ESP32 / generic");
 
     let [mut calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
-    let calibration_button =
-        CalibrationButtonWatch::new(p.GPIO0, PressedTo::Ground, spawner).await?;
+    let button_watch = ButtonWatch::new(p.GPIO0, PressedTo::Ground, spawner).await?;
 
     static CYD_STATIC: CydStaticEsp<{ CydEsp::SCREEN_PIXELS }> = CydEsp::new_static();
     let mut cyd = CydEsp::new(
@@ -65,40 +62,26 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         p.GPIO33,                     // touch_cs_pin
         p.GPIO36,                     // touch_irq_pin
         &mut calibration_flash_block, // calibration_flash_block
-        &mut *calibration_button,     // recalibration_button
+        &mut *button_watch,           // button_watch
     )
     .await?;
     info!("CYD display and touch initialized");
-    match armatron(&mut cyd, &mut *calibration_button).await? {
-        ArmatronExit::CalibrationRequested => {
-            clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
+    match run(&mut cyd, &mut *button_watch).await? {
+        armatron::Exit::CalibrationRequested => {
+            calibration_flash_block.clear()?;
+            let mut frame = cyd.display().full_frame_mut();
+            frame.clear().write_text("rebooting").flush()?;
+            info!("Restarting");
+            esp_hal::system::software_reset();
         }
     }
-
-    unreachable!("software_reset does not return")
-}
-
-async fn clear_calibration_and_reset(
-    cyd: &mut CydEsp,
-    calibration_flash_block: &mut FlashBlockEsp,
-) -> Result<(), Error> {
-    calibration_flash_block.clear()?;
-    reboot_with_message(cyd, "rebooting").await
-}
-
-async fn reboot_with_message(cyd: &mut CydEsp, message: &str) -> Result<(), Error> {
-    let (display, _) = cyd.parts();
-    let mut frame = display.full_frame_mut();
-    frame.clear().write_text(message).flush()?;
-    info!("Restarting");
-    esp_hal::system::software_reset();
 }
 
 #[derive(derive_more::From)]
 enum Error {
     DeviceEnvoy(device_envoy_esp::Error),
-    Cyd(CydError),
-    Armatron(ArmatronError<CydError>),
+    Cyd(device_envoy_esp::cyd::Error),
+    Armatron(armatron::Error<device_envoy_esp::cyd::Error>),
 }
 
 impl core::fmt::Debug for Error {

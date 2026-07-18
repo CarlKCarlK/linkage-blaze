@@ -9,7 +9,7 @@ use device_envoy_core::{
 };
 use linkage_blaze_core::examples::skeleton_clock::{
     BACKGROUND, Error as SkeletonClockError, Exit, FOREGROUND, ORIENTATION, TOP_FONT,
-    WIFI_STATUS_RECTANGLE, skeleton_clock, skeleton_clock_splash,
+    WIFI_STATUS_RECTANGLE, run, splash,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -42,7 +42,7 @@ async fn inner_main(
     let wifi_simulator = capabilities.wifi_simulator;
     clock_sync.show();
     let mut display = cyd.display();
-    skeleton_clock_splash(&mut display).await?;
+    splash(&mut display).await?;
 
     let wifi_outcome = match wifi_simulator
         .connect(&mut button, async |event| {
@@ -73,7 +73,7 @@ async fn inner_main(
         Ok(()) => {}
         Err(error) => match error {},
     }
-    match skeleton_clock(&mut display, &clock_sync, &mut button).await? {
+    match run(&mut display, &clock_sync, &mut button).await? {
         Exit::ResetWifi => Ok(cyd_web::Command::ResetWifi),
     }
 }

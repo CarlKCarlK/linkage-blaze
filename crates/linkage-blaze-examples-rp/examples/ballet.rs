@@ -13,7 +13,7 @@ use device_envoy_rp::{
 };
 use embassy_executor::Spawner;
 use linkage_blaze_core::examples::ballet::{
-    self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
+    self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, run,
 };
 use panic_probe as _;
 
@@ -47,8 +47,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("CYD display initialized");
 
-    let button = ButtonRp::new(p.PIN_15, PressedTo::Ground);
-    Ok(ballet(&mut display, &button).await?)
+    let button_watch = ButtonRp::new(p.PIN_15, PressedTo::Ground);
+    Ok(run(&mut display, &button_watch).await?)
 }
 
 #[derive(derive_more::From)]

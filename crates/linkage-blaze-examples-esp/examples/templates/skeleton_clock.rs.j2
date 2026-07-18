@@ -24,14 +24,14 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::skeleton_clock::{
     self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE,
-    skeleton_clock,
+    run,
 };
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
 button_watch! {
-    ForcePortalButtonWatch {
+    ButtonWatch {
         pin: GPIO{{ button_pin }},
     }
 }
@@ -72,14 +72,14 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("CYD display initialized");
 
-    skeleton_clock::skeleton_clock_splash(&mut display).await?;
+    skeleton_clock::splash(&mut display).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockEsp::new_array::<2>(p.FLASH)?;
 
     static TIMEZONE_FIELD_STATIC: TimezoneFieldStatic = TimezoneField::new_static();
     let timezone_field = TimezoneField::new(&TIMEZONE_FIELD_STATIC, timezone_flash_block);
-    let force_portal_button =
-        ForcePortalButtonWatch::new(p.GPIO{{ button_pin }}, PressedTo::Ground, spawner).await?;
+    let button_watch =
+        ButtonWatch::new(p.GPIO{{ button_pin }}, PressedTo::Ground, spawner).await?;
 
     let wifi_auto = WifiAutoEsp::new(
         p.WIFI,
@@ -92,7 +92,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     let wifi_status_frame = RefCell::new(display.frame_mut(WIFI_STATUS_RECTANGLE));
     let stack = wifi_auto
         .connect(
-            &mut *force_portal_button,
+            &mut *button_watch,
             async |wifi_auto_event| -> Result<(), DeviceEnvoyError> {
                 let message = match wifi_auto_event {
                     WifiAutoEvent::CaptivePortalReady => "WiFi: setup SkelClock",
@@ -135,7 +135,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("clock sync ready; entering skeleton-clock loop");
 
-    match skeleton_clock(&mut display, &clock_sync, &mut *force_portal_button).await? {
+    match run(&mut display, &clock_sync, &mut *button_watch).await? {
         skeleton_clock::Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             device_envoy_esp::esp_hal::system::software_reset();

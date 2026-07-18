@@ -106,13 +106,10 @@ const SHOW_FPS_TEXT: bool = true;
 /// 4. Presents a full-screen CYD frame.
 ///
 /// Calibration is intentionally outside this game loop. Platform setup must
-/// provide calibrated touch before calling [`armatron`]. Shared calibration
+/// provide calibrated touch before calling [`run`]. Shared calibration
 /// UI helpers now live in [`device_envoy_core::cyd::touch::calibration`], alongside
 /// the rest of the CYD touch-calibration flow.
-pub async fn armatron<C, R>(
-    cyd: &mut C,
-    recalibration_button: &mut R,
-) -> Result<ArmatronExit, Error<C::Error>>
+pub async fn run<C, R>(cyd: &mut C, recalibration_button: &mut R) -> Result<Exit, Error<C::Error>>
 where
     C: Cyd,
     R: Button,
@@ -129,7 +126,7 @@ where
 
     loop {
         if recalibration_button.is_pressed() {
-            return Ok(ArmatronExit::CalibrationRequested);
+            return Ok(Exit::CalibrationRequested);
         }
 
         let (display, touch) = cyd.parts();
@@ -177,7 +174,7 @@ where
         let hold_button_state = ui.hold_button(&mut frame, &RK_STEP_BUTTON)?;
 
         if ui.button(&mut frame, &CALIBRATE_BUTTON)? {
-            return Ok(ArmatronExit::CalibrationRequested);
+            return Ok(Exit::CalibrationRequested);
         }
 
         // Explicit per-frame solver schedule slot.
@@ -222,7 +219,7 @@ where
 }
 
 #[derive(Debug)]
-pub enum ArmatronExit {
+pub enum Exit {
     CalibrationRequested,
 }
 
@@ -236,7 +233,7 @@ mod tests {
     use futures_executor::block_on;
 
     use super::controls::CALIBRATE_BUTTON;
-    use super::{ArmatronExit, Error, armatron};
+    use super::{Error, Exit, run};
 
     fn test_memory_cyd() -> CydMemory {
         CydMemory::new(
@@ -261,10 +258,10 @@ mod tests {
         });
         let mut memory_button = memory_cyd.button_memory();
 
-        let armatron_exit = block_on(armatron(&mut memory_cyd, &mut memory_button))
+        let armatron_exit = block_on(run(&mut memory_cyd, &mut memory_button))
             .expect("tapping the calibrate button should exit cleanly, not error");
 
-        assert!(matches!(armatron_exit, ArmatronExit::CalibrationRequested));
+        assert!(matches!(armatron_exit, Exit::CalibrationRequested));
         assert_eq!(
             memory_cyd.flush_count(),
             0,
@@ -279,10 +276,10 @@ mod tests {
         let mut memory_button = memory_cyd.button_memory();
         memory_button.set_pressed_for_frame(0, true);
 
-        let armatron_exit = block_on(armatron(&mut memory_cyd, &mut memory_button))
+        let armatron_exit = block_on(run(&mut memory_cyd, &mut memory_button))
             .expect("BOOT should request calibration cleanly, not error");
 
-        assert!(matches!(armatron_exit, ArmatronExit::CalibrationRequested));
+        assert!(matches!(armatron_exit, Exit::CalibrationRequested));
         assert_eq!(memory_cyd.flush_count(), 0);
     }
 
@@ -292,7 +289,7 @@ mod tests {
         memory_cyd.set_frame_budget(1);
         let mut memory_button = memory_cyd.button_memory();
 
-        let armatron_error = block_on(armatron(&mut memory_cyd, &mut memory_button))
+        let armatron_error = block_on(run(&mut memory_cyd, &mut memory_button))
             .expect_err("the free-running loop should stop at the frame budget");
         assert!(matches!(
             armatron_error,

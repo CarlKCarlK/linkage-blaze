@@ -8,22 +8,19 @@ use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_esp::{
     button::PressedTo,
     button_watch,
-    cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Error as CydError, Orientation},
+    cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::armatron::{
-    ArmatronExit, BACKGROUND, Error as ArmatronError, FOREGROUND, armatron,
-};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND, FOREGROUND, run};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-//todo0000 just call it ButtonWatch if allowed
 button_watch! {
-    CalibrationButtonWatch {
+    ButtonWatch {
         pin: GPIO6,
     }
 }
@@ -40,9 +37,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     info!("Starting CYD armatron loop (one-SPI) on ESP32-S3 / esp32-s3-devkitc-1-v1.1-n16r8");
 
     let [mut calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
-    //todo0000 just call this button
-    let calibration_button =
-        CalibrationButtonWatch::new(p.GPIO6, PressedTo::Ground, spawner).await?;
+    let button_watch = ButtonWatch::new(p.GPIO6, PressedTo::Ground, spawner).await?;
 
     static CYD_STATIC: CydStaticEsp<{ CydEspOneSpi::SCREEN_PIXELS }> = CydEspOneSpi::new_static();
     let mut cyd = CydEspOneSpi::new(
@@ -64,42 +59,27 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         FOREGROUND,                   // foreground
         &DEFAULT_FONT,                // font
         &mut calibration_flash_block, // calibration_flash_block
-        &mut *calibration_button,     // recalibration_button
+        &mut *button_watch,           // button_watch
     )
     .await?;
     info!("CYD display and touch initialized");
-    match armatron(&mut cyd, &mut *calibration_button).await? {
+    match run(&mut cyd, &mut *button_watch).await? {
         // todo0000 can't this just be Exit (via module/namespace)
-        ArmatronExit::CalibrationRequested => {
-            //todo0000 devolve this and the function it calls
-            clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
+        armatron::Exit::CalibrationRequested => {
+            calibration_flash_block.clear()?;
+            let mut frame = cyd.display().full_frame_mut();
+            frame.clear().write_text("rebooting").flush()?;
+            info!("Restarting");
+            esp_hal::system::software_reset();
         }
     }
-
-    unreachable!("software_reset does not return")
-}
-
-async fn clear_calibration_and_reset(
-    cyd: &mut CydEspOneSpi,
-    calibration_flash_block: &mut FlashBlockEsp,
-) -> Result<(), Error> {
-    calibration_flash_block.clear()?;
-    reboot_with_message(cyd, "rebooting").await
-}
-
-async fn reboot_with_message(cyd: &mut CydEspOneSpi, message: &str) -> Result<(), Error> {
-    let (display, _) = cyd.parts();
-    let mut frame = display.full_frame_mut();
-    frame.clear().write_text(message).flush()?;
-    info!("Restarting");
-    esp_hal::system::software_reset();
 }
 
 #[derive(derive_more::From)]
 enum Error {
     DeviceEnvoy(device_envoy_esp::Error),
-    Cyd(CydError), //todo0000 shouldn't this just be Error (plus module and namespace)
-    Armatron(ArmatronError<CydError>), //todo0000 shouldn't this just be Error (plus module and namespace)
+    Cyd(device_envoy_esp::cyd::Error), //todo0000 shouldn't this just be Error (plus module and namespace) (may no longer apply)
+    Armatron(armatron::Error<device_envoy_esp::cyd::Error>), //todo0000 shouldn't this just be Error (plus module and namespace) (may no longer apply)
 }
 
 impl core::fmt::Debug for Error {

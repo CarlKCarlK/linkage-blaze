@@ -4,7 +4,7 @@ use core::convert::Infallible;
 
 use device_envoy_core::wasm::cyd_web;
 use linkage_blaze_core::examples::ballet::{
-    BACKGROUND, Error as BalletError, FOREGROUND, ORIENTATION, TOP_FONT, ballet,
+    BACKGROUND, Error as BalletError, FOREGROUND, ORIENTATION, TOP_FONT, run,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -34,7 +34,7 @@ async fn inner_main(
     let cyd = capabilities.cyd;
     let mut button = capabilities.button;
     let mut display = cyd.display();
-    match ballet(&mut display, &mut button).await {
+    match run(&mut display, &mut button).await {
         Ok(never) => match never {},
         Err(error) => Err(error),
     }

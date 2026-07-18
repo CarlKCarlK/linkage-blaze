@@ -60,7 +60,7 @@ const PROJECTION: Projection = Projection::front_orthographic(
 // ── Generic entry point ────────────────────────────────────────────────────────
 
 /// Run the ballet example forever on a [`Cyd`] implementation (for example `CydEsp` or `CydWasm`).
-pub async fn ballet<CydDisplayDevice>(
+pub async fn run<CydDisplayDevice>(
     display: &mut CydDisplayDevice,
     button: &impl Button,
 ) -> Result<Infallible, Error<CydDisplayDevice::Error>>
@@ -167,11 +167,11 @@ mod tests {
     use device_envoy_core::memory::{CydMemory, assert_framebuffer_matches_expected_png};
     use futures_executor::block_on;
 
-    use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, ballet};
+    use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, run};
 
     fn render_ballet(memory_cyd: &mut CydMemory, button: &impl device_envoy_core::button::Button) {
         let mut display = memory_cyd.display();
-        block_on(ballet(&mut display, button))
+        block_on(run(&mut display, button))
             .expect_err("the free-running loop should stop at the frame budget");
     }
 
@@ -209,7 +209,7 @@ mod tests {
 
         let ballet_error = {
             let mut display = memory_cyd.display();
-            block_on(ballet(&mut display, &memory_button))
+            block_on(run(&mut display, &memory_button))
         }
         .expect_err("the free-running loop should stop at the frame budget");
         drop(ballet_error);
