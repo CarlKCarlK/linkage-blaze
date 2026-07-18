@@ -7,7 +7,7 @@
 use core::convert::Infallible;
 
 use device_envoy_esp::cyd::{
-    CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
+    CydDisplayEsp, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ, Error as CydError,
 };
 use device_envoy_esp::init_and_start;
 use device_envoy_esp::{button::PressedTo, button_watch};

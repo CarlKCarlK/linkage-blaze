@@ -5,7 +5,7 @@ use core::{cell::RefCell, convert::Infallible};
 
 use device_envoy_core::cyd::display::CydFrame;
 use device_envoy_esp::cyd::{
-    CydDisplay as _, CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
+    CydDisplay as _, CydDisplayEsp, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ, Error as CydError,
 };
 use device_envoy_esp::{
     Error as DeviceEnvoyError,

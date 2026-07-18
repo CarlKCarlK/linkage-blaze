@@ -8,7 +8,7 @@ use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_esp::{
     button::PressedTo,
     button_watch,
-    cyd::{CydError, CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
+    cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Error as CydError, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
