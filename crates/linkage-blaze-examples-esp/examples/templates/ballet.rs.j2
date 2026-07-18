@@ -7,7 +7,7 @@
 
 use core::convert::Infallible;
 
-use device_envoy_esp::{button::PressedTo, button_watch};
+use device_envoy_esp::{Error as DeviceEnvoyError, button::PressedTo, button_watch};
 use device_envoy_esp::cyd::{DEFAULT_DISPLAY_SPI_HZ, CydDisplayEsp, Error as CydError, CydEsp, CydStaticEsp};
 use device_envoy_esp::init_and_start;
 use embassy_executor::Spawner;
@@ -64,7 +64,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
 // derived impls under -D warnings.
 #[derive(derive_more::From)]
 enum Error {
-    DeviceEnvoy(device_envoy_esp::Error),
+    DeviceEnvoy(DeviceEnvoyError),
     Cyd(CydError),
     Ballet(ballet::Error<CydError>),
 }

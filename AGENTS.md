@@ -95,6 +95,20 @@ pub mod linkage;
 
 ## Variable Naming Conventions
 
+### Module Context and Prefixes
+
+Prefer concise names when the containing module already supplies the context.
+Use the module path to disambiguate related items instead of repeating the
+module name in every item. For example, prefer `clock::run`, `clock::splash`,
+and `clock::Exit` over `clock::clock`, `clock::clock_splash`, and
+`ClockExit`.
+
+Add a prefix only when the item is commonly used outside that module, when it
+would otherwise be ambiguous in the same scope, or when the prefix conveys
+meaning that the module path cannot. Do not add redundant prefixes or retain
+example-, module-, or platform-prefixed compatibility aliases merely to
+preserve an older naming scheme.
+
 Variables should generally match their type names converted to snake_case. This improves predictability and encourages better type names.
 
 Avoid abbreviations like `addrs`; spell out `addresses`.

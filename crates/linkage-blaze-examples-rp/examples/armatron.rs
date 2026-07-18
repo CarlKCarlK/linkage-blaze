@@ -14,7 +14,7 @@ use device_envoy_rp::{
     flash_block::{FlashBlock as _, FlashBlockRp},
 };
 use embassy_executor::Spawner;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND, FOREGROUND, run};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND, Exit, FOREGROUND, run};
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -60,7 +60,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
     info!("CYD display and touch initialized");
 
     match run(&mut cyd, &mut button_watch).await? {
-        armatron::Exit::CalibrationRequested => {
+        Exit::CalibrationRequested => {
             calibration_flash_block.clear()?;
             let mut frame = cyd.display().full_frame_mut();
             frame.clear().write_text("rebooting").flush()?;

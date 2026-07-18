@@ -203,7 +203,8 @@ mod tests {
     use time::OffsetDateTime;
 
     use super::{
-        BACKGROUND, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, run, splash,
+        BACKGROUND, Exit, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, run,
+        splash,
     };
 
     /// A `ClockSync` test double that ticks instantly with a fixed time,
@@ -272,7 +273,7 @@ mod tests {
 
         assert_eq!(
             result.expect("BOOT should be a typed exit"),
-            super::Exit::ResetWifi
+            Exit::ResetWifi
         );
     }
 
@@ -301,7 +302,7 @@ mod tests {
 
         assert_eq!(
             result.expect("BOOT should exit after a rendered tick"),
-            super::Exit::ResetWifi
+            Exit::ResetWifi
         );
         assert!(memory_cyd.flush_count() > 0);
     }

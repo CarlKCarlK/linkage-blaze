@@ -10,7 +10,7 @@ use device_envoy_esp::cyd::{
     CydDisplayEsp, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ, Error as CydError,
 };
 use device_envoy_esp::init_and_start;
-use device_envoy_esp::{button::PressedTo, button_watch};
+use device_envoy_esp::{Error as DeviceEnvoyError, button::PressedTo, button_watch};
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::ballet::{
@@ -65,7 +65,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
 // derived impls under -D warnings.
 #[derive(derive_more::From)]
 enum Error {
-    DeviceEnvoy(device_envoy_esp::Error),
+    DeviceEnvoy(DeviceEnvoyError),
     Cyd(CydError),
     Ballet(ballet::Error<CydError>),
 }

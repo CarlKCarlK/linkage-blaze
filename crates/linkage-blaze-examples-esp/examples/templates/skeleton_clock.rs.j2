@@ -13,6 +13,7 @@ use device_envoy_esp::{
     button::PressedTo,
     button_watch,
     clock_sync::{ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
+    esp_hal,
     flash_block::FlashBlockEsp,
     init_and_start,
     wifi_auto::{
@@ -23,7 +24,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::skeleton_clock::{
-    self, BACKGROUND, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE,
+    self, BACKGROUND, Exit, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE,
     run,
 };
 use log::info;
@@ -136,9 +137,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     info!("clock sync ready; entering skeleton-clock loop");
 
     match run(&mut display, &clock_sync, &mut *button_watch).await? {
-        skeleton_clock::Exit::ResetWifi => {
+        Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
-            device_envoy_esp::esp_hal::system::software_reset();
+            esp_hal::system::software_reset();
         }
     }
 }

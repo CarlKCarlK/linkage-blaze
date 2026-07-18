@@ -477,7 +477,7 @@ mod tests {
     use futures_executor::block_on;
     use time::OffsetDateTime;
 
-    use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, run};
+    use super::{BACKGROUND, Exit, FOREGROUND, ORIENTATION, TOP_FONT, run};
 
     /// A `ClockSync` test double that ticks instantly with a fixed time,
     /// rather than waiting on real NTP/timer infrastructure.
@@ -540,7 +540,7 @@ mod tests {
 
         assert_eq!(
             result.expect("BOOT should be a typed exit"),
-            super::Exit::ResetWifi
+            Exit::ResetWifi
         );
     }
 
@@ -564,7 +564,7 @@ mod tests {
 
         assert_eq!(
             result.expect("BOOT should exit after a rendered tick"),
-            super::Exit::ResetWifi
+            Exit::ResetWifi
         );
         assert!(memory_cyd.flush_count() > 0);
     }

@@ -25,7 +25,7 @@ use device_envoy_rp::{
 };
 use embassy_executor::Spawner;
 use linkage_blaze_core::examples::clock::{
-    self, BACKGROUND, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
+    self, BACKGROUND, Exit, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
     WIFI_STATUS_RECTANGLE, run, splash,
 };
 use panic_probe as _;
@@ -129,7 +129,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     info!("clock sync ready; entering clock loop");
 
     match run(&mut display, &clock_sync, &mut button_watch15).await? {
-        clock::Exit::ResetWifi => {
+        Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             cortex_m::peripheral::SCB::sys_reset();
         }

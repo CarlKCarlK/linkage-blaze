@@ -4,8 +4,9 @@
 use core::convert::Infallible;
 
 use device_envoy_core::cyd::{Cyd as _, CydDisplay, display::CydFrame};
-use device_envoy_esp::cyd::DEFAULT_DISPLAY_SPI_HZ;
+use device_envoy_esp::cyd::{self, DEFAULT_DISPLAY_SPI_HZ};
 use device_envoy_esp::{
+    Error as DeviceEnvoyError,
     button::PressedTo,
     button_watch,
     cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
@@ -14,7 +15,7 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND, FOREGROUND, run};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND, Exit, FOREGROUND, run};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -64,8 +65,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     .await?;
     info!("CYD display and touch initialized");
     match run(&mut cyd, &mut *button_watch).await? {
-        // todo0000 can't this just be Exit (via module/namespace)
-        armatron::Exit::CalibrationRequested => {
+        Exit::CalibrationRequested => {
             calibration_flash_block.clear()?;
             let mut frame = cyd.display().full_frame_mut();
             frame.clear().write_text("rebooting").flush()?;
@@ -77,9 +77,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
 
 #[derive(derive_more::From)]
 enum Error {
-    DeviceEnvoy(device_envoy_esp::Error),
-    Cyd(device_envoy_esp::cyd::Error), //todo0000 shouldn't this just be Error (plus module and namespace) (may no longer apply)
-    Armatron(armatron::Error<device_envoy_esp::cyd::Error>), //todo0000 shouldn't this just be Error (plus module and namespace) (may no longer apply)
+    DeviceEnvoy(DeviceEnvoyError),
+    Cyd(cyd::Error),
+    Armatron(armatron::Error<cyd::Error>),
 }
 
 impl core::fmt::Debug for Error {
