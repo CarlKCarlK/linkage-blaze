@@ -47,7 +47,7 @@
 //! }));
 //! ui.slider(&mut display, &TILT_SLIDER, &mut tilt)?;
 //! ui.end(&mut display)?;
-//! # Ok::<(), linkage_blaze_core::examples::ui::UiError<Infallible>>(())
+//! # Ok::<(), linkage_blaze_core::examples::ui::Error<Infallible>>(())
 //! ```
 
 use core::{fmt, fmt::Write, ptr};
@@ -117,7 +117,7 @@ impl Ui {
         target: &mut D,
         slider: &'static Slider,
         value: &mut f32,
-    ) -> Result<bool, UiError<D::Error>>
+    ) -> Result<bool, Error<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
@@ -136,7 +136,7 @@ impl Ui {
             }
         }
 
-        slider.draw(target, *value).map_err(UiError::Draw)?;
+        slider.draw(target, *value).map_err(Error::Draw)?;
         Ok(is_active)
     }
 
@@ -146,12 +146,12 @@ impl Ui {
         &mut self,
         target: &mut D,
         button: &'static Button,
-    ) -> Result<bool, UiError<D::Error>>
+    ) -> Result<bool, Error<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
         let was_clicked = self.consume_down(button.touch_rectangle);
-        button.draw(target).map_err(UiError::Draw)?;
+        button.draw(target).map_err(Error::Draw)?;
         Ok(was_clicked)
     }
 
@@ -160,12 +160,12 @@ impl Ui {
         &mut self,
         target: &mut D,
         icon_button: &'static IconButton,
-    ) -> Result<bool, UiError<D::Error>>
+    ) -> Result<bool, Error<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
         let was_clicked = self.consume_down(icon_button.touch_rectangle);
-        icon_button.draw(target).map_err(UiError::Draw)?;
+        icon_button.draw(target).map_err(Error::Draw)?;
         Ok(was_clicked)
     }
 
@@ -175,7 +175,7 @@ impl Ui {
         &mut self,
         target: &mut D,
         icon_button: &'static IconButton,
-    ) -> Result<HoldButtonState, UiError<D::Error>>
+    ) -> Result<HoldButtonState, Error<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
@@ -198,7 +198,7 @@ impl Ui {
 
         icon_button
             .draw_with_state(target, is_pressed)
-            .map_err(UiError::Draw)?;
+            .map_err(Error::Draw)?;
         Ok(hold_button_state)
     }
 
@@ -208,17 +208,17 @@ impl Ui {
         target: &mut D,
         label: &'static Label,
         args: fmt::Arguments<'_>,
-    ) -> Result<(), UiError<D::Error>>
+    ) -> Result<(), Error<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
         let mut text = String::<LABEL_CAPACITY>::new();
         text.write_fmt(args)?;
-        label.draw(target, text.as_str()).map_err(UiError::Draw)
+        label.draw(target, text.as_str()).map_err(Error::Draw)
     }
 
     /// Draws the cyan touch cursor on top of everything when a touch is active.
-    pub fn end<D>(&self, target: &mut D) -> Result<(), UiError<D::Error>>
+    pub fn end<D>(&self, target: &mut D) -> Result<(), Error<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
@@ -234,7 +234,7 @@ impl Ui {
         )
         .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_CYAN))
         .draw(target)
-        .map_err(UiError::Draw)?;
+        .map_err(Error::Draw)?;
         Ok(())
     }
 
@@ -622,10 +622,10 @@ impl Label {
 ///
 /// Formatting has a concrete source type, so it gets a derived `From` and
 /// propagates with `?`. The generic draw error remains an explicit
-/// `UiError::Draw` conversion because a blanket `From<D>` would overlap with
+/// `Error::Draw` conversion because a blanket `From<D>` would overlap with
 /// those concrete conversions under coherence.
 #[derive(Debug, derive_more::From)]
-pub enum UiError<D> {
+pub enum Error<D> {
     /// Formatting label text failed, usually because the stack buffer overflowed.
     Text(fmt::Error),
     /// Drawing to the target failed.

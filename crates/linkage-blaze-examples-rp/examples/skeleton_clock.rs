@@ -14,8 +14,8 @@ use device_envoy_rp::{
     button::{ButtonRp, PressedTo},
     clock_sync::{ClockSyncRp, ClockSyncStaticRp, CoreError, ONE_SECOND},
     cyd::{
-        CydDisplay as _, CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ,
-        tiling::rectangle_pixel_count,
+        CydDisplay as _, CydDisplayRp, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ,
+        Error as CydError, tiling::rectangle_pixel_count,
     },
     flash_block::FlashBlockRp,
     wifi_auto::{

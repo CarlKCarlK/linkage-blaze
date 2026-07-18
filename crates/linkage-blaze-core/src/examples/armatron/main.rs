@@ -24,7 +24,7 @@ use embassy_time::Instant;
 use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
 use nanorand::{Rng, WyRand};
 
-use crate::examples::ui::{Ui, UiError};
+use crate::examples::ui::{Error as UiError, Ui};
 use controls::{
     CALIBRATE_BUTTON, DISTANCE_LABEL, DOLLY_SLIDER, FPS_LABEL, NEXT_TARGET_BUTTON,
     PARAM_SLIDER_COUNT, PARAM_SLIDERS, PREVIOUS_TARGET_BUTTON, RK_STEP_BUTTON, TARGET_LABEL,
@@ -230,7 +230,7 @@ pub enum ArmatronExit {
 mod tests {
     use device_envoy_core::cyd::touch::TouchEvent;
     use device_envoy_core::memory::{
-        CydMemory, CydMemoryError, assert_framebuffer_matches_expected_png,
+        CydMemory, Error as CydMemoryError, assert_framebuffer_matches_expected_png,
     };
     use embedded_graphics::mono_font::ascii::FONT_9X15_BOLD;
     use futures_executor::block_on;

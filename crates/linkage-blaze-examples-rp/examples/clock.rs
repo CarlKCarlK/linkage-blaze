@@ -13,7 +13,10 @@ use device_envoy_rp::{
     Result,
     button::{ButtonRp, PressedTo},
     clock_sync::{ClockSyncRp, ClockSyncStaticRp, CoreError, ONE_SECOND},
-    cyd::{CydDisplay as _, CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ},
+    cyd::{
+        CydDisplay as _, CydDisplayRp, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ,
+        Error as CydError,
+    },
     flash_block::FlashBlockRp,
     wifi_auto::{
         WifiAutoEvent, WifiAutoRp,

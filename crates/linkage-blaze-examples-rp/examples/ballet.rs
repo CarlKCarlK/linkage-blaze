@@ -9,7 +9,7 @@ use defmt_rtt as _;
 use device_envoy_rp::button::{ButtonRp, PressedTo};
 use device_envoy_rp::{
     Result,
-    cyd::{CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ},
+    cyd::{CydDisplayRp, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ, Error as CydError},
 };
 use embassy_executor::Spawner;
 use linkage_blaze_core::examples::ballet::{

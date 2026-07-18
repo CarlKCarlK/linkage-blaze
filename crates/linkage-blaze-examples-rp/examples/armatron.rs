@@ -10,7 +10,7 @@ use device_envoy_rp::cyd::DEFAULT_DISPLAY_SPI_HZ;
 use device_envoy_rp::{
     Result,
     button::{ButtonRp, PressedTo},
-    cyd::{CydError, CydRp, CydStaticRp, DEFAULT_FONT, Orientation},
+    cyd::{CydRp, CydStaticRp, DEFAULT_FONT, Error as CydError, Orientation},
     flash_block::{FlashBlock as _, FlashBlockRp},
 };
 use embassy_executor::Spawner;
