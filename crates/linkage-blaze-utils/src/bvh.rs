@@ -89,7 +89,7 @@ pub struct BvhParameter {
 }
 
 /// Discover Linkage parameter slots from BVH channels.
-pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, MocapParseError> {
+pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, Error> {
     let mut parameters = Vec::new();
 
     for (joint_index, joint) in clip.joints.iter().enumerate() {
@@ -111,7 +111,7 @@ pub fn build_bvh_linkage_buf<const DOF: usize, const MARKS: usize>(
     clip: &BvhClip,
     layout: &BvhParameterLayout,
     mark_joints: &[&str],
-) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
+) -> Result<LinkageBuf<DOF, MARKS>, Error> {
     let defaults = clip.samples.first().map_or_else(
         || Ok(Vec::new()),
         |sample| bvh_parameter_defaults(layout, sample),
@@ -124,9 +124,9 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
     layout: &BvhParameterLayout,
     defaults: &[f32],
     mark_joints: &[&str],
-) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
+) -> Result<LinkageBuf<DOF, MARKS>, Error> {
     if layout.len() > DOF {
-        return Err(MocapParseError::new(format!(
+        return Err(Error::new(format!(
             "BVH parameter layout has {} parameter(s), but LinkageBuf DOF is {DOF}",
             layout.len()
         )));
@@ -144,7 +144,7 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
 
     let needed_mark_count = bvh_needed_mark_count(clip, &children, mark_joints);
     if needed_mark_count > MARKS {
-        return Err(MocapParseError::new(format!(
+        return Err(Error::new(format!(
             "BVH needs {needed_mark_count} mark slot(s), but LinkageBuf MARKS is {MARKS}"
         )));
     }
@@ -285,9 +285,9 @@ fn annotate_depth_step_lines(
 pub fn bvh_sample_params<const DOF: usize>(
     layout: &BvhParameterLayout,
     sample: &MotionSample,
-) -> Result<[f32; DOF], MocapParseError> {
+) -> Result<[f32; DOF], Error> {
     if layout.len() > DOF {
-        return Err(MocapParseError::new(format!(
+        return Err(Error::new(format!(
             "BVH parameter layout has {} parameter(s), but parameter array DOF is {DOF}",
             layout.len()
         )));
@@ -311,7 +311,7 @@ pub fn bvh_sample_params<const DOF: usize>(
 pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
     source: &str,
     mark_joints: &[&str],
-) -> Result<String, MocapParseError> {
+) -> Result<String, Error> {
     let clip = parse_bvh(source)?;
     let layout = discover_bvh_parameters(&clip)?;
     let linkage = build_bvh_linkage_buf::<DOF, MARKS>(&clip, &layout, mark_joints)?;
@@ -325,7 +325,7 @@ pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
 }
 
 /// Parse BVH hierarchy and motion text.
-pub fn parse_bvh(source: &str) -> Result<BvhClip, MocapParseError> {
+pub fn parse_bvh(source: &str) -> Result<BvhClip, Error> {
     let mut parser = BvhParser::new(source);
 
     parser.expect("HIERARCHY")?;
@@ -346,7 +346,7 @@ pub fn parse_bvh(source: &str) -> Result<BvhClip, MocapParseError> {
             values.push(parser.next_f32("BVH sample channel value")?);
         }
         if values.len() != parser.channel_count {
-            return Err(MocapParseError::new(format!(
+            return Err(Error::new(format!(
                 "BVH sample {sample_index} has {} values, expected {}",
                 values.len(),
                 parser.channel_count
@@ -463,28 +463,26 @@ fn apply_bvh_joint_parameters<const DOF: usize, const MARKS: usize>(
 fn bvh_parameter_defaults(
     layout: &BvhParameterLayout,
     sample: &MotionSample,
-) -> Result<Vec<f32>, MocapParseError> {
+) -> Result<Vec<f32>, Error> {
     let mut defaults = Vec::with_capacity(layout.len());
 
     for parameter in &layout.parameters {
-        let value = sample.values.get(parameter.index).copied().ok_or_else(|| {
-            MocapParseError::new(format!("BVH sample missing channel {}", parameter.index))
-        })?;
+        let value =
+            sample.values.get(parameter.index).copied().ok_or_else(|| {
+                Error::new(format!("BVH sample missing channel {}", parameter.index))
+            })?;
         defaults.push(normalize_bvh_parameter_default(parameter, value)?);
     }
 
     Ok(defaults)
 }
 
-fn normalize_bvh_parameter_default(
-    parameter: &BvhParameter,
-    value: f32,
-) -> Result<f32, MocapParseError> {
+fn normalize_bvh_parameter_default(parameter: &BvhParameter, value: f32) -> Result<f32, Error> {
     let (low, high) = bvh_parameter_range(parameter.channel);
     let default = snap_centered_default((value - low) / (high - low));
 
     if !(0.0..=1.0).contains(&default) {
-        return Err(MocapParseError::new(format!(
+        return Err(Error::new(format!(
             "BVH value {value} for channel {:?} is outside [{low}, {high}]",
             parameter.channel
         )));
@@ -530,7 +528,7 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
     joint_index: usize,
     depth: usize,
     mark_joints: &[&str],
-) -> Result<LinkageBuf<DOF, MARKS>, MocapParseError> {
+) -> Result<LinkageBuf<DOF, MARKS>, Error> {
     linkage = apply_bvh_joint_parameters(linkage, layout, joint_index);
 
     let joint_name = clip.joints[joint_index].name.as_str();
@@ -589,11 +587,7 @@ impl BvhParser {
         }
     }
 
-    fn parse_joint(
-        &mut self,
-        name: String,
-        parent: Option<usize>,
-    ) -> Result<usize, MocapParseError> {
+    fn parse_joint(&mut self, name: String, parent: Option<usize>) -> Result<usize, Error> {
         let joint_index = self.joints.len();
         self.joints.push(BvhJoint {
             name,
@@ -638,16 +632,14 @@ impl BvhParser {
                     return Ok(joint_index);
                 }
                 Some(token) => {
-                    return Err(MocapParseError::new(format!(
-                        "unexpected BVH token `{token}`"
-                    )));
+                    return Err(Error::new(format!("unexpected BVH token `{token}`")));
                 }
-                None => return Err(MocapParseError::new("unexpected end of BVH hierarchy")),
+                None => return Err(Error::new("unexpected end of BVH hierarchy")),
             }
         }
     }
 
-    fn parse_end_site(&mut self, parent: usize) -> Result<usize, MocapParseError> {
+    fn parse_end_site(&mut self, parent: usize) -> Result<usize, Error> {
         let end_index = self.joints.len();
         let name = format!("{}_end_{}", self.joints[parent].name, end_index);
         self.joints.push(BvhJoint {
@@ -669,10 +661,10 @@ impl BvhParser {
         Ok(end_index)
     }
 
-    fn expect(&mut self, expected: &str) -> Result<(), MocapParseError> {
+    fn expect(&mut self, expected: &str) -> Result<(), Error> {
         let token = self.next_string(expected)?;
         if token != expected {
-            return Err(MocapParseError::new(format!(
+            return Err(Error::new(format!(
                 "expected BVH token `{expected}`, got `{token}`"
             )));
         }
@@ -680,7 +672,7 @@ impl BvhParser {
         Ok(())
     }
 
-    fn next_channel(&mut self) -> Result<BvhChannel, MocapParseError> {
+    fn next_channel(&mut self) -> Result<BvhChannel, Error> {
         let token = self.next_string("BVH channel")?;
         match token.as_str() {
             "Xposition" => Ok(BvhChannel::Xposition),
@@ -689,31 +681,29 @@ impl BvhParser {
             "Xrotation" => Ok(BvhChannel::Xrotation),
             "Yrotation" => Ok(BvhChannel::Yrotation),
             "Zrotation" => Ok(BvhChannel::Zrotation),
-            _ => Err(MocapParseError::new(format!(
-                "unknown BVH channel `{token}`"
-            ))),
+            _ => Err(Error::new(format!("unknown BVH channel `{token}`"))),
         }
     }
 
-    fn next_f32(&mut self, field_name: &str) -> Result<f32, MocapParseError> {
+    fn next_f32(&mut self, field_name: &str) -> Result<f32, Error> {
         let token = self.next_string(field_name)?;
         token
             .parse::<f32>()
-            .map_err(|_| MocapParseError::new(format!("expected f32 {field_name}, got `{token}`")))
+            .map_err(|_| Error::new(format!("expected f32 {field_name}, got `{token}`")))
     }
 
-    fn next_usize(&mut self, field_name: &str) -> Result<usize, MocapParseError> {
+    fn next_usize(&mut self, field_name: &str) -> Result<usize, Error> {
         let token = self.next_string(field_name)?;
-        token.parse::<usize>().map_err(|_| {
-            MocapParseError::new(format!("expected integer {field_name}, got `{token}`"))
-        })
+        token
+            .parse::<usize>()
+            .map_err(|_| Error::new(format!("expected integer {field_name}, got `{token}`")))
     }
 
-    fn next_string(&mut self, field_name: &str) -> Result<String, MocapParseError> {
+    fn next_string(&mut self, field_name: &str) -> Result<String, Error> {
         let token = self
             .tokens
             .get(self.index)
-            .ok_or_else(|| MocapParseError::new(format!("missing {field_name}")))?;
+            .ok_or_else(|| Error::new(format!("missing {field_name}")))?;
         self.index += 1;
 
         Ok(token.clone())
@@ -768,12 +758,12 @@ fn is_nearly_zero_degrees(degrees: f32) -> bool {
 
 /// BVH parser error.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MocapParseError {
+pub struct Error {
     line_number: Option<usize>,
     message: String,
 }
 
-impl MocapParseError {
+impl Error {
     fn new(message: impl Into<String>) -> Self {
         Self {
             line_number: None,
@@ -782,7 +772,7 @@ impl MocapParseError {
     }
 }
 
-impl fmt::Display for MocapParseError {
+impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(line_number) = self.line_number {
             write!(formatter, "line {line_number}: {}", self.message)
@@ -792,7 +782,7 @@ impl fmt::Display for MocapParseError {
     }
 }
 
-impl std::error::Error for MocapParseError {}
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {

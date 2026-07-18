@@ -63,6 +63,7 @@ cortex-m = { version = "0.7.7", optional = true }
 cortex-m-rt = { version = "0.7.5", optional = true }
 defmt = "=1.0.1"
 defmt-rtt = "=1.1.0"
+derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
 device-envoy-core = { version = "0.1.0", default-features = false }
 device-envoy-rp = { version = "0.1.0", default-features = false }
 embedded-graphics = { version = "0.8", default-features = false }

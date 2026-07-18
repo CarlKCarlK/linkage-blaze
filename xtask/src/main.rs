@@ -917,7 +917,7 @@ enum PreviewSource {
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, derive_more::From)]
 enum Error {
     Io(std::io::Error),
     Message(String),
@@ -926,12 +926,6 @@ enum Error {
 impl Error {
     fn message(message: impl Into<String>) -> Self {
         Self::Message(message.into())
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(error: std::io::Error) -> Self {
-        Self::Io(error)
     }
 }
 

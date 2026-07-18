@@ -9,7 +9,7 @@ use device_envoy_esp::cyd::{
     tiling::rectangle_pixel_count,
 };
 use device_envoy_esp::{
-    Error,
+    Error as DeviceEnvoyError,
     button::PressedTo,
     button_watch,
     clock_sync::{ClockSyncEsp, ClockSyncStaticEsp, CoreError, ONE_SECOND},
@@ -42,7 +42,7 @@ async fn main(spawner: Spawner) -> ! {
     panic!("{err:?}");
 }
 
-async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD skeleton-clock with WiFi on ESP32-C2 / generic");
@@ -91,7 +91,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     let stack = wifi_auto
         .connect(
             &mut *force_portal_button,
-            async |wifi_auto_event| -> Result<(), Error> {
+            async |wifi_auto_event| -> Result<(), DeviceEnvoyError> {
                 let message = match wifi_auto_event {
                     WifiAutoEvent::CaptivePortalReady => "WiFi: setup SkelClock",
                     WifiAutoEvent::Connecting { .. } => "WiFi: connecting",
@@ -121,7 +121,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     let timezone_offset_minutes = timezone_field
         .offset_minutes()?
-        .ok_or(Error::MissingCustomWifiAutoField)?;
+        .ok_or(DeviceEnvoyError::MissingCustomWifiAutoField)?;
 
     static CLOCK_SYNC_STATIC: ClockSyncStaticEsp = ClockSyncEsp::new_static();
     let clock_sync = ClockSyncEsp::new(
@@ -147,11 +147,23 @@ const fn max_usize(first: usize, second: usize) -> usize {
 
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores
 // derived impls under -D warnings.
-#[allow(dead_code)]
-#[derive(Debug, derive_more::From)]
-enum MainError {
-    DeviceEnvoy(Error),
+#[derive(derive_more::From)]
+enum Error {
+    DeviceEnvoy(DeviceEnvoyError),
     Core(CoreError),
     CydEsp(CydError),
     SkeletonClock(skeleton_clock::Error<CydError>),
+}
+
+impl core::fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
+            Self::Core(error) => formatter.debug_tuple("Core").field(error).finish(),
+            Self::CydEsp(error) => formatter.debug_tuple("CydEsp").field(error).finish(),
+            Self::SkeletonClock(error) => {
+                formatter.debug_tuple("SkeletonClock").field(error).finish()
+            }
+        }
+    }
 }

@@ -10,7 +10,7 @@ use device_envoy_esp::cyd::{
     CydDisplayEsp, CydError, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ,
 };
 use device_envoy_esp::init_and_start;
-use device_envoy_esp::{Error, button::PressedTo, button_watch};
+use device_envoy_esp::{button::PressedTo, button_watch};
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::ballet::{
@@ -32,7 +32,7 @@ async fn main(spawner: Spawner) -> ! {
     panic!("{err:?}");
 }
 
-async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
 
@@ -63,10 +63,19 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores
 // derived impls under -D warnings.
-#[allow(dead_code)]
-#[derive(Debug, derive_more::From)]
-enum MainError {
-    DeviceEnvoy(Error),
-    CydEsp(CydError),
+#[derive(derive_more::From)]
+enum Error {
+    DeviceEnvoy(device_envoy_esp::Error),
+    Cyd(CydError),
     Ballet(ballet::Error<CydError>),
+}
+
+impl core::fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
+            Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
+            Self::Ballet(error) => formatter.debug_tuple("Ballet").field(error).finish(),
+        }
+    }
 }

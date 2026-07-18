@@ -18,5 +18,6 @@ name = "bvh-to-lb"
 path = "src/bin/bvh-to-lb.rs"
 
 [dependencies]
+derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
 linkage-blaze-core = { workspace = true, features = ["alloc"] }
 wasm-bindgen = "=0.2.126"

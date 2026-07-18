@@ -23,7 +23,7 @@ async fn main(spawner: Spawner) -> ! {
     panic!("{err:?}");
 }
 
-async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
     info!("Starting CYD ballet loop on RP Pico");
 
     let p = embassy_rp::init(Default::default());
@@ -51,20 +51,17 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
     Ok(ballet(&mut display, &button).await?)
 }
 
-#[derive(Debug)]
-enum MainError {
-    Cyd,
-    Ballet,
+#[derive(derive_more::From)]
+enum Error {
+    Cyd(CydError),
+    Ballet(ballet::Error<CydError>),
 }
 
-impl From<CydError> for MainError {
-    fn from(_error: CydError) -> Self {
-        Self::Cyd
-    }
-}
-
-impl From<ballet::Error<CydError>> for MainError {
-    fn from(_error: ballet::Error<CydError>) -> Self {
-        Self::Ballet
+impl core::fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
+            Self::Ballet(error) => formatter.debug_tuple("Ballet").field(error).finish(),
+        }
     }
 }

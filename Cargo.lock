@@ -589,6 +589,7 @@ dependencies = [
  "crc32fast",
  "critical-section",
  "defmt 1.0.1",
+ "derive_more",
  "embassy-executor",
  "embassy-futures",
  "embassy-net",
@@ -2177,6 +2178,7 @@ dependencies = [
  "critical-section",
  "defmt 1.0.1",
  "defmt-rtt",
+ "derive_more",
  "device-envoy-core",
  "device-envoy-rp",
  "embassy-executor",
@@ -2208,6 +2210,7 @@ dependencies = [
 name = "linkage-blaze-utils"
 version = "0.1.4"
 dependencies = [
+ "derive_more",
  "linkage-blaze-core",
  "wasm-bindgen",
 ]
@@ -2216,6 +2219,7 @@ dependencies = [
 name = "linkage-blaze-xtask"
 version = "0.1.4"
 dependencies = [
+ "derive_more",
  "minijinja",
 ]
 

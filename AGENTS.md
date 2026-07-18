@@ -31,6 +31,13 @@ This file contains shared workspace rules for this repository.
 - Any time a color is defined with numeric components, add a nearby comment with its approximate color name.
 - Put primary entry points (`main`, `inner_main`, public run/game-loop functions) near the top of the file before helper types and functions. Do not bury them at the bottom. Concretely, order top-level items as: includes and constants; then the entry point(s); then error types, other helper types, and helper functions. In particular, error enums (e.g. `MainError`) and their `From` impls belong after the entry point, not before it.
 
+### Error Handling
+
+- Prefer one primary module error type named `Error`, with a module-level `Result` alias when it improves readability.
+- Preserve useful diagnostics by storing the original source error in wrapper variants. Use `#[derive(Debug, derive_more::From)]` for direct variant conversions and propagate them with plain `?`.
+- Keep `map_err`, handwritten `From` implementations, and error flattening only for intentional semantic translation, contextual diagnostics, platform boundaries, or coherence exceptions. Document those exceptions nearby.
+- Never replace a useful source error with a label-only or unit variant. Unit and infallible conversions are appropriate only when the source carries no meaningful information.
+
 ## Workspace Dependencies
 
 This workspace commonly includes the sibling Device Envoy repository at

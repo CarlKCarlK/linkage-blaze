@@ -10,7 +10,7 @@ use defmt_rtt as _;
 use device_envoy_core::cyd::display::CydFrame;
 use device_envoy_core::wifi_auto::WifiAuto;
 use device_envoy_rp::{
-    Error, Result,
+    Result,
     button::{ButtonRp, PressedTo},
     clock_sync::{ClockSyncRp, ClockSyncStaticRp, CoreError, ONE_SECOND},
     cyd::{CydDisplay as _, CydDisplayRp, CydError, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ},
@@ -33,7 +33,7 @@ async fn main(spawner: Spawner) -> ! {
     panic!("{err:?}");
 }
 
-async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     info!("Starting CYD clock with WiFi on RP Pico");
 
     let p = embassy_rp::init(Default::default());
@@ -113,7 +113,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 
     let timezone_offset_minutes = timezone_field
         .offset_minutes()?
-        .ok_or(Error::MissingCustomWifiAutoField)?;
+        .ok_or(device_envoy_rp::Error::MissingCustomWifiAutoField)?;
 
     static CLOCK_SYNC_STATIC: ClockSyncStaticRp = ClockSyncRp::new_static();
     let clock_sync = ClockSyncRp::new(
@@ -133,34 +133,21 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     }
 }
 
-#[derive(Debug)]
-enum MainError {
-    DeviceEnvoy,
-    Core,
-    Cyd,
-    Clock,
+#[derive(derive_more::From)]
+enum Error {
+    DeviceEnvoy(device_envoy_rp::Error),
+    Core(CoreError),
+    Cyd(CydError),
+    Clock(clock::Error<CydError>),
 }
 
-impl From<device_envoy_rp::Error> for MainError {
-    fn from(_error: device_envoy_rp::Error) -> Self {
-        Self::DeviceEnvoy
-    }
-}
-
-impl From<CoreError> for MainError {
-    fn from(_error: CoreError) -> Self {
-        Self::Core
-    }
-}
-
-impl From<CydError> for MainError {
-    fn from(_error: CydError) -> Self {
-        Self::Cyd
-    }
-}
-
-impl From<clock::Error<CydError>> for MainError {
-    fn from(_error: clock::Error<CydError>) -> Self {
-        Self::Clock
+impl core::fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
+            Self::Core(error) => formatter.debug_tuple("Core").field(error).finish(),
+            Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
+            Self::Clock(error) => formatter.debug_tuple("Clock").field(error).finish(),
+        }
     }
 }

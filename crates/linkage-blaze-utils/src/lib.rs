@@ -5,25 +5,13 @@ pub mod bvh;
 use linkage_blaze_core::{DrawItem3d, Error as LinkageError, LinkageBuf, RgbColor};
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
-#[derive(Debug)]
-enum RenderError {
+#[derive(Debug, derive_more::From)]
+enum Error {
     Parse(String),
     Evaluation(LinkageError),
 }
 
-impl From<String> for RenderError {
-    fn from(error: String) -> Self {
-        Self::Parse(error)
-    }
-}
-
-impl From<LinkageError> for RenderError {
-    fn from(error: LinkageError) -> Self {
-        Self::Evaluation(error)
-    }
-}
-
-impl core::fmt::Display for RenderError {
+impl core::fmt::Display for Error {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Parse(error) => formatter.write_str(error),
@@ -32,7 +20,7 @@ impl core::fmt::Display for RenderError {
     }
 }
 
-impl std::error::Error for RenderError {}
+impl std::error::Error for Error {}
 
 #[wasm_bindgen]
 pub fn default_program() -> String {
@@ -58,7 +46,7 @@ pub fn render_program_with_params_json(
     render_program(source, &overrides).map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
-fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, RenderError> {
+fn render_program(source: &str, overrides: &[(String, f32)]) -> Result<String, Error> {
     let linkage = LinkageBuf::<256, 64>::from_lb_rs(source)?;
     let view = linkage.view();
     let mut params = [0.0; 256];

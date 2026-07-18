@@ -21,6 +21,7 @@ use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+//todo0000 just call it ButtonWatch if allowed
 button_watch! {
     CalibrationButtonWatch {
         pin: GPIO0,
@@ -33,12 +34,13 @@ async fn main(spawner: Spawner) -> ! {
     panic!("{err:?}");
 }
 
-async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     init_and_start!(p);
     esp_println::logger::init_logger(log::LevelFilter::Info);
     info!("Starting CYD armatron loop (one-SPI) on ESP32-H2 / generic");
 
     let [mut calibration_flash_block] = FlashBlockEsp::new_array::<1>(p.FLASH)?;
+    //todo0000 just call this button
     let calibration_button =
         CalibrationButtonWatch::new(p.GPIO0, PressedTo::Ground, spawner).await?;
 
@@ -54,9 +56,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
         p.GPIO13,    // lcd_rst_pin
         p.GPIO14,    // lcd_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
-        p.GPIO4,                      // touch_cs_pin
-        p.GPIO5,                      // touch_irq_pin
-        Orientation::Landscape,       // orientation
+        p.GPIO4,                // touch_cs_pin
+        p.GPIO5,                // touch_irq_pin
+        Orientation::Landscape, // orientation
+        //todo000 should rename with _COLOR
         BACKGROUND,                   // background
         FOREGROUND,                   // foreground
         &DEFAULT_FONT,                // font
@@ -66,7 +69,9 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
     .await?;
     info!("CYD display and touch initialized");
     match armatron(&mut cyd, &mut *calibration_button).await? {
+        // todo0000 can't this just be Exit (via module/namespace)
         ArmatronExit::CalibrationRequested => {
+            //todo0000 devolve this and the function it calls
             clear_calibration_and_reset(&mut cyd, &mut calibration_flash_block).await?;
         }
     }
@@ -77,12 +82,12 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, MainError> {
 async fn clear_calibration_and_reset(
     cyd: &mut CydEspOneSpi,
     calibration_flash_block: &mut FlashBlockEsp,
-) -> Result<(), MainError> {
+) -> Result<(), Error> {
     calibration_flash_block.clear()?;
     reboot_with_message(cyd, "rebooting").await
 }
 
-async fn reboot_with_message(cyd: &mut CydEspOneSpi, message: &str) -> Result<(), MainError> {
+async fn reboot_with_message(cyd: &mut CydEspOneSpi, message: &str) -> Result<(), Error> {
     let (display, _) = cyd.parts();
     let mut frame = display.full_frame_mut();
     frame.clear().write_text(message).flush()?;
@@ -90,58 +95,19 @@ async fn reboot_with_message(cyd: &mut CydEspOneSpi, message: &str) -> Result<()
     esp_hal::system::software_reset();
 }
 
-#[derive(Debug)]
-enum MainError {
-    Flash,
-    ConfigureDisplaySpi,
-    CreateDisplaySpiDevice,
-    ConfigureTouchSpi,
-    CreateTouchSpiDevice,
-    InitDisplay,
-    FlushFrameBuffer,
-    FormatText,
+#[derive(derive_more::From)]
+enum Error {
+    DeviceEnvoy(device_envoy_esp::Error),
+    Cyd(CydError), //todo0000 shouldn't this just be Error (plus module and namespace)
+    Armatron(ArmatronError<CydError>), //todo0000 shouldn't this just be Error (plus module and namespace)
 }
 
-impl From<device_envoy_esp::Error> for MainError {
-    fn from(_error: device_envoy_esp::Error) -> Self {
-        MainError::Flash
-    }
-}
-
-impl From<CydError> for MainError {
-    fn from(error: CydError) -> Self {
-        match error {
-            CydError::DisplayInit(error) => match error {
-                device_envoy_esp::cyd::CydDisplayEspInitError::ConfigureDisplaySpi => {
-                    MainError::ConfigureDisplaySpi
-                }
-                device_envoy_esp::cyd::CydDisplayEspInitError::CreateDisplaySpiDevice => {
-                    MainError::CreateDisplaySpiDevice
-                }
-                device_envoy_esp::cyd::CydDisplayEspInitError::InitDisplay => {
-                    MainError::InitDisplay
-                }
-            },
-            CydError::TouchInit(error) => match error {
-                device_envoy_esp::cyd::CydTouchEspInitError::ConfigureTouchSpi => {
-                    MainError::ConfigureTouchSpi
-                }
-                device_envoy_esp::cyd::CydTouchEspInitError::CreateTouchSpiDevice => {
-                    MainError::CreateTouchSpiDevice
-                }
-            },
-            CydError::DisplayFlush(_) => MainError::FlushFrameBuffer,
-            CydError::DisplaySetOrientation(_) => MainError::FlushFrameBuffer,
-        }
-    }
-}
-
-impl From<ArmatronError<CydError>> for MainError {
-    fn from(error: ArmatronError<CydError>) -> Self {
-        match error {
-            ArmatronError::Linkage(_) => MainError::FormatText,
-            ArmatronError::Ui(_) => MainError::FormatText,
-            ArmatronError::Cyd(error) => error.into(),
+impl core::fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
+            Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
+            Self::Armatron(error) => formatter.debug_tuple("Armatron").field(error).finish(),
         }
     }
 }

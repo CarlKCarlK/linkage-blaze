@@ -25,7 +25,7 @@ async fn main(spawner: Spawner) -> ! {
     panic!("{err:?}");
 }
 
-async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
+async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
     info!("Starting CYD armatron loop on RP Pico");
 
     let p = embassy_rp::init(Default::default());
@@ -73,12 +73,12 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, MainError> {
 async fn clear_calibration_and_reset(
     cyd: &mut CydRp,
     calibration_flash_block: &mut FlashBlockRp,
-) -> Result<(), MainError> {
+) -> Result<(), Error> {
     calibration_flash_block.clear()?;
     reboot_with_message(cyd, "rebooting").await
 }
 
-async fn reboot_with_message(cyd: &mut CydRp, message: &str) -> Result<(), MainError> {
+async fn reboot_with_message(cyd: &mut CydRp, message: &str) -> Result<(), Error> {
     let (display, _) = cyd.parts();
     let mut frame = display.full_frame_mut();
     frame.clear().write_text(message).flush()?;
@@ -86,27 +86,19 @@ async fn reboot_with_message(cyd: &mut CydRp, message: &str) -> Result<(), MainE
     cortex_m::peripheral::SCB::sys_reset();
 }
 
-#[derive(Debug)]
-enum MainError {
-    DeviceEnvoy,
-    Cyd,
-    Armatron,
+#[derive(derive_more::From)]
+enum Error {
+    DeviceEnvoy(device_envoy_rp::Error),
+    Cyd(CydError),
+    Armatron(ArmatronError<CydError>),
 }
 
-impl From<device_envoy_rp::Error> for MainError {
-    fn from(_error: device_envoy_rp::Error) -> Self {
-        Self::DeviceEnvoy
-    }
-}
-
-impl From<CydError> for MainError {
-    fn from(_error: CydError) -> Self {
-        Self::Cyd
-    }
-}
-
-impl From<ArmatronError<CydError>> for MainError {
-    fn from(_error: ArmatronError<CydError>) -> Self {
-        Self::Armatron
+impl core::fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
+            Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
+            Self::Armatron(error) => formatter.debug_tuple("Armatron").field(error).finish(),
+        }
     }
 }
