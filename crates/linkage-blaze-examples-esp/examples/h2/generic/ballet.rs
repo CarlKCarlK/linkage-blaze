@@ -14,7 +14,7 @@ use device_envoy_esp::{Error as DeviceEnvoyError, button::PressedTo, button_watc
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::ballet::{
-    self, BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, run,
+    self, BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT, run,
 };
 use log::info;
 
@@ -50,10 +50,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         p.GPIO13,    // display_rst_pin
         p.GPIO14,    // display_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
-        ORIENTATION, // orientation
-        BACKGROUND,  // background
-        FOREGROUND,  // foreground
-        &TOP_FONT,   // font
+        ORIENTATION,      // orientation
+        BACKGROUND_COLOR, // background_color
+        FOREGROUND_COLOR, // foreground_color
+        &TOP_FONT,        // font
     )?;
     info!("CYD display initialized");
 

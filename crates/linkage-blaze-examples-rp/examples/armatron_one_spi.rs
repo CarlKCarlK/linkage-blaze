@@ -15,7 +15,7 @@ use device_envoy_rp::{
 };
 use embassy_executor::Spawner;
 use embassy_rp::peripherals::SPI0;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND, Exit, FOREGROUND, run};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, run};
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -48,8 +48,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
         p.PIN_13,                     // touch_cs_pin
         p.PIN_14,                     // touch_irq_pin
         Orientation::Landscape,       // orientation
-        BACKGROUND,                   // background
-        FOREGROUND,                   // foreground
+        BACKGROUND_COLOR,             // background_color
+        FOREGROUND_COLOR,             // foreground_color
         &DEFAULT_FONT,                // font
         &mut calibration_flash_block, // calibration_flash_block
         &mut button_watch,            // button_watch

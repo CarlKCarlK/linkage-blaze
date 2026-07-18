@@ -23,8 +23,8 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::clock::{
-    self, BACKGROUND, Exit, FOREGROUND, MAX_FRAME_PIXEL_COUNT, ORIENTATION, WIFI_STATUS_FONT,
-    WIFI_STATUS_RECTANGLE, run, splash,
+    self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, MAX_FRAME_PIXEL_COUNT, ORIENTATION,
+    WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, run, splash,
 };
 use log::info;
 
@@ -60,8 +60,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         p.GPIO5,     // display_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
         ORIENTATION,       // orientation
-        BACKGROUND,        // background
-        FOREGROUND,        // foreground
+        BACKGROUND_COLOR,  // background_color
+        FOREGROUND_COLOR,  // foreground_color
         &WIFI_STATUS_FONT, // font
     )?;
     info!("CYD display initialized");

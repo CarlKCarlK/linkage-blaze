@@ -6,15 +6,15 @@ use device_envoy_core::cyd::display::Orientation;
 use device_envoy_core::wasm::cyd_web;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use linkage_blaze_core::examples::armatron::{
-    self, BACKGROUND, Error as ArmatronError, Exit, FOREGROUND, run,
+    self, BACKGROUND_COLOR, Error as ArmatronError, Exit, FOREGROUND_COLOR, run,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
 const WEB_APP: cyd_web::Config = cyd_web::Config::new(
     "linkage-blaze/armatron",
     Orientation::Landscape,
-    BACKGROUND,
-    FOREGROUND,
+    BACKGROUND_COLOR,
+    FOREGROUND_COLOR,
     &FONT_6X10,
 );
 const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(

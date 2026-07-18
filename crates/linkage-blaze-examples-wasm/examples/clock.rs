@@ -8,7 +8,7 @@ use device_envoy_core::{
     wifi_auto::WifiAutoEvent,
 };
 use linkage_blaze_core::examples::clock::{
-    BACKGROUND, Error as ClockError, Exit, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT,
+    BACKGROUND_COLOR, Error as ClockError, Exit, FOREGROUND_COLOR, ORIENTATION, WIFI_STATUS_FONT,
     WIFI_STATUS_RECTANGLE, run, splash,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -16,8 +16,8 @@ use wasm_bindgen::prelude::wasm_bindgen;
 const WEB_APP: cyd_web::Config = cyd_web::Config::new(
     "linkage-blaze/clock",
     ORIENTATION,
-    BACKGROUND,
-    FOREGROUND,
+    BACKGROUND_COLOR,
+    FOREGROUND_COLOR,
     &WIFI_STATUS_FONT,
 );
 const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(

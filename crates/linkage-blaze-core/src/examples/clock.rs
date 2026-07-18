@@ -36,8 +36,8 @@ use time::OffsetDateTime;
 
 // ── Public constants ────────────────────────────────────────────────────────────────
 
-pub const BACKGROUND: Rgb888 = Rgb888::new(3, 7, 14); // near-black blue (3, 7, 14)
-pub const FOREGROUND: Rgb888 = Rgb888::new(210, 160, 80); // dim gold (210, 160, 80)
+pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(3, 7, 14); // near-black blue (3, 7, 14)
+pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(210, 160, 80); // dim gold (210, 160, 80)
 pub const ORIENTATION: Orientation = Orientation::Landscape;
 pub const WIFI_STATUS_FONT: MonoFont<'static> = FONT_6X10;
 pub const WIFI_STATUS_RECTANGLE: Rectangle = Rectangle::new(Point::new(256, 5), Size::new(62, 10));
@@ -83,7 +83,7 @@ where
     CydDisplayDevice: CydDisplay,
     ClockSyncDevice: ClockSync,
 {
-    let background = Rgb565::from(BACKGROUND);
+    let background565 = Rgb565::from(BACKGROUND_COLOR);
     let time_color = Rgb565::from(TIME_COLOR);
 
     loop {
@@ -98,7 +98,7 @@ where
 
         // ── Render the digital time strip (using embedded graphics methods). ─────────
         let mut time_frame = display.frame_mut(TIME_RECTANGLE);
-        time_frame.fill(background);
+        time_frame.fill(background565);
         Text::with_text_style(
             time_text.as_str(),
             Point::new(TIME_RECTANGLE.size.width as i32 / 2, TIME_TEXT_TOP_PADDING),
@@ -120,18 +120,18 @@ where
             .map(|draw_item_3d| draw_item_3d.project(&PROJECTION));
 
         // Stream the pixels row-major straight to the display with no frame or
-        // tile buffer, with the background bitmap as the first pixel source.
+        // tile buffer, with the background_bitmap as the first pixel source.
         display
             .draw_items::<{ 1 + LINKAGE.draw_item_3d_count() }>(
                 CLOCK_BOUNDS,
-                background, // color, but will be overridden by the bitmap background
+                background565, // color, but will be overridden by the background_bitmap
                 iter::once(CLOCK_BACKGROUND_BITMAP).chain(draw_items_2d),
             )
             .map_err(Error::Flush)?;
     }
 }
 
-/// Draw the static full-screen clock background.
+/// Draw the static full-screen clock background_bitmap.
 pub async fn splash<CydDisplayDevice>(
     display: &mut CydDisplayDevice,
 ) -> Result<(), Error<CydDisplayDevice::Error>>
@@ -203,8 +203,8 @@ mod tests {
     use time::OffsetDateTime;
 
     use super::{
-        BACKGROUND, Exit, FOREGROUND, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, run,
-        splash,
+        BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, ORIENTATION, WIFI_STATUS_FONT,
+        WIFI_STATUS_RECTANGLE, run, splash,
     };
 
     /// A `ClockSync` test double that ticks instantly with a fixed time,
@@ -256,8 +256,8 @@ mod tests {
     fn boot_requests_wifi_reset_before_rendering_the_next_tick() {
         let memory_cyd = CydMemory::new(
             ORIENTATION.size(),
-            BACKGROUND,
-            FOREGROUND,
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
             &WIFI_STATUS_FONT,
         );
         let clock_sync = FixedClockSync {
@@ -281,8 +281,8 @@ mod tests {
     fn boot_requests_wifi_reset_after_a_rendered_tick() {
         let mut memory_cyd = CydMemory::new(
             ORIENTATION.size(),
-            BACKGROUND,
-            FOREGROUND,
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
             &WIFI_STATUS_FONT,
         );
         memory_cyd.set_frame_budget(100);
@@ -311,8 +311,8 @@ mod tests {
     fn clock_renders_expected_frame() {
         let mut memory_cyd = CydMemory::new(
             ORIENTATION.size(),
-            BACKGROUND,
-            FOREGROUND,
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
             &WIFI_STATUS_FONT,
         );
         memory_cyd.set_frame_budget(3);
@@ -324,7 +324,8 @@ mod tests {
 
         {
             let mut display = memory_cyd.display();
-            block_on(splash(&mut display)).expect("clock splash should draw the static background");
+            block_on(splash(&mut display))
+                .expect("clock splash should draw the static background_bitmap");
             block_on(
                 display
                     .frame_mut(WIFI_STATUS_RECTANGLE)

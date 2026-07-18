@@ -34,8 +34,8 @@ use reverse_kinematics::ReverseKinematics;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-pub const BACKGROUND: Rgb888 = Rgb888::CSS_BLACK;
-pub const FOREGROUND: Rgb888 = Rgb888::CSS_WHITE;
+pub const BACKGROUND_COLOR: Rgb888 = Rgb888::CSS_BLACK;
+pub const FOREGROUND_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 
 // ---- linkages ----
 //
@@ -238,8 +238,8 @@ mod tests {
     fn test_memory_cyd() -> CydMemory {
         CydMemory::new(
             embedded_graphics::geometry::Size::new(320, 240),
-            super::BACKGROUND,
-            super::FOREGROUND,
+            super::BACKGROUND_COLOR,
+            super::FOREGROUND_COLOR,
             &FONT_9X15_BOLD,
         )
     }

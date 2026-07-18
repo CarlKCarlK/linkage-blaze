@@ -15,7 +15,7 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND, Exit, FOREGROUND, run};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, run};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -52,12 +52,11 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         p.GPIO4,     // lcd_rst_pin
         p.GPIO5,     // lcd_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
-        p.GPIO0,                // touch_cs_pin
-        p.GPIO1,                // touch_irq_pin
-        Orientation::Landscape, // orientation
-        //todo000 should rename with _COLOR
-        BACKGROUND,                   // background
-        FOREGROUND,                   // foreground
+        p.GPIO0,                      // touch_cs_pin
+        p.GPIO1,                      // touch_irq_pin
+        Orientation::Landscape,       // orientation
+        BACKGROUND_COLOR,             // background_color
+        FOREGROUND_COLOR,             // foreground_color
         &DEFAULT_FONT,                // font
         &mut calibration_flash_block, // calibration_flash_block
         &mut *button_watch,           // button_watch

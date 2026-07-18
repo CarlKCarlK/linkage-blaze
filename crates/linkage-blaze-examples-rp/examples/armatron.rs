@@ -14,7 +14,7 @@ use device_envoy_rp::{
     flash_block::{FlashBlock as _, FlashBlockRp},
 };
 use embassy_executor::Spawner;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND, Exit, FOREGROUND, run};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, run};
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -44,8 +44,8 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
         p.PIN_22,    // display_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
         Orientation::Landscape,       // orientation
-        BACKGROUND,                   // background
-        FOREGROUND,                   // foreground
+        BACKGROUND_COLOR,             // background_color
+        FOREGROUND_COLOR,             // foreground_color
         &DEFAULT_FONT,                // font
         p.SPI1,                       // touch_spi
         p.PIN_10,                     // touch_sck_pin

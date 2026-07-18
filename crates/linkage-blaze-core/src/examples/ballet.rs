@@ -30,14 +30,14 @@ pub const TOP_FONT: MonoFont<'static> = FONT_6X10;
 // ── Palette ──────────────────────────────────────────────────────────────────
 
 // Default colors.
-pub const BACKGROUND: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal
-pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
+pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal
+pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
 
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
 const LINKAGE0: LinkageFixed<{ MOTION.dof() }, 6, 538> =
     linkage_fixed!("../assets/mocap/pirouette.lb.rs");
 const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = LinkageFixed::<0, 0, 3>::start()
-    .pen_color(FOREGROUND)
+    .pen_color(FOREGROUND_COLOR)
     .pen_width(3.2)
     .combine::<{ MOTION.dof() }, 6, 538, { MOTION.dof() }, 6, 540>(LINKAGE0)
     .view();
@@ -48,7 +48,7 @@ const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = LinkageFixed::<0, 0, 3>::start
 const MOTION: BvhMotion<132, 592> = bvh_motion!("../assets/mocap/pirouette.bvh");
 const MOTION_FPS: f32 = 120.0; // the mocap was captured at 120fps, so we can run it at that speed.
 
-// A background bitmap read at compile time and stored in the binary.
+// A background_bitmap read at compile time and stored in the binary.
 const BACKGROUND_BITMAP: Image565Fixed<240, 320, { 240 * 320 }> =
     tga!("../assets/ballet_background.tga").to_565();
 
@@ -85,7 +85,7 @@ where
             // Create a frame to draw into. It uses preallocated memory.
             let mut cyd_frame = display.full_frame_mut();
 
-            // Draw the background bitmap into the frame via bulk copy.
+            // Draw the background_bitmap into the frame via bulk copy.
             // .draw(...) works too, but is slower.
             BACKGROUND_BITMAP.copy_to(&mut cyd_frame)?;
 
@@ -155,7 +155,7 @@ pub enum Error<FlushError> {
     Linkage(LinkageError),
     /// Formatting the status line failed.
     StatusText(StatusTextError),
-    /// A device-envoy-core operation failed (for example, the background bitmap's
+    /// A device-envoy-core operation failed (for example, the background_bitmap's
     /// dimensions didn't match the frame's).
     Core(CoreError),
     /// Flushing a frame to the display failed.
@@ -171,7 +171,7 @@ mod tests {
     };
     use futures_executor::block_on;
 
-    use super::{BACKGROUND, FOREGROUND, ORIENTATION, TOP_FONT, run};
+    use super::{BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT, run};
 
     fn render_ballet(memory_cyd: &mut CydMemory, button: &impl Button) {
         let mut display = memory_cyd.display();
@@ -181,12 +181,22 @@ mod tests {
 
     #[test]
     fn boot_restarts_the_motion_sequence_at_the_initial_frame() {
-        let mut baseline = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut baseline = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
+            &TOP_FONT,
+        );
         baseline.set_frame_budget(2);
         let baseline_button = baseline.button_memory();
         render_ballet(&mut baseline, &baseline_button);
 
-        let mut restarted = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut restarted = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
+            &TOP_FONT,
+        );
         restarted.set_frame_budget(4);
         let mut restarted_button = restarted.button_memory();
         restarted_button.set_pressed_for_frame(2, true);
@@ -207,7 +217,12 @@ mod tests {
     fn ballet_renders_expected_frame() {
         const GOLDEN_TEST_FRAME_BUDGET: usize = 225;
 
-        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut memory_cyd = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
+            &TOP_FONT,
+        );
         memory_cyd.set_frame_budget(GOLDEN_TEST_FRAME_BUDGET);
         let memory_button = memory_cyd.button_memory();
 

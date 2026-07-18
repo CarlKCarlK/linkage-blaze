@@ -25,7 +25,7 @@ use device_envoy_rp::{
 };
 use embassy_executor::Spawner;
 use linkage_blaze_core::examples::skeleton_clock::{
-    self, BACKGROUND, Exit, FIGURE_TILE_GRID, FOREGROUND, ORIENTATION, TOP_FONT,
+    self, BACKGROUND_COLOR, Exit, FIGURE_TILE_GRID, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
     WIFI_STATUS_RECTANGLE, run,
 };
 use panic_probe as _;
@@ -57,10 +57,10 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         p.PIN_21,    // display_rst_pin
         p.PIN_22,    // display_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
-        ORIENTATION, // orientation
-        BACKGROUND,  // background
-        FOREGROUND,  // foreground
-        &TOP_FONT,   // font
+        ORIENTATION,      // orientation
+        BACKGROUND_COLOR, // background_color
+        FOREGROUND_COLOR, // foreground_color
+        &TOP_FONT,        // font
     )?;
     info!("CYD display initialized");
 

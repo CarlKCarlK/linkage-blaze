@@ -8,7 +8,7 @@ use device_envoy_core::{
     wifi_auto::WifiAutoEvent,
 };
 use linkage_blaze_core::examples::skeleton_clock::{
-    BACKGROUND, Error as SkeletonClockError, Exit, FOREGROUND, ORIENTATION, TOP_FONT,
+    BACKGROUND_COLOR, Error as SkeletonClockError, Exit, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
     WIFI_STATUS_RECTANGLE, run, splash,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -16,8 +16,8 @@ use wasm_bindgen::prelude::wasm_bindgen;
 const WEB_APP: cyd_web::Config = cyd_web::Config::new(
     "linkage-blaze/skeleton-clock",
     ORIENTATION,
-    BACKGROUND,
-    FOREGROUND,
+    BACKGROUND_COLOR,
+    FOREGROUND_COLOR,
     &TOP_FONT,
 );
 const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(

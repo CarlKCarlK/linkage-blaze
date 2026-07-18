@@ -4,15 +4,15 @@ use core::convert::Infallible;
 
 use device_envoy_core::wasm::cyd_web;
 use linkage_blaze_core::examples::ballet::{
-    BACKGROUND, Error as BalletError, FOREGROUND, ORIENTATION, TOP_FONT, run,
+    BACKGROUND_COLOR, Error as BalletError, FOREGROUND_COLOR, ORIENTATION, TOP_FONT, run,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
 const WEB_APP: cyd_web::Config = cyd_web::Config::new(
     "linkage-blaze/ballet",
     ORIENTATION,
-    BACKGROUND,
-    FOREGROUND,
+    BACKGROUND_COLOR,
+    FOREGROUND_COLOR,
     &TOP_FONT,
 );
 const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(

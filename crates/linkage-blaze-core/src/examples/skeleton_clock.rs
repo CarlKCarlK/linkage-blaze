@@ -34,10 +34,10 @@ use device_envoy_core::cyd::{
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-pub const BACKGROUND: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal (13, 13, 11)
-const FIGURE: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
-pub const FOREGROUND: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
-const PLACARD_TEXT: Rgb888 = BACKGROUND; // dark text on the light sign face
+pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal (13, 13, 11)
+const FIGURE_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
+pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
+const PLACARD_TEXT_COLOR: Rgb888 = BACKGROUND_COLOR; // dark text on the light sign face
 
 // ── Linkage ────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ const LINKAGE0: LinkageFixed<132, 6, 600> = linkage_fixed!("../assets/mocap/piro
 // Prepend a linkage drawing style.
 const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
     .pen_width(3.5)
-    .pen_color(FIGURE)
+    .pen_color(FIGURE_COLOR)
     .combine(LINKAGE0);
 
 // Keep only the three clock-driven parameters, then optimize the fixed linkage.
@@ -65,9 +65,9 @@ const PROJECTION: Projection = Projection::front_orthographic(
     1.35,                 // scale
 );
 
-// ── Background bitmap ──────────────────────────────────────────────────────────
+// ── Background_bitmap ──────────────────────────────────────────────────────────
 
-/// Clock-face background bitmap, loaded at compile time.
+/// Clock-face background_bitmap, loaded at compile time.
 const BACKGROUND_BITMAP: Image565Fixed<239, 319, { 239 * 319 }> =
     tga!("../assets/clock_back.small.tga").to_565();
 
@@ -221,7 +221,7 @@ where
 }
 
 /// Draw the skeleton-clock screen *before* the time is known: the status line
-/// reads `WiFi: --` / `--:--:-- --`, and the clock-face background is shown with
+/// reads `WiFi: --` / `--:--:-- --`, and the clock-face background_bitmap is shown with
 /// no figure or placards. Call this as early as possible (right after the display
 /// is initialized) so the user sees the framed clock immediately; the per-tick
 /// [`skeleton_clock`] loop then overwrites the WiFi text, time and figure as they
@@ -433,7 +433,7 @@ fn draw_centered_sign_value<D>(
         &value_text,
         sign_top_left + value_center,
         &FONT_10X20,
-        Rgb565::from(PLACARD_TEXT),
+        Rgb565::from(PLACARD_TEXT_COLOR),
     );
 }
 
@@ -477,7 +477,7 @@ mod tests {
     use futures_executor::block_on;
     use time::OffsetDateTime;
 
-    use super::{BACKGROUND, Exit, FOREGROUND, ORIENTATION, TOP_FONT, run};
+    use super::{BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, ORIENTATION, TOP_FONT, run};
 
     /// A `ClockSync` test double that ticks instantly with a fixed time,
     /// rather than waiting on real NTP/timer infrastructure.
@@ -526,7 +526,12 @@ mod tests {
 
     #[test]
     fn boot_requests_wifi_reset_before_rendering_the_next_tick() {
-        let memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let memory_cyd = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
+            &TOP_FONT,
+        );
         let clock_sync = FixedClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
                 .expect("valid fixed timestamp"),
@@ -546,7 +551,12 @@ mod tests {
 
     #[test]
     fn boot_requests_wifi_reset_after_a_rendered_tick() {
-        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut memory_cyd = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
+            &TOP_FONT,
+        );
         memory_cyd.set_frame_budget(100);
         let clock_sync = OneTickClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)
@@ -575,7 +585,12 @@ mod tests {
 
     #[test]
     fn skeleton_clock_renders_expected_frame() {
-        let mut memory_cyd = CydMemory::new(ORIENTATION.size(), BACKGROUND, FOREGROUND, &TOP_FONT);
+        let mut memory_cyd = CydMemory::new(
+            ORIENTATION.size(),
+            BACKGROUND_COLOR,
+            FOREGROUND_COLOR,
+            &TOP_FONT,
+        );
         memory_cyd.set_frame_budget(ONE_COMPLETE_FRAME_BUDGET);
         let clock_sync = FixedClockSync {
             local_time: OffsetDateTime::from_unix_timestamp(1_700_003_415)

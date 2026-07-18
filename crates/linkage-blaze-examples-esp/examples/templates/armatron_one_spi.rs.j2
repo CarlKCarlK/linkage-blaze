@@ -17,7 +17,7 @@ use device_envoy_esp::{
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::armatron::{
-    self, run, Exit, BACKGROUND, FOREGROUND,
+    self, run, Exit, BACKGROUND_COLOR, FOREGROUND_COLOR,
 };
 use log::info;
 
@@ -59,9 +59,8 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         p.GPIO{{ cyd_touch_cs_pin }}, // touch_cs_pin
         p.GPIO{{ cyd_touch_irq_pin }}, // touch_irq_pin
         Orientation::Landscape, // orientation
-        //todo000 should rename with _COLOR
-        BACKGROUND, // background
-        FOREGROUND, // foreground
+        BACKGROUND_COLOR, // background_color
+        FOREGROUND_COLOR, // foreground_color
         &DEFAULT_FONT, // font
         &mut calibration_flash_block, // calibration_flash_block
         &mut *button_watch, // button_watch
