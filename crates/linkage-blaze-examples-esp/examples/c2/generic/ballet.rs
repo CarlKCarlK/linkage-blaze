@@ -14,7 +14,7 @@ use device_envoy_esp::{Error as DeviceEnvoyError, button::PressedTo, button_watc
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::ballet::{
-    self, BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT, run,
+    self, BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
 };
 use log::info;
 
@@ -58,7 +58,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     info!("CYD display initialized");
 
     let button_watch = ButtonWatch::new(p.GPIO18, PressedTo::Ground, spawner).await?;
-    Ok(run(&mut display, &*button_watch).await?)
+    Ok(ballet::run(&mut display, &*button_watch).await?)
 }
 
 // Derived Debug reads these payloads at runtime, but dead_code analysis ignores

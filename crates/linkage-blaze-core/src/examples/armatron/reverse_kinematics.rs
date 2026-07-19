@@ -206,11 +206,7 @@ impl Run {
         Ok(Self {
             search_params: *params,
             best_params: *params,
-            best_distance: super::compute_target_distance(
-                super::ARM_TIP_LINKAGE,
-                super::LINKAGE,
-                params,
-            )?,
+            best_distance: super::target_distance(params)?,
             step: INITIAL_STEP,
             search_exhausted: false,
             candidate_index: 0,
@@ -329,11 +325,7 @@ impl Run {
     }
 
     fn keep_if_improved(&mut self) -> Result<bool, LinkageError> {
-        let distance = super::compute_target_distance(
-            super::ARM_TIP_LINKAGE,
-            super::LINKAGE,
-            &self.search_params,
-        )?;
+        let distance = super::target_distance(&self.search_params)?;
         if distance < self.best_distance {
             self.best_distance = distance;
             self.best_params = self.search_params;

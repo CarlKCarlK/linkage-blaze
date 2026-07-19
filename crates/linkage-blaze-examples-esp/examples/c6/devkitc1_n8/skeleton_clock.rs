@@ -25,7 +25,7 @@ use embassy_executor::Spawner;
 use esp_backtrace as _;
 use linkage_blaze_core::examples::skeleton_clock::{
     self, BACKGROUND_COLOR, Exit, FIGURE_TILE_GRID, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
-    WIFI_STATUS_RECTANGLE, run,
+    WIFI_STATUS_RECTANGLE,
 };
 use log::info;
 
@@ -133,7 +133,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("clock sync ready; entering skeleton-clock loop");
 
-    match run(&mut display, &clock_sync, &mut *button_watch).await? {
+    match skeleton_clock::run(&mut display, &clock_sync, &mut *button_watch).await? {
         Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             esp_hal::system::software_reset();

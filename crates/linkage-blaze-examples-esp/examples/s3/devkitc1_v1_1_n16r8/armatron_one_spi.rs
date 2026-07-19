@@ -15,7 +15,7 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, run};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -63,7 +63,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )
     .await?;
     info!("CYD display and touch initialized");
-    match run(&mut cyd, &mut *button_watch).await? {
+    match armatron::run(&mut cyd, &mut *button_watch).await? {
         Exit::CalibrationRequested => {
             calibration_flash_block.clear()?;
             let mut frame = cyd.display().full_frame_mut();

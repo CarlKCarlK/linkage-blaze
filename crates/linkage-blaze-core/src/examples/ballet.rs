@@ -109,6 +109,24 @@ where
     }
 }
 
+#[derive(Debug, derive_more::From)]
+pub struct StatusTextError(pub fmt::Error);
+
+/// Errors from the generic ballet loop.
+#[derive(Debug, derive_more::From)]
+pub enum Error<FlushError> {
+    /// A runtime linkage parameter was invalid.
+    Linkage(LinkageError),
+    /// Formatting the status line failed.
+    StatusText(StatusTextError),
+    /// A device-envoy-core operation failed (for example, the background_bitmap's
+    /// dimensions didn't match the frame's).
+    Core(CoreError),
+    /// Flushing a frame to the display failed.
+    #[from(ignore)]
+    Flush(FlushError),
+}
+
 #[cfg(not(test))]
 fn sample_duration(started: Instant) -> Duration {
     Instant::now() - started
@@ -143,24 +161,6 @@ fn status_text(
         slomo,
     )?;
     Ok(status_text)
-}
-
-#[derive(Debug, derive_more::From)]
-pub struct StatusTextError(pub fmt::Error);
-
-/// Errors from the generic ballet loop.
-#[derive(Debug, derive_more::From)]
-pub enum Error<FlushError> {
-    /// A runtime linkage parameter was invalid.
-    Linkage(LinkageError),
-    /// Formatting the status line failed.
-    StatusText(StatusTextError),
-    /// A device-envoy-core operation failed (for example, the background_bitmap's
-    /// dimensions didn't match the frame's).
-    Core(CoreError),
-    /// Flushing a frame to the display failed.
-    #[from(ignore)]
-    Flush(FlushError),
 }
 
 #[cfg(test)]

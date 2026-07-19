@@ -8,8 +8,8 @@ use device_envoy_core::{
     wifi_auto::WifiAutoEvent,
 };
 use linkage_blaze_core::examples::clock::{
-    BACKGROUND_COLOR, Error as ClockError, Exit, FOREGROUND_COLOR, ORIENTATION, WIFI_STATUS_FONT,
-    WIFI_STATUS_RECTANGLE, run, splash,
+    self, BACKGROUND_COLOR, Error as ClockError, Exit, FOREGROUND_COLOR, ORIENTATION,
+    WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -42,7 +42,7 @@ async fn inner_main(
     let wifi_simulator = capabilities.wifi_simulator;
     clock_sync.show();
     let mut display = cyd.display();
-    splash(&mut display).await?;
+    clock::splash(&mut display).await?;
 
     let wifi_outcome = match wifi_simulator
         .connect(&mut button, async |event| {
@@ -73,7 +73,7 @@ async fn inner_main(
         Ok(()) => {}
         Err(error) => match error {},
     }
-    match run(&mut display, &clock_sync, &mut button).await? {
+    match clock::run(&mut display, &clock_sync, &mut button).await? {
         Exit::ResetWifi => Ok(cyd_web::Command::ResetWifi),
     }
 }

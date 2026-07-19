@@ -6,7 +6,7 @@ use device_envoy_core::cyd::display::Orientation;
 use device_envoy_core::wasm::cyd_web;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
 use linkage_blaze_core::examples::armatron::{
-    self, BACKGROUND_COLOR, Error as ArmatronError, Exit, FOREGROUND_COLOR, run,
+    self, BACKGROUND_COLOR, Error as ArmatronError, Exit, FOREGROUND_COLOR,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -34,8 +34,8 @@ async fn inner_main(
     capabilities: cyd_web::Capabilities,
 ) -> Result<cyd_web::Command, ArmatronError<Infallible>> {
     let mut cyd = capabilities.cyd;
-    let mut button_watch = capabilities.button;
-    match run(&mut cyd, &mut button_watch).await? {
+    let mut button = capabilities.button;
+    match armatron::run(&mut cyd, &mut button).await? {
         Exit::CalibrationRequested => Ok(cyd_web::Command::CalibrationNotNeeded),
     }
 }

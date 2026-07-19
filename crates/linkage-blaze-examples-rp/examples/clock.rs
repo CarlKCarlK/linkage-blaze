@@ -26,7 +26,7 @@ use device_envoy_rp::{
 use embassy_executor::Spawner;
 use linkage_blaze_core::examples::clock::{
     self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, MAX_FRAME_PIXEL_COUNT, ORIENTATION,
-    WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, run, splash,
+    WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE,
 };
 use panic_probe as _;
 
@@ -60,7 +60,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("CYD display initialized");
 
-    splash(&mut display).await?;
+    clock::splash(&mut display).await?;
 
     let [wifi_auto_flash_block, timezone_flash_block] = FlashBlockRp::new_array::<2>(p.FLASH)?;
 
@@ -128,7 +128,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
     )?;
     info!("clock sync ready; entering clock loop");
 
-    match run(&mut display, &clock_sync, &mut button_watch15).await? {
+    match clock::run(&mut display, &clock_sync, &mut button_watch15).await? {
         Exit::ResetWifi => {
             wifi_auto.reset_to_captive_portal()?;
             cortex_m::peripheral::SCB::sys_reset();

@@ -1,13 +1,13 @@
 //! Immediate-mode widgets for simple touch UIs.
 //!
 //! Widgets in this module do not own application state. Callers keep the
-//! authoritative values and pass them into [`Ui::slider`] or react to
-//! [`Ui::button`], [`Ui::icon_button`], and [`Ui::hold_button`] return values
+//! authoritative values and pass them into [UiFrame::slider] or react to
+//! [UiFrame::button], [UiFrame::icon_button], and [UiFrame::hold_button] return values
 //! each frame.
 //!
 //! Layout specs such as [`Slider`] and [`Button`] are plain data. A slider drag
 //! is identified by pointer equality on the layout spec, so sliders used with
-//! [`Ui::slider`] must be defined as `static` items instead of `const` items:
+//! [UiFrame::slider] must be defined as `static` items instead of `const` items:
 //! `static` values have a stable unique address, while `const` values may be
 //! duplicated at each use site.
 //!
@@ -28,7 +28,7 @@
 //! # };
 //! # use core::convert::Infallible;
 //! # use device_envoy_core::cyd::touch::TouchEvent;
-//! # use linkage_blaze_core::examples::ui::{Slider, Ui};
+//! # use linkage_blaze_core::examples::ui::{Slider, UiFrame, UiState};
 //! static TILT_SLIDER: Slider = Slider::vertical(
 //!     "z",
 //!     16,
@@ -39,14 +39,17 @@
 //! );
 //!
 //! let mut display = MockDisplay::<Rgb565>::new();
-//! let mut ui = Ui::new();
+//! let mut ui_state = UiState::new();
 //! let mut tilt = 0.5;
 //!
-//! ui.begin(Some(TouchEvent::Down {
-//!     point: Point::new(16, 124),
-//! }));
-//! ui.slider(&mut display, &TILT_SLIDER, &mut tilt)?;
-//! ui.end(&mut display)?;
+//! let mut ui_frame = UiFrame::new(
+//!     &mut ui_state,
+//!     Some(TouchEvent::Down {
+//!         point: Point::new(16, 124),
+//!     }),
+//! );
+//! ui_frame.slider(&mut display, &TILT_SLIDER, &mut tilt)?;
+//! ui_frame.draw_touch_cursor(&mut display)?;
 //! # Ok::<(), linkage_blaze_core::examples::ui::Error<Infallible>>(())
 //! ```
 
@@ -67,46 +70,51 @@ use heapless::String;
 const LABEL_CAPACITY: usize = 24;
 const SLIDER_TOUCH_PAD: i32 = 14;
 
-/// Immediate-mode UI state for one touch pointer.
+/// Persistent immediate-mode UI state for one touch pointer.
 #[derive(Default)]
-pub struct Ui {
+pub struct UiState {
     touch_cursor: Option<Point>,
-    touch_event: Option<TouchEvent>,
     active_slider: Option<&'static Slider>,
     active_hold_button: Option<&'static IconButton>,
     down_consumed: bool,
 }
 
-impl Ui {
-    /// Creates an empty UI state with no captured slider.
+impl UiState {
+    /// Creates empty UI state with no captured slider.
     pub const fn new() -> Self {
         Self {
             touch_cursor: None,
-            touch_event: None,
             active_slider: None,
             active_hold_button: None,
             down_consumed: false,
         }
     }
+}
 
-    /// Starts a frame by storing the touch event and refreshing pointer state.
-    ///
-    /// A touch-up clears the active drag capture before any widgets run.
-    pub fn begin(&mut self, touch_event: Option<TouchEvent>) {
-        self.touch_event = touch_event;
-        self.down_consumed = false;
+/// Widget operations and input for one frame.
+pub struct UiFrame<'state> {
+    state: &'state mut UiState,
+    touch_event: Option<TouchEvent>,
+}
+
+impl<'state> UiFrame<'state> {
+    /// Creates a frame and updates persistent state for its touch event.
+    pub fn new(state: &'state mut UiState, touch_event: Option<TouchEvent>) -> Self {
+        state.down_consumed = false;
 
         match touch_event {
             Some(TouchEvent::Down { point }) | Some(TouchEvent::Move { point }) => {
-                self.touch_cursor = Some(point);
+                state.touch_cursor = Some(point);
             }
             Some(TouchEvent::Up) => {
-                self.touch_cursor = None;
-                self.active_slider = None;
-                self.active_hold_button = None;
+                state.touch_cursor = None;
+                state.active_slider = None;
+                state.active_hold_button = None;
             }
             None => {}
         }
+
+        Self { state, touch_event }
     }
 
     /// Updates `value` from any captured drag, then draws the slider.
@@ -122,16 +130,17 @@ impl Ui {
         D: DrawTarget<Color = Rgb565>,
     {
         if let Some(TouchEvent::Down { point }) = self.touch_event {
-            if !self.down_consumed && slider.touch_rectangle.contains(point) {
-                self.active_slider = Some(slider);
-                self.down_consumed = true;
+            if !self.state.down_consumed && slider.touch_rectangle.contains(point) {
+                self.state.active_slider = Some(slider);
+                self.state.down_consumed = true;
             }
         }
         let is_active = self
+            .state
             .active_slider
             .is_some_and(|active_slider| ptr::eq(active_slider, slider));
         if is_active {
-            if let Some(touch_point) = self.touch_cursor {
+            if let Some(touch_point) = self.state.touch_cursor {
                 *value = slider.value_from_touch(touch_point.x as f32, touch_point.y as f32);
             }
         }
@@ -155,7 +164,7 @@ impl Ui {
         Ok(was_clicked)
     }
 
-    /// Like [`Ui::button`], but draws an icon instead of text.
+    /// Like [UiFrame::button], but draws an icon instead of text.
     pub fn icon_button<D>(
         &mut self,
         target: &mut D,
@@ -169,7 +178,7 @@ impl Ui {
         Ok(was_clicked)
     }
 
-    /// Like [`Ui::icon_button`], but captures the touch and reports a
+    /// Like [UiFrame::icon_button], but captures the touch and reports a
     /// frame-by-frame hold state until touch-up.
     pub fn hold_button<D>(
         &mut self,
@@ -182,14 +191,15 @@ impl Ui {
         let mut hold_button_state = HoldButtonState::Idle;
 
         if let Some(TouchEvent::Down { point }) = self.touch_event {
-            if !self.down_consumed && icon_button.touch_rectangle.contains(point) {
-                self.active_hold_button = Some(icon_button);
-                self.down_consumed = true;
+            if !self.state.down_consumed && icon_button.touch_rectangle.contains(point) {
+                self.state.active_hold_button = Some(icon_button);
+                self.state.down_consumed = true;
                 hold_button_state = HoldButtonState::Pressed;
             }
         }
 
         let is_pressed = self
+            .state
             .active_hold_button
             .is_some_and(|active_hold_button| ptr::eq(active_hold_button, icon_button));
         if is_pressed && matches!(hold_button_state, HoldButtonState::Idle) {
@@ -218,11 +228,11 @@ impl Ui {
     }
 
     /// Draws the cyan touch cursor on top of everything when a touch is active.
-    pub fn end<D>(&self, target: &mut D) -> Result<(), Error<D::Error>>
+    pub fn draw_touch_cursor<D>(&self, target: &mut D) -> Result<(), Error<D::Error>>
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        let Some(touch_point) = self.touch_cursor else {
+        let Some(touch_point) = self.state.touch_cursor else {
             return Ok(());
         };
         let center_x = touch_point.x;
@@ -242,7 +252,7 @@ impl Ui {
         let Some(TouchEvent::Down { point }) = self.touch_event else {
             return false;
         };
-        if self.down_consumed {
+        if self.state.down_consumed {
             return false;
         }
 
@@ -250,7 +260,7 @@ impl Ui {
             return false;
         }
 
-        self.down_consumed = true;
+        self.state.down_consumed = true;
         true
     }
 }
@@ -584,7 +594,7 @@ impl Icon {
     }
 }
 
-/// Per-frame hold-button state returned by [`Ui::hold_button`].
+/// Per-frame hold-button state returned by [UiFrame::hold_button].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HoldButtonState {
     /// No active hold for this button this frame.

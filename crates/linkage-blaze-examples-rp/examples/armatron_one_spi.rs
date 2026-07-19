@@ -15,7 +15,7 @@ use device_envoy_rp::{
 };
 use embassy_executor::Spawner;
 use embassy_rp::peripherals::SPI0;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR, run};
+use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR};
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -30,7 +30,7 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
     let p = embassy_rp::init(Default::default());
 
     let [mut calibration_flash_block] = FlashBlockRp::new_array::<1>(p.FLASH)?;
-    let mut button_watch = ButtonRp::new(p.PIN_15, PressedTo::Ground);
+    let mut button = ButtonRp::new(p.PIN_15, PressedTo::Ground);
 
     static CYD_STATIC: CydRpOneSpiStatic<SPI0, { CydRpOneSpi::<SPI0>::SCREEN_PIXELS }> =
         CydRpOneSpi::new_static();
@@ -52,12 +52,12 @@ async fn inner_main(_spawner: Spawner) -> Result<Infallible, Error> {
         FOREGROUND_COLOR,             // foreground_color
         &DEFAULT_FONT,                // font
         &mut calibration_flash_block, // calibration_flash_block
-        &mut button_watch,            // button_watch
+        &mut button,                  // button
     )
     .await?;
     info!("CYD display and touch initialized");
 
-    match run(&mut cyd, &mut button_watch).await? {
+    match armatron::run(&mut cyd, &mut button).await? {
         Exit::CalibrationRequested => {
             calibration_flash_block.clear()?;
             let mut frame = cyd.display().full_frame_mut();

@@ -72,8 +72,8 @@ const CLOCK_BACKGROUND_BITMAP: DrawItem = DrawItem::Bitmap {
 const LINKAGE0: LinkageFixed<2, 2, 50> = linkage_fixed!("../assets/examples/clock.lb.rs");
 const LINKAGE: LinkageView<2, 2> = LINKAGE0.view();
 
-/// Run the clock render loop forever, driven by `clock_sync` ticks and drawn
-/// onto `cyd`.
+/// Run the clock render loop until the physical BOOT button requests a Wi-Fi
+/// reset, driven by `clock_sync` ticks and drawn onto `cyd`.
 pub async fn run<CydDisplayDevice, ClockSyncDevice>(
     display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
@@ -151,20 +151,20 @@ pub enum Exit {
     ResetWifi,
 }
 
-/// Error from the generic clock loop, generic over the surface's flush error `F`.
+/// Error from the generic clock loop, generic over the surface's flush error `FlushError`.
 ///
 /// Both variants are converted explicitly at the call site (`.map_err(...)`),
 /// the same flush-error convention as
 /// [`skeleton_clock::Error`](crate::skeleton_clock::Error).
 #[derive(Debug, derive_more::From)]
-pub enum Error<F> {
+pub enum Error<FlushError> {
     /// A runtime linkage parameter was invalid.
     Linkage(LinkageError),
     /// Formatting the time string failed.
     Text(fmt::Error),
     /// Flushing a frame to the display failed.
     #[from(ignore)]
-    Flush(F),
+    Flush(FlushError),
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────

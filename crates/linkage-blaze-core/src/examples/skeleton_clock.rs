@@ -117,8 +117,8 @@ pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
 );
 // ── Main function ────────────────────────────────────────────────────────
 
-/// Run the skeleton-clock render loop forever, driven by `clock_sync` ticks and
-/// drawn onto `cyd`.
+/// Run the skeleton-clock render loop until the physical BOOT button requests a
+/// Wi-Fi reset, driven by `clock_sync` ticks and drawn onto `cyd`.
 pub async fn run<CydDisplayDevice, ClockSyncDevice>(
     display: &mut CydDisplayDevice,
     clock_sync: &ClockSyncDevice,
@@ -224,7 +224,7 @@ where
 /// reads `WiFi: --` / `--:--:-- --`, and the clock-face background_bitmap is shown with
 /// no figure or placards. Call this as early as possible (right after the display
 /// is initialized) so the user sees the framed clock immediately; the per-tick
-/// [`skeleton_clock`] loop then overwrites the WiFi text, time and figure as they
+/// [`run`] loop then overwrites the WiFi text, time and figure as they
 /// become available.
 pub async fn splash<CydDisplayDevice>(
     display: &mut CydDisplayDevice,
@@ -260,6 +260,27 @@ where
 pub enum Exit {
     /// Return to Wi-Fi setup before resuming the clock.
     ResetWifi,
+}
+
+/// Error from the generic skeleton-clock loop, generic over the surface's flush
+/// error `FlushError`.
+///
+/// Our own [`MarkLookupError`] gets a derived `From`, so it propagates with a
+/// plain `?`. The device's flush error `FlushError` and the overflow value are converted
+/// explicitly with `.map_err(...)` at the call site: a blanket `From<FlushError>` would
+/// be greedy enough to collide with that concrete `From` under coherence.
+#[derive(Debug, derive_more::From)]
+pub enum Error<FlushError> {
+    /// A runtime linkage parameter was invalid.
+    Linkage(LinkageError),
+    /// Flushing a frame to the display failed.
+    #[from(ignore)]
+    Flush(FlushError),
+    /// A required figure mark was not found.
+    Mark(MarkLookupError),
+    /// The projected-items scratch buffer was smaller than the linkage draw-item count.
+    #[from(ignore)]
+    VecOverflow(DrawItem),
 }
 
 // ── Clock time ────────────────────────────────────────────────────────────────
@@ -444,27 +465,6 @@ pub struct MarkLookupError(pub MarkError);
 
 fn mark_lookup<T>(result: Result<T, MarkError>) -> Result<T, MarkLookupError> {
     Ok(result?)
-}
-
-/// Error from the generic skeleton-clock loop, generic over the surface's flush
-/// error `F`.
-///
-/// Our own [`MarkLookupError`] gets a derived `From`, so it propagates with a
-/// plain `?`. The device's flush error `F` and the overflow value are converted
-/// explicitly with `.map_err(...)` at the call site: a blanket `From<F>` would
-/// be greedy enough to collide with that concrete `From` under coherence.
-#[derive(Debug, derive_more::From)]
-pub enum Error<F> {
-    /// A runtime linkage parameter was invalid.
-    Linkage(LinkageError),
-    /// Flushing a frame to the display failed.
-    #[from(ignore)]
-    Flush(F),
-    /// A required figure mark was not found.
-    Mark(MarkLookupError),
-    /// The projected-items scratch buffer was smaller than the linkage draw-item count.
-    #[from(ignore)]
-    VecOverflow(DrawItem),
 }
 
 #[cfg(test)]
