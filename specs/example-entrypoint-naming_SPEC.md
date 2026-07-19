@@ -67,16 +67,16 @@ preserve existing user modifications.
 
 ## Implementation checklist
 
-- [ ] Confirm the complete caller and template list with `rg`.
-- [ ] Rename the four Linkage Blaze primary functions to `run`.
-- [ ] Update module imports and calls in RP, WASM, and ESP examples.
-- [ ] Update ESP templates before changing or regenerating generated examples.
-- [ ] Decide whether the two clock splash functions should become `splash` and
+- [x] Confirm the complete caller and template list with `rg`.
+- [x] Rename the four Linkage Blaze primary functions to `run`.
+- [x] Update module imports and calls in RP, WASM, and ESP examples.
+- [x] Update ESP templates before changing or regenerating generated examples.
+- [x] Decide whether the two clock splash functions should become `splash` and
       update their documentation and callers if so.
-- [ ] Remove obsolete naming TODOs and stale references to the old function
+- [x] Remove obsolete naming TODOs and stale references to the old function
       names.
-- [ ] Confirm the DNS Tester API remains unchanged and consistent.
-- [ ] Inspect the final diff to ensure unrelated user changes are preserved.
+- [x] Confirm the DNS Tester API remains unchanged and consistent.
+- [x] Inspect the final diff to ensure unrelated user changes are preserved.
 
 ## Verification
 
