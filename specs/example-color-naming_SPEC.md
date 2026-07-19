@@ -96,18 +96,18 @@ designed with the final names.
 
 ## Implementation checklist
 
-- [ ] Confirm all definitions and uses with searches limited to `.rs` and
+- [x] Confirm all definitions and uses with searches limited to `.rs` and
       `.j2` files.
-- [ ] Rename the four canonical `BACKGROUND`/`FOREGROUND` constant pairs.
-- [ ] Rename `FIGURE`, `PLACARD_TEXT`, and the local `background` color.
-- [ ] Update core tests and internal call sites.
-- [ ] Update RP and WASM imports and call sites.
-- [ ] Update every affected ESP template.
-- [ ] Remove the obsolete `_COLOR` naming TODO.
-- [ ] Run `just generate-board-examples` and review the generated changes.
-- [ ] Search for stale bare color names without matching bitmap and prose
+- [x] Rename the four canonical `BACKGROUND`/`FOREGROUND` constant pairs.
+- [x] Rename `FIGURE`, `PLACARD_TEXT`, and the local `background` color.
+- [x] Update core tests and internal call sites.
+- [x] Update RP and WASM imports and call sites.
+- [x] Update every affected ESP template.
+- [x] Remove the obsolete `_COLOR` naming TODO.
+- [x] Run `just generate-board-examples` and review the generated changes.
+- [x] Search for stale bare color names without matching bitmap and prose
       identifiers accidentally.
-- [ ] Inspect the final diff and preserve unrelated user changes.
+- [x] Inspect the final diff and preserve unrelated user changes.
 
 ## Verification
 

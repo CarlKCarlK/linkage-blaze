@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use core::convert::Infallible;
+use core::{convert::Infallible, fmt};
 
 use device_envoy_core::cyd::{Cyd as _, CydDisplay, display::CydFrame};
 use device_envoy_esp::cyd::{self, DEFAULT_DISPLAY_SPI_HZ};
@@ -81,8 +81,8 @@ enum Error {
     Armatron(armatron::Error<cyd::Error>),
 }
 
-impl core::fmt::Debug for Error {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
             Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),

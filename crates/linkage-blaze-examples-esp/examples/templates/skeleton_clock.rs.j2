@@ -2,7 +2,7 @@
 #![no_std]
 #![no_main]
 
-use core::{cell::RefCell, convert::Infallible};
+use core::{cell::RefCell, convert::Infallible, fmt};
 
 use device_envoy_core::cyd::display::CydFrame;
 use device_envoy_esp::cyd::{DEFAULT_DISPLAY_SPI_HZ, 
@@ -157,8 +157,8 @@ enum Error {
     SkeletonClock(skeleton_clock::Error<CydError>),
 }
 
-impl core::fmt::Debug for Error {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
             Self::Core(error) => formatter.debug_tuple("Core").field(error).finish(),

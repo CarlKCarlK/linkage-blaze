@@ -4,7 +4,7 @@
 // where the generic `ballet::<CydEsp>` is instantiated, so the allow lives here.
 #![allow(long_running_const_eval)]
 
-use core::convert::Infallible;
+use core::{convert::Infallible, fmt};
 
 use device_envoy_esp::cyd::{
     CydDisplayEsp, CydEsp, CydStaticEsp, DEFAULT_DISPLAY_SPI_HZ, Error as CydError,
@@ -70,8 +70,8 @@ enum Error {
     Ballet(ballet::Error<CydError>),
 }
 
-impl core::fmt::Debug for Error {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
             Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),

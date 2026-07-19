@@ -3,7 +3,7 @@
 #![no_main]
 #![allow(clippy::future_not_send, reason = "single-threaded")]
 
-use core::{cell::RefCell, convert::Infallible};
+use core::{cell::RefCell, convert::Infallible, fmt};
 
 use defmt::info;
 use defmt_rtt as _;
@@ -152,8 +152,8 @@ enum Error {
     SkeletonClock(skeleton_clock::Error<CydError>),
 }
 
-impl core::fmt::Debug for Error {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DeviceEnvoy(error) => formatter.debug_tuple("DeviceEnvoy").field(error).finish(),
             Self::Core(error) => formatter.debug_tuple("Core").field(error).finish(),

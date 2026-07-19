@@ -2,7 +2,7 @@
 #![no_main]
 #![allow(long_running_const_eval)]
 
-use core::convert::Infallible;
+use core::{convert::Infallible, fmt};
 
 use defmt::info;
 use defmt_rtt as _;
@@ -57,8 +57,8 @@ enum Error {
     Ballet(ballet::Error<CydError>),
 }
 
-impl core::fmt::Debug for Error {
-    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Cyd(error) => formatter.debug_tuple("Cyd").field(error).finish(),
             Self::Ballet(error) => formatter.debug_tuple("Ballet").field(error).finish(),
