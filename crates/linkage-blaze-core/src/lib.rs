@@ -235,6 +235,9 @@ impl VariableArg {
 /// # Ok(())
 /// # }
 /// ```
+// TODO Consider reducing this trait to only `view`, with all inspection and
+// evaluation APIs living on `LinkageView`. If third-party storage types are not
+// needed, inherent `view` methods may make the conversion trait unnecessary.
 pub trait Linkage<const DOF: usize, const MARKS: usize> {
     /// Create a borrowed view for evaluation and rendering.
     ///

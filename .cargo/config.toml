@@ -1,5 +1,6 @@
 [alias]
 xtask = "run -p linkage-blaze-xtask --"
+check-all = "run --quiet -p linkage-blaze-xtask -- check-all"
 
 [env]
 DEFMT_LOG = "info"

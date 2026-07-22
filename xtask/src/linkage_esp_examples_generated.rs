@@ -121,7 +121,7 @@ fn prepend_path(command: &mut Command, dir: &Path) {
 }
 
 /// Builds every generated `linkage-blaze-examples-esp` board example (real or placeholder) for its
-/// own board's target, so `just check-all` exercises the full board matrix instead of a
+/// own board's target, so `cargo check-all` exercises the full board matrix instead of a
 /// hand-picked handful of `esp32_generic` examples.
 pub fn build_all_board_examples(workspace_root: &Path) -> Result<(), Box<dyn Error>> {
     let crate_root = workspace_root.join(LINKAGE_ESP_CRATE_DIR);

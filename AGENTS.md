@@ -66,7 +66,7 @@ Put implementation specs (`*_SPEC.md` and similar planning documents) in the `sp
 
 ## Local CI
 
-`just check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite. When a task depends on Device Envoy, also run its `cargo check-all` command from the Device Envoy repository.
+`cargo check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite. When a task depends on Device Envoy, also run its `cargo check-all` command from the Device Envoy repository.
 
 ## Module Structure Convention
 

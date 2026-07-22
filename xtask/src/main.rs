@@ -80,12 +80,18 @@ fn inner_main() -> Result<()> {
             }
             build_esp_examples()
         }
+        "check-all" => {
+            if arguments.next().is_some() {
+                return Err(Error::message("usage: cargo check-all"));
+            }
+            check_all()
+        }
         _ => Err(Error::message(usage())),
     }
 }
 
 fn usage() -> &'static str {
-    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]\n  cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]\n  cargo run -p linkage-blaze-xtask -- generate-board-examples\n  cargo run -p linkage-blaze-xtask -- build-esp-examples"
+    "usage:\n  cargo run -p linkage-blaze-xtask -- build-pages [demo-slug]\n  cargo run -p linkage-blaze-xtask -- bump-demo-version <demo-slug> [new-version]\n  cargo run -p linkage-blaze-xtask -- bump-gallery-version [new-version]\n  cargo run -p linkage-blaze-xtask -- generate-board-examples\n  cargo run -p linkage-blaze-xtask -- build-esp-examples\n  cargo check-all"
 }
 
 fn generate_board_examples() -> Result<()> {
@@ -102,6 +108,180 @@ fn build_esp_examples() -> Result<()> {
         .map_err(|error| Error::message(error.to_string()))?;
     println!("Built all linkage-blaze-examples-esp board examples");
     Ok(())
+}
+
+fn check_all() -> Result<()> {
+    let repo_root = env::current_dir()?;
+
+    run_cargo_command(
+        &repo_root,
+        &[
+            "run",
+            "--quiet",
+            "-p",
+            "linkage-blaze-xtask",
+            "--",
+            "generate-board-examples",
+        ],
+        None,
+        "generate board examples",
+    )?;
+    for (arguments, description) in [
+        (
+            &["test", "-p", "linkage-blaze-core"][..],
+            "linkage-blaze-core tests",
+        ),
+        (
+            &["test", "-p", "linkage-blaze-core", "--features", "alloc"][..],
+            "linkage-blaze-core alloc tests",
+        ),
+        (
+            &[
+                "test",
+                "-p",
+                "linkage-blaze-core",
+                "--features",
+                "examples-armatron,examples-ballet,examples-clock,examples-skeleton-clock",
+            ][..],
+            "linkage-blaze-core example tests",
+        ),
+        (
+            &["test", "-p", "linkage-blaze-utils"][..],
+            "linkage-blaze-utils tests",
+        ),
+    ] {
+        run_cargo_command(
+            &repo_root,
+            arguments,
+            Some(("RUSTFLAGS", "-D warnings")),
+            description,
+        )?;
+    }
+
+    let mut esp_command = Command::new("bash");
+    esp_command.current_dir(&repo_root);
+    esp_command.args([
+        "-lc",
+        "source ~/export-esp.sh && cargo run --quiet -p linkage-blaze-xtask -- build-esp-examples",
+    ]);
+    run_command(&mut esp_command, "build ESP examples")?;
+
+    for (example_name, board) in [
+        ("armatron", "1"),
+        ("armatron", "2"),
+        ("armatron", "w"),
+        ("armatron", "2w"),
+        ("ballet", "1"),
+        ("ballet", "2"),
+        ("ballet", "w"),
+        ("ballet", "2w"),
+        ("clock", "w"),
+        ("clock", "2w"),
+        ("skeleton_clock", "w"),
+        ("skeleton_clock", "2w"),
+    ] {
+        build_rp_example(&repo_root, example_name, board)?;
+    }
+
+    let device_envoy_rp = repo_root.join("../mcu/device-envoy/crates/device-envoy-rp");
+    run_cargo_command(
+        &device_envoy_rp,
+        &[
+            "run",
+            "--quiet",
+            "--manifest-path",
+            "xtask/Cargo.toml",
+            "--",
+            "check-examples",
+        ],
+        None,
+        "Device Envoy RP example checks",
+    )?;
+    run_cargo_command(
+        &repo_root,
+        &[
+            "check",
+            "-p",
+            "linkage-blaze-utils",
+            "--target",
+            "wasm32-unknown-unknown",
+        ],
+        Some(("RUSTFLAGS", "-D warnings")),
+        "linkage-blaze-utils WASM check",
+    )?;
+
+    let mut wasm_pack = Command::new("wasm-pack");
+    wasm_pack.current_dir(&repo_root);
+    wasm_pack.env("RUSTFLAGS", "-D warnings");
+    wasm_pack.args([
+        "build",
+        "crates/linkage-blaze-utils",
+        "--target",
+        "web",
+        "--out-dir",
+        "www/pkg",
+        "--out-name",
+        "linkage_blaze_editor",
+    ]);
+    run_command(&mut wasm_pack, "build linkage-blaze-utils WASM package")
+}
+
+fn build_rp_example(repo_root: &Path, example_name: &str, board: &str) -> Result<()> {
+    let (target, board_features) = match board {
+        "1" => ("thumbv6m-none-eabi", "pico1,arm"),
+        "2" => ("thumbv8m.main-none-eabihf", "pico2,arm"),
+        "w" => ("thumbv6m-none-eabi", "pico1,arm,wifi"),
+        "2w" => ("thumbv8m.main-none-eabihf", "pico2,arm,wifi"),
+        _ => return Err(Error::message(format!("invalid RP board: {board}"))),
+    };
+    let feature_name = match example_name {
+        "skeleton_clock" => "skeleton-clock",
+        name => name,
+    };
+    let features = format!("{board_features},{feature_name}");
+
+    let mut command = Command::new("cargo");
+    command.current_dir(repo_root);
+    command.env("CARGO_TARGET_DIR", "target/rp-no-lto");
+    command.env("CARGO_PROFILE_RELEASE_LTO", "off");
+    command.arg(if example_name == "ballet" {
+        "rustc"
+    } else {
+        "build"
+    });
+    command.args([
+        "-p",
+        "linkage-blaze-examples-rp",
+        "--example",
+        example_name,
+        "--target",
+        target,
+        "--release",
+        "--features",
+        &features,
+        "--no-default-features",
+    ]);
+    if example_name == "ballet" {
+        command.args(["--", "-A", "long-running-const-eval"]);
+    }
+    run_command(
+        &mut command,
+        &format!("build RP example {example_name} for board {board}"),
+    )
+}
+
+fn run_cargo_command(
+    current_dir: &Path,
+    arguments: &[&str],
+    environment: Option<(&str, &str)>,
+    description: &str,
+) -> Result<()> {
+    let mut command = Command::new("cargo");
+    command.current_dir(current_dir).args(arguments);
+    if let Some((name, value)) = environment {
+        command.env(name, value);
+    }
+    run_command(&mut command, description)
 }
 
 fn build_pages(selected_demo: Option<&str>) -> Result<()> {

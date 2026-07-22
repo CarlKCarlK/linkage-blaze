@@ -32,37 +32,13 @@ test-core:
 test-utils:
     env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-utils
 
-# TODO0 Consider moving this orchestration into a Cargo xtask if linkage-blaze
-# and Device Envoy standardize on `cargo check-all` as their shared interface.
-# Check and build all crates
-check-all:
-    cargo run --quiet -p linkage-blaze-xtask -- generate-board-examples
-    just test-core
-    just test-utils
-    source ~/export-esp.sh && cargo run --quiet -p linkage-blaze-xtask -- build-esp-examples
-    just --justfile crates/linkage-blaze-examples-rp/justfile build armatron 1
-    just --justfile crates/linkage-blaze-examples-rp/justfile build armatron 2
-    just --justfile crates/linkage-blaze-examples-rp/justfile build armatron w
-    just --justfile crates/linkage-blaze-examples-rp/justfile build armatron 2w
-    just --justfile crates/linkage-blaze-examples-rp/justfile build ballet 1
-    just --justfile crates/linkage-blaze-examples-rp/justfile build ballet 2
-    just --justfile crates/linkage-blaze-examples-rp/justfile build ballet w
-    just --justfile crates/linkage-blaze-examples-rp/justfile build ballet 2w
-    just --justfile crates/linkage-blaze-examples-rp/justfile build clock w
-    just --justfile crates/linkage-blaze-examples-rp/justfile build clock 2w
-    just --justfile crates/linkage-blaze-examples-rp/justfile build skeleton_clock w
-    just --justfile crates/linkage-blaze-examples-rp/justfile build skeleton_clock 2w
-    cd ../mcu/device-envoy/crates/device-envoy-rp && cargo run --quiet --manifest-path xtask/Cargo.toml -- check-examples
-    env RUSTFLAGS="-D warnings" cargo check -p linkage-blaze-utils --target wasm32-unknown-unknown
-    env RUSTFLAGS="-D warnings" wasm-pack build crates/linkage-blaze-utils --target web --out-dir www/pkg --out-name linkage_blaze_editor
-
 # Profile each command in check-all and write a Markdown report under specs/.
 profile-check-all:
     ./scripts/profile-check-all.sh
 
 # Alias for check-all
 build-all:
-    just check-all
+    cargo check-all
 
 # Build the static GitHub Pages artifact with immutable demo version URLs.
 build-pages demo='':
