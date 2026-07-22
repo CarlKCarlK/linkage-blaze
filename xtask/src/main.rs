@@ -497,26 +497,138 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         })?;
 
         let output_dir = repo_root.join(&output_dir);
-        let mut command = Command::new("wasm-pack");
-        command.env("RUSTFLAGS", "-D warnings");
-        command.arg("build");
-        command.arg(&demo_record.crate_dir);
-        command.arg("--target");
-        command.arg("web");
-        command.arg("--out-dir");
-        command.arg(&output_dir.join("pkg"));
-        command.arg("--out-name");
-        command.arg(&out_name);
-        if !demo_record.example_name.is_empty() {
-            command.args(["--", "--example", &demo_record.example_name]);
+        if demo_record.example_name.is_empty() {
+            build_wasm_library(
+                repo_root,
+                &demo_record.crate_dir,
+                &output_dir.join("pkg"),
+                &out_name,
+            )?;
+        } else {
+            build_wasm_example(
+                repo_root,
+                &demo_record.crate_dir,
+                &demo_record.example_name,
+                &output_dir.join("pkg"),
+                &out_name,
+            )?;
         }
-        run_command(
-            &mut command,
-            &format!("wasm-pack build {}", demo_record.crate_dir),
-        )?;
     }
 
     Ok(())
+}
+
+fn build_wasm_library(
+    repo_root: &Path,
+    crate_dir: &str,
+    pkg_dir: &Path,
+    out_name: &str,
+) -> Result<()> {
+    let manifest_path = Path::new(crate_dir).join("Cargo.toml");
+
+    let mut command = Command::new("cargo");
+    command.current_dir(repo_root);
+    command.env("RUSTFLAGS", "-D warnings");
+    command.args([
+        "build",
+        "--manifest-path",
+        manifest_path
+            .to_str()
+            .ok_or_else(|| Error::message("WASM crate manifest path is not valid UTF-8"))?,
+        "--lib",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--release",
+    ]);
+    run_command(&mut command, &format!("build WASM library {crate_dir}"))?;
+
+    let crate_name = Path::new(crate_dir)
+        .file_name()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| Error::message("WASM crate directory has no UTF-8 file name"))?
+        .replace('-', "_");
+    let wasm_path = repo_root
+        .join("target/wasm32-unknown-unknown/release")
+        .join(format!("{crate_name}.wasm"));
+    if !wasm_path.is_file() {
+        return Err(Error::message(format!(
+            "WASM library artifact not found: {}",
+            wasm_path.display()
+        )));
+    }
+
+    generate_wasm_bindings(&wasm_path, pkg_dir, out_name)?;
+    Ok(())
+}
+
+/// Builds one `cdylib` example and generates web bindings for that exact artifact.
+///
+/// `wasm-pack build -- --example NAME` asks Cargo to build the example, but
+/// wasm-pack still selects the package's library artifact when one exists. The
+/// examples crate has both kinds of target, so bind the example explicitly.
+fn build_wasm_example(
+    repo_root: &Path,
+    crate_dir: &str,
+    example_name: &str,
+    pkg_dir: &Path,
+    out_name: &str,
+) -> Result<()> {
+    let manifest_path = Path::new(crate_dir).join("Cargo.toml");
+    let mut command = Command::new("cargo");
+    command.current_dir(repo_root);
+    command.env("RUSTFLAGS", "-D warnings");
+    command.args([
+        "build",
+        "--manifest-path",
+        manifest_path
+            .to_str()
+            .ok_or_else(|| Error::message("WASM crate manifest path is not valid UTF-8"))?,
+        "--target",
+        "wasm32-unknown-unknown",
+        "--release",
+        "--example",
+        example_name,
+    ]);
+    run_command(&mut command, &format!("build WASM example {example_name}"))?;
+
+    let wasm_path = repo_root
+        .join("target/wasm32-unknown-unknown/release/examples")
+        .join(format!("{example_name}.wasm"));
+    if !wasm_path.is_file() {
+        return Err(Error::message(format!(
+            "WASM example artifact not found: {}",
+            wasm_path.display()
+        )));
+    }
+
+    generate_wasm_bindings(&wasm_path, pkg_dir, out_name)?;
+
+    let js_path = pkg_dir.join(format!("{out_name}.js"));
+    let js = fs::read_to_string(&js_path)?;
+    if !exports_start(&js) {
+        return Err(Error::message(format!(
+            "generated bindings do not export start: {}",
+            js_path.display()
+        )));
+    }
+
+    Ok(())
+}
+
+fn generate_wasm_bindings(wasm_path: &Path, pkg_dir: &Path, out_name: &str) -> Result<()> {
+    fs::create_dir_all(pkg_dir)?;
+    let mut bindgen = wasm_bindgen_cli_support::Bindgen::new();
+    bindgen
+        .input_path(wasm_path)
+        .out_name(out_name)
+        .omit_default_module_path(false)
+        .web(true)?;
+    bindgen.generate(pkg_dir)?;
+    Ok(())
+}
+
+fn exports_start(js: &str) -> bool {
+    js.contains("export function start(")
 }
 
 /// Bundle the canonical Device Envoy CYD shell into each simulator page.
@@ -1100,6 +1212,7 @@ type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, derive_more::From)]
 enum Error {
     Io(std::io::Error),
+    WasmBindgen(anyhow::Error),
     Message(String),
 }
 
@@ -1113,6 +1226,7 @@ impl Display for Error {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(error) => write!(formatter, "{error}"),
+            Self::WasmBindgen(error) => write!(formatter, "{error}"),
             Self::Message(message) => formatter.write_str(message),
         }
     }
@@ -1488,9 +1602,9 @@ $body
 #[cfg(test)]
 mod tests {
     use super::{
-        DemoRecord, PreviewOrientation, PreviewSource, gallery_versions_section_html,
-        infer_next_gallery_version, infer_next_version, parse_pkg_out_name, run_command,
-        validate_version,
+        DemoRecord, PreviewOrientation, PreviewSource, exports_start,
+        gallery_versions_section_html, infer_next_gallery_version, infer_next_version,
+        parse_pkg_out_name, run_command, validate_version,
     };
     use std::process::Command;
 
@@ -1638,6 +1752,13 @@ mod tests {
     fn rejects_vendor_js_without_relative_pkg_import() {
         let vendor_js = "const path = \"pkg/not-a-wasm-import.js\";";
         assert!(parse_pkg_out_name(vendor_js).is_none());
+    }
+
+    #[test]
+    fn recognizes_exported_wasm_start_function() {
+        assert!(exports_start("export function start(canvas_id) {}"));
+        assert!(!exports_start("function start(canvas_id) {}"));
+        assert!(!exports_start("export function restart() {}"));
     }
 
     #[test]

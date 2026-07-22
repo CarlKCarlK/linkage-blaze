@@ -1,7 +1,4 @@
-import init, {
-  start,
-  set_time_of_day,
-} from "./pkg/linkage_blaze_clock_wasm.js";
+import init, { start } from "./pkg/linkage_blaze_clock_wasm.js";
 
 try {
   await init();
@@ -10,8 +7,14 @@ try {
   // inside Rust and ticks once per second from the browser clock. CSS stretches
   // the canvas over the case's screen area, so no JS animation loop or sizing is
   // needed here.
-  start("screen");
-  buildTimeOfDaySlider(set_time_of_day);
+  const handle = start("screen");
+  buildTimeOfDaySlider((secondsOfDay) => {
+    if (secondsOfDay < 0) {
+      handle.use_live_clock();
+    } else {
+      handle.set_clock_time_of_day(secondsOfDay);
+    }
+  });
 } catch (error) {
   console.error(error);
   throw error;
