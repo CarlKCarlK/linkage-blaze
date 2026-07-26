@@ -27,7 +27,7 @@ use time::OffsetDateTime;
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, MaskFixed, Orientation, TgaImageFixed, mask_byte_count,
+        CydFrame, DrawItem, Image565Fixed, Image888Fixed, MaskFixed, Orientation, mask_byte_count,
         tga, tiling::TileGrid,
     },
 };
@@ -71,14 +71,14 @@ const PROJECTION: Projection = Projection::front_orthographic(
 const BACKGROUND_BITMAP: Image565Fixed<239, 319, { 239 * 319 }> =
     tga!("../assets/clock_back.small.tga").to_565();
 
-const HOURS_SIGN_TGA: TgaImageFixed<45, 73, { 45 * 73 }> = tga!("../assets/hours.small.tga");
+const HOURS_SIGN_TGA: Image888Fixed<45, 73, { 45 * 73 }> = tga!("../assets/hours.small.tga");
 const HOURS_SIGN_BITMAP: Image565Fixed<45, 73, { 45 * 73 }> = HOURS_SIGN_TGA.to_565();
 const HOURS_SIGN_MASK: MaskFixed<45, 73, { mask_byte_count(45, 73) }> =
     HOURS_SIGN_TGA.to_mask_magenta();
 const HOURS_SIGN_ANCHOR_X: f32 = 22.0;
 const HOURS_SIGN_VALUE_CENTER: Point = Point::new(22, 50);
 
-const MINUTE_SIGN_TGA: TgaImageFixed<45, 77, { 45 * 77 }> = tga!("../assets/minute.small.tga");
+const MINUTE_SIGN_TGA: Image888Fixed<45, 77, { 45 * 77 }> = tga!("../assets/minute.small.tga");
 const MINUTE_SIGN_BITMAP: Image565Fixed<45, 77, { 45 * 77 }> = MINUTE_SIGN_TGA.to_565();
 const MINUTE_SIGN_MASK: MaskFixed<45, 77, { mask_byte_count(45, 77) }> =
     MINUTE_SIGN_TGA.to_mask_magenta();

@@ -9,6 +9,11 @@ This file contains shared workspace rules for this repository.
   step is within the current task and safe to perform, perform it rather than
   stopping merely to recommend it.
 
+- In this repository, **devolve** means inlining a code element's behavior at
+  its call sites (or into its containing function) and deleting the original
+  struct, enum, helper, or other abstraction. Prefer the clearer term
+  **inline** in prose when there is no need for the project-specific shorthand.
+
 - Avoid introducing `unsafe` blocks. If a change truly requires `unsafe`, call it out explicitly and explain the justification so the user can review it carefully.
 - Do not "fix" warnings or errors by suppressing lints (for example `#[allow(...)]`, crate-level allow attributes, or similar) unless the human explicitly requests that suppression.
 - If warnings are caused by obsolete code, delete or refactor the obsolete code instead of hiding the warning.
