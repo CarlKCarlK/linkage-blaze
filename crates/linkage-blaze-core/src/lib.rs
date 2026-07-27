@@ -1392,7 +1392,8 @@ macro_rules! emit_fixed_step_methods {
             self.push(Step::SphereParam(VariableArg::new(index, low, high)))
         }
 
-        // Restore methods
+        // Restore is an ordinary fluent DSL method. Structural extension macros
+        // resize the backing array before replaying it.
         pub const fn restore(self, name: &'static str) -> Self {
             let index = match self.mark_index(name) {
                 Some(i) => i,
@@ -1401,29 +1402,6 @@ macro_rules! emit_fixed_step_methods {
                 }
             };
             self.push(Step::Restore { index })
-        }
-
-        /// Append a restore step while deriving a new exact step capacity.
-        #[doc(hidden)]
-        pub const fn __restore<const OUT_N: usize>(
-            self,
-            name: &'static str,
-        ) -> LinkageFixed<DOF, MARKS, OUT_N> {
-            self.resize_steps::<OUT_N>().restore(name)
-        }
-
-        /// Append the two display-style steps used by the armatron example.
-        #[doc(hidden)]
-        pub const fn __append_display_style<const OUT_N: usize>(
-            self,
-            color: Rgb888,
-            parameter_name: &'static str,
-            low: f32,
-            high: f32,
-        ) -> LinkageFixed<DOF, MARKS, OUT_N> {
-            self.resize_steps::<OUT_N>()
-                .pen_color(color)
-                .sphere_param(parameter_name, low, high)
         }
     };
 }
@@ -2147,46 +2125,11 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             .strip_fixed_noops_same_capacity()
     }
 
-    /// Optimize the fixed steps for the device.
-    ///
-    /// Runs the const peephole pipeline applied after parameter specialization
-    /// ([`freeze_param_name`](Self::freeze_param_name),
-    /// [`retain_param_names`](Self::retain_param_names)): strip provable no-ops,
-    /// merge runs of adjacent same-type fixed steps, then strip again to remove
-    /// any merged steps whose sum is zero. The result evaluates identically to
-    /// the input at every set of parameters, with fewer steps.
-    ///
-    /// `OUT_N` (the step capacity of the returned linkage) must equal the number
-    /// of steps remaining after optimization; the function asserts this at
-    /// const-eval time.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// # use linkage_blaze_core::LinkageFixed;
-    /// const L: LinkageFixed<0, 0, 3> = LinkageFixed::start()
-    ///     .yaw(0.0)
-    ///     .forward(1.0);
-    ///
-    /// const C: LinkageFixed<0, 0, 2> = L.compact();
-    /// ```
-    pub const fn compact<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
-        self.strip_fixed_noops_same_capacity()
-            .merge_adjacent_fixed_same_capacity()
-            .strip_fixed_noops_same_capacity()
-            .resize_steps()
-    }
-
-    /// Count the exact output slots produced by [`Self::compact`].
+    /// Resize backing storage to the active step count.
+    //
+    // This is public only because exported declarative macros expand in downstream crates.
     #[doc(hidden)]
-    pub const fn __compact_step_count(self) -> usize {
-        self.strip_fixed_noops_same_capacity()
-            .merge_adjacent_fixed_same_capacity()
-            .strip_fixed_noops_same_capacity()
-            .step_count()
-    }
-
-    const fn resize_steps<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
+    pub const fn __resize_steps<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
         let mut out_steps = [const { Step::Start }; OUT_N];
         let mut step_index = 0;
         while step_index < self.len {
@@ -3195,18 +3138,6 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             mark_names: self.mark_names,
             mark_len: self.mark_len,
         }
-    }
-
-    /// Optimize the fixed steps for the device.
-    ///
-    /// Runtime counterpart of [`LinkageFixed::compact`]: strip provable no-ops,
-    /// merge runs of adjacent same-type fixed steps, then strip again to remove
-    /// any merged steps whose sum is zero. The result evaluates identically to
-    /// the input at every set of parameters, with fewer steps.
-    pub fn compact(self) -> Self {
-        self.strip_fixed_noops()
-            .merge_adjacent_fixed()
-            .strip_fixed_noops()
     }
 }
 
@@ -4400,19 +4331,19 @@ macro_rules! linkage_fixed {
             include!($path)
         };
         const __LINKAGE_BLAZE_FIXED: $crate::LinkageFixed<
-            $dof,
-            $marks,
+            { $dof },
+            { $marks },
             { __LINKAGE_BLAZE_MEASURED.step_count() },
         > = {
             macro_rules! __linkage_blaze_start {
-                        () => {
-                            $crate::LinkageFixed::<
-                                                        $dof,
-                                                        $marks,
-                                                        { __LINKAGE_BLAZE_MEASURED.step_count() },
-                                                    >::start()
-                        };
-                    }
+                () => {
+                    $crate::LinkageFixed::<
+                        { $dof },
+                        { $marks },
+                        { __LINKAGE_BLAZE_MEASURED.step_count() },
+                    >::start()
+                };
+            }
             let linkage = include!($path);
             assert!(
                 linkage.param_count() == $dof,
@@ -4431,16 +4362,67 @@ macro_rules! linkage_fixed {
     }};
 }
 
-/// Declare a measured fixed linkage with an exact concrete type.
+/// Declare one or more named, exactly-sized linkage programs.
 #[macro_export]
-macro_rules! linkage_fixed_const {
-    ($(#[$attribute:meta])* $visibility:vis const $name:ident = $expression:expr $(;)?) => {
-        $(#[$attribute])*
-        $visibility const $name: $crate::LinkageFixed<
-            { $expression.dof() },
-            { $expression.mark_count() },
-            { $expression.step_count() },
-        > = $expression;
+macro_rules! linkage_program {
+    ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
+        file: $path:literal,
+        dof: $dof:expr,
+        marks: $marks:expr $(,)?
+    })*) => {
+        $(
+            $(#[$attribute])*
+            pub struct $name;
+
+            impl $name {
+                pub const DOF: usize = $dof;
+                pub const MARKS: usize = $marks;
+                pub const STEP_COUNT: usize = {
+                    const __MEASURED: $crate::LinkageStepCount = {
+                        macro_rules! __linkage_blaze_start {
+                            () => { $crate::LinkageStepCount::start() };
+                        }
+                        include!($path)
+                    };
+                    __MEASURED.step_count()
+                };
+
+                pub const fn fixed() -> $crate::LinkageFixed<
+                    { $name::DOF }, { $name::MARKS }, { $name::STEP_COUNT }
+                > {
+                    $crate::linkage_fixed!($path, $name::DOF, $name::MARKS)
+                }
+
+                pub const VIEW: $crate::LinkageView<'static, { $name::DOF }, { $name::MARKS }> = $name::fixed().view();
+            }
+        )*
+    };
+    ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
+        program: $program:expr,
+        dof: $dof:expr,
+        marks: $marks:expr $(,)?
+    })*) => {
+        $(
+            $(#[$attribute])*
+            pub struct $name;
+
+            impl $name {
+                pub const DOF: usize = $dof;
+                pub const MARKS: usize = $marks;
+                pub const STEP_COUNT: usize = $program.step_count();
+
+                pub const fn fixed() -> $crate::LinkageFixed<
+                    { $name::DOF }, { $name::MARKS }, { $name::STEP_COUNT }
+                > {
+                    let program = $program;
+                    assert!(program.param_count() == $dof, "DOF must equal the number of defined parameters");
+                    assert!(program.mark_count() == $marks, "MARKS must equal the number of defined marks");
+                    program.__resize_steps::<{ $name::STEP_COUNT }>()
+                }
+
+                pub const VIEW: $crate::LinkageView<'static, { $name::DOF }, { $name::MARKS }> = $name::fixed().view();
+            }
+        )*
     };
 }
 
@@ -4448,12 +4430,7 @@ macro_rules! linkage_fixed_const {
 #[macro_export]
 macro_rules! linkage_combine {
     ($first:expr, $second:expr) => {{
-        $first.combine::<
-                            _, _, _,
-                            { $first.param_count() + $second.param_count() },
-                            { $first.mark_count() + $second.mark_count() },
-                            { $first.step_count() + $second.step_count() - 1 },
-                        >($second)
+        $first.combine::<_, _, _, { $first.param_count() + $second.param_count() }, { $first.mark_count() + $second.mark_count() }, { $first.step_count() + $second.step_count() - 1 }>($second)
     }};
 }
 
@@ -4463,29 +4440,34 @@ macro_rules! linkage_with_joint_spheres {
     ($linkage:expr, $radius:expr) => {{ $linkage.with_joint_spheres::<{ $linkage.__with_joint_spheres_step_count() }>($radius) }};
 }
 
-/// Append a restore step with exact fixed storage.
+/// Append ordinary fluent DSL operations with exact fixed storage.
 #[macro_export]
-macro_rules! linkage_restore {
-    ($linkage:expr, $name:expr) => {{ $linkage.__restore::<{ $linkage.step_count() + 1 }>($name) }};
-}
-
-/// Append the armatron display-style steps with exact fixed storage.
-#[macro_export]
-macro_rules! linkage_display_style {
-    ($linkage:expr, $color:expr, $parameter_name:expr, $low:expr, $high:expr) => {{
-        $linkage.__append_display_style::<{ $linkage.step_count() + 2 }>(
-            $color,
-            $parameter_name,
-            $low,
-            $high,
-        )
+macro_rules! linkage_extend {
+    ($linkage:expr; .define_param($($args:tt)*) $($rest:tt)*) => {
+        compile_error!("linkage_extend! cannot define parameters; declare them in the source program");
+    };
+    ($linkage:expr; .mark($($args:tt)*) $($rest:tt)*) => {
+        compile_error!("linkage_extend! cannot create marks; declare them in the source program");
+    };
+    ($linkage:expr; $(.$method:ident($($args:tt)*))+ $(,)?) => {{
+        const __APPENDED_STEP_COUNT: usize =
+            $crate::LinkageStepCount::start()
+                $(.$method($($args)*))*
+                .step_count() - 1;
+        $linkage
+            .__resize_steps::<{ $linkage.step_count() + __APPENDED_STEP_COUNT }>()
+            $(.$method($($args)*))*
     }};
 }
 
-/// Compact a const-evaluable fixed linkage into exact storage.
+/// Materialize a fixed expression with backing storage equal to its active length.
 #[macro_export]
-macro_rules! linkage_compact {
-    ($linkage:expr) => {{ $linkage.compact::<{ $linkage.__compact_step_count() }>() }};
+macro_rules! linkage_view {
+    ($linkage:expr) => {{
+        $linkage
+            .__resize_steps::<{ $linkage.step_count() }>()
+            .view()
+    }};
 }
 
 /// Include a `.lb.rs` linkage file as a [`LinkageBuf`] expression.
@@ -4534,8 +4516,8 @@ mod tests {
     #[cfg(feature = "alloc")]
     use super::LinkageBuf;
     use super::{
-        Arg, DrawItem3d, Error, LinkageFixed, Mat3, Point, Pose, Projection, Rgb565, Rgb888, Step,
-        Vec3,
+        Arg, DrawItem3d, Error, LinkageFixed, LinkageView, Mat3, Point, Pose, Projection, Rgb565,
+        Rgb888, Step, Vec3,
     };
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
@@ -5405,20 +5387,22 @@ mod tests {
     }
 
     #[test]
-    fn linkage_fixed_compact_removes_identity_motion_steps() {
+    fn linkage_view_materializes_active_step_count() {
         const BASE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
             .yaw(0.0)
             .forward(2.0)
             .left(0.0)
             .up(1.0);
 
-        const STRIPPED: LinkageFixed<0, 0, 3> = BASE.compact();
+        const STRIPPED: LinkageView<'static, 0, 0> = linkage_view!(BASE);
 
-        let steps = STRIPPED.view().steps();
-        assert_eq!(steps.len(), 3);
+        let steps = STRIPPED.steps();
+        assert_eq!(steps.len(), 5);
         assert!(matches!(steps[0], Step::Start));
-        assert_fixed_move(steps[1], 2.0);
-        assert_fixed_up(steps[2], 1.0);
+        assert!(matches!(steps[1], Step::Yaw(Arg::Fixed(value)) if value == 0.0));
+        assert_fixed_move(steps[2], 2.0);
+        assert!(matches!(steps[3], Step::Left(Arg::Fixed(value)) if value == 0.0));
+        assert_fixed_up(steps[4], 1.0);
     }
 
     #[test]

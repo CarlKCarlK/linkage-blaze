@@ -8,7 +8,7 @@ use core::{
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
-    bvh_motion, bvh_parse::BvhMotion, linkage, linkage_combine, linkage_fixed, linkage_fixed_const,
+    bvh_motion, bvh_parse::BvhMotion, linkage, linkage_combine, linkage_program,
 };
 use device_envoy_core::{
     Error as CoreError,
@@ -34,20 +34,25 @@ pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm
 pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
 
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
-linkage_fixed_const! {
-    const LINKAGE0 = linkage_fixed!("../assets/mocap/pirouette.lb.rs", { MOTION.dof() }, 6);
+linkage_program! {
+    Pirouette {
+        file: "../assets/mocap/pirouette.lb.rs",
+        dof: 132,
+        marks: 6,
+    }
 }
-const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = (linkage_combine!(
+const _: LinkageView<132, 6> = Pirouette::VIEW;
+const LINKAGE: LinkageView<132, 6> = (linkage_combine!(
     LinkageFixed::<0, 0, 3>::start()
         .pen_color(FOREGROUND_COLOR)
         .pen_width(3.2),
-    LINKAGE0
+    Pirouette::fixed()
 ))
 .view();
 
 // The motion capture data, read at compile time from BVH and stored in the binary.
 #[allow(long_running_const_eval)]
-// This can take ~8 seconds to compile and will generate a warning.
+// This can take ~8 seconds to compile.
 const MOTION: BvhMotion<132, 592> = bvh_motion!("../assets/mocap/pirouette.bvh");
 const MOTION_FPS: f32 = 120.0; // the mocap was captured at 120fps, so we can run it at that speed.
 

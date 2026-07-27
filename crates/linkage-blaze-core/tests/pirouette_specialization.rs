@@ -1,14 +1,17 @@
 #[cfg(feature = "alloc")]
 use linkage_blaze_core::LinkageBuf;
 use linkage_blaze_core::{
-    DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_compact, linkage_fixed,
-    linkage_fixed_const,
+    DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_program, linkage_view,
 };
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
 // 538 steps.
-linkage_fixed_const! {
-    const PIROUETTE = linkage_fixed!("../src/assets/mocap/pirouette.lb.rs", 132, 6);
+linkage_program! {
+    Pirouette {
+        file: "../src/assets/mocap/pirouette.lb.rs",
+        dof: 132,
+        marks: 6,
+    }
 }
 
 // Freeze l_shin_yrotation first (DOF 132 → 131), then retain the four joints
@@ -17,7 +20,7 @@ linkage_fixed_const! {
 //   1: head_yrotation
 //   2: r_shldr_zrotation
 //   3: l_shldr_zrotation
-const PIROUETTE_BODY: LinkageFixed<4, 6, 538> = PIROUETTE
+const PIROUETTE_BODY: LinkageFixed<4, 6, { Pirouette::STEP_COUNT }> = Pirouette::fixed()
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
     .retain_param_names::<4>(&[
         "head_yrotation",
@@ -29,9 +32,8 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, 538> = PIROUETTE
 // Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
 // steps, strip again.  N (capacity) shrinks toward ~384.  This must evaluate
 // identically to PIROUETTE_BODY at every input.
-linkage_fixed_const! {
-    const PIROUETTE_BODY_OPT = linkage_compact!(PIROUETTE_BODY);
-}
+const PIROUETTE_BODY_OPT: linkage_blaze_core::LinkageView<'static, 4, 6> =
+    linkage_view!(PIROUETTE_BODY);
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
@@ -82,7 +84,7 @@ fn pirouette_body_matches_full_linkage_with_frozen_defaults()
 -> Result<(), linkage_blaze_core::Error> {
     let body_params = [0.62, 0.37, 0.81, 0.18];
     let mut full_params = full_pirouette_defaults();
-    let full_view = PIROUETTE.view();
+    let full_view = Pirouette::VIEW;
 
     full_params[full_view.param_index("l_shin_yrotation", 0)] = 0.54;
     full_params[full_view.param_index("abdomen_xrotation", 0)] = body_params[0];
@@ -121,7 +123,7 @@ fn pirouette_body_optimized_matches_original() -> Result<(), linkage_blaze_core:
     // PIROUETTE_BODY_OPT has fewer steps but must evaluate identically to
     // PIROUETTE_BODY at every input.
     let full = PIROUETTE_BODY.view();
-    let opt = PIROUETTE_BODY_OPT.view();
+    let opt = PIROUETTE_BODY_OPT;
 
     assert_eq!(opt.dof(), full.dof());
 
@@ -150,9 +152,9 @@ fn pirouette_body_optimized_matches_original() -> Result<(), linkage_blaze_core:
 #[test]
 fn pirouette_body_const_opt_matches_buf_opt() -> Result<(), linkage_blaze_core::Error> {
     // Build the same pipeline through LinkageBuf and verify identical evaluation.
-    let buf_result = LinkageBuf::<4, 6>::from(&PIROUETTE_BODY).compact();
+    let buf_result = LinkageBuf::<4, 6>::from(&PIROUETTE_BODY);
 
-    assert_eq!(buf_result.view().len(), PIROUETTE_BODY_OPT.view().len());
+    assert_eq!(buf_result.view().len(), PIROUETTE_BODY_OPT.len());
 
     for params in [
         [0.0, 0.0, 0.0, 0.0_f32],
@@ -161,7 +163,7 @@ fn pirouette_body_const_opt_matches_buf_opt() -> Result<(), linkage_blaze_core::
         [0.62, 0.37, 0.81, 0.18],
     ] {
         assert_pose_close(
-            PIROUETTE_BODY_OPT.view().final_pose(&params)?,
+            PIROUETTE_BODY_OPT.final_pose(&params)?,
             buf_result.view().final_pose(&params)?,
             1e-4,
         );
@@ -175,7 +177,7 @@ fn pirouette_fixed_and_buf_freeze_retain_produce_same_result()
 -> Result<(), linkage_blaze_core::Error> {
     // Load the full pirouette as a LinkageBuf, apply the same freeze+retain
     // pipeline as the const PIROUETTE_BODY, and verify the two paths agree.
-    let buf_body = LinkageBuf::<132, 6>::from(&PIROUETTE)
+    let buf_body = LinkageBuf::<132, 6>::from(&Pirouette::fixed())
         .freeze_param_name::<131>("l_shin_yrotation", 57.6)
         .retain_param_names::<4>(&[
             "head_yrotation",
@@ -203,7 +205,7 @@ fn pirouette_fixed_and_buf_freeze_retain_produce_same_result()
 }
 
 fn full_pirouette_defaults() -> [f32; 132] {
-    PIROUETTE.view().param_defaults()
+    Pirouette::VIEW.param_defaults()
 }
 
 fn assert_draw_item_3d_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
