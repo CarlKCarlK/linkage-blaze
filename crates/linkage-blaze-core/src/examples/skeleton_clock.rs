@@ -5,7 +5,7 @@ use core::{array::from_fn, convert::Infallible, fmt};
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, MarkError, Projection, Rgb888,
-    linkage, linkage_fixed,
+    linkage, linkage_combine, linkage_compact, linkage_fixed, linkage_fixed_const,
 };
 use device_envoy_core::{
     UnwrapInfallible,
@@ -42,21 +42,28 @@ const PLACARD_TEXT_COLOR: Rgb888 = BACKGROUND_COLOR; // dark text on the light s
 // ── Linkage ────────────────────────────────────────────────────────────
 
 // Load the motion-capture linkage converted *.bvh -> *.lb.rs.
-const LINKAGE0: LinkageFixed<132, 6, 600> = linkage_fixed!("../assets/mocap/pirouette.lb.rs");
+linkage_fixed_const! {
+    const LINKAGE0 = linkage_fixed!("../assets/mocap/pirouette.lb.rs", 132, 6);
+}
 
 // Prepend a linkage drawing style.
-const LINKAGE1: LinkageFixed<132, 6, 600> = LinkageFixed::<0, 0, 3>::start()
+linkage_fixed_const! {
+const LINKAGE1 = linkage_combine!(
+    LinkageFixed::<0, 0, 3>::start()
     .pen_width(3.5)
-    .pen_color(FIGURE_COLOR)
-    .combine(LINKAGE0);
+    .pen_color(FIGURE_COLOR),
+    LINKAGE0
+);
+}
 
 // Keep only the three clock-driven parameters, then optimize the fixed linkage.
-const LINKAGE: LinkageView<3, 6> = LINKAGE1
-    // turn the left foot out jauntily.
-    .freeze_param_name::<131>("l_shin_yrotation", 57.6)
-    .retain_param_names(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
-    .compact::<385>()
-    .view();
+const LINKAGE: LinkageView<3, 6> = linkage_compact!(
+    LINKAGE1
+        // turn the left foot out jauntily.
+        .freeze_param_name::<131>("l_shin_yrotation", 57.6)
+        .retain_param_names::<3>(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
+)
+.view();
 
 // ── Projection ───────────────────────────────────────────────────────────────
 

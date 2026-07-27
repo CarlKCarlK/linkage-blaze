@@ -12,8 +12,9 @@ pub mod reverse_kinematics;
 use core::convert::Infallible;
 
 use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Projection, Rgb888, linkage,
-    linkage_fixed,
+    DrawItem3dExt, Error as LinkageError, LinkageView, Projection, Rgb888, linkage,
+    linkage_combine, linkage_display_style, linkage_fixed, linkage_fixed_const, linkage_restore,
+    linkage_with_joint_spheres,
 };
 use device_envoy_core::{
     button::Button,
@@ -48,24 +49,37 @@ pub const FOREGROUND_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 // - `SCENE_WITH_ARM` adds the articulated arm plus joint spheres for display.
 //       The arm linkage ends with an invisible tip in the center of the hand.
 // - `LINKAGE_FIXED` appends a red ghost arm that shows the current target pose.
-const CAMERA_CONTROL: LinkageFixed<3, 1, 8> =
-    linkage_fixed!("../../assets/examples/armatron/camera_control.lb.rs");
-const GRID_9X9: LinkageFixed<0, 1, 81> =
-    linkage_fixed!("../../assets/examples/armatron/grid_9x9.lb.rs");
-const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);
-const ARMATRON1: LinkageFixed<6, 1, 25> =
-    linkage_fixed!("../../assets/examples/armatron/armatron1.lb.rs");
-const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
-const SCENE_WITH_ARM: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
-const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM
-    .restore("scene origin")
-    .combine(ARMATRON1) // Add a red ghost arm to hold the current target pose.
-    .pen_color(Rgb888::CSS_RED)
-    .sphere_param("close hand", 0.5, 0.0);
-const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
+linkage_fixed_const! {
+    const CAMERA_CONTROL = linkage_fixed!("../../assets/examples/armatron/camera_control.lb.rs", 3, 1);
+}
+linkage_fixed_const! {
+    const GRID_9X9 = linkage_fixed!("../../assets/examples/armatron/grid_9x9.lb.rs", 0, 1);
+}
+linkage_fixed_const! {
+    const CAMERA_AND_GRID = linkage_combine!(CAMERA_CONTROL, GRID_9X9);
+}
+linkage_fixed_const! {
+    const ARMATRON1 = linkage_fixed!("../../assets/examples/armatron/armatron1.lb.rs", 6, 1);
+}
+linkage_fixed_const! {
+    const ARMATRON1_WITH_JOINTS = linkage_with_joint_spheres!(ARMATRON1, 0.15);
+}
+linkage_fixed_const! {
+    const SCENE_WITH_ARM = linkage_combine!(CAMERA_AND_GRID, ARMATRON1_WITH_JOINTS);
+}
+linkage_fixed_const! {
+    const SCENE_WITH_ARM_RESTORED = linkage_restore!(SCENE_WITH_ARM, "scene origin");
+}
+const LINKAGE: LinkageView<15, 4> = (linkage_display_style!(
+    linkage_combine!(SCENE_WITH_ARM_RESTORED, ARMATRON1),
+    Rgb888::CSS_RED,
+    "close hand",
+    0.5,
+    0.0
+))
+.view();
 // Minimal linkage used only to measure arm-tip distance to the target.
-const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
-const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
+const ARM_TIP_LINKAGE: LinkageView<9, 2> = (linkage_combine!(CAMERA_CONTROL, ARMATRON1)).view();
 
 // The ghost arm's params begin immediately after the displayed scene's params.
 const TARGET_PARAM_START: usize = SCENE_WITH_ARM.view().dof();

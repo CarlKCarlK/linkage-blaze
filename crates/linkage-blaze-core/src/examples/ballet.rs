@@ -8,7 +8,7 @@ use core::{
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
-    bvh_motion, bvh_parse::BvhMotion, linkage, linkage_fixed,
+    bvh_motion, bvh_parse::BvhMotion, linkage, linkage_combine, linkage_fixed, linkage_fixed_const,
 };
 use device_envoy_core::{
     Error as CoreError,
@@ -34,13 +34,16 @@ pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm
 pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
 
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
-const LINKAGE0: LinkageFixed<{ MOTION.dof() }, 6, 538> =
-    linkage_fixed!("../assets/mocap/pirouette.lb.rs");
-const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = LinkageFixed::<0, 0, 3>::start()
-    .pen_color(FOREGROUND_COLOR)
-    .pen_width(3.2)
-    .combine::<{ MOTION.dof() }, 6, 538, { MOTION.dof() }, 6, 540>(LINKAGE0)
-    .view();
+linkage_fixed_const! {
+    const LINKAGE0 = linkage_fixed!("../assets/mocap/pirouette.lb.rs", { MOTION.dof() }, 6);
+}
+const LINKAGE: LinkageView<{ MOTION.dof() }, 6> = (linkage_combine!(
+    LinkageFixed::<0, 0, 3>::start()
+        .pen_color(FOREGROUND_COLOR)
+        .pen_width(3.2),
+    LINKAGE0
+))
+.view();
 
 // The motion capture data, read at compile time from BVH and stored in the binary.
 #[allow(long_running_const_eval)]

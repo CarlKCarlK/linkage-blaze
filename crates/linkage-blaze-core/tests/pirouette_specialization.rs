@@ -1,10 +1,15 @@
 #[cfg(feature = "alloc")]
 use linkage_blaze_core::LinkageBuf;
-use linkage_blaze_core::{DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_fixed};
+use linkage_blaze_core::{
+    DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_compact, linkage_fixed,
+    linkage_fixed_const,
+};
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
 // 538 steps.
-const PIROUETTE: LinkageFixed<132, 6, 538> = linkage_fixed!("../src/assets/mocap/pirouette.lb.rs");
+linkage_fixed_const! {
+    const PIROUETTE = linkage_fixed!("../src/assets/mocap/pirouette.lb.rs", 132, 6);
+}
 
 // Freeze l_shin_yrotation first (DOF 132 → 131), then retain the four joints
 // of interest (DOF 131 → 4).  Retained param order follows the original linkage:
@@ -14,7 +19,7 @@ const PIROUETTE: LinkageFixed<132, 6, 538> = linkage_fixed!("../src/assets/mocap
 //   3: l_shldr_zrotation
 const PIROUETTE_BODY: LinkageFixed<4, 6, 538> = PIROUETTE
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
-    .retain_param_names(&[
+    .retain_param_names::<4>(&[
         "head_yrotation",
         "abdomen_xrotation",
         "l_shldr_zrotation",
@@ -24,7 +29,9 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, 538> = PIROUETTE
 // Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
 // steps, strip again.  N (capacity) shrinks toward ~384.  This must evaluate
 // identically to PIROUETTE_BODY at every input.
-const PIROUETTE_BODY_OPT: LinkageFixed<4, 6, 400> = PIROUETTE_BODY.compact::<400>();
+linkage_fixed_const! {
+    const PIROUETTE_BODY_OPT = linkage_compact!(PIROUETTE_BODY);
+}
 
 #[test]
 fn pirouette_body_only_has_4_dof() {

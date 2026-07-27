@@ -1402,6 +1402,29 @@ macro_rules! emit_fixed_step_methods {
             };
             self.push(Step::Restore { index })
         }
+
+        /// Append a restore step while deriving a new exact step capacity.
+        #[doc(hidden)]
+        pub const fn __restore<const OUT_N: usize>(
+            self,
+            name: &'static str,
+        ) -> LinkageFixed<DOF, MARKS, OUT_N> {
+            self.resize_steps::<OUT_N>().restore(name)
+        }
+
+        /// Append the two display-style steps used by the armatron example.
+        #[doc(hidden)]
+        pub const fn __append_display_style<const OUT_N: usize>(
+            self,
+            color: Rgb888,
+            parameter_name: &'static str,
+            low: f32,
+            high: f32,
+        ) -> LinkageFixed<DOF, MARKS, OUT_N> {
+            self.resize_steps::<OUT_N>()
+                .pen_color(color)
+                .sphere_param(parameter_name, low, high)
+        }
     };
 }
 
@@ -1495,6 +1518,103 @@ macro_rules! emit_buf_step_methods {
 
         // Restore methods - handled specially for LinkageBuf
     };
+}
+
+/// Const-only builder used by [`linkage_fixed!`] to measure a linkage before
+/// allocating its exact fixed step storage.
+#[doc(hidden)]
+pub struct LinkageStepCount {
+    step_count: usize,
+}
+
+impl LinkageStepCount {
+    /// Start a measured linkage with its implicit origin step.
+    pub const fn start() -> Self {
+        Self { step_count: 1 }
+    }
+
+    /// Return the number of steps emitted by the linkage DSL.
+    pub const fn step_count(self) -> usize {
+        self.step_count
+    }
+
+    const fn push(mut self) -> Self {
+        self.step_count += 1;
+        self
+    }
+
+    pub const fn define_param(self, _name: &'static str, _default: f32) -> Self {
+        self
+    }
+
+    pub const fn mark(self, _name: &'static str) -> Self {
+        self.push()
+    }
+
+    pub const fn restore(self, _name: &'static str) -> Self {
+        self.push()
+    }
+
+    pub const fn yaw(self, _degrees: f32) -> Self {
+        self.push()
+    }
+    pub const fn pitch(self, _degrees: f32) -> Self {
+        self.push()
+    }
+    pub const fn roll(self, _degrees: f32) -> Self {
+        self.push()
+    }
+    pub const fn forward(self, _distance: f32) -> Self {
+        self.push()
+    }
+    pub const fn left(self, _distance: f32) -> Self {
+        self.push()
+    }
+    pub const fn up(self, _distance: f32) -> Self {
+        self.push()
+    }
+    pub const fn pen_up(self) -> Self {
+        self.push()
+    }
+    pub const fn pen_down(self) -> Self {
+        self.push()
+    }
+    pub const fn pen_color(self, _color: Rgb888) -> Self {
+        self.push()
+    }
+    pub const fn pen_width(self, _width: f32) -> Self {
+        self.push()
+    }
+    pub const fn disk(self, _radius: f32) -> Self {
+        self.push()
+    }
+    pub const fn sphere(self, _radius: f32) -> Self {
+        self.push()
+    }
+    pub const fn yaw_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
+    pub const fn pitch_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
+    pub const fn roll_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
+    pub const fn forward_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
+    pub const fn left_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
+    pub const fn up_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
+    pub const fn disk_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
+    pub const fn sphere_param(self, _name: &str, _low: f32, _high: f32) -> Self {
+        self.push()
+    }
 }
 
 /// A fixed-capacity const linkage expression/storage type.
@@ -1685,6 +1805,23 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             i += 1;
         }
         out
+    }
+
+    /// Count the exact output slots required by [`Self::with_joint_spheres`].
+    #[doc(hidden)]
+    pub const fn __with_joint_spheres_step_count(&self) -> usize {
+        let mut count = self.len;
+        let mut step_index = 0;
+        while step_index < self.len {
+            if matches!(
+                self.steps[step_index],
+                Step::Move(_) | Step::Left(_) | Step::Up(_)
+            ) {
+                count += 2;
+            }
+            step_index += 1;
+        }
+        count
     }
 
     const fn push(mut self, step: Step) -> Self {
@@ -2038,6 +2175,15 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             .merge_adjacent_fixed_same_capacity()
             .strip_fixed_noops_same_capacity()
             .resize_steps()
+    }
+
+    /// Count the exact output slots produced by [`Self::compact`].
+    #[doc(hidden)]
+    pub const fn __compact_step_count(self) -> usize {
+        self.strip_fixed_noops_same_capacity()
+            .merge_adjacent_fixed_same_capacity()
+            .strip_fixed_noops_same_capacity()
+            .step_count()
     }
 
     const fn resize_steps<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
@@ -4197,7 +4343,7 @@ impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
 /// `.mark(...)`).
 ///
 /// `linkage!` is a *callback* macro: it does not know the storage type on its
-/// own.  The including macro ([`linkage_fixed!`] or [`linkage_buf!`]) defines
+/// own. The including macro ([`linkage_fixed!`] or [`linkage_buf!`]) defines
 /// the local helper `__linkage_blaze_start!` immediately before the
 /// `include!`, which `linkage!` calls to obtain the correctly-typed builder.
 ///
@@ -4235,42 +4381,111 @@ macro_rules! linkage {
 /// `linkage![ ... ]` invocation using the fluent DSL — see [`linkage!`] for
 /// the full `.lb.rs` convention.
 ///
-/// ## Forms
+/// Supply the meaningful parameter and mark dimensions; the step capacity is
+/// measured from the included file during const evaluation.
 ///
-/// Prefer the one-argument form with an explicit type annotation:
-///
-/// ```rust,ignore
-/// const CLOCK: LinkageFixed<2, 4, 48> =
-///     linkage_fixed!("clock.lb.rs");
-///
-/// // Inside a function body:
-/// let clock: LinkageFixed<2, 4, 48> =
-///     linkage_fixed!("clock.lb.rs");
-/// ```
-///
-/// Use the explicit-number form only when the surrounding type cannot be
-/// inferred:
-///
-/// ```rust,ignore
-/// const CLOCK: LinkageFixed<2, 4, 48> =
-///     linkage_fixed!("clock.lb.rs", 2, 4, 48);
+/// ```rust,no_run
+/// # use linkage_blaze_core::{linkage, linkage_fixed, LinkageFixed, Rgb888};
+/// const CLOCK: LinkageFixed<2, 2, 48> = linkage_fixed!("assets/examples/clock.lb.rs", 2, 2);
 /// ```
 #[macro_export]
 macro_rules! linkage_fixed {
+    ($path:literal, $dof:expr, $marks:expr) => {{
+        const __LINKAGE_BLAZE_MEASURED: $crate::LinkageStepCount = {
+            macro_rules! __linkage_blaze_start {
+                () => {
+                    $crate::LinkageStepCount::start()
+                };
+            }
+            include!($path)
+        };
+        const __LINKAGE_BLAZE_FIXED: $crate::LinkageFixed<
+            $dof,
+            $marks,
+            { __LINKAGE_BLAZE_MEASURED.step_count() },
+        > = {
+            macro_rules! __linkage_blaze_start {
+                        () => {
+                            $crate::LinkageFixed::<
+                                                        $dof,
+                                                        $marks,
+                                                        { __LINKAGE_BLAZE_MEASURED.step_count() },
+                                                    >::start()
+                        };
+                    }
+            let linkage = include!($path);
+            assert!(
+                linkage.param_count() == $dof,
+                "DOF must equal the number of defined parameters"
+            );
+            assert!(
+                linkage.mark_count() == $marks,
+                "MARKS must equal the number of defined marks"
+            );
+            linkage
+        };
+        __LINKAGE_BLAZE_FIXED
+    }};
     ($path:literal) => {{
-        macro_rules! __linkage_blaze_start {
-            () => {
-                $crate::LinkageFixed::start()
-            };
-        }
-        include!($path)
+        compile_error!("linkage_fixed! requires the DOF and MARKS arguments");
     }};
-    ($path:literal, $dof:expr, $marks:expr, $n:expr) => {{
-        // $n is a capacity (>= actual step count); DOF, MARKS, and N are checked
-        // against the file's type at the let-binding.
-        let linkage: $crate::LinkageFixed<$dof, $marks, $n> = $crate::linkage_fixed!($path);
-        linkage
+}
+
+/// Declare a measured fixed linkage with an exact concrete type.
+#[macro_export]
+macro_rules! linkage_fixed_const {
+    ($(#[$attribute:meta])* $visibility:vis const $name:ident = $expression:expr $(;)?) => {
+        $(#[$attribute])*
+        $visibility const $name: $crate::LinkageFixed<
+            { $expression.dof() },
+            { $expression.mark_count() },
+            { $expression.step_count() },
+        > = $expression;
+    };
+}
+
+/// Combine two const-evaluable fixed linkages, deriving all output sizes.
+#[macro_export]
+macro_rules! linkage_combine {
+    ($first:expr, $second:expr) => {{
+        $first.combine::<
+                            _, _, _,
+                            { $first.param_count() + $second.param_count() },
+                            { $first.mark_count() + $second.mark_count() },
+                            { $first.step_count() + $second.step_count() - 1 },
+                        >($second)
     }};
+}
+
+/// Add joint spheres to a const-evaluable fixed linkage with exact storage.
+#[macro_export]
+macro_rules! linkage_with_joint_spheres {
+    ($linkage:expr, $radius:expr) => {{ $linkage.with_joint_spheres::<{ $linkage.__with_joint_spheres_step_count() }>($radius) }};
+}
+
+/// Append a restore step with exact fixed storage.
+#[macro_export]
+macro_rules! linkage_restore {
+    ($linkage:expr, $name:expr) => {{ $linkage.__restore::<{ $linkage.step_count() + 1 }>($name) }};
+}
+
+/// Append the armatron display-style steps with exact fixed storage.
+#[macro_export]
+macro_rules! linkage_display_style {
+    ($linkage:expr, $color:expr, $parameter_name:expr, $low:expr, $high:expr) => {{
+        $linkage.__append_display_style::<{ $linkage.step_count() + 2 }>(
+            $color,
+            $parameter_name,
+            $low,
+            $high,
+        )
+    }};
+}
+
+/// Compact a const-evaluable fixed linkage into exact storage.
+#[macro_export]
+macro_rules! linkage_compact {
+    ($linkage:expr) => {{ $linkage.compact::<{ $linkage.__compact_step_count() }>() }};
 }
 
 /// Include a `.lb.rs` linkage file as a [`LinkageBuf`] expression.

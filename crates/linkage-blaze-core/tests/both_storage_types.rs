@@ -1,38 +1,55 @@
 #![cfg(feature = "alloc")]
 
 use linkage_blaze_core::{
-    LinkageBuf, LinkageFixed, Rgb888, WebColors, linkage, linkage_buf, linkage_fixed,
+    LinkageBuf, LinkageFixed, Rgb888, WebColors, linkage, linkage_buf, linkage_combine,
+    linkage_display_style, linkage_fixed, linkage_fixed_const, linkage_restore,
+    linkage_with_joint_spheres,
 };
 
 mod common_linkage_tests;
 use common_linkage_tests::assert_linkages_equivalent;
 
-// Clock linkage (N=48 matches the clock-classic application)
-const CLOCK_HANDS: LinkageFixed<2, 2, 48> = linkage_fixed!("linkages/clock.lb.rs");
+linkage_fixed_const! {
+    const CLOCK_HANDS = linkage_fixed!("linkages/clock.lb.rs", 2, 2);
+}
 
 // Armatron application linkages — mirroring the shared example-core linkage data
-const CAMERA_CONTROL: LinkageFixed<3, 1, 8> = linkage_fixed!("linkages/camera_control.lb.rs");
-const GRID_9X9: LinkageFixed<0, 1, 81> = linkage_fixed!("linkages/grid_9x9.lb.rs");
-const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = CAMERA_CONTROL.combine(GRID_9X9);
-const ARMATRON1: LinkageFixed<6, 1, 25> = linkage_fixed!("linkages/armatron1.lb.rs");
-const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1.with_joint_spheres(0.15);
-const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 133> = CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS);
-const ARMATRON_LINKAGE: LinkageFixed<15, 4, 159> = ARMATRON_LINKAGE0
-    .restore("scene origin")
-    .combine(ARMATRON1)
-    .pen_color(Rgb888::CSS_RED)
-    .sphere_param("close hand", 0.5, 0.0);
-const ARMATRON_RK_LINKAGE: LinkageFixed<9, 2, 32> = CAMERA_CONTROL.combine(ARMATRON1);
+linkage_fixed_const! { const CAMERA_CONTROL = linkage_fixed!("linkages/camera_control.lb.rs", 3, 1); }
+linkage_fixed_const! { const GRID_9X9 = linkage_fixed!("linkages/grid_9x9.lb.rs", 0, 1); }
+linkage_fixed_const! { const CAMERA_AND_GRID = linkage_combine!(CAMERA_CONTROL, GRID_9X9); }
+linkage_fixed_const! { const ARMATRON1 = linkage_fixed!("linkages/armatron1.lb.rs", 6, 1); }
+linkage_fixed_const! { const ARMATRON1_WITH_JOINTS = linkage_with_joint_spheres!(ARMATRON1, 0.15); }
+linkage_fixed_const! { const ARMATRON_LINKAGE0 = linkage_combine!(CAMERA_AND_GRID, ARMATRON1_WITH_JOINTS); }
+linkage_fixed_const! { const ARMATRON_LINKAGE0_RESTORED = linkage_restore!(ARMATRON_LINKAGE0, "scene origin"); }
+linkage_fixed_const! {
+    const ARMATRON_LINKAGE = linkage_display_style!(
+        linkage_combine!(ARMATRON_LINKAGE0_RESTORED, ARMATRON1),
+        Rgb888::CSS_RED, "close hand", 0.5, 0.0
+    );
+}
+linkage_fixed_const! { const ARMATRON_RK_LINKAGE = linkage_combine!(CAMERA_CONTROL, ARMATRON1); }
 
-// N=128 is a capacity larger than the file's actual step count (48).
-const CLOCK_FIXED: LinkageFixed<2, 2, 128> = linkage_fixed!("linkages/clock.lb.rs");
-const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 128> =
-    linkage_fixed!("linkages/clock.lb.rs", 2, 2, 128);
+linkage_fixed_const! {
+    /// A measured linkage used by the storage API tests.
+    const MEASURED_CLOCK = linkage_fixed!("linkages/clock.lb.rs", 2, 2);
+}
+
+const DERIVED_COMBINATION: LinkageFixed<3, 2, 88> = linkage_combine!(CAMERA_CONTROL, GRID_9X9);
+const DERIVED_JOINTS: LinkageFixed<6, 1, 45> = linkage_with_joint_spheres!(ARMATRON1, 0.15);
+
+linkage_fixed_const! { const CLOCK_FIXED = linkage_fixed!("linkages/clock.lb.rs", 2, 2); }
+linkage_fixed_const! { const CLOCK_FIXED_EXPLICIT = linkage_fixed!("linkages/clock.lb.rs", 2, 2); }
+
+#[test]
+fn derived_fixed_macros_preserve_exact_sizes() {
+    assert_eq!(DERIVED_COMBINATION.step_count(), 88);
+    assert_eq!(DERIVED_JOINTS.step_count(), 45);
+}
 
 #[test]
 fn linkage_fixed_include_works_in_function_body() -> Result<(), linkage_blaze_core::Error> {
-    let clock: LinkageFixed<2, 2, 128> = linkage_fixed!("linkages/clock.lb.rs");
-    let clock_explicit = linkage_fixed!("linkages/clock.lb.rs", 2, 2, 128);
+    let clock = linkage_fixed!("linkages/clock.lb.rs", 2, 2);
+    let clock_explicit = linkage_fixed!("linkages/clock.lb.rs", 2, 2);
 
     assert_eq!(clock.view().dof(), 2);
     assert_eq!(clock_explicit.view().dof(), 2);
