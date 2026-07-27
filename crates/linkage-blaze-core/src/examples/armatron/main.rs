@@ -44,39 +44,42 @@ pub const FOREGROUND_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 // Build the displayed scene in layers:
 // - `CAMERA_CONTROL` provides the view-control params shared by the scene and
 //   the arm-tip distance helper linkage.
-// - `CAMERA_AND_GRID` adds the static floor grid under the arm.
-// - `SCENE_WITH_ARM` adds the articulated arm plus joint spheres for display.
+// - `SceneWithArm` adds the static floor grid and articulated arm plus joint spheres.
 //       The arm linkage ends with an invisible tip in the center of the hand.
-// - `LINKAGE_FIXED` appends a red ghost arm that shows the current target pose.
+// - `LINKAGE` appends a red ghost arm that shows the current target pose.
 linkage_program! {
-    CameraControl {
+    pub CameraControl {
         file: "../../assets/examples/armatron/camera_control.lb.rs",
         dof: 3,
         marks: 1,
     }
-    Grid9x9 {
+    pub Grid9x9 {
         file: "../../assets/examples/armatron/grid_9x9.lb.rs",
         dof: 0,
         marks: 1,
     }
-    Armatron1 {
+    pub Armatron1 {
         file: "../../assets/examples/armatron/armatron1.lb.rs",
         dof: 6,
         marks: 1,
     }
 }
-const _: LinkageView<3, 1> = CameraControl::VIEW;
-const _: LinkageView<0, 1> = Grid9x9::VIEW;
-const _: LinkageView<6, 1> = Armatron1::VIEW;
+linkage_program! {
+    pub SceneWithArm {
+        program: linkage_combine!(
+            CameraControl::fixed(),
+            Grid9x9::fixed(),
+            linkage_with_joint_spheres!(Armatron1::fixed(), 0.15),
+        ),
+        dof: 9,
+        marks: 3,
+    }
+}
 const LINKAGE: LinkageView<15, 4> = linkage_view!(linkage_extend!(
     linkage_combine!(
-        linkage_combine!(
-            linkage_combine!(CameraControl::fixed(), Grid9x9::fixed()),
-            linkage_with_joint_spheres!(Armatron1::fixed(), 0.15)
-        ),
-        Armatron1::fixed()
+        linkage_extend!(SceneWithArm::fixed(); .restore("scene origin")),
+        Armatron1::fixed(),
     );
-    .restore("scene origin")
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0)
 ));
@@ -85,7 +88,7 @@ const ARM_TIP_LINKAGE: LinkageView<9, 2> =
     linkage_view!(linkage_combine!(CameraControl::fixed(), Armatron1::fixed()));
 
 // The ghost arm's params begin immediately after the displayed scene's params.
-const TARGET_PARAM_START: usize = 9;
+const TARGET_PARAM_START: usize = SceneWithArm::DOF;
 const ORIENTATION: Orientation = Orientation::Landscape;
 
 const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_SLIDER.label(), 0);

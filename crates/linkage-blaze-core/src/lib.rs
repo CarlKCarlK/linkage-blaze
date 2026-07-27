@@ -331,6 +331,12 @@ impl std::error::Error for Error {}
 /// It borrows both the parameter array and the active step slice from a `LinkageFixed`.
 ///
 /// Create a view via [`LinkageFixed::view()`] or convert from `&LinkageFixed` with `From`.
+///
+/// The API intentionally keeps `LinkageFixed<DOF, MARKS, N>` as the owned
+/// const-generic representation and uses this explicit borrowed wrapper to
+/// erase `N`. The [`linkage_view!`] macro materializes exact active-step
+/// backing before producing this view; a custom dynamically sized linkage type
+/// is not needed for the public API.
 #[derive(Clone, Copy)]
 pub struct LinkageView<'a, const DOF: usize, const MARKS: usize> {
     params: &'a [Param; DOF],
@@ -3046,8 +3052,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// `Fixed` arguments are merged. Variable-arg steps and non-motion steps
     /// break a run.
     ///
-    /// Combined with no-op stripping (see [`compact`](Self::compact)) afterward
-    /// to also remove any merged steps whose sum is zero.
+    /// followed by no-op stripping to remove any merged steps whose sum is zero.
     pub(crate) fn merge_adjacent_fixed(self) -> Self {
         let mut out = Vec::with_capacity(self.steps.len());
         let mut i = 0;
@@ -4307,6 +4312,11 @@ macro_rules! linkage {
 
 /// Include a `.lb.rs` linkage file as a [`LinkageFixed`] expression.
 ///
+/// Most applications should use [`linkage_program!`] to give a source file a
+/// named namespace with measured dimensions and a canonical `VIEW`.
+/// Use `linkage_fixed!` when a one-off expression is clearer than a named
+/// declaration.
+///
 /// The path is relative to the source file containing the macro invocation
 /// (same rules as `include!`).  The file must contain exactly one
 /// `linkage![ ... ]` invocation using the fluent DSL — see [`linkage!`] for
@@ -4362,7 +4372,56 @@ macro_rules! linkage_fixed {
     }};
 }
 
+// These exported helpers are implementation details required by the public
+// declaration macro when it expands in a downstream crate.
+#[cfg(feature = "alloc")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __linkage_program_buf {
+    ($name:ident, $path:literal) => {
+        /// Load the declared `.lb.rs` body into growable storage.
+        pub fn buf() -> $crate::LinkageBuf<{ $name::DOF }, { $name::MARKS }> {
+            $crate::linkage_buf!($path, { $name::DOF }, { $name::MARKS })
+        }
+    };
+}
+
+#[cfg(not(feature = "alloc"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __linkage_program_buf {
+    ($name:ident, $path:literal) => {};
+}
+
 /// Declare one or more named, exactly-sized linkage programs.
+///
+/// A file declaration measures the included body at compile time, validates
+/// `DOF` and `MARKS`, and exposes [`fixed`](Self::fixed), [`DOF`](Self::DOF),
+/// [`MARKS`](Self::MARKS), [`STEP_COUNT`](Self::STEP_COUNT), and [`VIEW`].
+/// `STEP_COUNT` is measured storage; `VIEW` erases it for runtime callers.
+/// With the `alloc` feature, file declarations also expose [`buf`](Self::buf)
+/// for growable loading through the same source body. For direct declarations,
+/// see the `program:` form below.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::{linkage, linkage_program, LinkageView, Rgb888};
+/// # #[cfg(feature = "alloc")]
+/// # use linkage_blaze_core::{linkage_buf, LinkageBuf};
+/// linkage_program! {
+///     ClockLinkage {
+///         file: "assets/examples/clock.lb.rs",
+///         dof: 2,
+///         marks: 2,
+///     }
+/// }
+///
+/// const CLOCK: LinkageView<'static, 2, 2> = ClockLinkage::VIEW;
+/// # #[cfg(feature = "alloc")]
+/// # fn load() {
+/// let _clock: LinkageBuf<2, 2> = linkage_buf!("assets/examples/clock.lb.rs");
+/// let _same_source = ClockLinkage::buf();
+/// # }
+/// ```
 #[macro_export]
 macro_rules! linkage_program {
     ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
@@ -4372,7 +4431,7 @@ macro_rules! linkage_program {
     })*) => {
         $(
             $(#[$attribute])*
-            pub struct $name;
+            $visibility struct $name;
 
             impl $name {
                 pub const DOF: usize = $dof;
@@ -4394,6 +4453,8 @@ macro_rules! linkage_program {
                 }
 
                 pub const VIEW: $crate::LinkageView<'static, { $name::DOF }, { $name::MARKS }> = $name::fixed().view();
+
+                $crate::__linkage_program_buf!($name, $path);
             }
         )*
     };
@@ -4404,7 +4465,7 @@ macro_rules! linkage_program {
     })*) => {
         $(
             $(#[$attribute])*
-            pub struct $name;
+            $visibility struct $name;
 
             impl $name {
                 pub const DOF: usize = $dof;
@@ -4426,21 +4487,68 @@ macro_rules! linkage_program {
     };
 }
 
-/// Combine two const-evaluable fixed linkages, deriving all output sizes.
+/// Combine two or more const-evaluable fixed linkages, deriving all output sizes.
+///
+/// The variadic form is left-associative: later programs continue from the
+/// preceding final pose, and each later implicit `Start` step is skipped.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::{linkage_combine, LinkageFixed};
+/// const LINKAGE: LinkageFixed<0, 0, 4> = linkage_combine!(
+///     LinkageFixed::<0, 0, 2>::start().forward(1.0),
+///     LinkageFixed::<0, 0, 2>::start().left(2.0),
+///     LinkageFixed::<0, 0, 2>::start().up(3.0),
+/// );
+/// # const _: LinkageFixed<0, 0, 4> = LINKAGE;
+/// ```
 #[macro_export]
 macro_rules! linkage_combine {
-    ($first:expr, $second:expr) => {{
+    ($first:expr, $second:expr $(,)?) => {{
         $first.combine::<_, _, _, { $first.param_count() + $second.param_count() }, { $first.mark_count() + $second.mark_count() }, { $first.step_count() + $second.step_count() - 1 }>($second)
     }};
+    ($first:expr, $second:expr, $($rest:expr),+ $(,)?) => {
+        $crate::linkage_combine!(
+            $crate::linkage_combine!($first, $second),
+            $($rest),+
+        )
+    };
 }
 
 /// Add joint spheres to a const-evaluable fixed linkage with exact storage.
+///
+/// This structural transform derives its output capacity from the linkage
+/// contents and adds one sphere at each joint.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::{linkage_with_joint_spheres, LinkageFixed};
+/// const LINKAGE: LinkageFixed<0, 0, 4> = linkage_with_joint_spheres!(
+///     LinkageFixed::<0, 0, 2>::start().forward(1.0),
+///     0.15
+/// );
+/// ```
 #[macro_export]
 macro_rules! linkage_with_joint_spheres {
     ($linkage:expr, $radius:expr) => {{ $linkage.with_joint_spheres::<{ $linkage.__with_joint_spheres_step_count() }>($radius) }};
 }
 
 /// Append ordinary fluent DSL operations with exact fixed storage.
+///
+/// ```rust,no_run
+/// # use embedded_graphics::pixelcolor::Rgb888;
+/// # use embedded_graphics::pixelcolor::WebColors;
+/// # use linkage_blaze_core::{linkage_extend, LinkageFixed};
+/// const LINKAGE: LinkageFixed<1, 1, 5> = linkage_extend!(
+///     LinkageFixed::<1, 1, 3>::start()
+///         .define_param("radius", 0.5)
+///         .mark("origin");
+///     .restore("origin")
+///     .pen_color(Rgb888::CSS_RED)
+///     .sphere_param("radius", 0.0, 1.0)
+/// );
+/// ```
+///
+/// The first implementation does not permit `define_param` or creation of
+/// new marks; those must be declared in the source program.
 #[macro_export]
 macro_rules! linkage_extend {
     ($linkage:expr; .define_param($($args:tt)*) $($rest:tt)*) => {
@@ -4461,6 +4569,16 @@ macro_rules! linkage_extend {
 }
 
 /// Materialize a fixed expression with backing storage equal to its active length.
+///
+/// This shrinks backing to active steps, promotes the final data, and erases
+/// `N`. It does not perform another optimization pass.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::{linkage_view, LinkageFixed, LinkageView};
+/// const LINKAGE: LinkageView<'static, 0, 0> = linkage_view!(
+///     LinkageFixed::<0, 0, 8>::start().forward(1.0)
+/// );
+/// ```
 #[macro_export]
 macro_rules! linkage_view {
     ($linkage:expr) => {{

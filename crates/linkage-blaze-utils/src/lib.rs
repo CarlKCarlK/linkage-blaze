@@ -327,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_compact_linkage_macro_wrapper() {
+    fn accepts_short_linkage_macro_wrapper() {
         let result = render_program(
             r#"linkage![
     .forward(1.0)
@@ -337,7 +337,7 @@ mod tests {
         );
         assert!(
             result.is_ok(),
-            "compact linkage macro wrapper should be accepted: {result:?}"
+            "short linkage macro wrapper should be accepted: {result:?}"
         );
     }
 

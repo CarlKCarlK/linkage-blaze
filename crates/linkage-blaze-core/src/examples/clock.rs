@@ -69,7 +69,7 @@ const CLOCK_BACKGROUND_BITMAP: DrawItem = DrawItem::Bitmap {
     top_left: CLOCK_BOUNDS.top_left,
 };
 linkage_program! {
-    ClockLinkage {
+    pub ClockLinkage {
         file: "../assets/examples/clock.lb.rs",
         dof: 2,
         marks: 2,

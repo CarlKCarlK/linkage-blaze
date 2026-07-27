@@ -32,7 +32,7 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, { Pirouette::STEP_COUNT }> = Pirouette:
 // Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
 // steps, strip again.  N (capacity) shrinks toward ~384.  This must evaluate
 // identically to PIROUETTE_BODY at every input.
-const PIROUETTE_BODY_OPT: linkage_blaze_core::LinkageView<'static, 4, 6> =
+const PIROUETTE_BODY_VIEW: linkage_blaze_core::LinkageView<'static, 4, 6> =
     linkage_view!(PIROUETTE_BODY);
 
 #[test]
@@ -119,11 +119,11 @@ fn pirouette_body_matches_full_linkage_with_frozen_defaults()
 }
 
 #[test]
-fn pirouette_body_optimized_matches_original() -> Result<(), linkage_blaze_core::Error> {
-    // PIROUETTE_BODY_OPT has fewer steps but must evaluate identically to
+fn pirouette_body_exact_view_matches_fixed() -> Result<(), linkage_blaze_core::Error> {
+    // PIROUETTE_BODY_VIEW has exact active-step backing but must evaluate identically to
     // PIROUETTE_BODY at every input.
     let full = PIROUETTE_BODY.view();
-    let opt = PIROUETTE_BODY_OPT;
+    let opt = PIROUETTE_BODY_VIEW;
 
     assert_eq!(opt.dof(), full.dof());
 
@@ -150,11 +150,11 @@ fn pirouette_body_optimized_matches_original() -> Result<(), linkage_blaze_core:
 
 #[cfg(feature = "alloc")]
 #[test]
-fn pirouette_body_const_opt_matches_buf_opt() -> Result<(), linkage_blaze_core::Error> {
-    // Build the same pipeline through LinkageBuf and verify identical evaluation.
+fn pirouette_body_view_matches_buf() -> Result<(), linkage_blaze_core::Error> {
+    // Build the same specialized linkage through LinkageBuf and verify identical evaluation.
     let buf_result = LinkageBuf::<4, 6>::from(&PIROUETTE_BODY);
 
-    assert_eq!(buf_result.view().len(), PIROUETTE_BODY_OPT.len());
+    assert_eq!(buf_result.view().len(), PIROUETTE_BODY_VIEW.len());
 
     for params in [
         [0.0, 0.0, 0.0, 0.0_f32],
@@ -163,7 +163,7 @@ fn pirouette_body_const_opt_matches_buf_opt() -> Result<(), linkage_blaze_core::
         [0.62, 0.37, 0.81, 0.18],
     ] {
         assert_pose_close(
-            PIROUETTE_BODY_OPT.final_pose(&params)?,
+            PIROUETTE_BODY_VIEW.final_pose(&params)?,
             buf_result.view().final_pose(&params)?,
             1e-4,
         );

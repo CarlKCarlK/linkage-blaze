@@ -20,10 +20,20 @@ const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> =
     linkage_combine!(CameraControl::fixed(), Grid9x9::fixed());
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> =
     linkage_with_joint_spheres!(Armatron1::fixed(), 0.15);
-const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 132> =
-    linkage_combine!(CAMERA_AND_GRID, ARMATRON1_WITH_JOINTS);
+linkage_program! {
+    SceneWithArm {
+        program: linkage_combine!(
+            CameraControl::fixed(),
+            Grid9x9::fixed(),
+            linkage_with_joint_spheres!(Armatron1::fixed(), 0.15),
+        ),
+        dof: 9,
+        marks: 3,
+    }
+}
+const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 132> = SceneWithArm::fixed();
 const ARMATRON_LINKAGE0_RESTORED: LinkageFixed<9, 3, 133> =
-    linkage_extend!(ARMATRON_LINKAGE0; .restore("scene origin"));
+    linkage_extend!(SceneWithArm::fixed(); .restore("scene origin"));
 const ARMATRON_LINKAGE: LinkageFixed<15, 4, 159> = linkage_extend!(
     linkage_combine!(ARMATRON_LINKAGE0_RESTORED, Armatron1::fixed());
     .pen_color(Rgb888::CSS_RED)
@@ -36,6 +46,11 @@ const MEASURED_CLOCK: LinkageFixed<2, 2, 46> = ClockHands::fixed();
 
 const DERIVED_COMBINATION: LinkageFixed<3, 2, 88> =
     linkage_combine!(CameraControl::fixed(), Grid9x9::fixed());
+const VARIADIC_COMBINATION: LinkageFixed<9, 3, 132> = linkage_combine!(
+    CameraControl::fixed(),
+    Grid9x9::fixed(),
+    linkage_with_joint_spheres!(Armatron1::fixed(), 0.15),
+);
 const DERIVED_JOINTS: LinkageFixed<6, 1, 45> =
     linkage_with_joint_spheres!(Armatron1::fixed(), 0.15);
 
@@ -45,7 +60,26 @@ const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 46> = ClockHands::fixed();
 #[test]
 fn derived_fixed_macros_preserve_exact_sizes() {
     assert_eq!(DERIVED_COMBINATION.step_count(), 88);
+    assert_eq!(
+        VARIADIC_COMBINATION.step_count(),
+        ARMATRON_LINKAGE0.step_count()
+    );
     assert_eq!(DERIVED_JOINTS.step_count(), 45);
+}
+
+#[test]
+fn variadic_combination_matches_left_associative_nesting() -> Result<(), linkage_blaze_core::Error>
+{
+    let params = [0.5_f32; 9];
+    assert_linkages_equivalent(&VARIADIC_COMBINATION, &ARMATRON_LINKAGE0, &params)?;
+    Ok(())
+}
+
+#[test]
+fn named_program_buf_matches_fixed() -> Result<(), linkage_blaze_core::Error> {
+    let buf = ClockHands::buf();
+    assert_linkages_equivalent(&ClockHands::fixed(), &buf, &[0.25, 0.5])?;
+    Ok(())
 }
 
 #[test]

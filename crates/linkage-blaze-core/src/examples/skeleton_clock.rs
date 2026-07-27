@@ -43,17 +43,16 @@ const PLACARD_TEXT_COLOR: Rgb888 = BACKGROUND_COLOR; // dark text on the light s
 
 // Load the motion-capture linkage converted *.bvh -> *.lb.rs.
 linkage_program! {
-    Pirouette {
+    pub Pirouette {
         file: "../assets/mocap/pirouette.lb.rs",
         dof: 132,
         marks: 6,
     }
 }
-const _: LinkageView<132, 6> = Pirouette::VIEW;
 
 // Prepend a linkage drawing style.
 linkage_program! {
-    Linkage1 {
+    pub Linkage1 {
         program: linkage_combine!(
             LinkageFixed::<0, 0, 3>::start()
                 .pen_width(3.5)
@@ -64,9 +63,8 @@ linkage_program! {
         marks: 6,
     }
 }
-const _: LinkageView<132, 6> = Linkage1::VIEW;
 
-// Keep only the three clock-driven parameters, then optimize the fixed linkage.
+// Keep only the three clock-driven parameters, then specialize the fixed linkage.
 const LINKAGE: LinkageView<3, 6> = linkage_view!(
     Linkage1::fixed()
         // turn the left foot out jauntily.

@@ -35,13 +35,12 @@ pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale go
 
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
 linkage_program! {
-    Pirouette {
+    pub Pirouette {
         file: "../assets/mocap/pirouette.lb.rs",
         dof: 132,
         marks: 6,
     }
 }
-const _: LinkageView<132, 6> = Pirouette::VIEW;
 const LINKAGE: LinkageView<132, 6> = (linkage_combine!(
     LinkageFixed::<0, 0, 3>::start()
         .pen_color(FOREGROUND_COLOR)
