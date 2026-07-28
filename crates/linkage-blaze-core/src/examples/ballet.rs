@@ -8,7 +8,7 @@ use core::{
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
-    bvh_motion, bvh_parse::BvhMotion, linkage, linkage_combine, linkage_program,
+    bvh_motion, bvh_parse::BvhMotion, linkage, linkage_combine, linkage_file,
 };
 use device_envoy_core::{
     Error as CoreError,
@@ -34,11 +34,9 @@ pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm
 pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
 
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
-linkage_program! {
+linkage_file! {
     pub Pirouette {
         file: "../assets/mocap/pirouette.lb.rs",
-        dof: 132,
-        marks: 6,
     }
 }
 const LINKAGE: LinkageView<132, 6> = (linkage_combine!(

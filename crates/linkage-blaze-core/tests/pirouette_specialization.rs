@@ -1,16 +1,14 @@
 #[cfg(feature = "alloc")]
 use linkage_blaze_core::LinkageBuf;
 use linkage_blaze_core::{
-    DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_program, linkage_view,
+    DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_file, linkage_view,
 };
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
 // 538 steps.
-linkage_program! {
+linkage_file! {
     Pirouette {
         file: "../src/assets/mocap/pirouette.lb.rs",
-        dof: 132,
-        marks: 6,
     }
 }
 
@@ -34,6 +32,8 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, { Pirouette::STEP_COUNT }> = Pirouette:
 // identically to PIROUETTE_BODY at every input.
 const PIROUETTE_BODY_VIEW: linkage_blaze_core::LinkageView<'static, 4, 6> =
     linkage_view!(PIROUETTE_BODY);
+const PIROUETTE_FULL_VIEW: linkage_blaze_core::LinkageView<'static, 132, 6> =
+    linkage_view!(Pirouette::fixed());
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
@@ -84,7 +84,7 @@ fn pirouette_body_matches_full_linkage_with_frozen_defaults()
 -> Result<(), linkage_blaze_core::Error> {
     let body_params = [0.62, 0.37, 0.81, 0.18];
     let mut full_params = full_pirouette_defaults();
-    let full_view = Pirouette::VIEW;
+    let full_view = PIROUETTE_FULL_VIEW;
 
     full_params[full_view.param_index("l_shin_yrotation", 0)] = 0.54;
     full_params[full_view.param_index("abdomen_xrotation", 0)] = body_params[0];
@@ -205,7 +205,7 @@ fn pirouette_fixed_and_buf_freeze_retain_produce_same_result()
 }
 
 fn full_pirouette_defaults() -> [f32; 132] {
-    Pirouette::VIEW.param_defaults()
+    PIROUETTE_FULL_VIEW.param_defaults()
 }
 
 fn assert_draw_item_3d_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {

@@ -13,7 +13,8 @@ use core::convert::Infallible;
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageView, Projection, Rgb888, linkage,
-    linkage_combine, linkage_extend, linkage_program, linkage_view, linkage_with_joint_spheres,
+    linkage_combine, linkage_extend, linkage_file, linkage_program, linkage_view,
+    linkage_with_joint_spheres,
 };
 use device_envoy_core::{
     button::Button,
@@ -47,21 +48,15 @@ pub const FOREGROUND_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 // - `SceneWithArm` adds the static floor grid and articulated arm plus joint spheres.
 //       The arm linkage ends with an invisible tip in the center of the hand.
 // - `LINKAGE` appends a red ghost arm that shows the current target pose.
-linkage_program! {
+linkage_file! {
     pub CameraControl {
         file: "../../assets/examples/armatron/camera_control.lb.rs",
-        dof: 3,
-        marks: 1,
     }
     pub Grid9x9 {
         file: "../../assets/examples/armatron/grid_9x9.lb.rs",
-        dof: 0,
-        marks: 1,
     }
     pub Armatron1 {
         file: "../../assets/examples/armatron/armatron1.lb.rs",
-        dof: 6,
-        marks: 1,
     }
 }
 linkage_program! {

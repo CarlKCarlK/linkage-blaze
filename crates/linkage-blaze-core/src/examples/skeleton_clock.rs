@@ -5,7 +5,7 @@ use core::{array::from_fn, convert::Infallible, fmt};
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, MarkError, Projection, Rgb888,
-    linkage, linkage_combine, linkage_program, linkage_view,
+    linkage, linkage_combine, linkage_file, linkage_program, linkage_view,
 };
 use device_envoy_core::{
     UnwrapInfallible,
@@ -42,11 +42,9 @@ const PLACARD_TEXT_COLOR: Rgb888 = BACKGROUND_COLOR; // dark text on the light s
 // ── Linkage ────────────────────────────────────────────────────────────
 
 // Load the motion-capture linkage converted *.bvh -> *.lb.rs.
-linkage_program! {
+linkage_file! {
     pub Pirouette {
         file: "../assets/mocap/pirouette.lb.rs",
-        dof: 132,
-        marks: 6,
     }
 }
 

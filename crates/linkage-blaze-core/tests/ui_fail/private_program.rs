@@ -1,4 +1,4 @@
-use linkage_blaze_core::{LinkageFixed, LinkageView, linkage_program};
+use linkage_blaze_core::{LinkageFixed, linkage_program};
 
 mod declarations {
     use super::*;
@@ -12,6 +12,6 @@ mod declarations {
     }
 }
 
-const _: LinkageView<'static, 0, 0> = declarations::Private::VIEW;
+const _: LinkageFixed<0, 0, 1> = declarations::Private::fixed();
 
 fn main() {}

@@ -1,4 +1,4 @@
-use linkage_blaze_core::{LinkageFixed, LinkageView, linkage_program};
+use linkage_blaze_core::{LinkageFixed, linkage_program};
 
 mod declarations {
     use super::*;
@@ -17,11 +17,11 @@ mod declarations {
         }
     }
 
-    const _: LinkageView<'static, 0, 0> = Restricted::VIEW;
-    const _: LinkageView<'static, 0, 0> = Public::VIEW;
+    const _: LinkageFixed<0, 0, 1> = Restricted::fixed();
+    const _: LinkageFixed<0, 0, 1> = Public::fixed();
 }
 
-const _: LinkageView<'static, 0, 0> = declarations::Restricted::VIEW;
-const _: LinkageView<'static, 0, 0> = declarations::Public::VIEW;
+const _: LinkageFixed<0, 0, 1> = declarations::Restricted::fixed();
+const _: LinkageFixed<0, 0, 1> = declarations::Public::fixed();
 
 fn main() {}

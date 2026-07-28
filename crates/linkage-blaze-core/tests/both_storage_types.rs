@@ -2,19 +2,20 @@
 
 use linkage_blaze_core::{
     LinkageBuf, LinkageFixed, Rgb888, WebColors, linkage, linkage_buf, linkage_combine,
-    linkage_extend, linkage_fixed, linkage_program, linkage_with_joint_spheres,
+    linkage_extend, linkage_file, linkage_fixed, linkage_program, linkage_view,
+    linkage_with_joint_spheres,
 };
 
 mod common_linkage_tests;
 use common_linkage_tests::assert_linkages_equivalent;
 
-linkage_program! { ClockHands { file: "linkages/clock.lb.rs", dof: 2, marks: 2 } }
+linkage_file! { ClockHands { file: "linkages/clock.lb.rs" } }
 
 // Armatron application linkages — mirroring the shared example-core linkage data
-linkage_program! {
-    CameraControl { file: "linkages/camera_control.lb.rs", dof: 3, marks: 1 }
-    Grid9x9 { file: "linkages/grid_9x9.lb.rs", dof: 0, marks: 1 }
-    Armatron1 { file: "linkages/armatron1.lb.rs", dof: 6, marks: 1 }
+linkage_file! {
+    CameraControl { file: "linkages/camera_control.lb.rs" }
+    Grid9x9 { file: "linkages/grid_9x9.lb.rs" }
+    Armatron1 { file: "linkages/armatron1.lb.rs" }
 }
 const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> =
     linkage_combine!(CameraControl::fixed(), Grid9x9::fixed());
@@ -56,6 +57,14 @@ const DERIVED_JOINTS: LinkageFixed<6, 1, 45> =
 
 const CLOCK_FIXED: LinkageFixed<2, 2, 46> = ClockHands::fixed();
 const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 46> = ClockHands::fixed();
+const CLOCK_VIEW: linkage_blaze_core::LinkageView<'static, 2, 2> =
+    linkage_view!(ClockHands::fixed());
+const CAMERA_CONTROL_VIEW: linkage_blaze_core::LinkageView<'static, 3, 1> =
+    linkage_view!(CameraControl::fixed());
+const GRID9X9_VIEW: linkage_blaze_core::LinkageView<'static, 0, 1> =
+    linkage_view!(Grid9x9::fixed());
+const ARMATRON1_VIEW: linkage_blaze_core::LinkageView<'static, 6, 1> =
+    linkage_view!(Armatron1::fixed());
 
 #[test]
 fn derived_fixed_macros_preserve_exact_sizes() {
@@ -128,8 +137,8 @@ fn clock_from_file_both_storage_types() -> Result<(), linkage_blaze_core::Error>
 fn clock_hands_fixed_dims() {
     assert_eq!(ClockHands::STEP_COUNT, 46);
     assert_eq!(MEASURED_CLOCK.step_count(), ClockHands::STEP_COUNT);
-    assert_eq!(ClockHands::VIEW.dof(), 2);
-    assert_eq!(ClockHands::VIEW.len(), 46);
+    assert_eq!(CLOCK_VIEW.dof(), 2);
+    assert_eq!(CLOCK_VIEW.len(), 46);
 }
 
 #[test]
@@ -142,12 +151,12 @@ fn clock_hands_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Erro
 
 #[test]
 fn armatron_component_linkages_fixed_dims() {
-    assert_eq!(CameraControl::VIEW.dof(), 3);
-    assert_eq!(CameraControl::VIEW.len(), 8);
-    assert_eq!(Grid9x9::VIEW.dof(), 0);
-    assert_eq!(Grid9x9::VIEW.len(), 81);
-    assert_eq!(Armatron1::VIEW.dof(), 6);
-    assert_eq!(Armatron1::VIEW.len(), 25);
+    assert_eq!(CAMERA_CONTROL_VIEW.dof(), 3);
+    assert_eq!(CAMERA_CONTROL_VIEW.len(), 8);
+    assert_eq!(GRID9X9_VIEW.dof(), 0);
+    assert_eq!(GRID9X9_VIEW.len(), 81);
+    assert_eq!(ARMATRON1_VIEW.dof(), 6);
+    assert_eq!(ARMATRON1_VIEW.len(), 25);
     assert_eq!(CAMERA_AND_GRID.view().dof(), 3);
     assert_eq!(CAMERA_AND_GRID.view().len(), 88);
     assert_eq!(ARMATRON1_WITH_JOINTS.view().dof(), 6);

@@ -1504,17 +1504,23 @@ macro_rules! emit_buf_step_methods {
     };
 }
 
-/// Const-only builder used by [`linkage_fixed!`] to measure a linkage before
-/// allocating its exact fixed step storage.
+/// Const-only builder used by the linkage include macros to measure a linkage
+/// before allocating its exact fixed storage.
 #[doc(hidden)]
 pub struct LinkageStepCount {
     step_count: usize,
+    param_count: usize,
+    mark_count: usize,
 }
 
 impl LinkageStepCount {
     /// Start a measured linkage with its implicit origin step.
     pub const fn start() -> Self {
-        Self { step_count: 1 }
+        Self {
+            step_count: 1,
+            param_count: 0,
+            mark_count: 0,
+        }
     }
 
     /// Return the number of steps emitted by the linkage DSL.
@@ -1522,16 +1528,28 @@ impl LinkageStepCount {
         self.step_count
     }
 
+    /// Number of parameter definitions encountered during measurement.
+    pub const fn param_count(self) -> usize {
+        self.param_count
+    }
+
+    /// Number of mark calls encountered during measurement.
+    pub const fn mark_count(self) -> usize {
+        self.mark_count
+    }
+
     const fn push(mut self) -> Self {
         self.step_count += 1;
         self
     }
 
-    pub const fn define_param(self, _name: &'static str, _default: f32) -> Self {
+    pub const fn define_param(mut self, _name: &'static str, _default: f32) -> Self {
+        self.param_count += 1;
         self
     }
 
-    pub const fn mark(self, _name: &'static str) -> Self {
+    pub const fn mark(mut self, _name: &'static str) -> Self {
+        self.mark_count += 1;
         self.push()
     }
 
@@ -4312,8 +4330,7 @@ macro_rules! linkage {
 
 /// Include a `.lb.rs` linkage file as a [`LinkageFixed`] expression.
 ///
-/// Most applications should use [`linkage_program!`] to give a source file a
-/// named namespace with measured dimensions and a canonical `VIEW`.
+/// For a named application asset, use [`linkage_file!`].
 /// Use `linkage_fixed!` when a one-off expression is clearer than a named
 /// declaration.
 ///
@@ -4393,71 +4410,25 @@ macro_rules! __linkage_program_buf {
     ($name:ident, $path:literal) => {};
 }
 
-/// Declare one or more named, exactly-sized linkage programs.
+/// Declare one or more named linkage programs constructed from expressions.
 ///
-/// A file declaration measures the included body at compile time, validates
-/// `DOF` and `MARKS`, and exposes [`fixed`](Self::fixed), [`DOF`](Self::DOF),
-/// [`MARKS`](Self::MARKS), [`STEP_COUNT`](Self::STEP_COUNT), and [`VIEW`].
-/// `STEP_COUNT` is measured storage; `VIEW` erases it for runtime callers.
-/// With the `alloc` feature, file declarations also expose [`buf`](Self::buf)
-/// for growable loading through the same source body. For direct declarations,
-/// see the `program:` form below.
+/// For named `.lb.rs` files, use [`linkage_file!`].
+///
+/// The expression form derives `STEP_COUNT` from the supplied program and
+/// validates the supplied `DOF` and `MARKS`.
 ///
 /// ```rust,no_run
-/// # use linkage_blaze_core::{linkage, linkage_program, LinkageView, Rgb888};
-/// # #[cfg(feature = "alloc")]
-/// # use linkage_blaze_core::{linkage_buf, LinkageBuf};
+/// # use linkage_blaze_core::{linkage, linkage_program, LinkageFixed, Rgb888};
 /// linkage_program! {
 ///     ClockLinkage {
-///         file: "assets/examples/clock.lb.rs",
-///         dof: 2,
-///         marks: 2,
+///         program: LinkageFixed::<0, 0, 1>::start(),
+///         dof: 0,
+///         marks: 0,
 ///     }
 /// }
-///
-/// const CLOCK: LinkageView<'static, 2, 2> = ClockLinkage::VIEW;
-/// # #[cfg(feature = "alloc")]
-/// # fn load() {
-/// let _clock: LinkageBuf<2, 2> = linkage_buf!("assets/examples/clock.lb.rs");
-/// let _same_source = ClockLinkage::buf();
-/// # }
 /// ```
 #[macro_export]
 macro_rules! linkage_program {
-    ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
-        file: $path:literal,
-        dof: $dof:expr,
-        marks: $marks:expr $(,)?
-    })*) => {
-        $(
-            $(#[$attribute])*
-            $visibility struct $name;
-
-            impl $name {
-                pub const DOF: usize = $dof;
-                pub const MARKS: usize = $marks;
-                pub const STEP_COUNT: usize = {
-                    const __MEASURED: $crate::LinkageStepCount = {
-                        macro_rules! __linkage_blaze_start {
-                            () => { $crate::LinkageStepCount::start() };
-                        }
-                        include!($path)
-                    };
-                    __MEASURED.step_count()
-                };
-
-                pub const fn fixed() -> $crate::LinkageFixed<
-                    { $name::DOF }, { $name::MARKS }, { $name::STEP_COUNT }
-                > {
-                    $crate::linkage_fixed!($path, $name::DOF, $name::MARKS)
-                }
-
-                pub const VIEW: $crate::LinkageView<'static, { $name::DOF }, { $name::MARKS }> = $name::fixed().view();
-
-                $crate::__linkage_program_buf!($name, $path);
-            }
-        )*
-    };
     ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
         program: $program:expr,
         dof: $dof:expr,
@@ -4481,7 +4452,104 @@ macro_rules! linkage_program {
                     program.__resize_steps::<{ $name::STEP_COUNT }>()
                 }
 
-                pub const VIEW: $crate::LinkageView<'static, { $name::DOF }, { $name::MARKS }> = $name::fixed().view();
+            }
+        )*
+    };
+}
+
+/// Declare one or more named external `.lb.rs` linkage files.
+///
+/// The file is measured during const evaluation. `DOF`, `MARKS`, and
+/// `STEP_COUNT` are inferred from the body, while [`fixed`](Self::fixed)
+/// materializes exact fixed storage. With `alloc`, [`buf`](Self::buf) loads
+/// the same body into growable storage. This declaration only provides access
+/// to the source and constructors; it does not choose a final application
+/// view or backing-storage strategy.
+///
+/// ```rust,no_run
+/// # use linkage_blaze_core::{linkage, linkage_file, LinkageFixed, Rgb888};
+/// linkage_file! {
+///     ClockLinkage {
+///         file: "assets/examples/clock.lb.rs",
+///     }
+/// }
+///
+/// const CLOCK: LinkageFixed<
+///     { ClockLinkage::DOF },
+///     { ClockLinkage::MARKS },
+///     { ClockLinkage::STEP_COUNT },
+/// > = ClockLinkage::fixed();
+/// # #[cfg(feature = "alloc")]
+/// # fn load() {
+/// let _clock = ClockLinkage::buf();
+/// # }
+/// ```
+#[macro_export]
+macro_rules! linkage_file {
+    ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
+        file: $path:literal $(,)?
+    })*) => {
+        $(
+            $(#[$attribute])*
+            $visibility struct $name;
+
+            impl $name {
+                const __METADATA: $crate::LinkageStepCount = {
+                    macro_rules! __linkage_blaze_start {
+                        () => { $crate::LinkageStepCount::start() };
+                    }
+                    include!($path)
+                };
+
+                pub const DOF: usize = {
+                    const __CANDIDATE: $crate::LinkageFixed<
+                        { $name::__METADATA.param_count() },
+                        { $name::__METADATA.mark_count() },
+                        { $name::__METADATA.step_count() },
+                    > = {
+                        macro_rules! __linkage_blaze_start {
+                            () => {
+                                $crate::LinkageFixed::<
+                                    { $name::__METADATA.param_count() },
+                                    { $name::__METADATA.mark_count() },
+                                    { $name::__METADATA.step_count() },
+                                >::start()
+                            };
+                        }
+                        include!($path)
+                    };
+                    __CANDIDATE.param_count()
+                };
+
+                pub const MARKS: usize = {
+                    const __CANDIDATE: $crate::LinkageFixed<
+                        { $name::__METADATA.param_count() },
+                        { $name::__METADATA.mark_count() },
+                        { $name::__METADATA.step_count() },
+                    > = {
+                        macro_rules! __linkage_blaze_start {
+                            () => {
+                                $crate::LinkageFixed::<
+                                    { $name::__METADATA.param_count() },
+                                    { $name::__METADATA.mark_count() },
+                                    { $name::__METADATA.step_count() },
+                                >::start()
+                            };
+                        }
+                        include!($path)
+                    };
+                    __CANDIDATE.mark_count()
+                };
+
+                pub const STEP_COUNT: usize = $name::__METADATA.step_count();
+
+                pub const fn fixed() -> $crate::LinkageFixed<
+                    { $name::DOF }, { $name::MARKS }, { $name::STEP_COUNT }
+                > {
+                    $crate::linkage_fixed!($path, $name::DOF, $name::MARKS)
+                }
+
+                $crate::__linkage_program_buf!($name, $path);
             }
         )*
     };
@@ -4593,6 +4661,7 @@ macro_rules! linkage_view {
 /// Requires the `alloc` feature.  The path follows the same rules as
 /// `include!`.  The file must contain exactly one `linkage![ ... ]`
 /// invocation — see [`linkage!`] for the full `.lb.rs` convention.
+/// For a named application asset, prefer [`linkage_file!`].
 ///
 /// ## Forms
 ///
