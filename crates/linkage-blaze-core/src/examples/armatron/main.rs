@@ -12,9 +12,8 @@ pub mod reverse_kinematics;
 use core::convert::Infallible;
 
 use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageView, Projection, Rgb888, linkage,
-    linkage_combine, linkage_extend, linkage_file, linkage_program, linkage_view,
-    linkage_with_joint_spheres,
+    DrawItem3dExt, Error as LinkageError, LinkageView, Projection, Rgb888, linkage_combine,
+    linkage_extend, linkage_file, linkage_program, linkage_view, linkage_with_joint_spheres,
 };
 use device_envoy_core::{
     button::Button,
@@ -49,22 +48,26 @@ pub const FOREGROUND_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 //       The arm linkage ends with an invisible tip in the center of the hand.
 // - `LINKAGE` appends a red ghost arm that shows the current target pose.
 linkage_file! {
-    pub CameraControl {
+    camera_control {
         file: "../../assets/examples/armatron/camera_control.lb.rs",
     }
-    pub Grid9x9 {
+}
+linkage_file! {
+    grid9x9 {
         file: "../../assets/examples/armatron/grid_9x9.lb.rs",
     }
-    pub Armatron1 {
+}
+linkage_file! {
+    armatron1 {
         file: "../../assets/examples/armatron/armatron1.lb.rs",
     }
 }
 linkage_program! {
     pub SceneWithArm {
         program: linkage_combine!(
-            CameraControl::fixed(),
-            Grid9x9::fixed(),
-            linkage_with_joint_spheres!(Armatron1::fixed(), 0.15),
+            camera_control::fixed(),
+            grid9x9::fixed(),
+            linkage_with_joint_spheres!(armatron1::fixed(), 0.15),
         ),
         dof: 9,
         marks: 3,
@@ -73,14 +76,16 @@ linkage_program! {
 const LINKAGE: LinkageView<15, 4> = linkage_view!(linkage_extend!(
     linkage_combine!(
         linkage_extend!(SceneWithArm::fixed(); .restore("scene origin")),
-        Armatron1::fixed(),
+        armatron1::fixed(),
     );
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0)
 ));
 // Minimal linkage used only to measure arm-tip distance to the target.
-const ARM_TIP_LINKAGE: LinkageView<9, 2> =
-    linkage_view!(linkage_combine!(CameraControl::fixed(), Armatron1::fixed()));
+const ARM_TIP_LINKAGE: LinkageView<9, 2> = linkage_view!(linkage_combine!(
+    camera_control::fixed(),
+    armatron1::fixed()
+));
 
 // The ghost arm's params begin immediately after the displayed scene's params.
 const TARGET_PARAM_START: usize = SceneWithArm::DOF;

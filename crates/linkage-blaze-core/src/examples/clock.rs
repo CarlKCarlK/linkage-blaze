@@ -4,10 +4,7 @@
 
 use core::{fmt, iter};
 
-use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageView, Projection, linkage, linkage_file,
-    linkage_view,
-};
+use crate::{DrawItem3dExt, Error as LinkageError, Projection, linkage_file};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,
@@ -70,11 +67,11 @@ const CLOCK_BACKGROUND_BITMAP: DrawItem = DrawItem::Bitmap {
     top_left: CLOCK_BOUNDS.top_left,
 };
 linkage_file! {
-    pub ClockLinkage {
+    clock_linkage {
         file: "../assets/examples/clock.lb.rs",
     }
 }
-const LINKAGE: LinkageView<2, 2> = linkage_view!(ClockLinkage::fixed());
+const LINKAGE: clock_linkage::View = clock_linkage::view();
 
 /// Run the clock render loop until the physical BOOT button requests a Wi-Fi
 /// reset, driven by `clock_sync` ticks and drawn onto `cyd`.

@@ -1,13 +1,11 @@
 #[cfg(feature = "alloc")]
 use linkage_blaze_core::LinkageBuf;
-use linkage_blaze_core::{
-    DrawItem3d, LinkageFixed, Pose, Vec3, linkage, linkage_file, linkage_view,
-};
+use linkage_blaze_core::{DrawItem3d, LinkageFixed, Pose, Vec3, linkage_file, linkage_view};
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
 // 538 steps.
 linkage_file! {
-    Pirouette {
+    pirouette {
         file: "../src/assets/mocap/pirouette.lb.rs",
     }
 }
@@ -18,7 +16,7 @@ linkage_file! {
 //   1: head_yrotation
 //   2: r_shldr_zrotation
 //   3: l_shldr_zrotation
-const PIROUETTE_BODY: LinkageFixed<4, 6, { Pirouette::STEP_COUNT }> = Pirouette::fixed()
+const PIROUETTE_BODY: LinkageFixed<4, 6, { pirouette::STEP_COUNT }> = pirouette::fixed()
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
     .retain_param_names::<4>(&[
         "head_yrotation",
@@ -33,7 +31,7 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, { Pirouette::STEP_COUNT }> = Pirouette:
 const PIROUETTE_BODY_VIEW: linkage_blaze_core::LinkageView<'static, 4, 6> =
     linkage_view!(PIROUETTE_BODY);
 const PIROUETTE_FULL_VIEW: linkage_blaze_core::LinkageView<'static, 132, 6> =
-    linkage_view!(Pirouette::fixed());
+    linkage_view!(pirouette::fixed());
 
 #[test]
 fn pirouette_body_only_has_4_dof() {
@@ -177,7 +175,7 @@ fn pirouette_fixed_and_buf_freeze_retain_produce_same_result()
 -> Result<(), linkage_blaze_core::Error> {
     // Load the full pirouette as a LinkageBuf, apply the same freeze+retain
     // pipeline as the const PIROUETTE_BODY, and verify the two paths agree.
-    let buf_body = LinkageBuf::<132, 6>::from(&Pirouette::fixed())
+    let buf_body = LinkageBuf::<132, 6>::from(&pirouette::fixed())
         .freeze_param_name::<131>("l_shin_yrotation", 57.6)
         .retain_param_names::<4>(&[
             "head_yrotation",

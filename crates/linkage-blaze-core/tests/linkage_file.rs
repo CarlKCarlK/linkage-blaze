@@ -1,28 +1,28 @@
-use linkage_blaze_core::{LinkageFixed, linkage, linkage_file, linkage_view};
+use linkage_blaze_core::linkage_file;
 
 linkage_file! {
-    #[derive(Debug)]
-    RepeatedMarks {
+    repeated_marks {
         file: "linkages/repeated_marks.lb.rs",
     }
-    MultipleParams {
+}
+linkage_file! {
+    multiple_params {
         file: "linkages/multiple_params.lb.rs",
     }
 }
 
-const REPEATED_MARKS: LinkageFixed<0, 1, 5> = RepeatedMarks::fixed();
-const MULTIPLE_PARAMS: LinkageFixed<2, 0, 3> = MultipleParams::fixed();
-const REPEATED_MARKS_VIEW: linkage_blaze_core::LinkageView<'static, 0, 1> =
-    linkage_view!(RepeatedMarks::fixed());
+const REPEATED_MARKS: repeated_marks::Fixed = repeated_marks::fixed();
+const MULTIPLE_PARAMS: multiple_params::Fixed = multiple_params::fixed();
+const REPEATED_MARKS_VIEW: repeated_marks::View = repeated_marks::view();
 
 #[test]
 fn derives_exact_file_metadata() {
-    assert_eq!(RepeatedMarks::DOF, 0);
-    assert_eq!(RepeatedMarks::MARKS, 1);
-    assert_eq!(RepeatedMarks::STEP_COUNT, 5);
-    assert_eq!(MultipleParams::DOF, 2);
-    assert_eq!(MultipleParams::MARKS, 0);
-    assert_eq!(MultipleParams::STEP_COUNT, 3);
+    assert_eq!(repeated_marks::DOF, 0);
+    assert_eq!(repeated_marks::MARKS, 1);
+    assert_eq!(repeated_marks::STEP_COUNT, 5);
+    assert_eq!(multiple_params::DOF, 2);
+    assert_eq!(multiple_params::MARKS, 0);
+    assert_eq!(multiple_params::STEP_COUNT, 3);
     assert_eq!(REPEATED_MARKS_VIEW.len(), 5);
     assert_eq!(REPEATED_MARKS.view().mark_names(), &["origin"]);
     assert_eq!(MULTIPLE_PARAMS.view().dof(), 2);
@@ -31,8 +31,8 @@ fn derives_exact_file_metadata() {
 #[cfg(feature = "alloc")]
 #[test]
 fn fixed_and_buf_use_the_same_file_body() -> Result<(), linkage_blaze_core::Error> {
-    let fixed = RepeatedMarks::fixed();
-    let buffered = RepeatedMarks::buf();
+    let fixed = repeated_marks::fixed();
+    let buffered = repeated_marks::buf();
     assert_eq!(fixed.view().len(), buffered.view().len());
     assert_eq!(fixed.view().mark_names(), buffered.view().mark_names());
     assert!(

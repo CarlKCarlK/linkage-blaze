@@ -4394,11 +4394,13 @@ macro_rules! linkage_fixed {
 #[cfg(feature = "alloc")]
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __linkage_program_buf {
-    ($name:ident, $path:literal) => {
+macro_rules! __linkage_file_buf {
+    ($path:literal) => {
         /// Load the declared `.lb.rs` body into growable storage.
-        pub fn buf() -> $crate::LinkageBuf<{ $name::DOF }, { $name::MARKS }> {
-            $crate::linkage_buf!($path, { $name::DOF }, { $name::MARKS })
+        pub type Buf = $crate::LinkageBuf<DOF, MARKS>;
+
+        pub fn buf() -> Buf {
+            $crate::linkage_buf!($path, DOF, MARKS)
         }
     };
 }
@@ -4406,8 +4408,8 @@ macro_rules! __linkage_program_buf {
 #[cfg(not(feature = "alloc"))]
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __linkage_program_buf {
-    ($name:ident, $path:literal) => {};
+macro_rules! __linkage_file_buf {
+    ($path:literal) => {};
 }
 
 /// Declare one or more named linkage programs constructed from expressions.
@@ -4457,7 +4459,7 @@ macro_rules! linkage_program {
     };
 }
 
-/// Declare one or more named external `.lb.rs` linkage files.
+/// Declare access to one external `.lb.rs` linkage file as a Rust module.
 ///
 /// The file is measured during const evaluation. `DOF`, `MARKS`, and
 /// `STEP_COUNT` are inferred from the body, while [`fixed`](Self::fixed)
@@ -4467,91 +4469,79 @@ macro_rules! linkage_program {
 /// view or backing-storage strategy.
 ///
 /// ```rust,no_run
-/// # use linkage_blaze_core::{linkage, linkage_file, LinkageFixed, Rgb888};
+/// # use linkage_blaze_core::{linkage, linkage_file};
 /// linkage_file! {
-///     ClockLinkage {
+///     clock_linkage {
 ///         file: "assets/examples/clock.lb.rs",
 ///     }
 /// }
 ///
-/// const CLOCK: LinkageFixed<
-///     { ClockLinkage::DOF },
-///     { ClockLinkage::MARKS },
-///     { ClockLinkage::STEP_COUNT },
-/// > = ClockLinkage::fixed();
+/// const CLOCK_LINKAGE: clock_linkage::View =
+///     clock_linkage::view();
 /// # #[cfg(feature = "alloc")]
 /// # fn load() {
-/// let _clock = ClockLinkage::buf();
+/// let _clock = clock_linkage::buf();
 /// # }
 /// ```
 #[macro_export]
 macro_rules! linkage_file {
-    ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
+    ($(#[$attribute:meta])* $visibility:vis $name:ident {
         file: $path:literal $(,)?
-    })*) => {
-        $(
-            $(#[$attribute])*
-            $visibility struct $name;
+    }) => {
+        $(#[$attribute])*
+        $visibility mod $name {
+            use $crate::{linkage, Rgb888, WebColors};
 
-            impl $name {
-                const __METADATA: $crate::LinkageStepCount = {
-                    macro_rules! __linkage_blaze_start {
-                        () => { $crate::LinkageStepCount::start() };
-                    }
-                    include!($path)
-                };
+            const _: Rgb888 = Rgb888::CSS_BLACK;
 
-                pub const DOF: usize = {
-                    const __CANDIDATE: $crate::LinkageFixed<
-                        { $name::__METADATA.param_count() },
-                        { $name::__METADATA.mark_count() },
-                        { $name::__METADATA.step_count() },
-                    > = {
-                        macro_rules! __linkage_blaze_start {
-                            () => {
-                                $crate::LinkageFixed::<
-                                    { $name::__METADATA.param_count() },
-                                    { $name::__METADATA.mark_count() },
-                                    { $name::__METADATA.step_count() },
-                                >::start()
-                            };
-                        }
-                        include!($path)
+            const __CANDIDATE: $crate::LinkageFixed<
+                { __METADATA.param_count() },
+                { __METADATA.mark_count() },
+                { __METADATA.step_count() },
+            > = {
+                macro_rules! __linkage_blaze_start {
+                    () => {
+                        $crate::LinkageFixed::<
+                            { __METADATA.param_count() },
+                            { __METADATA.mark_count() },
+                            { __METADATA.step_count() },
+                        >::start()
                     };
-                    __CANDIDATE.param_count()
-                };
-
-                pub const MARKS: usize = {
-                    const __CANDIDATE: $crate::LinkageFixed<
-                        { $name::__METADATA.param_count() },
-                        { $name::__METADATA.mark_count() },
-                        { $name::__METADATA.step_count() },
-                    > = {
-                        macro_rules! __linkage_blaze_start {
-                            () => {
-                                $crate::LinkageFixed::<
-                                    { $name::__METADATA.param_count() },
-                                    { $name::__METADATA.mark_count() },
-                                    { $name::__METADATA.step_count() },
-                                >::start()
-                            };
-                        }
-                        include!($path)
-                    };
-                    __CANDIDATE.mark_count()
-                };
-
-                pub const STEP_COUNT: usize = $name::__METADATA.step_count();
-
-                pub const fn fixed() -> $crate::LinkageFixed<
-                    { $name::DOF }, { $name::MARKS }, { $name::STEP_COUNT }
-                > {
-                    $crate::linkage_fixed!($path, $name::DOF, $name::MARKS)
                 }
+                include!($path)
+            };
 
-                $crate::__linkage_program_buf!($name, $path);
+            pub const DOF: usize = __CANDIDATE.param_count();
+            pub const MARKS: usize = __CANDIDATE.mark_count();
+            pub const STEP_COUNT: usize = __METADATA.step_count();
+
+            pub type Fixed = $crate::LinkageFixed<DOF, MARKS, STEP_COUNT>;
+            pub type View = $crate::LinkageView<'static, DOF, MARKS>;
+
+            const __METADATA: $crate::LinkageStepCount = {
+                macro_rules! __linkage_blaze_start {
+                    () => { $crate::LinkageStepCount::start() };
+                }
+                include!($path)
+            };
+
+            pub const fn fixed() -> Fixed {
+                $crate::linkage_fixed!($path, DOF, MARKS)
             }
-        )*
+
+            const __VIEW: View = $crate::linkage_view!(fixed());
+
+            pub const fn view() -> View {
+                __VIEW
+            }
+
+            const _: View = view();
+
+            $crate::__linkage_file_buf!($path);
+        }
+    };
+    ($($tokens:tt)*) => {
+        compile_error!("linkage_file! accepts exactly one file declaration per invocation");
     };
 }
 
