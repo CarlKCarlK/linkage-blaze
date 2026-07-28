@@ -21,16 +21,16 @@ linkage_file! {
 linkage_file! {
     armatron1 { file: "linkages/armatron1.lb.rs" }
 }
-const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> =
-    linkage_combine!(camera_control::fixed(), grid9x9::fixed());
+const CAMERA_AND_GRID: linkage_blaze_core::LinkageView<'static, 3, 2> =
+    linkage_combine!(camera_control::view(), grid9x9::view());
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> =
     linkage_with_joint_spheres!(armatron1::fixed(), 0.15);
 linkage_program! {
     SceneWithArm {
         program: linkage_combine!(
-            camera_control::fixed(),
-            grid9x9::fixed(),
-            linkage_with_joint_spheres!(armatron1::fixed(), 0.15),
+            camera_control::view(),
+            grid9x9::view(),
+            linkage_view!(linkage_with_joint_spheres!(armatron1::fixed(), 0.15)),
         ),
         dof: 9,
         marks: 3,
@@ -40,35 +40,31 @@ const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 132> = SceneWithArm::fixed();
 const ARMATRON_LINKAGE0_RESTORED: LinkageFixed<9, 3, 133> =
     linkage_extend!(SceneWithArm::fixed(); .restore("scene origin"));
 const ARMATRON_LINKAGE: LinkageFixed<15, 4, 159> = linkage_extend!(
-    linkage_combine!(ARMATRON_LINKAGE0_RESTORED, armatron1::fixed());
+    linkage_combine!(ARMATRON_LINKAGE0_RESTORED.view(), armatron1::view());
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0)
 );
-const ARMATRON_RK_LINKAGE: LinkageFixed<9, 2, 32> =
-    linkage_combine!(camera_control::fixed(), armatron1::fixed());
+const ARMATRON_RK_LINKAGE: linkage_blaze_core::LinkageView<'static, 9, 2> =
+    linkage_combine!(camera_control::view(), armatron1::view());
 
 const MEASURED_CLOCK: LinkageFixed<2, 2, 46> = clock_hands::fixed();
 
-const DERIVED_COMBINATION: LinkageFixed<3, 2, 88> =
-    linkage_combine!(camera_control::fixed(), grid9x9::fixed());
-const VARIADIC_COMBINATION: LinkageFixed<9, 3, 132> = linkage_combine!(
-    camera_control::fixed(),
-    grid9x9::fixed(),
-    linkage_with_joint_spheres!(armatron1::fixed(), 0.15),
+const DERIVED_COMBINATION: linkage_blaze_core::LinkageView<'static, 3, 2> =
+    linkage_combine!(camera_control::view(), grid9x9::view());
+const VARIADIC_COMBINATION: linkage_blaze_core::LinkageView<'static, 9, 3> = linkage_combine!(
+    camera_control::view(),
+    grid9x9::view(),
+    linkage_view!(linkage_with_joint_spheres!(armatron1::fixed(), 0.15)),
 );
 const DERIVED_JOINTS: LinkageFixed<6, 1, 45> =
     linkage_with_joint_spheres!(armatron1::fixed(), 0.15);
 
 const CLOCK_FIXED: LinkageFixed<2, 2, 46> = clock_hands::fixed();
 const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 46> = clock_hands::fixed();
-const CLOCK_VIEW: linkage_blaze_core::LinkageView<'static, 2, 2> =
-    linkage_view!(clock_hands::fixed());
-const CAMERA_CONTROL_VIEW: linkage_blaze_core::LinkageView<'static, 3, 1> =
-    linkage_view!(camera_control::fixed());
-const GRID9X9_VIEW: linkage_blaze_core::LinkageView<'static, 0, 1> =
-    linkage_view!(grid9x9::fixed());
-const ARMATRON1_VIEW: linkage_blaze_core::LinkageView<'static, 6, 1> =
-    linkage_view!(armatron1::fixed());
+const CLOCK_VIEW: linkage_blaze_core::LinkageView<'static, 2, 2> = clock_hands::view();
+const CAMERA_CONTROL_VIEW: linkage_blaze_core::LinkageView<'static, 3, 1> = camera_control::view();
+const GRID9X9_VIEW: linkage_blaze_core::LinkageView<'static, 0, 1> = grid9x9::view();
+const ARMATRON1_VIEW: linkage_blaze_core::LinkageView<'static, 6, 1> = armatron1::view();
 
 #[test]
 fn derived_fixed_macros_preserve_exact_sizes() {
@@ -84,14 +80,14 @@ fn derived_fixed_macros_preserve_exact_sizes() {
 fn variadic_combination_matches_left_associative_nesting() -> Result<(), linkage_blaze_core::Error>
 {
     let params = [0.5_f32; 9];
-    assert_linkages_equivalent(&VARIADIC_COMBINATION, &ARMATRON_LINKAGE0, &params)?;
+    assert_linkages_equivalent(&VARIADIC_COMBINATION, &ARMATRON_LINKAGE0.view(), &params)?;
     Ok(())
 }
 
 #[test]
 fn named_program_buf_matches_fixed() -> Result<(), linkage_blaze_core::Error> {
     let buf = clock_hands::buf();
-    assert_linkages_equivalent(&clock_hands::fixed(), &buf, &[0.25, 0.5])?;
+    assert_linkages_equivalent(&clock_hands::view(), &buf.view(), &[0.25, 0.5])?;
     Ok(())
 }
 
@@ -131,7 +127,7 @@ fn linkage_buf_include_works() -> Result<(), linkage_blaze_core::Error> {
 fn clock_from_file_both_storage_types() -> Result<(), linkage_blaze_core::Error> {
     let buf = linkage_buf!("linkages/clock.lb.rs", 2, 2);
     let params = [0.25, 0.5];
-    assert_linkages_equivalent(&CLOCK_FIXED, &buf, &params)?;
+    assert_linkages_equivalent(&CLOCK_FIXED.view(), &buf.view(), &params)?;
     Ok(())
 }
 
@@ -149,7 +145,7 @@ fn clock_hands_fixed_dims() {
 fn clock_hands_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let buf = LinkageBuf::from(&clock_hands::fixed());
     let params = [0.3_f32, 0.7];
-    assert_linkages_equivalent(&clock_hands::fixed(), &buf, &params)?;
+    assert_linkages_equivalent(&clock_hands::view(), &buf.view(), &params)?;
     Ok(())
 }
 
@@ -161,16 +157,16 @@ fn armatron_component_linkages_fixed_dims() {
     assert_eq!(GRID9X9_VIEW.len(), 81);
     assert_eq!(ARMATRON1_VIEW.dof(), 6);
     assert_eq!(ARMATRON1_VIEW.len(), 25);
-    assert_eq!(CAMERA_AND_GRID.view().dof(), 3);
-    assert_eq!(CAMERA_AND_GRID.view().len(), 88);
+    assert_eq!(CAMERA_AND_GRID.dof(), 3);
+    assert_eq!(CAMERA_AND_GRID.len(), 88);
     assert_eq!(ARMATRON1_WITH_JOINTS.view().dof(), 6);
     assert_eq!(ARMATRON1_WITH_JOINTS.view().len(), 45);
     assert_eq!(ARMATRON_LINKAGE0.view().dof(), 9);
     assert_eq!(ARMATRON_LINKAGE0.view().len(), 132);
     assert_eq!(ARMATRON_LINKAGE.view().dof(), 15);
     assert_eq!(ARMATRON_LINKAGE.view().len(), 159);
-    assert_eq!(ARMATRON_RK_LINKAGE.view().dof(), 9);
-    assert_eq!(ARMATRON_RK_LINKAGE.view().len(), 32);
+    assert_eq!(ARMATRON_RK_LINKAGE.dof(), 9);
+    assert_eq!(ARMATRON_RK_LINKAGE.len(), 32);
 }
 
 #[test]
@@ -179,10 +175,14 @@ fn armatron_component_linkages_fixed_and_buf_equivalent() -> Result<(), linkage_
     let armatron1_buf = linkage_buf!("linkages/armatron1.lb.rs", 6, 1);
 
     let vc_params = [0.5_f32, 0.4, 0.6];
-    assert_linkages_equivalent(&camera_control::fixed(), &camera_control_buf, &vc_params)?;
+    assert_linkages_equivalent(
+        &camera_control::view(),
+        &camera_control_buf.view(),
+        &vc_params,
+    )?;
 
     let arm_params = [0.5_f32, 0.5, 0.0, 0.5, 0.5, 0.5];
-    assert_linkages_equivalent(&armatron1::fixed(), &armatron1_buf, &arm_params)?;
+    assert_linkages_equivalent(&armatron1::view(), &armatron1_buf.view(), &arm_params)?;
     Ok(())
 }
 
@@ -190,22 +190,22 @@ fn armatron_component_linkages_fixed_and_buf_equivalent() -> Result<(), linkage_
 fn armatron_grid_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let grid_buf = linkage_buf!("linkages/grid_9x9.lb.rs", 0, 1);
     let params: [f32; 0] = [];
-    assert_linkages_equivalent(&grid9x9::fixed(), &grid_buf, &params)?;
+    assert_linkages_equivalent(&grid9x9::view(), &grid_buf.view(), &params)?;
     Ok(())
 }
 
 #[test]
 fn armatron_combined_linkages_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let full_buf = LinkageBuf::from(&ARMATRON_LINKAGE);
-    let rk_buf = LinkageBuf::from(&ARMATRON_RK_LINKAGE);
+    let rk_buf = LinkageBuf::from(&ARMATRON_RK_LINKAGE.__to_fixed::<32>());
 
     let full_params = [0.5_f32; 15];
     let rk_params = [0.5_f32; 9];
 
     assert_eq!(full_buf.view().dof(), 15);
     assert_eq!(full_buf.view().len(), ARMATRON_LINKAGE.view().len());
-    assert_linkages_equivalent(&ARMATRON_LINKAGE, &full_buf, &full_params)?;
-    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_buf, &rk_params)?;
+    assert_linkages_equivalent(&ARMATRON_LINKAGE.view(), &full_buf.view(), &full_params)?;
+    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_buf.view(), &rk_params)?;
     Ok(())
 }
 
@@ -231,12 +231,12 @@ fn armatron_full_scene_linkage_built_with_buf() -> Result<(), linkage_blaze_core
     assert_eq!(full_linkage.view().dof(), 15);
     assert_eq!(full_linkage.view().len(), ARMATRON_LINKAGE.view().len());
     assert_eq!(rk_linkage.view().dof(), 9);
-    assert_eq!(rk_linkage.view().len(), ARMATRON_RK_LINKAGE.view().len());
+    assert_eq!(rk_linkage.view().len(), ARMATRON_RK_LINKAGE.len());
 
     let full_params = [0.5_f32; 15];
     let rk_params = [0.5_f32; 9];
-    assert_linkages_equivalent(&ARMATRON_LINKAGE, &full_linkage, &full_params)?;
-    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_linkage, &rk_params)?;
+    assert_linkages_equivalent(&ARMATRON_LINKAGE.view(), &full_linkage.view(), &full_params)?;
+    assert_linkages_equivalent(&ARMATRON_RK_LINKAGE, &rk_linkage.view(), &rk_params)?;
     Ok(())
 }
 

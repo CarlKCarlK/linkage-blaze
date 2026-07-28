@@ -214,74 +214,6 @@ impl VariableArg {
     }
 }
 
-/// A linkage expression/storage type that can expose a borrowed view for evaluation and rendering.
-///
-/// This trait provides a minimal, uniform interface for linkage types. The only required method is
-/// [`view()`](Linkage::view), which returns a [`LinkageView`] where all evaluation and rendering
-/// happens. This keeps the API clean by separating expression/storage from evaluation.
-///
-/// # Examples
-///
-/// ```rust
-/// # use linkage_blaze_core::{Linkage, LinkageFixed};
-/// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
-///     .define_param("distance", 0.5)
-///     .forward_param("distance", 1.0, 5.0);
-///
-/// // Get a view and evaluate
-/// # fn example() -> Result<(), linkage_blaze_core::Error> {
-/// let pose = LINKAGE.view().final_pose(&[0.5])?;
-/// # let _ = pose;
-/// # Ok(())
-/// # }
-/// ```
-// TODO Consider reducing this trait to only `view`, with all inspection and
-// evaluation APIs living on `LinkageView`. If third-party storage types are not
-// needed, inherent `view` methods may make the conversion trait unnecessary.
-pub trait Linkage<const DOF: usize, const MARKS: usize> {
-    /// Create a borrowed view for evaluation and rendering.
-    ///
-    /// All evaluation methods (final_pose, poses, draw_items_3d, etc.) are available on the returned
-    /// [`LinkageView`]. This keeps the conceptual model clean: storage types (LinkageFixed, LinkageBuf)
-    /// define expressions; views evaluate them.
-    fn view(&self) -> LinkageView<'_, DOF, MARKS>;
-
-    /// Return the number of runtime parameters (degrees of freedom).
-    ///
-    /// Default implementation: returns `DOF`.
-    fn dof(&self) -> usize {
-        DOF
-    }
-
-    /// Return the number of linkage steps, including the implicit start step.
-    ///
-    /// Default implementation: delegates to the view.
-    fn len(&self) -> usize {
-        self.view().len()
-    }
-
-    /// Return a reference to the parameter array.
-    ///
-    /// Default implementation: delegates to the view.
-    fn params(&self) -> &[Param; DOF] {
-        self.view().params()
-    }
-
-    /// Return each parameter's normalized default value.
-    ///
-    /// Default implementation: delegates to the view.
-    fn param_defaults(&self) -> [f32; DOF] {
-        self.view().param_defaults()
-    }
-
-    /// Return a reference to the step slice.
-    ///
-    /// Default implementation: delegates to the view.
-    fn steps(&self) -> &[Step] {
-        self.view().steps()
-    }
-}
-
 /// Error returned when evaluating a linkage fails.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Error {
@@ -305,10 +237,10 @@ impl fmt::Display for Error {
 #[cfg(test)]
 impl std::error::Error for Error {}
 
-/// A borrowed view of a linkage for evaluation and rendering.
+/// The canonical operational API for evaluating and composing a linkage.
 ///
-/// `LinkageView` erases the step capacity `N` while preserving the degree-of-freedom `DOF`.
-/// It borrows both the parameter array and the active step slice from a `LinkageFixed`.
+/// `LinkageView` erases fixed step capacity while preserving the degree-of-freedom and mark
+/// dimensions. Obtain one with [`LinkageFixed::view()`] or [`LinkageBuf::view()`].
 ///
 /// # Examples
 ///
@@ -325,18 +257,8 @@ impl std::error::Error for Error {}
 /// # Ok(())
 /// # }
 /// ```
-/// A borrowed view of a linkage for evaluation and rendering.
-///
-/// `LinkageView` erases the step capacity `N` while preserving the degree-of-freedom `DOF`.
-/// It borrows both the parameter array and the active step slice from a `LinkageFixed`.
-///
-/// Create a view via [`LinkageFixed::view()`] or convert from `&LinkageFixed` with `From`.
-///
-/// The API intentionally keeps `LinkageFixed<DOF, MARKS, N>` as the owned
-/// const-generic representation and uses this explicit borrowed wrapper to
-/// erase `N`. The [`linkage_view!`] macro materializes exact active-step
-/// backing before producing this view; a custom dynamically sized linkage type
-/// is not needed for the public API.
+/// The API keeps `LinkageFixed<DOF, MARKS, N>` as the owned const-generic representation and uses
+/// this borrowed wrapper to erase `N`.
 #[derive(Clone, Copy)]
 pub struct LinkageView<'a, const DOF: usize, const MARKS: usize> {
     params: &'a [Param; DOF],
@@ -348,6 +270,9 @@ pub struct LinkageView<'a, const DOF: usize, const MARKS: usize> {
 impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// The number of runtime parameters (degrees of freedom).
     pub const DOF: usize = DOF;
+
+    /// The number of mark slots in this view.
+    pub const MARKS: usize = MARKS;
 
     /// Create a new linkage view from parameter and step arrays.
     #[must_use]
@@ -375,6 +300,12 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     #[must_use]
     pub const fn len(&self) -> usize {
         self.steps.len()
+    }
+
+    /// Return the active step count for const-evaluation helpers.
+    #[doc(hidden)]
+    pub const fn step_count(&self) -> usize {
+        self.len()
     }
 
     /// Return a parameter definition by index.
@@ -503,6 +434,111 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     #[must_use]
     pub const fn mark_len(&self) -> usize {
         self.mark_len
+    }
+
+    /// Return the number of marks currently used by this view.
+    #[must_use]
+    pub const fn mark_count(&self) -> usize {
+        self.mark_len()
+    }
+
+    /// Return the view's mark-slot capacity.
+    #[must_use]
+    pub const fn marks(&self) -> usize {
+        MARKS
+    }
+
+    /// Materialize this view into exact fixed backing storage.
+    #[doc(hidden)]
+    pub const fn __to_fixed<const N: usize>(self) -> LinkageFixed<DOF, MARKS, N> {
+        assert!(
+            self.steps.len() <= N,
+            "fixed backing is too small for linkage view"
+        );
+        let mut steps = [const { Step::Start }; N];
+        let mut step_index = 0;
+        while step_index < self.steps.len() {
+            steps[step_index] = self.steps[step_index];
+            step_index += 1;
+        }
+        LinkageFixed {
+            steps,
+            len: self.steps.len(),
+            params: *self.params,
+            param_len: DOF,
+            mark_names: *self.mark_names,
+            mark_len: self.mark_len,
+        }
+    }
+
+    /// Compatibility entry point for structural macros that need fixed backing.
+    #[doc(hidden)]
+    pub const fn __resize_steps<const N: usize>(self) -> LinkageFixed<DOF, MARKS, N> {
+        self.__to_fixed()
+    }
+
+    /// Combine two views into one exact fixed backing value.
+    #[doc(hidden)]
+    pub const fn __combine_fixed<
+        const DOF2: usize,
+        const MARKS2: usize,
+        const DOF_OUT: usize,
+        const MARKS_OUT: usize,
+        const N_OUT: usize,
+    >(
+        self,
+        other: LinkageView<'_, DOF2, MARKS2>,
+    ) -> LinkageFixed<DOF_OUT, MARKS_OUT, N_OUT> {
+        let needed_dof = DOF + DOF2;
+        assert!(DOF_OUT == needed_dof, "DOF_OUT must equal the combined DOF");
+        let needed_marks = self.mark_len + other.mark_len;
+        assert!(MARKS_OUT >= needed_marks, "MARKS_OUT is too small");
+        let needed_steps = self.steps.len() + other.steps.len() - 1;
+        assert!(N_OUT >= needed_steps, "N_OUT is too small");
+
+        let mut out = LinkageFixed {
+            steps: [const { Step::Start }; N_OUT],
+            len: self.steps.len(),
+            params: [Param::EMPTY; DOF_OUT],
+            param_len: DOF + DOF2,
+            mark_names: [""; MARKS_OUT],
+            mark_len: needed_marks,
+        };
+
+        let mut step_index = 0;
+        while step_index < self.steps.len() {
+            out.steps[step_index] = self.steps[step_index];
+            step_index += 1;
+        }
+        let mut other_step_index = 1;
+        while other_step_index < other.steps.len() {
+            out.steps[out.len] = other.steps[other_step_index].offset_params(DOF, self.mark_len);
+            out.len += 1;
+            other_step_index += 1;
+        }
+
+        let mut param_index = 0;
+        while param_index < DOF {
+            out.params[param_index] = self.params[param_index];
+            param_index += 1;
+        }
+        let mut other_param_index = 0;
+        while other_param_index < DOF2 {
+            out.params[DOF + other_param_index] = other.params[other_param_index];
+            other_param_index += 1;
+        }
+
+        let mut mark_index = 0;
+        while mark_index < self.mark_len {
+            out.mark_names[mark_index] = self.mark_names[mark_index];
+            mark_index += 1;
+        }
+        let mut other_mark_index = 0;
+        while other_mark_index < other.mark_len {
+            out.mark_names[self.mark_len + other_mark_index] = other.mark_names[other_mark_index];
+            other_mark_index += 1;
+        }
+        out
     }
 
     /// Serialize this linkage view as `.lb.rs` source using the `linkage![ ... ]` format.
@@ -1692,6 +1728,12 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         self.len
     }
 
+    /// Return the active step count.
+    #[doc(hidden)]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
     /// Return the number of parameters actually defined.
     ///
     /// Use this to discover the correct `DOF` after building with an oversized capacity.
@@ -2171,6 +2213,12 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         }
     }
 
+    /// Materialize fixed storage for macros that accept either a view or fixed input.
+    #[doc(hidden)]
+    pub const fn __to_fixed<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
+        self.__resize_steps()
+    }
+
     const fn strip_fixed_noops_same_capacity(self) -> Self {
         let mut out_steps = [const { Step::Start }; N];
         let mut out_len = 0usize;
@@ -2374,37 +2422,6 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         out.mark_len = self.mark_len + other.mark_len;
 
         out
-    }
-}
-
-impl<const DOF: usize, const MARKS: usize, const N: usize> Linkage<DOF, MARKS>
-    for LinkageFixed<DOF, MARKS, N>
-{
-    fn view(&self) -> LinkageView<'_, DOF, MARKS> {
-        LinkageView::new(
-            &self.params,
-            &self.steps[..self.len],
-            &self.mark_names,
-            self.mark_len,
-        )
-    }
-
-    fn len(&self) -> usize {
-        self.len
-    }
-
-    fn params(&self) -> &[Param; DOF] {
-        &self.params
-    }
-
-    fn steps(&self) -> &[Step] {
-        &self.steps[..self.len]
-    }
-}
-
-impl<'a, const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageView<'a, DOF, MARKS> {
-    fn view(&self) -> LinkageView<'_, DOF, MARKS> {
-        *self
     }
 }
 
@@ -3161,25 +3178,6 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             mark_names: self.mark_names,
             mark_len: self.mark_len,
         }
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl<const DOF: usize, const MARKS: usize> Linkage<DOF, MARKS> for LinkageBuf<DOF, MARKS> {
-    fn view(&self) -> LinkageView<'_, DOF, MARKS> {
-        self.view()
-    }
-
-    fn len(&self) -> usize {
-        self.steps.len()
-    }
-
-    fn params(&self) -> &[Param; DOF] {
-        &self.params
-    }
-
-    fn steps(&self) -> &[Step] {
-        &self.steps
     }
 }
 
@@ -4416,8 +4414,8 @@ macro_rules! __linkage_file_buf {
 ///
 /// For named `.lb.rs` files, use [`linkage_file!`].
 ///
-/// The expression form derives `STEP_COUNT` from the supplied program and
-/// validates the supplied `DOF` and `MARKS`.
+/// The expression form accepts a [`LinkageView`], derives `STEP_COUNT`, and
+/// retains fixed storage only for the named program's `fixed()` constructor.
 ///
 /// ```rust,no_run
 /// # use linkage_blaze_core::{linkage, linkage_program, LinkageFixed, Rgb888};
@@ -4443,15 +4441,15 @@ macro_rules! linkage_program {
             impl $name {
                 pub const DOF: usize = $dof;
                 pub const MARKS: usize = $marks;
-                pub const STEP_COUNT: usize = $program.step_count();
+                pub const STEP_COUNT: usize = $program.len();
 
                 pub const fn fixed() -> $crate::LinkageFixed<
                     { $name::DOF }, { $name::MARKS }, { $name::STEP_COUNT }
                 > {
                     let program = $program;
-                    assert!(program.param_count() == $dof, "DOF must equal the number of defined parameters");
+                    assert!(program.dof() == $dof, "DOF must equal the number of defined parameters");
                     assert!(program.mark_count() == $marks, "MARKS must equal the number of defined marks");
-                    program.__resize_steps::<{ $name::STEP_COUNT }>()
+                    program.__to_fixed::<{ $name::STEP_COUNT }>()
                 }
 
             }
@@ -4545,24 +4543,54 @@ macro_rules! linkage_file {
     };
 }
 
-/// Combine two or more const-evaluable fixed linkages, deriving all output sizes.
+/// Combine two or more const-evaluable linkage views into a promoted view.
+///
+/// Inputs are views and the result is a view. Exact fixed backing is generated
+/// and promoted internally during const evaluation; no runtime allocation is
+/// performed. Later inputs continue from the preceding final pose, with their
+/// parameter and mark indexes offset and their implicit `Start` step skipped.
 ///
 /// The variadic form is left-associative: later programs continue from the
 /// preceding final pose, and each later implicit `Start` step is skipped.
 ///
 /// ```rust,no_run
-/// # use linkage_blaze_core::{linkage_combine, LinkageFixed};
-/// const LINKAGE: LinkageFixed<0, 0, 4> = linkage_combine!(
-///     LinkageFixed::<0, 0, 2>::start().forward(1.0),
-///     LinkageFixed::<0, 0, 2>::start().left(2.0),
-///     LinkageFixed::<0, 0, 2>::start().up(3.0),
+/// # use linkage_blaze_core::{linkage_combine, LinkageFixed, LinkageView};
+/// # mod first_program {
+/// #     use linkage_blaze_core::{LinkageFixed, LinkageView};
+/// #     pub type View = LinkageView<'static, 0, 0>;
+/// #     const FIXED: LinkageFixed<0, 0, 1> = LinkageFixed::start();
+/// #     pub const fn view() -> View { FIXED.view() }
+/// # }
+/// # mod second_program {
+/// #     use linkage_blaze_core::{LinkageFixed, LinkageView};
+/// #     pub type View = LinkageView<'static, 0, 0>;
+/// #     const FIXED: LinkageFixed<0, 0, 1> = LinkageFixed::start();
+/// #     pub const fn view() -> View { FIXED.view() }
+/// # }
+/// # mod combined_program { pub type View = linkage_blaze_core::LinkageView<'static, 0, 0>; }
+/// const COMBINED: combined_program::View = linkage_combine!(
+///     first_program::view(),
+///     second_program::view(),
 /// );
-/// # const _: LinkageFixed<0, 0, 4> = LINKAGE;
 /// ```
 #[macro_export]
 macro_rules! linkage_combine {
     ($first:expr, $second:expr $(,)?) => {{
-        $first.combine::<_, _, _, { $first.param_count() + $second.param_count() }, { $first.mark_count() + $second.mark_count() }, { $first.step_count() + $second.step_count() - 1 }>($second)
+        const __COMBINED: $crate::LinkageView<
+            'static,
+            { ($first).dof() + ($second).dof() },
+            { ($first).marks() + ($second).marks() },
+        > = ($first)
+            .__combine_fixed::<
+                _,
+                _,
+                { ($first).dof() + ($second).dof() },
+                { ($first).marks() + ($second).marks() },
+                { ($first).len() + ($second).len() - 1 },
+            >($second)
+            .view()
+        ;
+        __COMBINED
     }};
     ($first:expr, $second:expr, $($rest:expr),+ $(,)?) => {
         $crate::linkage_combine!(

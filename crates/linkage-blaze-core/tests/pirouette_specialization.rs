@@ -30,8 +30,7 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, { pirouette::STEP_COUNT }> = pirouette:
 // identically to PIROUETTE_BODY at every input.
 const PIROUETTE_BODY_VIEW: linkage_blaze_core::LinkageView<'static, 4, 6> =
     linkage_view!(PIROUETTE_BODY);
-const PIROUETTE_FULL_VIEW: linkage_blaze_core::LinkageView<'static, 132, 6> =
-    linkage_view!(pirouette::fixed());
+const PIROUETTE_FULL_VIEW: linkage_blaze_core::LinkageView<'static, 132, 6> = pirouette::view();
 
 #[test]
 fn pirouette_body_only_has_4_dof() {

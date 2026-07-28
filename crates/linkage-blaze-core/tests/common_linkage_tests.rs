@@ -1,28 +1,24 @@
 // Helper function to compare LinkageFixed and LinkageBuf behavior.
 // Both should produce identical results given the same parameters.
 
-use linkage_blaze_core::Linkage;
+use linkage_blaze_core::LinkageView;
 
 pub fn assert_linkages_equivalent<const DOF: usize, const MARKS: usize>(
-    linkage_fixed: &impl Linkage<DOF, MARKS>,
-    linkage_buf: &impl Linkage<DOF, MARKS>,
+    linkage_fixed: &LinkageView<'_, DOF, MARKS>,
+    linkage_buf: &LinkageView<'_, DOF, MARKS>,
     params: &[f32; DOF],
 ) -> Result<(), linkage_blaze_core::Error> {
     // Compare basic properties
+    assert_eq!(linkage_fixed.dof(), linkage_buf.dof(), "DOF should match");
     assert_eq!(
-        linkage_fixed.view().dof(),
-        linkage_buf.view().dof(),
-        "DOF should match"
-    );
-    assert_eq!(
-        linkage_fixed.view().len(),
-        linkage_buf.view().len(),
+        linkage_fixed.len(),
+        linkage_buf.len(),
         "Step count should match"
     );
 
     // Compare evaluation results
-    let fixed_final = linkage_fixed.view().final_pose(params)?;
-    let buf_final = linkage_buf.view().final_pose(params)?;
+    let fixed_final = linkage_fixed.final_pose(params)?;
+    let buf_final = linkage_buf.final_pose(params)?;
 
     assert!(
         fixed_final
@@ -41,8 +37,8 @@ pub fn assert_linkages_equivalent<const DOF: usize, const MARKS: usize>(
     );
 
     // Count draw items - both should produce the same number
-    let fixed_items: Vec<_> = linkage_fixed.view().draw_items_3d(params)?.collect();
-    let buf_items: Vec<_> = linkage_buf.view().draw_items_3d(params)?.collect();
+    let fixed_items: Vec<_> = linkage_fixed.draw_items_3d(params)?.collect();
+    let buf_items: Vec<_> = linkage_buf.draw_items_3d(params)?.collect();
     assert_eq!(
         fixed_items.len(),
         buf_items.len(),

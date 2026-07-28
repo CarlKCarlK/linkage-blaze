@@ -65,9 +65,9 @@ linkage_file! {
 linkage_program! {
     pub SceneWithArm {
         program: linkage_combine!(
-            camera_control::fixed(),
-            grid9x9::fixed(),
-            linkage_with_joint_spheres!(armatron1::fixed(), 0.15),
+            camera_control::view(),
+            grid9x9::view(),
+            linkage_with_joint_spheres!(armatron1::fixed(), 0.15).view(),
         ),
         dof: 9,
         marks: 3,
@@ -75,17 +75,15 @@ linkage_program! {
 }
 const LINKAGE: LinkageView<15, 4> = linkage_view!(linkage_extend!(
     linkage_combine!(
-        linkage_extend!(SceneWithArm::fixed(); .restore("scene origin")),
-        armatron1::fixed(),
+        linkage_extend!(SceneWithArm::fixed(); .restore("scene origin")).view(),
+        armatron1::view(),
     );
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0)
 ));
 // Minimal linkage used only to measure arm-tip distance to the target.
-const ARM_TIP_LINKAGE: LinkageView<9, 2> = linkage_view!(linkage_combine!(
-    camera_control::fixed(),
-    armatron1::fixed()
-));
+const ARM_TIP_LINKAGE: LinkageView<9, 2> =
+    linkage_combine!(camera_control::view(), armatron1::view());
 
 // The ghost arm's params begin immediately after the displayed scene's params.
 const TARGET_PARAM_START: usize = SceneWithArm::DOF;

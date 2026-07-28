@@ -7,8 +7,8 @@ use core::{
 };
 
 use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageFixed, Point, Projection, Rgb888, bvh_motion,
-    bvh_parse::BvhMotion, linkage_combine, linkage_file,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
+    bvh_motion, bvh_parse::BvhMotion, linkage_combine, linkage_file,
 };
 use device_envoy_core::{
     Error as CoreError,
@@ -33,19 +33,18 @@ pub const TOP_FONT: MonoFont<'static> = FONT_6X10;
 pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal
 pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
 
+// todo00000 review every linkage_file!, linkage_combine!, etc.
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
 linkage_file! {
     pirouette {
         file: "../assets/mocap/pirouette.lb.rs",
     }
 }
-const LINKAGE: pirouette::View = (linkage_combine!(
-    LinkageFixed::<0, 0, 3>::start()
-        .pen_color(FOREGROUND_COLOR)
-        .pen_width(3.2),
-    pirouette::fixed()
-))
-.view();
+const STYLE: LinkageView<'static, 0, 0> = LinkageFixed::<0, 0, 3>::start()
+    .pen_color(FOREGROUND_COLOR)
+    .pen_width(3.2)
+    .view();
+const LINKAGE: pirouette::View = linkage_combine!(STYLE, pirouette::view());
 
 // The motion capture data, read at compile time from BVH and stored in the binary.
 #[allow(long_running_const_eval)]

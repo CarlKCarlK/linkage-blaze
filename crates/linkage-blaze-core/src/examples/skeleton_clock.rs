@@ -54,8 +54,9 @@ linkage_program! {
         program: linkage_combine!(
             LinkageFixed::<0, 0, 3>::start()
                 .pen_width(3.5)
-                .pen_color(FIGURE_COLOR),
-            pirouette::fixed()
+                .pen_color(FIGURE_COLOR)
+                .view(),
+            pirouette::view()
         ),
         dof: 132,
         marks: 6,
