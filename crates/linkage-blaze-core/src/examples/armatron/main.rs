@@ -12,8 +12,8 @@ pub mod reverse_kinematics;
 use core::convert::Infallible;
 
 use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageView, Projection, Rgb888, linkage_combine,
-    linkage_extend, linkage_file, linkage_program, linkage_view, linkage_with_joint_spheres,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Projection, Rgb888,
+    linkage_file,
 };
 use device_envoy_core::{
     button::Button,
@@ -44,7 +44,7 @@ pub const FOREGROUND_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 // Build the displayed scene in layers:
 // - `CAMERA_CONTROL` provides the view-control params shared by the scene and
 //   the arm-tip distance helper linkage.
-// - `SceneWithArm` adds the static floor grid and articulated arm plus joint spheres.
+// - `SCENE_WITH_ARM` adds the static floor grid and articulated arm plus joint spheres.
 //       The arm linkage ends with an invisible tip in the center of the hand.
 // - `LINKAGE` appends a red ghost arm that shows the current target pose.
 linkage_file! {
@@ -62,31 +62,32 @@ linkage_file! {
         file: "../../assets/examples/armatron/armatron1.lb.rs",
     }
 }
-linkage_program! {
-    pub SceneWithArm {
-        program: linkage_combine!(
-            camera_control::view(),
-            grid9x9::view(),
-            linkage_with_joint_spheres!(armatron1::fixed(), 0.15).view(),
-        ),
-        dof: 9,
-        marks: 3,
-    }
-}
-const LINKAGE: LinkageView<15, 4> = linkage_view!(linkage_extend!(
-    linkage_combine!(
-        linkage_extend!(SceneWithArm::fixed(); .restore("scene origin")).view(),
-        armatron1::view(),
-    );
+// TODO000API Named binary intermediates keep the three ordered scene inputs readable.
+const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = camera_control::fixed().combine(grid9x9::view());
+// TODO000API The explicit joint-sphere capacity is the cost of ordinary fixed construction.
+const ARMATRON_WITH_JOINTS: LinkageFixed<6, 1, 45> =
+    armatron1::fixed().with_joint_spheres::<45>(0.15);
+// TODO000API This typed fixed intermediate replaces the removed named-program macro.
+const SCENE_WITH_ARM: LinkageFixed<9, 3, 132> =
+    CAMERA_AND_GRID.combine(ARMATRON_WITH_JOINTS.view());
+// TODO000API Restoring after the scene requires a larger explicitly owned fixed capacity.
+const SCENE_WITH_ARM_RESTORED: LinkageFixed<9, 3, 133> =
+    LinkageFixed::from_view::<133>(SCENE_WITH_ARM.view()).restore("scene origin");
+// TODO000API The final scene combines the restored scene with a ghost arm and preserves fixed ownership.
+const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM_RESTORED
+    .combine(armatron1::view())
     .pen_color(Rgb888::CSS_RED)
-    .sphere_param("close hand", 0.5, 0.0)
-));
+    .sphere_param("close hand", 0.5, 0.0);
+// TODO000API Rendering borrows the final fixed owner through the common view boundary.
+const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
 // Minimal linkage used only to measure arm-tip distance to the target.
-const ARM_TIP_LINKAGE: LinkageView<9, 2> =
-    linkage_combine!(camera_control::view(), armatron1::view());
+// TODO000API This separate consumer linkage uses a named binary fixed intermediate.
+const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> =
+    camera_control::fixed().combine(armatron1::view());
+const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
 
 // The ghost arm's params begin immediately after the displayed scene's params.
-const TARGET_PARAM_START: usize = SceneWithArm::DOF;
+const TARGET_PARAM_START: usize = SCENE_WITH_ARM.dof();
 const ORIENTATION: Orientation = Orientation::Landscape;
 
 const XY_VIEW_PARAM_INDEX: usize = LINKAGE.param_index(XY_VIEW_SLIDER.label(), 0);

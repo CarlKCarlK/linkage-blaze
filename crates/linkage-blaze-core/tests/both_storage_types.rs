@@ -1,9 +1,7 @@
 #![cfg(feature = "alloc")]
 
 use linkage_blaze_core::{
-    LinkageBuf, LinkageFixed, Rgb888, WebColors, linkage, linkage_buf, linkage_combine,
-    linkage_extend, linkage_file, linkage_fixed, linkage_program, linkage_view,
-    linkage_with_joint_spheres,
+    LinkageBuf, LinkageFixed, Rgb888, WebColors, linkage, linkage_buf, linkage_file, linkage_fixed,
 };
 
 mod common_linkage_tests;
@@ -21,43 +19,34 @@ linkage_file! {
 linkage_file! {
     armatron1 { file: "linkages/armatron1.lb.rs" }
 }
-const CAMERA_AND_GRID: linkage_blaze_core::LinkageView<'static, 3, 2> =
-    linkage_combine!(camera_control::view(), grid9x9::view());
+// TODO000API Named binary intermediate for the camera and grid inputs.
+const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = camera_control::fixed().combine(grid9x9::view());
+// TODO000API Explicit capacity for the fixed joint-sphere transformation.
 const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> =
-    linkage_with_joint_spheres!(armatron1::fixed(), 0.15);
-linkage_program! {
-    SceneWithArm {
-        program: linkage_combine!(
-            camera_control::view(),
-            grid9x9::view(),
-            linkage_view!(linkage_with_joint_spheres!(armatron1::fixed(), 0.15)),
-        ),
-        dof: 9,
-        marks: 3,
-    }
-}
-const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 132> = SceneWithArm::fixed();
+    armatron1::fixed().with_joint_spheres::<45>(0.15);
+// TODO000API Three ordered inputs are represented by named fixed intermediates.
+const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 132> =
+    CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS.view());
+// TODO000API The restore suffix needs one additional fixed step slot.
 const ARMATRON_LINKAGE0_RESTORED: LinkageFixed<9, 3, 133> =
-    linkage_extend!(SceneWithArm::fixed(); .restore("scene origin"));
-const ARMATRON_LINKAGE: LinkageFixed<15, 4, 159> = linkage_extend!(
-    linkage_combine!(ARMATRON_LINKAGE0_RESTORED.view(), armatron1::view());
+    LinkageFixed::from_view::<133>(ARMATRON_LINKAGE0.view()).restore("scene origin");
+// TODO000API The final fixed combination preserves ownership and uses the annotated output size.
+const ARMATRON_LINKAGE: LinkageFixed<15, 4, 159> = ARMATRON_LINKAGE0_RESTORED
+    .combine(armatron1::view())
     .pen_color(Rgb888::CSS_RED)
-    .sphere_param("close hand", 0.5, 0.0)
-);
+    .sphere_param("close hand", 0.5, 0.0);
+// TODO000API Separate arm-tip composition remains a named binary fixed intermediate.
+const ARMATRON_RK_LINKAGE_FIXED: LinkageFixed<9, 2, 32> =
+    camera_control::fixed().combine(armatron1::view());
 const ARMATRON_RK_LINKAGE: linkage_blaze_core::LinkageView<'static, 9, 2> =
-    linkage_combine!(camera_control::view(), armatron1::view());
+    ARMATRON_RK_LINKAGE_FIXED.view();
 
 const MEASURED_CLOCK: LinkageFixed<2, 2, 46> = clock_hands::fixed();
 
-const DERIVED_COMBINATION: linkage_blaze_core::LinkageView<'static, 3, 2> =
-    linkage_combine!(camera_control::view(), grid9x9::view());
-const VARIADIC_COMBINATION: linkage_blaze_core::LinkageView<'static, 9, 3> = linkage_combine!(
-    camera_control::view(),
-    grid9x9::view(),
-    linkage_view!(linkage_with_joint_spheres!(armatron1::fixed(), 0.15)),
-);
-const DERIVED_JOINTS: LinkageFixed<6, 1, 45> =
-    linkage_with_joint_spheres!(armatron1::fixed(), 0.15);
+const DERIVED_COMBINATION: linkage_blaze_core::LinkageView<'static, 3, 2> = CAMERA_AND_GRID.view();
+const VARIADIC_COMBINATION: linkage_blaze_core::LinkageView<'static, 9, 3> =
+    ARMATRON_LINKAGE0.view();
+const DERIVED_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1_WITH_JOINTS;
 
 const CLOCK_FIXED: LinkageFixed<2, 2, 46> = clock_hands::fixed();
 const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 46> = clock_hands::fixed();
@@ -197,7 +186,7 @@ fn armatron_grid_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Er
 #[test]
 fn armatron_combined_linkages_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
     let full_buf = LinkageBuf::from(&ARMATRON_LINKAGE);
-    let rk_buf = LinkageBuf::from(&ARMATRON_RK_LINKAGE.__to_fixed::<32>());
+    let rk_buf = LinkageBuf::from(&ARMATRON_RK_LINKAGE_FIXED);
 
     let full_params = [0.5_f32; 15];
     let rk_params = [0.5_f32; 9];
@@ -216,17 +205,18 @@ fn armatron_full_scene_linkage_built_with_buf() -> Result<(), linkage_blaze_core
     let camera_control = linkage_buf!("linkages/camera_control.lb.rs", 3, 1);
     let grid_9x9 = linkage_buf!("linkages/grid_9x9.lb.rs", 0, 1);
 
-    let camera_and_grid: LinkageBuf<3, 2> = camera_control.combine_ref(grid_9x9.view());
+    // TODO000API Buffer combination consumes the left owner and copies the right view.
+    let camera_and_grid: LinkageBuf<3, 2> = camera_control.clone().combine(grid_9x9.view());
     let linkage0: LinkageBuf<9, 3> =
-        camera_and_grid.combine(armatron1.with_joint_spheres_ref(0.15));
+        camera_and_grid.combine(armatron1.clone().with_joint_spheres(0.15).view());
 
     let full_linkage = linkage0
         .restore("scene origin")
-        .combine_ref(armatron1.view())
+        .combine(armatron1.view())
         .pen_color(Rgb888::CSS_RED)
         .sphere_param("close hand", 0.5, 0.0);
 
-    let rk_linkage = camera_control.combine(armatron1);
+    let rk_linkage = camera_control.combine(armatron1.view());
 
     assert_eq!(full_linkage.view().dof(), 15);
     assert_eq!(full_linkage.view().len(), ARMATRON_LINKAGE.view().len());
@@ -276,7 +266,7 @@ fn linkage_buf_combine_combines_params_and_steps() -> Result<(), linkage_blaze_c
         .left_param("y", 0.0, 5.0);
 
     // The output type supplies the combined DOF and mark capacities for `combine`.
-    let c: LinkageBuf<2, 0> = a.combine(b);
+    let c: LinkageBuf<2, 0> = a.combine(b.view());
 
     let params = [0.5, 0.75];
     let final_pose = c.view().final_pose(&params)?;
@@ -293,7 +283,7 @@ fn linkage_buf_combine_combines_params_and_steps() -> Result<(), linkage_blaze_c
 
 #[cfg(feature = "alloc")]
 #[test]
-fn linkage_buf_combine_ref_combines_from_view() -> Result<(), linkage_blaze_core::Error> {
+fn linkage_buf_combine_combines_from_view() -> Result<(), linkage_blaze_core::Error> {
     const FIXED_A: LinkageFixed<1, 0, 8> = LinkageFixed::start()
         .define_param("x", 0.5)
         .forward_param("x", 0.0, 10.0);
@@ -305,8 +295,8 @@ fn linkage_buf_combine_ref_combines_from_view() -> Result<(), linkage_blaze_core
     let buf_a = LinkageBuf::from(&FIXED_A);
     let view_b = FIXED_B.view();
 
-    // The output type supplies the combined DOF and mark capacities for `combine_ref`.
-    let combined: LinkageBuf<2, 0> = buf_a.combine_ref(view_b);
+    // TODO000API The output type supplies the combined DOF and mark capacities for `combine`.
+    let combined: LinkageBuf<2, 0> = buf_a.combine(view_b);
 
     let params = [0.5, 0.75];
     let pose = combined.view().final_pose(&params)?;
@@ -341,7 +331,7 @@ fn armatron_buf_combine_combines_limbs() -> Result<(), linkage_blaze_core::Error
         .forward(3.0);
 
     // The output type supplies the combined DOF and mark capacities for `combine`.
-    let combined_arm: LinkageBuf<3, 0> = upper_arm.combine(forearm);
+    let combined_arm: LinkageBuf<3, 0> = upper_arm.combine(forearm.view());
 
     let params = [0.5, 0.5, 0.5]; // spin_whole_arm, lower_arm, bend_elbow
     let pose = combined_arm.view().final_pose(&params)?;

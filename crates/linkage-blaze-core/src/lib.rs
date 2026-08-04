@@ -448,9 +448,10 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         MARKS
     }
 
-    /// Materialize this view into exact fixed backing storage.
-    #[doc(hidden)]
-    pub const fn __to_fixed<const N: usize>(self) -> LinkageFixed<DOF, MARKS, N> {
+    /// Copy this view into fixed backing storage.
+    ///
+    /// `N` must be large enough for the active steps.
+    pub const fn to_fixed<const N: usize>(self) -> LinkageFixed<DOF, MARKS, N> {
         assert!(
             self.steps.len() <= N,
             "fixed backing is too small for linkage view"
@@ -471,15 +472,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         }
     }
 
-    /// Compatibility entry point for structural macros that need fixed backing.
-    #[doc(hidden)]
-    pub const fn __resize_steps<const N: usize>(self) -> LinkageFixed<DOF, MARKS, N> {
-        self.__to_fixed()
-    }
-
-    /// Combine two views into one exact fixed backing value.
-    #[doc(hidden)]
-    pub const fn __combine_fixed<
+    const fn combine_fixed<
         const DOF2: usize,
         const MARKS2: usize,
         const DOF_OUT: usize,
@@ -1853,7 +1846,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 
     /// Count the exact output slots required by [`Self::with_joint_spheres`].
     #[doc(hidden)]
-    pub const fn __with_joint_spheres_step_count(&self) -> usize {
+    pub const fn with_joint_spheres_step_count(&self) -> usize {
         let mut count = self.len;
         let mut step_index = 0;
         while step_index < self.len {
@@ -2195,30 +2188,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     //
     // This is public only because exported declarative macros expand in downstream crates.
     #[doc(hidden)]
-    pub const fn __resize_steps<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
-        let mut out_steps = [const { Step::Start }; OUT_N];
-        let mut step_index = 0;
-        while step_index < self.len {
-            out_steps[step_index] = self.steps[step_index];
-            step_index += 1;
-        }
-        assert!(self.len <= OUT_N, "OUT_N too small for actual step count");
-        LinkageFixed {
-            steps: out_steps,
-            len: self.len,
-            params: self.params,
-            param_len: self.param_len,
-            mark_names: self.mark_names,
-            mark_len: self.mark_len,
-        }
-    }
-
     /// Materialize fixed storage for macros that accept either a view or fixed input.
     #[doc(hidden)]
-    pub const fn __to_fixed<const OUT_N: usize>(self) -> LinkageFixed<DOF, MARKS, OUT_N> {
-        self.__resize_steps()
-    }
-
     const fn strip_fixed_noops_same_capacity(self) -> Self {
         let mut out_steps = [const { Step::Start }; N];
         let mut out_len = 0usize;
@@ -2347,81 +2318,26 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     pub const fn combine<
         const DOF2: usize,
         const MARKS2: usize,
-        const N2: usize,
         const DOF_OUT: usize,
         const MARKS_OUT: usize,
         const N_OUT: usize,
     >(
         self,
-        other: LinkageFixed<DOF2, MARKS2, N2>,
+        other: LinkageView<'_, DOF2, MARKS2>,
     ) -> LinkageFixed<DOF_OUT, MARKS_OUT, N_OUT> {
-        let needed_dof = DOF + DOF2;
-        if DOF_OUT != needed_dof {
-            let _: u8 = [][needed_dof]; // correct DOF_OUT = N shown as "the index is N" in the compile error
-        }
-        let needed_marks = self.mark_len + other.mark_len;
-        if MARKS_OUT < needed_marks {
-            let _: u8 = [][needed_marks]; // correct MARKS_OUT = N shown as "the index is N" in the compile error
-        }
-        let other_steps = other.len - 1; // skip the implicit Start step
-        let needed_n = self.len + other_steps;
-        if N_OUT < needed_n {
-            let _: u8 = [][needed_n]; // correct N_OUT = N shown as "the index is N" in the compile error
-        }
+        self.view().combine_fixed(other)
+    }
+}
 
-        let mut out = LinkageFixed {
-            steps: [const { Step::Start }; N_OUT],
-            len: 0,
-            params: [Param::EMPTY; DOF_OUT],
-            param_len: 0,
-            mark_names: [""; MARKS_OUT],
-            mark_len: 0,
-        };
-
-        // Copy self's steps as-is
-        let mut i = 0;
-        while i < self.len {
-            out.steps[i] = self.steps[i];
-            i += 1;
-        }
-        out.len = self.len;
-
-        // Copy other's steps (skip index 0 = Start), offsetting param and remember indices
-        let mut i = 1;
-        while i < other.len {
-            out.steps[out.len] = other.steps[i].offset_params(DOF, self.mark_len);
-            out.len += 1;
-            i += 1;
-        }
-
-        // Copy self's params
-        let mut i = 0;
-        while i < self.param_len {
-            out.params[i] = self.params[i];
-            i += 1;
-        }
-
-        // Copy other's params
-        let mut i = 0;
-        while i < other.param_len {
-            out.params[DOF + i] = other.params[i];
-            i += 1;
-        }
-        out.param_len = self.param_len + other.param_len;
-
-        let mut i = 0;
-        while i < self.mark_len {
-            out.mark_names[i] = self.mark_names[i];
-            i += 1;
-        }
-        let mut i = 0;
-        while i < other.mark_len {
-            out.mark_names[self.mark_len + i] = other.mark_names[i];
-            i += 1;
-        }
-        out.mark_len = self.mark_len + other.mark_len;
-
-        out
+impl<const DOF: usize, const MARKS: usize> LinkageFixed<DOF, MARKS, 0> {
+    /// Copy a borrowed view into fixed backing storage.
+    ///
+    /// `OUT_N` must be large enough for the active steps. The zero-capacity
+    /// implementation type is only an associated-function anchor.
+    pub const fn from_view<const OUT_N: usize>(
+        view: LinkageView<'_, DOF, MARKS>,
+    ) -> LinkageFixed<DOF, MARKS, OUT_N> {
+        view.to_fixed()
     }
 }
 
@@ -2645,12 +2561,10 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
         }
     }
 
-    /// Combine another owned linkage buffer's steps and parameters into this one.
+    /// Combine a borrowed linkage view into this buffer.
     ///
-    /// Consumes both buffers and produces a new one with DOF_OUT = DOF + DOF2.
-    /// Parameters from `other` are concatenated after parameters from `self`.
-    /// Steps from `other` (excluding its implicit Start step) are appended after this linkage's steps,
-    /// with parameter and mark indices offset appropriately.
+    /// The receiver is consumed, while the right input is copied. The output
+    /// annotation supplies the combined parameter and mark capacities.
     ///
     /// # Panics
     ///
@@ -2672,7 +2586,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     ///     .left_param("y", 0.0, 5.0);
     ///
     /// // The output annotation supplies the combined DOF and mark capacities.
-    /// let c: LinkageBuf<2, 0> = a.combine(b);
+    /// let c: LinkageBuf<2, 0> = a.combine(b.view());
     /// let params = [0.5, 0.5];
     /// let pose = c.view().final_pose(&params)?;
     /// # Ok(())
@@ -2686,7 +2600,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
         const MARKS_OUT: usize,
     >(
         self,
-        other: LinkageBuf<DOF2, MARKS2>,
+        other: LinkageView<'_, DOF2, MARKS2>,
     ) -> LinkageBuf<DOF_OUT, MARKS_OUT> {
         assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF + DOF2");
         assert!(
@@ -2721,11 +2635,11 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
 
         // Copy other's params
         let mut i = 0;
-        while i < other.param_len {
+        while i < DOF2 {
             out.params[DOF + i] = other.params[i];
             i += 1;
         }
-        out.param_len = self.param_len + other.param_len;
+        out.param_len = self.param_len + DOF2;
 
         let mut i = 0;
         while i < self.mark_len {
@@ -2738,81 +2652,6 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             i += 1;
         }
         out.mark_len = self.mark_len + other.mark_len;
-
-        out
-    }
-
-    /// Produce a new linkage by combining `self` (borrowed) with a `LinkageView` (also borrowed).
-    ///
-    /// Both inputs are preserved — `self` is not consumed, and `other` is accessed via a
-    /// shared view. The name `combine_ref` signals that neither side is moved.
-    /// Use `combine` when you are done with both inputs and want to avoid the clone.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `DOF_OUT != DOF + DOF2`.
-    pub fn combine_ref<
-        const DOF2: usize,
-        const MARKS2: usize,
-        const DOF_OUT: usize,
-        const MARKS_OUT: usize,
-    >(
-        &self,
-        other: LinkageView<'_, DOF2, MARKS2>,
-    ) -> LinkageBuf<DOF_OUT, MARKS_OUT> {
-        assert!(DOF_OUT == DOF + DOF2, "DOF_OUT must equal DOF + DOF2");
-        assert!(
-            MARKS_OUT >= self.mark_len + other.mark_len(),
-            "MARKS_OUT must fit all marks from both linkages"
-        );
-
-        let mut out = LinkageBuf {
-            params: [Param::EMPTY; DOF_OUT],
-            param_len: 0,
-            steps: alloc::vec::Vec::new(),
-            mark_names: [""; MARKS_OUT],
-            mark_len: 0,
-        };
-
-        // Copy self's steps (including Start)
-        out.steps.extend_from_slice(&self.steps);
-
-        // Append steps from the view (skip Start)
-        let mark_offset = self.mark_len;
-        let view_steps = other.steps();
-        for i in 1..view_steps.len() {
-            let step = view_steps[i].offset_params(DOF, mark_offset);
-            out.steps.push(step);
-        }
-
-        // Copy self's params
-        let mut i = 0;
-        while i < self.param_len {
-            out.params[i] = self.params[i];
-            i += 1;
-        }
-
-        // Copy params from the view
-        let view_params = other.params();
-        let mut i = 0;
-        while i < DOF2 {
-            out.params[DOF + i] = view_params[i];
-            i += 1;
-        }
-        out.param_len = self.param_len + DOF2;
-
-        let mut i = 0;
-        while i < self.mark_len {
-            out.mark_names[i] = self.mark_names[i];
-            i += 1;
-        }
-        let other_mark_names = other.mark_names();
-        let mut i = 0;
-        while i < other.mark_len() {
-            out.mark_names[self.mark_len + i] = other_mark_names[i];
-            i += 1;
-        }
-        out.mark_len = self.mark_len + other.mark_len();
 
         out
     }
@@ -4410,53 +4249,6 @@ macro_rules! __linkage_file_buf {
     ($path:literal) => {};
 }
 
-/// Declare one or more named linkage programs constructed from expressions.
-///
-/// For named `.lb.rs` files, use [`linkage_file!`].
-///
-/// The expression form accepts a [`LinkageView`], derives `STEP_COUNT`, and
-/// retains fixed storage only for the named program's `fixed()` constructor.
-///
-/// ```rust,no_run
-/// # use linkage_blaze_core::{linkage, linkage_program, LinkageFixed, Rgb888};
-/// linkage_program! {
-///     ClockLinkage {
-///         program: LinkageFixed::<0, 0, 1>::start(),
-///         dof: 0,
-///         marks: 0,
-///     }
-/// }
-/// ```
-#[macro_export]
-macro_rules! linkage_program {
-    ($( $(#[$attribute:meta])* $visibility:vis $name:ident {
-        program: $program:expr,
-        dof: $dof:expr,
-        marks: $marks:expr $(,)?
-    })*) => {
-        $(
-            $(#[$attribute])*
-            $visibility struct $name;
-
-            impl $name {
-                pub const DOF: usize = $dof;
-                pub const MARKS: usize = $marks;
-                pub const STEP_COUNT: usize = $program.len();
-
-                pub const fn fixed() -> $crate::LinkageFixed<
-                    { $name::DOF }, { $name::MARKS }, { $name::STEP_COUNT }
-                > {
-                    let program = $program;
-                    assert!(program.dof() == $dof, "DOF must equal the number of defined parameters");
-                    assert!(program.mark_count() == $marks, "MARKS must equal the number of defined marks");
-                    program.__to_fixed::<{ $name::STEP_COUNT }>()
-                }
-
-            }
-        )*
-    };
-}
-
 /// Declare access to one external `.lb.rs` linkage file as a Rust module.
 ///
 /// The file is measured during const evaluation. `DOF`, `MARKS`, and
@@ -4527,7 +4319,7 @@ macro_rules! linkage_file {
                 $crate::linkage_fixed!($path, DOF, MARKS)
             }
 
-            const __VIEW: View = $crate::linkage_view!(fixed());
+            const __VIEW: View = fixed().view();
 
             pub const fn view() -> View {
                 __VIEW
@@ -4541,137 +4333,6 @@ macro_rules! linkage_file {
     ($($tokens:tt)*) => {
         compile_error!("linkage_file! accepts exactly one file declaration per invocation");
     };
-}
-
-/// Combine two or more const-evaluable linkage views into a promoted view.
-///
-/// Inputs are views and the result is a view. Exact fixed backing is generated
-/// and promoted internally during const evaluation; no runtime allocation is
-/// performed. Later inputs continue from the preceding final pose, with their
-/// parameter and mark indexes offset and their implicit `Start` step skipped.
-///
-/// The variadic form is left-associative: later programs continue from the
-/// preceding final pose, and each later implicit `Start` step is skipped.
-///
-/// ```rust,no_run
-/// # use linkage_blaze_core::{linkage_combine, LinkageFixed, LinkageView};
-/// # mod first_program {
-/// #     use linkage_blaze_core::{LinkageFixed, LinkageView};
-/// #     pub type View = LinkageView<'static, 0, 0>;
-/// #     const FIXED: LinkageFixed<0, 0, 1> = LinkageFixed::start();
-/// #     pub const fn view() -> View { FIXED.view() }
-/// # }
-/// # mod second_program {
-/// #     use linkage_blaze_core::{LinkageFixed, LinkageView};
-/// #     pub type View = LinkageView<'static, 0, 0>;
-/// #     const FIXED: LinkageFixed<0, 0, 1> = LinkageFixed::start();
-/// #     pub const fn view() -> View { FIXED.view() }
-/// # }
-/// # mod combined_program { pub type View = linkage_blaze_core::LinkageView<'static, 0, 0>; }
-/// const COMBINED: combined_program::View = linkage_combine!(
-///     first_program::view(),
-///     second_program::view(),
-/// );
-/// ```
-#[macro_export]
-macro_rules! linkage_combine {
-    ($first:expr, $second:expr $(,)?) => {{
-        const __COMBINED: $crate::LinkageView<
-            'static,
-            { ($first).dof() + ($second).dof() },
-            { ($first).marks() + ($second).marks() },
-        > = ($first)
-            .__combine_fixed::<
-                _,
-                _,
-                { ($first).dof() + ($second).dof() },
-                { ($first).marks() + ($second).marks() },
-                { ($first).len() + ($second).len() - 1 },
-            >($second)
-            .view()
-        ;
-        __COMBINED
-    }};
-    ($first:expr, $second:expr, $($rest:expr),+ $(,)?) => {
-        $crate::linkage_combine!(
-            $crate::linkage_combine!($first, $second),
-            $($rest),+
-        )
-    };
-}
-
-/// Add joint spheres to a const-evaluable fixed linkage with exact storage.
-///
-/// This structural transform derives its output capacity from the linkage
-/// contents and adds one sphere at each joint.
-///
-/// ```rust,no_run
-/// # use linkage_blaze_core::{linkage_with_joint_spheres, LinkageFixed};
-/// const LINKAGE: LinkageFixed<0, 0, 4> = linkage_with_joint_spheres!(
-///     LinkageFixed::<0, 0, 2>::start().forward(1.0),
-///     0.15
-/// );
-/// ```
-#[macro_export]
-macro_rules! linkage_with_joint_spheres {
-    ($linkage:expr, $radius:expr) => {{ $linkage.with_joint_spheres::<{ $linkage.__with_joint_spheres_step_count() }>($radius) }};
-}
-
-/// Append ordinary fluent DSL operations with exact fixed storage.
-///
-/// ```rust,no_run
-/// # use embedded_graphics::pixelcolor::Rgb888;
-/// # use embedded_graphics::pixelcolor::WebColors;
-/// # use linkage_blaze_core::{linkage_extend, LinkageFixed};
-/// const LINKAGE: LinkageFixed<1, 1, 5> = linkage_extend!(
-///     LinkageFixed::<1, 1, 3>::start()
-///         .define_param("radius", 0.5)
-///         .mark("origin");
-///     .restore("origin")
-///     .pen_color(Rgb888::CSS_RED)
-///     .sphere_param("radius", 0.0, 1.0)
-/// );
-/// ```
-///
-/// The first implementation does not permit `define_param` or creation of
-/// new marks; those must be declared in the source program.
-#[macro_export]
-macro_rules! linkage_extend {
-    ($linkage:expr; .define_param($($args:tt)*) $($rest:tt)*) => {
-        compile_error!("linkage_extend! cannot define parameters; declare them in the source program");
-    };
-    ($linkage:expr; .mark($($args:tt)*) $($rest:tt)*) => {
-        compile_error!("linkage_extend! cannot create marks; declare them in the source program");
-    };
-    ($linkage:expr; $(.$method:ident($($args:tt)*))+ $(,)?) => {{
-        const __APPENDED_STEP_COUNT: usize =
-            $crate::LinkageStepCount::start()
-                $(.$method($($args)*))*
-                .step_count() - 1;
-        $linkage
-            .__resize_steps::<{ $linkage.step_count() + __APPENDED_STEP_COUNT }>()
-            $(.$method($($args)*))*
-    }};
-}
-
-/// Materialize a fixed expression with backing storage equal to its active length.
-///
-/// This shrinks backing to active steps, promotes the final data, and erases
-/// `N`. It does not perform another optimization pass.
-///
-/// ```rust,no_run
-/// # use linkage_blaze_core::{linkage_view, LinkageFixed, LinkageView};
-/// const LINKAGE: LinkageView<'static, 0, 0> = linkage_view!(
-///     LinkageFixed::<0, 0, 8>::start().forward(1.0)
-/// );
-/// ```
-#[macro_export]
-macro_rules! linkage_view {
-    ($linkage:expr) => {{
-        $linkage
-            .__resize_steps::<{ $linkage.step_count() }>()
-            .view()
-    }};
 }
 
 /// Include a `.lb.rs` linkage file as a [`LinkageBuf`] expression.
@@ -5599,7 +5260,7 @@ mod tests {
             .left(0.0)
             .up(1.0);
 
-        const STRIPPED: LinkageView<'static, 0, 0> = linkage_view!(BASE);
+        const STRIPPED: LinkageView<'static, 0, 0> = BASE.view();
 
         let steps = STRIPPED.steps();
         assert_eq!(steps.len(), 5);

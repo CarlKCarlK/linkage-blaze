@@ -8,7 +8,7 @@ use core::{
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
-    bvh_motion, bvh_parse::BvhMotion, linkage_combine, linkage_file,
+    bvh_motion, bvh_parse::BvhMotion, linkage_file,
 };
 use device_envoy_core::{
     Error as CoreError,
@@ -33,18 +33,21 @@ pub const TOP_FONT: MonoFont<'static> = FONT_6X10;
 pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal
 pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
 
-// todo00000 review every linkage_file!, linkage_combine!, etc.
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
 linkage_file! {
     pirouette {
         file: "../assets/mocap/pirouette.lb.rs",
     }
 }
-const STYLE: LinkageView<'static, 0, 0> = LinkageFixed::<0, 0, 3>::start()
+// TODO000API The drawing style is an owned fixed prefix for the file linkage.
+const STYLE: LinkageFixed<0, 0, 3> = LinkageFixed::<0, 0, 3>::start()
     .pen_color(FOREGROUND_COLOR)
-    .pen_width(3.2)
-    .view();
-const LINKAGE: pirouette::View = linkage_combine!(STYLE, pirouette::view());
+    .pen_width(3.2);
+// TODO000API The typed fixed result makes the combined owner and capacity explicit.
+const LINKAGE_FIXED: LinkageFixed<132, 6, { 3 + pirouette::STEP_COUNT - 1 }> =
+    STYLE.combine(pirouette::view());
+// TODO000API Rendering borrows the combined fixed owner through the common view boundary.
+const LINKAGE: LinkageView<132, 6> = LINKAGE_FIXED.view();
 
 // The motion capture data, read at compile time from BVH and stored in the binary.
 #[allow(long_running_const_eval)]

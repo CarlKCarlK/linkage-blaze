@@ -1,6 +1,6 @@
 #[cfg(feature = "alloc")]
 use linkage_blaze_core::LinkageBuf;
-use linkage_blaze_core::{DrawItem3d, LinkageFixed, Pose, Vec3, linkage_file, linkage_view};
+use linkage_blaze_core::{DrawItem3d, LinkageFixed, Pose, Vec3, linkage_file};
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
 // 538 steps.
@@ -28,8 +28,7 @@ const PIROUETTE_BODY: LinkageFixed<4, 6, { pirouette::STEP_COUNT }> = pirouette:
 // Full peephole pipeline in const: strip zeros, merge adjacent same-type fixed
 // steps, strip again.  N (capacity) shrinks toward ~384.  This must evaluate
 // identically to PIROUETTE_BODY at every input.
-const PIROUETTE_BODY_VIEW: linkage_blaze_core::LinkageView<'static, 4, 6> =
-    linkage_view!(PIROUETTE_BODY);
+const PIROUETTE_BODY_VIEW: linkage_blaze_core::LinkageView<'static, 4, 6> = PIROUETTE_BODY.view();
 const PIROUETTE_FULL_VIEW: linkage_blaze_core::LinkageView<'static, 132, 6> = pirouette::view();
 
 #[test]

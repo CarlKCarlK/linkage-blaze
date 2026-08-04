@@ -5,7 +5,7 @@ use core::{array::from_fn, convert::Infallible, fmt};
 
 use crate::{
     DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, MarkError, Projection, Rgb888,
-    linkage_combine, linkage_file, linkage_program, linkage_view,
+    linkage_file,
 };
 use device_envoy_core::{
     UnwrapInfallible,
@@ -49,27 +49,20 @@ linkage_file! {
 }
 
 // Prepend a linkage drawing style.
-linkage_program! {
-    pub Linkage1 {
-        program: linkage_combine!(
-            LinkageFixed::<0, 0, 3>::start()
-                .pen_width(3.5)
-                .pen_color(FIGURE_COLOR)
-                .view(),
-            pirouette::view()
-        ),
-        dof: 132,
-        marks: 6,
-    }
-}
+// TODO000API The style prefix and file linkage use one typed fixed intermediate.
+const STYLE: LinkageFixed<0, 0, 3> = LinkageFixed::start().pen_width(3.5).pen_color(FIGURE_COLOR);
+// TODO000API The explicit output capacity preserves fixed ownership while combining style and motion.
+const LINKAGE_WITH_STYLE: LinkageFixed<132, 6, { 3 + pirouette::STEP_COUNT - 1 }> =
+    STYLE.combine(pirouette::view());
 
 // Keep only the three clock-driven parameters, then specialize the fixed linkage.
-const LINKAGE: LinkageView<3, 6> = linkage_view!(
-    Linkage1::fixed()
-        // turn the left foot out jauntily.
-        .freeze_param_name::<131>("l_shin_yrotation", 57.6)
-        .retain_param_names::<3>(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"])
-);
+// TODO000API Specialization changes DOF while retaining the fixed backing capacity.
+const LINKAGE_FIXED: LinkageFixed<3, 6, { 3 + pirouette::STEP_COUNT - 1 }> = LINKAGE_WITH_STYLE
+    // turn the left foot out jauntily.
+    .freeze_param_name::<131>("l_shin_yrotation", 57.6)
+    .retain_param_names::<3>(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"]);
+// TODO000API Rendering borrows the specialized fixed owner through LinkageView.
+const LINKAGE: LinkageView<3, 6> = LINKAGE_FIXED.view();
 
 // ── Projection ───────────────────────────────────────────────────────────────
 
