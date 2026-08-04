@@ -1792,75 +1792,6 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         None
     }
 
-    /// Return a new linkage with a sphere at the start and end of every move step
-    /// (Move, Left, Up — both fixed and parametric).
-    ///
-    /// Spheres at adjacent move endpoints overlap and render twice, which is fine.
-    /// `N_OUT` must be ≥ `self.len` + (number of move steps × 2).
-    pub const fn with_joint_spheres<const N_OUT: usize>(
-        self,
-        joint_radius: f32,
-    ) -> LinkageFixed<DOF, MARKS, N_OUT> {
-        let mut out = LinkageFixed {
-            steps: [const { Step::Start }; N_OUT],
-            len: 0,
-            params: [Param::EMPTY; DOF],
-            param_len: self.param_len,
-            mark_names: [""; MARKS],
-            mark_len: self.mark_len,
-        };
-        let mut i = 0;
-        while i < self.param_len {
-            out.params[i] = self.params[i];
-            i += 1;
-        }
-        let mut i = 0;
-        while i < self.mark_len {
-            out.mark_names[i] = self.mark_names[i];
-            i += 1;
-        }
-        let mut i = 0;
-        while i < self.len {
-            let step = self.steps[i];
-            let is_move = match step {
-                Step::Move(_) | Step::Left(_) | Step::Up(_) => true,
-                _ => false,
-            };
-            if is_move {
-                assert!(out.len < N_OUT, "N_OUT too small for with_joint_spheres");
-                out.steps[out.len] = Step::Sphere(joint_radius);
-                out.len += 1;
-            }
-            assert!(out.len < N_OUT, "N_OUT too small for with_joint_spheres");
-            out.steps[out.len] = step;
-            out.len += 1;
-            if is_move {
-                assert!(out.len < N_OUT, "N_OUT too small for with_joint_spheres");
-                out.steps[out.len] = Step::Sphere(joint_radius);
-                out.len += 1;
-            }
-            i += 1;
-        }
-        out
-    }
-
-    /// Count the exact output slots required by [`Self::with_joint_spheres`].
-    #[doc(hidden)]
-    pub const fn with_joint_spheres_step_count(&self) -> usize {
-        let mut count = self.len;
-        let mut step_index = 0;
-        while step_index < self.len {
-            if matches!(
-                self.steps[step_index],
-                Step::Move(_) | Step::Left(_) | Step::Up(_)
-            ) {
-                count += 2;
-            }
-            step_index += 1;
-        }
-        count
-    }
-
     const fn push(mut self, step: Step) -> Self {
         assert!(
             self.len < N,
@@ -2329,18 +2260,6 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     }
 }
 
-impl<const DOF: usize, const MARKS: usize> LinkageFixed<DOF, MARKS, 0> {
-    /// Copy a borrowed view into fixed backing storage.
-    ///
-    /// `OUT_N` must be large enough for the active steps. The zero-capacity
-    /// implementation type is only an associated-function anchor.
-    pub const fn from_view<const OUT_N: usize>(
-        view: LinkageView<'_, DOF, MARKS>,
-    ) -> LinkageFixed<DOF, MARKS, OUT_N> {
-        view.to_fixed()
-    }
-}
-
 #[cfg(feature = "alloc")]
 /// A growable linkage expression/storage type.
 ///
@@ -2492,35 +2411,6 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             }
         };
         self.push_step(Step::Restore { index })
-    }
-
-    /// Insert a sphere at every joint (before and after each `Move`/`Left`/`Up` step).
-    ///
-    /// Mirrors `LinkageFixed::with_joint_spheres`, but operates on growable storage.
-    pub fn with_joint_spheres(self, joint_radius: f32) -> Self {
-        let mut out = Self {
-            params: self.params,
-            param_len: self.param_len,
-            steps: alloc::vec::Vec::with_capacity(self.steps.len() * 3),
-            mark_names: self.mark_names,
-            mark_len: self.mark_len,
-        };
-        for step in &self.steps {
-            let is_move = matches!(step, Step::Move(_) | Step::Left(_) | Step::Up(_));
-            if is_move {
-                out.steps.push(Step::Sphere(joint_radius));
-            }
-            out.steps.push(*step);
-            if is_move {
-                out.steps.push(Step::Sphere(joint_radius));
-            }
-        }
-        out
-    }
-
-    /// Borrowing variant of `with_joint_spheres` — clones `self` then adds joint spheres.
-    pub fn with_joint_spheres_ref(&self, joint_radius: f32) -> Self {
-        self.clone().with_joint_spheres(joint_radius)
     }
 
     fn push_step(mut self, step: Step) -> Self {

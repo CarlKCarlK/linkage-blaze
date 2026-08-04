@@ -115,16 +115,18 @@ the ownership conversion visible:
 ```rust
 // TODO000API Confirm that this uncommon view-to-fixed conversion is genuinely needed.
 let left_fixed: LinkageFixed<1, 0, 3> =
-    LinkageFixed::from_view(left_buf.view());
+    left_buf.view().to_fixed();
 
 // TODO000API Review the combination after the explicit ownership conversion.
 let combined: LinkageFixed<3, 1, 4> =
     left_fixed.combine(RIGHT.view());
 ```
 
-`LinkageFixed::from_view` is the only general view-to-owner conversion in the
+`LinkageView::to_fixed` is the only general view-to-owner conversion in the
 initial API. It copies the active data, verifies matching `DOF` and `MARKS`,
-and verifies that the annotated `N` is large enough. Do not add
+and verifies that the annotated `N` is large enough. Never convert an existing
+fixed owner to a view and back merely to gain capacity; reserve suffix capacity
+when constructing the fixed owner instead. Do not add
 `from_view_pair`, `from_views`, a free `combine_views`, or a parallel trait.
 
 ## Step-capacity erasure
@@ -166,11 +168,11 @@ Both operations consume the receiver, copy the right view, skip its implicit
 ownership family.
 
 Prefer ordinary typed fixed methods over structural capacity-derivation macros.
-In particular, migrate `linkage_with_joint_spheres!` to an owned fixed method
-with an explicit result type if stable Rust requires the result capacity to be
-named. Mark every such site as described below; repeated unreadable capacities
-may motivate a narrowly scoped future facility, but do not preserve a general
-macro system preemptively.
+Move the application-specific `linkage_with_joint_spheres!` behavior to an
+Armatron-local const function rather than preserving it in the public API. Mark
+every such site as described below; repeated unreadable capacities may motivate
+a narrowly scoped future facility, but do not preserve a general macro system
+preemptively.
 
 Keep `linkage_file!` and the useful fixed/buffer/view access supplied by file
 modules. File parsing and inclusion are not the design problem addressed here.
@@ -272,7 +274,7 @@ After the production migration and focused tests pass:
 1. Inventory and annotate every logical API use with a specific `TODO000API`
    comment before changing behavior.
 2. Add focused compile tests for `LinkageFixed::combine(view)`,
-   `LinkageBuf::combine(view)`, `LinkageFixed::from_view(view)`, and `.view()`
+   `LinkageBuf::combine(view)`, `LinkageView::to_fixed()`, and `.view()`
    at read-only consumer boundaries.
 3. Implement the three owner operations without macros or traits.
 4. Migrate ordinary two-input fixed and buffer call sites.

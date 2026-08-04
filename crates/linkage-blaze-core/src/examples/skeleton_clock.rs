@@ -4,8 +4,7 @@
 use core::{array::from_fn, convert::Infallible, fmt};
 
 use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, MarkError, Projection, Rgb888,
-    linkage_file,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, MarkError, Projection, Rgb888, linkage_file,
 };
 use device_envoy_core::{
     UnwrapInfallible,
@@ -49,20 +48,26 @@ linkage_file! {
 }
 
 // Prepend a linkage drawing style.
-// TODO000API The style prefix and file linkage use one typed fixed intermediate.
+// TODO0API The style prefix and file linkage use one typed fixed intermediate.
 const STYLE: LinkageFixed<0, 0, 3> = LinkageFixed::start().pen_width(3.5).pen_color(FIGURE_COLOR);
-// TODO000API The explicit output capacity preserves fixed ownership while combining style and motion.
-const LINKAGE_WITH_STYLE: LinkageFixed<132, 6, { 3 + pirouette::STEP_COUNT - 1 }> =
-    STYLE.combine(pirouette::view());
+const CLOCK_PARAM_NAMES: [&str; 3] = ["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"];
+// TODO0API The explicit output capacity preserves fixed ownership while combining style and motion.
+const LINKAGE_WITH_STYLE: LinkageFixed<
+    { pirouette::DOF },
+    { pirouette::MARKS },
+    { STYLE.step_count() + pirouette::STEP_COUNT - 1 },
+> = STYLE.combine(pirouette::view());
 
 // Keep only the three clock-driven parameters, then specialize the fixed linkage.
-// TODO000API Specialization changes DOF while retaining the fixed backing capacity.
-const LINKAGE_FIXED: LinkageFixed<3, 6, { 3 + pirouette::STEP_COUNT - 1 }> = LINKAGE_WITH_STYLE
+// TOD00API Specialization changes DOF while retaining the fixed backing capacity.
+const LINKAGE: LinkageFixed<
+    { CLOCK_PARAM_NAMES.len() },
+    { pirouette::MARKS },
+    { STYLE.step_count() + pirouette::STEP_COUNT - 1 },
+> = LINKAGE_WITH_STYLE
     // turn the left foot out jauntily.
-    .freeze_param_name::<131>("l_shin_yrotation", 57.6)
-    .retain_param_names::<3>(&["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"]);
-// TODO000API Rendering borrows the specialized fixed owner through LinkageView.
-const LINKAGE: LinkageView<3, 6> = LINKAGE_FIXED.view();
+    .freeze_param_name::<{ pirouette::DOF - 1 }>("l_shin_yrotation", 57.6)
+    .retain_param_names(&CLOCK_PARAM_NAMES);
 
 // ── Projection ───────────────────────────────────────────────────────────────
 
@@ -157,10 +162,12 @@ where
         let params = linkage_params(local_time);
 
         // Create an iterator that will list every 3D item and its pose.
-        let mut draw_items_3d = LINKAGE.draw_items_3d(&params)?;
+        let linkage = LINKAGE.view();
+        let mut draw_items_3d = linkage.draw_items_3d(&params)?;
 
         // // Iterate 3d items, project to 2D, and collect 2D items and poses.
-        let mut projected_items = heapless::Vec::<_, { LINKAGE.draw_item_3d_count() }>::new();
+        let mut projected_items =
+            heapless::Vec::<_, { LINKAGE.view().draw_item_3d_count() }>::new();
         for draw_item_3d in draw_items_3d.by_ref() {
             projected_items
                 .push(draw_item_3d.project(&PROJECTION))
@@ -386,14 +393,14 @@ fn wrap_unit(value: f32) -> f32 {
 
 /// Compile-time assert that `LINKAGE`'s param `index` has the expected name.
 const fn assert_param_name(index: usize, name: &str) {
-    assert!(str_eq(LINKAGE.param(index).name(), name));
+    assert!(str_eq(LINKAGE.view().param(index).name(), name));
 }
 
 /// The span of `LINKAGE`'s param `index`, in full turns (1 turn = 360°), read from
 /// the linkage's stored range.
 const fn param_span_turns(index: usize) -> f32 {
     use core::f32::consts::TAU;
-    let (low, high) = LINKAGE.scan_param_range(index);
+    let (low, high) = LINKAGE.view().scan_param_range(index);
     (high - low) / TAU
 }
 

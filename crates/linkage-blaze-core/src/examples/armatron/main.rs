@@ -12,7 +12,7 @@ pub mod reverse_kinematics;
 use core::convert::Infallible;
 
 use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Projection, Rgb888,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Projection, Rgb888, Step,
     linkage_file,
 };
 use device_envoy_core::{
@@ -63,28 +63,49 @@ linkage_file! {
     }
 }
 // TODO000API Named binary intermediates keep the three ordered scene inputs readable.
-const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = camera_control::fixed().combine(grid9x9::view());
+const CAMERA_AND_GRID: LinkageFixed<
+    { camera_control::DOF + grid9x9::DOF },
+    { camera_control::MARKS + grid9x9::MARKS },
+    { camera_control::STEP_COUNT + grid9x9::STEP_COUNT - 1 },
+> = camera_control::fixed().combine(grid9x9::view());
 // TODO000API The explicit joint-sphere capacity is the cost of ordinary fixed construction.
-const ARMATRON_WITH_JOINTS: LinkageFixed<6, 1, 45> =
-    armatron1::fixed().with_joint_spheres::<45>(0.15);
+const ARMATRON_WITH_JOINTS: LinkageFixed<
+    { armatron1::DOF },
+    { armatron1::MARKS },
+    { joint_sphere_step_count(&armatron1::fixed()) },
+> = with_joint_spheres(armatron1::fixed(), 0.15);
 // TODO000API This typed fixed intermediate replaces the removed named-program macro.
-const SCENE_WITH_ARM: LinkageFixed<9, 3, 132> =
-    CAMERA_AND_GRID.combine(ARMATRON_WITH_JOINTS.view());
-// TODO000API Restoring after the scene requires a larger explicitly owned fixed capacity.
-const SCENE_WITH_ARM_RESTORED: LinkageFixed<9, 3, 133> =
-    LinkageFixed::from_view::<133>(SCENE_WITH_ARM.view()).restore("scene origin");
+const SCENE_WITH_ARM: LinkageFixed<
+    { CAMERA_AND_GRID.dof() + ARMATRON_WITH_JOINTS.dof() },
+    { CAMERA_AND_GRID.mark_count() + ARMATRON_WITH_JOINTS.mark_count() },
+    { CAMERA_AND_GRID.step_count() + ARMATRON_WITH_JOINTS.step_count() },
+> = CAMERA_AND_GRID.combine(ARMATRON_WITH_JOINTS.view());
+// `pen_color` and `sphere_param` each append one step after the ghost arm.
+const TARGET_SUFFIX_STEP_COUNT: usize = 2;
 // TODO000API The final scene combines the restored scene with a ghost arm and preserves fixed ownership.
-const LINKAGE_FIXED: LinkageFixed<15, 4, 159> = SCENE_WITH_ARM_RESTORED
+const LINKAGE_FIXED: LinkageFixed<
+    { SCENE_WITH_ARM.dof() + armatron1::DOF },
+    { SCENE_WITH_ARM.mark_count() + armatron1::MARKS },
+    { SCENE_WITH_ARM.step_count() + armatron1::STEP_COUNT + TARGET_SUFFIX_STEP_COUNT },
+> = SCENE_WITH_ARM
+    .restore("scene origin")
     .combine(armatron1::view())
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
 // TODO000API Rendering borrows the final fixed owner through the common view boundary.
-const LINKAGE: LinkageView<15, 4> = LINKAGE_FIXED.view();
+const LINKAGE: LinkageView<{ LINKAGE_FIXED.dof() }, { LINKAGE_FIXED.mark_count() }> =
+    LINKAGE_FIXED.view();
 // Minimal linkage used only to measure arm-tip distance to the target.
 // TODO000API This separate consumer linkage uses a named binary fixed intermediate.
-const ARM_TIP_LINKAGE_FIXED: LinkageFixed<9, 2, 32> =
-    camera_control::fixed().combine(armatron1::view());
-const ARM_TIP_LINKAGE: LinkageView<9, 2> = ARM_TIP_LINKAGE_FIXED.view();
+const ARM_TIP_LINKAGE_FIXED: LinkageFixed<
+    { camera_control::DOF + armatron1::DOF },
+    { camera_control::MARKS + armatron1::MARKS },
+    { camera_control::STEP_COUNT + armatron1::STEP_COUNT - 1 },
+> = camera_control::fixed().combine(armatron1::view());
+const ARM_TIP_LINKAGE: LinkageView<
+    { ARM_TIP_LINKAGE_FIXED.dof() },
+    { ARM_TIP_LINKAGE_FIXED.mark_count() },
+> = ARM_TIP_LINKAGE_FIXED.view();
 
 // The ghost arm's params begin immediately after the displayed scene's params.
 const TARGET_PARAM_START: usize = SCENE_WITH_ARM.dof();
@@ -334,6 +355,62 @@ mod tests {
 }
 
 // ── Private helper functions ───────────────────────────────────────────────────
+
+const fn joint_sphere_step_count<const DOF: usize, const MARKS: usize, const N: usize>(
+    linkage: &LinkageFixed<DOF, MARKS, N>,
+) -> usize {
+    let mut count = linkage.len;
+    let mut step_index = 0;
+    while step_index < linkage.len {
+        if matches!(
+            linkage.steps[step_index],
+            Step::Move(_) | Step::Left(_) | Step::Up(_)
+        ) {
+            count += 2;
+        }
+        step_index += 1;
+    }
+    count
+}
+
+const fn with_joint_spheres<
+    const DOF: usize,
+    const MARKS: usize,
+    const N: usize,
+    const N_OUT: usize,
+>(
+    linkage: LinkageFixed<DOF, MARKS, N>,
+    joint_radius: f32,
+) -> LinkageFixed<DOF, MARKS, N_OUT> {
+    let mut output = LinkageFixed {
+        steps: [const { Step::Start }; N_OUT],
+        len: 0,
+        params: linkage.params,
+        param_len: linkage.param_len,
+        mark_names: linkage.mark_names,
+        mark_len: linkage.mark_len,
+    };
+    let mut step_index = 0;
+    while step_index < linkage.len {
+        let step = linkage.steps[step_index];
+        let is_move = matches!(step, Step::Move(_) | Step::Left(_) | Step::Up(_));
+        if is_move {
+            assert!(output.len < N_OUT, "joint-sphere output capacity too small");
+            output.steps[output.len] = Step::Sphere(joint_radius);
+            output.len += 1;
+        }
+        assert!(output.len < N_OUT, "joint-sphere output capacity too small");
+        output.steps[output.len] = step;
+        output.len += 1;
+        if is_move {
+            assert!(output.len < N_OUT, "joint-sphere output capacity too small");
+            output.steps[output.len] = Step::Sphere(joint_radius);
+            output.len += 1;
+        }
+        step_index += 1;
+    }
+    output
+}
 
 fn randomize_target_from_seed(target_seed: u8, params: &mut [f32; DOF]) {
     let mut rng = WyRand::new_seed(u64::from(target_seed));

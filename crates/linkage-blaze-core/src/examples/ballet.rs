@@ -7,8 +7,8 @@ use core::{
 };
 
 use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageFixed, LinkageView, Point, Projection, Rgb888,
-    bvh_motion, bvh_parse::BvhMotion, linkage_file,
+    DrawItem3dExt, Error as LinkageError, LinkageFixed, Point, Projection, Rgb888, bvh_motion,
+    bvh_parse::BvhMotion, linkage_file,
 };
 use device_envoy_core::{
     Error as CoreError,
@@ -39,20 +39,21 @@ linkage_file! {
         file: "../assets/mocap/pirouette.lb.rs",
     }
 }
-// TODO000API The drawing style is an owned fixed prefix for the file linkage.
+// TODO0API The drawing style is an owned fixed prefix for the file linkage.
 const STYLE: LinkageFixed<0, 0, 3> = LinkageFixed::<0, 0, 3>::start()
     .pen_color(FOREGROUND_COLOR)
     .pen_width(3.2);
-// TODO000API The typed fixed result makes the combined owner and capacity explicit.
-const LINKAGE_FIXED: LinkageFixed<132, 6, { 3 + pirouette::STEP_COUNT - 1 }> =
-    STYLE.combine(pirouette::view());
-// TODO000API Rendering borrows the combined fixed owner through the common view boundary.
-const LINKAGE: LinkageView<132, 6> = LINKAGE_FIXED.view();
+// TODO0API The typed fixed result makes the combined owner and capacity explicit.
+const LINKAGE: LinkageFixed<
+    { pirouette::DOF },
+    { pirouette::MARKS },
+    { STYLE.step_count() + pirouette::STEP_COUNT - 1 },
+> = STYLE.combine(pirouette::view());
 
 // The motion capture data, read at compile time from BVH and stored in the binary.
 #[allow(long_running_const_eval)]
 // This can take ~8 seconds to compile.
-const MOTION: BvhMotion<132, 592> = bvh_motion!("../assets/mocap/pirouette.bvh");
+const MOTION: BvhMotion<{ pirouette::DOF }, 592> = bvh_motion!("../assets/mocap/pirouette.bvh");
 const MOTION_FPS: f32 = 120.0; // the mocap was captured at 120fps, so we can run it at that speed.
 
 // A background_bitmap read at compile time and stored in the binary.
@@ -97,7 +98,7 @@ where
             BACKGROUND_BITMAP.copy_to(&mut cyd_frame)?;
 
             // Apply the mocap params to the linkage and draw everything to the frame.
-            for draw_item_3d in LINKAGE.draw_items_3d(&params)? {
+            for draw_item_3d in LINKAGE.view().draw_items_3d(&params)? {
                 draw_item_3d.project(&PROJECTION).draw(&mut cyd_frame);
             }
 

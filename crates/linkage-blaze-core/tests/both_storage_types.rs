@@ -21,17 +21,11 @@ linkage_file! {
 }
 // TODO000API Named binary intermediate for the camera and grid inputs.
 const CAMERA_AND_GRID: LinkageFixed<3, 2, 88> = camera_control::fixed().combine(grid9x9::view());
-// TODO000API Explicit capacity for the fixed joint-sphere transformation.
-const ARMATRON1_WITH_JOINTS: LinkageFixed<6, 1, 45> =
-    armatron1::fixed().with_joint_spheres::<45>(0.15);
-// TODO000API Three ordered inputs are represented by named fixed intermediates.
-const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 132> =
-    CAMERA_AND_GRID.combine(ARMATRON1_WITH_JOINTS.view());
-// TODO000API The restore suffix needs one additional fixed step slot.
-const ARMATRON_LINKAGE0_RESTORED: LinkageFixed<9, 3, 133> =
-    LinkageFixed::from_view::<133>(ARMATRON_LINKAGE0.view()).restore("scene origin");
+// TODO000API The combination reserves one capacity slot for its restore suffix.
+const ARMATRON_LINKAGE0: LinkageFixed<9, 3, 113> = CAMERA_AND_GRID.combine(armatron1::view());
 // TODO000API The final fixed combination preserves ownership and uses the annotated output size.
-const ARMATRON_LINKAGE: LinkageFixed<15, 4, 159> = ARMATRON_LINKAGE0_RESTORED
+const ARMATRON_LINKAGE: LinkageFixed<15, 4, 139> = ARMATRON_LINKAGE0
+    .restore("scene origin")
     .combine(armatron1::view())
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
@@ -46,7 +40,6 @@ const MEASURED_CLOCK: LinkageFixed<2, 2, 46> = clock_hands::fixed();
 const DERIVED_COMBINATION: linkage_blaze_core::LinkageView<'static, 3, 2> = CAMERA_AND_GRID.view();
 const VARIADIC_COMBINATION: linkage_blaze_core::LinkageView<'static, 9, 3> =
     ARMATRON_LINKAGE0.view();
-const DERIVED_JOINTS: LinkageFixed<6, 1, 45> = ARMATRON1_WITH_JOINTS;
 
 const CLOCK_FIXED: LinkageFixed<2, 2, 46> = clock_hands::fixed();
 const CLOCK_FIXED_EXPLICIT: LinkageFixed<2, 2, 46> = clock_hands::fixed();
@@ -62,7 +55,6 @@ fn derived_fixed_macros_preserve_exact_sizes() {
         VARIADIC_COMBINATION.step_count(),
         ARMATRON_LINKAGE0.step_count()
     );
-    assert_eq!(DERIVED_JOINTS.step_count(), 45);
 }
 
 #[test]
@@ -148,12 +140,10 @@ fn armatron_component_linkages_fixed_dims() {
     assert_eq!(ARMATRON1_VIEW.len(), 25);
     assert_eq!(CAMERA_AND_GRID.dof(), 3);
     assert_eq!(CAMERA_AND_GRID.len(), 88);
-    assert_eq!(ARMATRON1_WITH_JOINTS.view().dof(), 6);
-    assert_eq!(ARMATRON1_WITH_JOINTS.view().len(), 45);
     assert_eq!(ARMATRON_LINKAGE0.view().dof(), 9);
-    assert_eq!(ARMATRON_LINKAGE0.view().len(), 132);
+    assert_eq!(ARMATRON_LINKAGE0.view().len(), 112);
     assert_eq!(ARMATRON_LINKAGE.view().dof(), 15);
-    assert_eq!(ARMATRON_LINKAGE.view().len(), 159);
+    assert_eq!(ARMATRON_LINKAGE.view().len(), 139);
     assert_eq!(ARMATRON_RK_LINKAGE.dof(), 9);
     assert_eq!(ARMATRON_RK_LINKAGE.len(), 32);
 }
@@ -207,8 +197,7 @@ fn armatron_full_scene_linkage_built_with_buf() -> Result<(), linkage_blaze_core
 
     // TODO000API Buffer combination consumes the left owner and copies the right view.
     let camera_and_grid: LinkageBuf<3, 2> = camera_control.clone().combine(grid_9x9.view());
-    let linkage0: LinkageBuf<9, 3> =
-        camera_and_grid.combine(armatron1.clone().with_joint_spheres(0.15).view());
+    let linkage0: LinkageBuf<9, 3> = camera_and_grid.combine(armatron1.clone().view());
 
     let full_linkage = linkage0
         .restore("scene origin")

@@ -266,11 +266,11 @@ arm.simulate(&steps);
 Omit turbofish const-generic suffixes (e.g. `::<39>`) when the value can be inferred from context. This is almost always the case when the result is assigned to a typed `const`:
 
 ```rust
-// Bad — redundant turbofish; the 39 is already stated in the const type
-const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres::<39>(0.15);
+// Bad — redundant turbofish; the 1 is already stated in the const type
+const RETAINED: LinkageFixed<1, 0, 5> = BASE.retain_param_names::<1>(&["distance"]);
 
 // Good — type annotation on the const is sufficient
-const ARMATRON1_WITH_JOINTS: Linkage<6, 39> = ARMATRON1.with_joint_spheres(0.15);
+const RETAINED: LinkageFixed<1, 0, 5> = BASE.retain_param_names(&["distance"]);
 ```
 
 Only write the turbofish when inference would otherwise be ambiguous or when a call site has no surrounding type annotation to infer from.
