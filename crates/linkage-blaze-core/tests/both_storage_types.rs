@@ -29,47 +29,58 @@ const CAMERA_AND_GRID: LinkageFixed<
     { camera_control::STEP_COUNT + grid9x9::STEP_COUNT - 1 },
 > = camera_control::fixed().combine(grid9x9::view());
 // TODO0API The combination reserves one capacity slot for its restore suffix.
-const ARMATRON_LINKAGE0: LinkageFixed<
+const SCENE_WITH_ARM: LinkageFixed<
     { CAMERA_AND_GRID.dof() + armatron1::DOF },
     { CAMERA_AND_GRID.mark_count() + armatron1::MARKS },
     { CAMERA_AND_GRID.step_count() + armatron1::STEP_COUNT },
 > = CAMERA_AND_GRID.combine(armatron1::view());
 // TODO0API The final fixed combination preserves ownership and uses the annotated output size.
-const ARMATRON_LINKAGE: LinkageFixed<
-    { ARMATRON_LINKAGE0.dof() + armatron1::DOF },
-    { ARMATRON_LINKAGE0.mark_count() + armatron1::MARKS },
+const LINKAGE_FIXED: LinkageFixed<
+    { SCENE_WITH_ARM.dof() + armatron1::DOF },
+    { SCENE_WITH_ARM.mark_count() + armatron1::MARKS },
     // `combine` skips the ghost arm's `Start`; the other calls each append one step.
-    { ARMATRON_LINKAGE0.step_count() + armatron1::STEP_COUNT - 1 + 3 },
-> = ARMATRON_LINKAGE0
+    { SCENE_WITH_ARM.step_count() + armatron1::STEP_COUNT - 1 + 3 },
+> = SCENE_WITH_ARM
     .restore("scene origin")
     .combine(armatron1::view())
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
 // TODO0API Separate arm-tip composition remains a named binary fixed intermediate.
-const ARMATRON_RK_LINKAGE_FIXED: LinkageFixed<
+const ARM_TIP_LINKAGE_FIXED: LinkageFixed<
     { camera_control::DOF + armatron1::DOF },
     { camera_control::MARKS + armatron1::MARKS },
     { camera_control::STEP_COUNT + armatron1::STEP_COUNT - 1 },
 > = camera_control::fixed().combine(armatron1::view());
 
 #[test]
-fn derived_fixed_macros_preserve_exact_sizes() {
+fn composed_fixed_linkages_have_expected_step_counts() {
     assert_eq!(
         CAMERA_AND_GRID.step_count(),
         camera_control::STEP_COUNT + grid9x9::STEP_COUNT - 1
     );
     assert_eq!(
-        ARMATRON_LINKAGE0.step_count(),
+        SCENE_WITH_ARM.step_count(),
         CAMERA_AND_GRID.step_count() + armatron1::STEP_COUNT - 1
     );
 }
 
 #[test]
-fn variadic_combination_matches_left_associative_nesting() -> Result<(), linkage_blaze_core::Error>
-{
-    let params = [0.5_f32; ARMATRON_LINKAGE0.dof()];
-    let variadic_combination = ARMATRON_LINKAGE0.view();
-    assert_linkages_equivalent(&variadic_combination, &ARMATRON_LINKAGE0.view(), &params)?;
+fn scene_with_arm_fixed_and_buf_are_equivalent() -> Result<(), linkage_blaze_core::Error> {
+    let camera_control = camera_control::buf();
+    let grid9x9 = grid9x9::buf();
+    let armatron1 = armatron1::buf();
+
+    let camera_and_grid: LinkageBuf<
+        { camera_control::DOF + grid9x9::DOF },
+        { camera_control::MARKS + grid9x9::MARKS },
+    > = camera_control.combine(grid9x9.view());
+    let scene_with_arm: LinkageBuf<
+        { CAMERA_AND_GRID.dof() + armatron1::DOF },
+        { CAMERA_AND_GRID.mark_count() + armatron1::MARKS },
+    > = camera_and_grid.combine(armatron1.view());
+
+    let params = [0.5_f32; SCENE_WITH_ARM.dof()];
+    assert_linkages_equivalent(&SCENE_WITH_ARM.view(), &scene_with_arm.view(), &params)?;
     Ok(())
 }
 
@@ -156,27 +167,27 @@ fn armatron_component_linkages_fixed_dims() {
         camera_control::STEP_COUNT + grid9x9::STEP_COUNT - 1
     );
     assert_eq!(
-        ARMATRON_LINKAGE0.view().dof(),
+        SCENE_WITH_ARM.view().dof(),
         CAMERA_AND_GRID.dof() + armatron1::DOF
     );
     assert_eq!(
-        ARMATRON_LINKAGE0.view().len(),
+        SCENE_WITH_ARM.view().len(),
         CAMERA_AND_GRID.step_count() + armatron1::STEP_COUNT - 1
     );
     assert_eq!(
-        ARMATRON_LINKAGE.view().dof(),
-        ARMATRON_LINKAGE0.dof() + armatron1::DOF
+        LINKAGE_FIXED.view().dof(),
+        SCENE_WITH_ARM.dof() + armatron1::DOF
     );
     assert_eq!(
-        ARMATRON_LINKAGE.view().len(),
-        ARMATRON_LINKAGE0.step_count() + armatron1::STEP_COUNT - 1 + 3
+        LINKAGE_FIXED.view().len(),
+        SCENE_WITH_ARM.step_count() + armatron1::STEP_COUNT - 1 + 3
     );
     assert_eq!(
-        ARMATRON_RK_LINKAGE_FIXED.view().dof(),
+        ARM_TIP_LINKAGE_FIXED.view().dof(),
         camera_control::DOF + armatron1::DOF
     );
     assert_eq!(
-        ARMATRON_RK_LINKAGE_FIXED.view().len(),
+        ARM_TIP_LINKAGE_FIXED.view().len(),
         camera_control::STEP_COUNT + armatron1::STEP_COUNT - 1
     );
 }
@@ -208,20 +219,16 @@ fn armatron_grid_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Er
 
 #[test]
 fn armatron_combined_linkages_fixed_and_buf_equivalent() -> Result<(), linkage_blaze_core::Error> {
-    let full_buf = LinkageBuf::from(&ARMATRON_LINKAGE);
-    let rk_buf = LinkageBuf::from(&ARMATRON_RK_LINKAGE_FIXED);
+    let full_buf = LinkageBuf::from(&LINKAGE_FIXED);
+    let rk_buf = LinkageBuf::from(&ARM_TIP_LINKAGE_FIXED);
 
-    let full_params = [0.5_f32; ARMATRON_LINKAGE.dof()];
-    let rk_params = [0.5_f32; ARMATRON_RK_LINKAGE_FIXED.dof()];
+    let full_params = [0.5_f32; LINKAGE_FIXED.dof()];
+    let rk_params = [0.5_f32; ARM_TIP_LINKAGE_FIXED.dof()];
 
-    assert_eq!(full_buf.view().dof(), ARMATRON_LINKAGE.dof());
-    assert_eq!(full_buf.view().len(), ARMATRON_LINKAGE.view().len());
-    assert_linkages_equivalent(&ARMATRON_LINKAGE.view(), &full_buf.view(), &full_params)?;
-    assert_linkages_equivalent(
-        &ARMATRON_RK_LINKAGE_FIXED.view(),
-        &rk_buf.view(),
-        &rk_params,
-    )?;
+    assert_eq!(full_buf.view().dof(), LINKAGE_FIXED.dof());
+    assert_eq!(full_buf.view().len(), LINKAGE_FIXED.view().len());
+    assert_linkages_equivalent(&LINKAGE_FIXED.view(), &full_buf.view(), &full_params)?;
+    assert_linkages_equivalent(&ARM_TIP_LINKAGE_FIXED.view(), &rk_buf.view(), &rk_params)?;
     Ok(())
 }
 
@@ -236,33 +243,33 @@ fn armatron_full_scene_linkage_built_with_buf() -> Result<(), linkage_blaze_core
         { camera_control::DOF + grid9x9::DOF },
         { camera_control::MARKS + grid9x9::MARKS },
     > = camera_control.clone().combine(grid9x9.view());
-    let linkage0: LinkageBuf<
+    let scene_with_arm: LinkageBuf<
         { CAMERA_AND_GRID.dof() + armatron1::DOF },
         { CAMERA_AND_GRID.mark_count() + armatron1::MARKS },
     > = camera_and_grid.combine(armatron1.clone().view());
 
-    let full_linkage = linkage0
+    let linkage = scene_with_arm
         .restore("scene origin")
         .combine(armatron1.view())
         .pen_color(Rgb888::CSS_RED)
         .sphere_param("close hand", 0.5, 0.0);
 
-    let rk_linkage = camera_control.combine(armatron1.view());
+    let arm_tip_linkage = camera_control.combine(armatron1.view());
 
-    assert_eq!(full_linkage.view().dof(), ARMATRON_LINKAGE.dof());
-    assert_eq!(full_linkage.view().len(), ARMATRON_LINKAGE.view().len());
-    assert_eq!(rk_linkage.view().dof(), ARMATRON_RK_LINKAGE_FIXED.dof());
+    assert_eq!(linkage.view().dof(), LINKAGE_FIXED.dof());
+    assert_eq!(linkage.view().len(), LINKAGE_FIXED.view().len());
+    assert_eq!(arm_tip_linkage.view().dof(), ARM_TIP_LINKAGE_FIXED.dof());
     assert_eq!(
-        rk_linkage.view().len(),
-        ARMATRON_RK_LINKAGE_FIXED.step_count()
+        arm_tip_linkage.view().len(),
+        ARM_TIP_LINKAGE_FIXED.step_count()
     );
 
-    let full_params = [0.5_f32; ARMATRON_LINKAGE.dof()];
-    let rk_params = [0.5_f32; ARMATRON_RK_LINKAGE_FIXED.dof()];
-    assert_linkages_equivalent(&ARMATRON_LINKAGE.view(), &full_linkage.view(), &full_params)?;
+    let full_params = [0.5_f32; LINKAGE_FIXED.dof()];
+    let rk_params = [0.5_f32; ARM_TIP_LINKAGE_FIXED.dof()];
+    assert_linkages_equivalent(&LINKAGE_FIXED.view(), &linkage.view(), &full_params)?;
     assert_linkages_equivalent(
-        &ARMATRON_RK_LINKAGE_FIXED.view(),
-        &rk_linkage.view(),
+        &ARM_TIP_LINKAGE_FIXED.view(),
+        &arm_tip_linkage.view(),
         &rk_params,
     )?;
     Ok(())

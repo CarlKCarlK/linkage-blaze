@@ -50,7 +50,7 @@ linkage_file! {
 // Prepend a linkage drawing style.
 // TODO0API The style prefix and file linkage use one typed fixed intermediate.
 const STYLE: LinkageFixed<0, 0, 3> = LinkageFixed::start().pen_width(3.5).pen_color(FIGURE_COLOR);
-const CLOCK_PARAM_NAMES: [&str; 3] = ["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"];
+const CLOCK_PARAM_NAMES: &[&str] = &["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"];
 // TODO0API The explicit output capacity preserves fixed ownership while combining style and motion.
 const LINKAGE_WITH_STYLE: LinkageFixed<
     { pirouette::DOF },
@@ -58,16 +58,15 @@ const LINKAGE_WITH_STYLE: LinkageFixed<
     { STYLE.step_count() + pirouette::STEP_COUNT - 1 },
 > = STYLE.combine(pirouette::view());
 
-// Keep only the three clock-driven parameters, then specialize the fixed linkage.
+// Turn the left foot out jauntily, then keep only the three clock-driven parameters.
 // TOD00API Specialization changes DOF while retaining the fixed backing capacity.
 const LINKAGE: LinkageFixed<
     { CLOCK_PARAM_NAMES.len() },
-    { pirouette::MARKS },
-    { STYLE.step_count() + pirouette::STEP_COUNT - 1 },
+    { LINKAGE_WITH_STYLE.mark_count() },
+    { LINKAGE_WITH_STYLE.step_count() },
 > = LINKAGE_WITH_STYLE
-    // turn the left foot out jauntily.
     .freeze_param_name::<{ pirouette::DOF - 1 }>("l_shin_yrotation", 57.6)
-    .retain_param_names(&CLOCK_PARAM_NAMES);
+    .retain_param_names(CLOCK_PARAM_NAMES);
 
 // ── Projection ───────────────────────────────────────────────────────────────
 
