@@ -364,7 +364,7 @@ const fn joint_sphere_step_count<const DOF: usize, const MARKS: usize, const N: 
     while step_index < linkage.len {
         if matches!(
             linkage.steps[step_index],
-            Step::Move(_) | Step::Left(_) | Step::Up(_)
+            Step::Forward(_) | Step::Left(_) | Step::Up(_)
         ) {
             count += 2;
         }
@@ -393,8 +393,8 @@ const fn with_joint_spheres<
     let mut step_index = 0;
     while step_index < linkage.len {
         let step = linkage.steps[step_index];
-        let is_move = matches!(step, Step::Move(_) | Step::Left(_) | Step::Up(_));
-        if is_move {
+        let is_translation = matches!(step, Step::Forward(_) | Step::Left(_) | Step::Up(_));
+        if is_translation {
             assert!(output.len < N_OUT, "joint-sphere output capacity too small");
             output.steps[output.len] = Step::Sphere(joint_radius);
             output.len += 1;
@@ -402,7 +402,7 @@ const fn with_joint_spheres<
         assert!(output.len < N_OUT, "joint-sphere output capacity too small");
         output.steps[output.len] = step;
         output.len += 1;
-        if is_move {
+        if is_translation {
             assert!(output.len < N_OUT, "joint-sphere output capacity too small");
             output.steps[output.len] = Step::Sphere(joint_radius);
             output.len += 1;

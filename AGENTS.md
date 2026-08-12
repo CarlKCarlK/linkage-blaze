@@ -241,7 +241,7 @@ Good:
 ```rust
 let linkage = [
     Step::Yaw(90.0),
-    Step::Move(2.5),
+    Step::Forward(2.5),
 ];
 ```
 

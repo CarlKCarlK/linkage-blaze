@@ -84,7 +84,7 @@ pub enum Step {
     /// Rotate around local +X.
     Roll(Arg),
     /// Advance along local +X by the given distance.
-    Move(Arg),
+    Forward(Arg),
     /// Advance along local +Y by the given distance.
     Left(Arg),
     /// Advance along local +Z by the given distance.
@@ -405,7 +405,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
                 Step::Yaw(arg)
                 | Step::Pitch(arg)
                 | Step::Roll(arg)
-                | Step::Move(arg)
+                | Step::Forward(arg)
                 | Step::Left(arg)
                 | Step::Up(arg) => arg,
                 Step::DiskParam(v) | Step::SphereParam(v) => Arg::Variable(v),
@@ -569,7 +569,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
                 Step::Roll(arg) => {
                     push_arg_step(self, &mut source, "roll", "roll_param", arg, true);
                 }
-                Step::Move(arg) => {
+                Step::Forward(arg) => {
                     push_arg_step(self, &mut source, "forward", "forward_param", arg, false);
                 }
                 Step::Left(arg) => {
@@ -781,7 +781,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
                 Step::PenDown => pen_down = true,
                 Step::Mark { index: mark_index } => marked[*mark_index] = pen_down,
                 Step::Restore { index: mark_index } => pen_down = marked[*mark_index],
-                Step::Move(_) | Step::Left(_) | Step::Up(_) => {
+                Step::Forward(_) | Step::Left(_) | Step::Up(_) => {
                     if pen_down {
                         count += 1;
                     }
@@ -1020,7 +1020,7 @@ fn apply_parsed_method<const DOF: usize, const MARKS: usize>(
             }
             Ok(linkage.define_param(name, default))
         }
-        "forward" | "move" => {
+        "forward" => {
             expect_arg_count(line_number, method_call, 1)?;
             Ok(linkage.forward(parse_number_arg(line_number, method_call, 0)?))
         }
@@ -1355,7 +1355,7 @@ macro_rules! emit_fixed_step_methods {
             self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
         }
         pub const fn forward(self, distance: f32) -> Self {
-            self.push(Step::Move(Arg::Fixed(distance)))
+            self.push(Step::Forward(Arg::Fixed(distance)))
         }
         pub const fn left(self, distance: f32) -> Self {
             self.push(Step::Left(Arg::Fixed(distance)))
@@ -1404,7 +1404,7 @@ macro_rules! emit_fixed_step_methods {
         }
         pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Move(Arg::Variable(VariableArg::new(
+            self.push(Step::Forward(Arg::Variable(VariableArg::new(
                 index, low, high,
             ))))
         }
@@ -1457,7 +1457,7 @@ macro_rules! emit_buf_step_methods {
             self.push_step(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
         }
         pub fn forward(self, distance: f32) -> Self {
-            self.push_step(Step::Move(Arg::Fixed(distance)))
+            self.push_step(Step::Forward(Arg::Fixed(distance)))
         }
         pub fn left(self, distance: f32) -> Self {
             self.push_step(Step::Left(Arg::Fixed(distance)))
@@ -1506,7 +1506,7 @@ macro_rules! emit_buf_step_methods {
         }
         pub fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Move(Arg::Variable(VariableArg::new(
+            self.push_step(Step::Forward(Arg::Variable(VariableArg::new(
                 index, low, high,
             ))))
         }
@@ -2187,17 +2187,17 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
                     }
                     Step::Roll(Arg::Fixed(total))
                 }
-                Step::Move(Arg::Fixed(v)) => {
+                Step::Forward(Arg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.len {
-                        if let Step::Move(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Forward(Arg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Move(Arg::Fixed(total))
+                    Step::Forward(Arg::Fixed(total))
                 }
                 Step::Left(Arg::Fixed(v)) => {
                     let mut total = v;
@@ -2812,7 +2812,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// number of consecutive same-type fixed steps are folded into one. The
     /// merged value is the arithmetic sum of their arguments.
     ///
-    /// Only `Yaw`, `Pitch`, `Roll`, `Move`, `Left`, and `Up` steps with
+    /// Only `Yaw`, `Pitch`, `Roll`, `Forward`, `Left`, and `Up` steps with
     /// `Fixed` arguments are merged. Variable-arg steps and non-motion steps
     /// break a run.
     ///
@@ -2860,17 +2860,17 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
                     }
                     Step::Roll(Arg::Fixed(total))
                 }
-                Step::Move(Arg::Fixed(v)) => {
+                Step::Forward(Arg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.steps.len() {
-                        if let Step::Move(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Forward(Arg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Move(Arg::Fixed(total))
+                    Step::Forward(Arg::Fixed(total))
                 }
                 Step::Left(Arg::Fixed(v)) => {
                     let mut total = v;
@@ -2940,7 +2940,7 @@ impl Step {
             Self::Yaw(arg) => Self::Yaw(arg.offset_param(param_offset)),
             Self::Pitch(arg) => Self::Pitch(arg.offset_param(param_offset)),
             Self::Roll(arg) => Self::Roll(arg.offset_param(param_offset)),
-            Self::Move(arg) => Self::Move(arg.offset_param(param_offset)),
+            Self::Forward(arg) => Self::Forward(arg.offset_param(param_offset)),
             Self::Left(arg) => Self::Left(arg.offset_param(param_offset)),
             Self::Up(arg) => Self::Up(arg.offset_param(param_offset)),
             Self::DiskParam(v) => Self::DiskParam(v.offset(param_offset)),
@@ -2981,7 +2981,7 @@ const fn is_fixed_noop(step: Step) -> bool {
         Step::Yaw(Arg::Fixed(v))
         | Step::Pitch(Arg::Fixed(v))
         | Step::Roll(Arg::Fixed(v))
-        | Step::Move(Arg::Fixed(v))
+        | Step::Forward(Arg::Fixed(v))
         | Step::Left(Arg::Fixed(v))
         | Step::Up(Arg::Fixed(v))
         if v == 0.0
@@ -3056,7 +3056,7 @@ const fn rewrite_step_for_freeze(
             new_param_index,
             true,
         )),
-        Step::Move(arg) => Step::Move(rewrite_arg_for_freeze(
+        Step::Forward(arg) => Step::Forward(rewrite_arg_for_freeze(
             arg,
             is_frozen,
             frozen_at_default,
@@ -3171,7 +3171,7 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
     let radians = match step {
         Step::Yaw(arg) | Step::Pitch(arg) | Step::Roll(arg) => arg.resolve(params),
         Step::Start
-        | Step::Move(_)
+        | Step::Forward(_)
         | Step::Left(_)
         | Step::Up(_)
         | Step::PenUp
@@ -3190,7 +3190,7 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
         Step::Pitch(_) => Mat3::pitch(radians),
         Step::Roll(_) => Mat3::roll(radians),
         Step::Start
-        | Step::Move(_)
+        | Step::Forward(_)
         | Step::Left(_)
         | Step::Up(_)
         | Step::PenUp
@@ -3264,7 +3264,7 @@ impl PenStyle {
             Step::Yaw(_)
             | Step::Pitch(_)
             | Step::Roll(_)
-            | Step::Move(_)
+            | Step::Forward(_)
             | Step::Left(_)
             | Step::Up(_)
             | Step::Disk(_)
@@ -3338,7 +3338,7 @@ impl Pose {
             Step::Start => {
                 *self = Self::start();
             }
-            Step::Move(arg) => {
+            Step::Forward(arg) => {
                 self.position += self.orientation.forward() * arg.resolve(params);
             }
             Step::Left(arg) => {
@@ -3397,7 +3397,7 @@ impl StyledPose {
     }
 }
 
-/// A drawable pen-down move segment produced by a linkage.
+/// A drawable pen-down forward segment produced by a linkage.
 #[derive(Clone, Copy, Debug)]
 pub struct StrokeSegment {
     start: Pose,
@@ -3438,7 +3438,7 @@ impl StrokeSegment {
 
 /// Iterator over styled poses produced by evaluating a linkage.
 ///
-/// Yields after every linkage step, including non-move steps and the implicit
+/// Yields after every linkage step, including non-forward steps and the implicit
 /// [`Step::Start`].
 #[derive(Clone, Copy)]
 struct MarkedState {
@@ -3611,7 +3611,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
             self.pen_style.apply(step);
 
             match step {
-                Step::Move(_) | Step::Left(_) | Step::Up(_)
+                Step::Forward(_) | Step::Left(_) | Step::Up(_)
                     if matches!(pen_style.pen(), PenState::Down) =>
                 {
                     return Some(DrawItem3d::Stroke(StrokeSegment {
@@ -5105,12 +5105,12 @@ mod tests {
 
     #[test]
     fn freeze_covers_all_translation_and_rotation_step_types() -> Result<(), Box<dyn StdError>> {
-        // One param used across move/left/up/yaw/pitch/roll with distinct ranges.
+        // One param used across forward/left/up/yaw/pitch/roll with distinct ranges.
         // Retain none freezes it at its normalized default, which resolves through
         // each step's own range.
         const BASE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
             .define_param("t", 0.5)
-            .forward_param("t", 0.0, 1.0) // Move: high = 1.0
+            .forward_param("t", 0.0, 1.0) // Forward: high = 1.0
             .left_param("t", 0.0, 2.0) // Left: high = 2.0
             .up_param("t", 0.0, 3.0) // Up:   high = 3.0
             .yaw_param("t", 0.0, 0.0) // Yaw:  high = 0.0  (no rotation)
@@ -5119,7 +5119,7 @@ mod tests {
 
         const FROZEN: LinkageFixed<0, 0, 8> = BASE.retain_param_indexes(&[]);
 
-        // Zero rotations, then move(0.5) + left(1) + up(1.5).
+        // Zero rotations, then forward(0.5) + left(1) + up(1.5).
         let pos = FROZEN.view().final_pose(&[])?.position();
         assert!(pos.is_close_to(&Vec3::from([0.5, 1.0, 1.5]), 1e-4));
         Ok(())
@@ -5341,8 +5341,8 @@ mod tests {
 
     fn assert_fixed_move(step: Step, expected: f32) {
         match step {
-            Step::Move(Arg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
-            _ => panic!("expected fixed move step"),
+            Step::Forward(Arg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
+            _ => panic!("expected fixed forward step"),
         }
     }
 
