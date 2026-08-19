@@ -47,9 +47,10 @@
 //!     Some(TouchEvent::Down {
 //!         point: Point::new(16, 124),
 //!     }),
+//!     &mut display,
 //! );
-//! ui_frame.slider(&mut display, &TILT_SLIDER, &mut tilt)?;
-//! ui_frame.draw_touch_cursor(&mut display)?;
+//! ui_frame.slider(&TILT_SLIDER, &mut tilt)?;
+//! ui_frame.draw_touch_cursor()?;
 //! # Ok::<(), linkage_blaze_core::examples::ui::Error<Infallible>>(())
 //! ```
 
@@ -90,14 +91,22 @@ impl UiState {
 }
 
 /// Widget operations and input for one frame.
-pub struct UiFrame<'state> {
+pub struct UiFrame<'state, 'frame, Frame> {
     state: &'state mut UiState,
+    frame: &'frame mut Frame,
     unclaimed_touch_down: Option<Point>,
 }
 
-impl<'state> UiFrame<'state> {
+impl<'state, 'frame, Frame> UiFrame<'state, 'frame, Frame>
+where
+    Frame: DrawTarget<Color = Rgb565>,
+{
     /// Creates a frame and updates persistent state for its touch event.
-    pub fn new(state: &'state mut UiState, touch_event: Option<TouchEvent>) -> Self {
+    pub fn new(
+        state: &'state mut UiState,
+        touch_event: Option<TouchEvent>,
+        frame: &'frame mut Frame,
+    ) -> Self {
         let unclaimed_touch_down = match touch_event {
             Some(TouchEvent::Down { point }) => {
                 state.touch_cursor = Some(point);
@@ -118,6 +127,7 @@ impl<'state> UiFrame<'state> {
 
         Self {
             state,
+            frame,
             unclaimed_touch_down,
         }
     }
@@ -125,15 +135,11 @@ impl<'state> UiFrame<'state> {
     /// Updates `value` from any captured drag, then draws the slider.
     /// Slider identity uses pointer equality on `slider`, so callers must pass
     /// a `static` layout spec instead of a `const` one.
-    pub fn slider<D>(
+    pub fn slider(
         &mut self,
-        target: &mut D,
         slider: &'static Slider,
         value: &mut f32,
-    ) -> Result<bool, Error<D::Error>>
-    where
-        D: DrawTarget<Color = Rgb565>,
-    {
+    ) -> Result<bool, Error<Frame::Error>> {
         if self.claim_touch_down(slider.touch_rectangle) {
             self.state.active_slider = Some(slider);
         }
@@ -147,49 +153,34 @@ impl<'state> UiFrame<'state> {
             }
         }
 
-        slider.draw(target, *value).map_err(Error::Draw)?;
+        slider.draw(self.frame, *value).map_err(Error::Draw)?;
         Ok(is_active)
     }
 
     /// Draws the button and returns `true` only on the frame a touch-down lands
     /// inside its rectangle.
-    pub fn button<D>(
-        &mut self,
-        target: &mut D,
-        button: &'static Button,
-    ) -> Result<bool, Error<D::Error>>
-    where
-        D: DrawTarget<Color = Rgb565>,
-    {
+    pub fn button(&mut self, button: &'static Button) -> Result<bool, Error<Frame::Error>> {
         let was_clicked = self.claim_touch_down(button.touch_rectangle);
-        button.draw(target).map_err(Error::Draw)?;
+        button.draw(self.frame).map_err(Error::Draw)?;
         Ok(was_clicked)
     }
 
     /// Like [UiFrame::button], but draws an icon instead of text.
-    pub fn icon_button<D>(
+    pub fn icon_button(
         &mut self,
-        target: &mut D,
         icon_button: &'static IconButton,
-    ) -> Result<bool, Error<D::Error>>
-    where
-        D: DrawTarget<Color = Rgb565>,
-    {
+    ) -> Result<bool, Error<Frame::Error>> {
         let was_clicked = self.claim_touch_down(icon_button.touch_rectangle);
-        icon_button.draw(target).map_err(Error::Draw)?;
+        icon_button.draw(self.frame).map_err(Error::Draw)?;
         Ok(was_clicked)
     }
 
     /// Like [UiFrame::icon_button], but captures the touch and reports a
     /// frame-by-frame hold state until touch-up.
-    pub fn hold_button<D>(
+    pub fn hold_button(
         &mut self,
-        target: &mut D,
         icon_button: &'static IconButton,
-    ) -> Result<HoldButtonState, Error<D::Error>>
-    where
-        D: DrawTarget<Color = Rgb565>,
-    {
+    ) -> Result<HoldButtonState, Error<Frame::Error>> {
         let mut hold_button_state = HoldButtonState::Idle;
 
         if self.claim_touch_down(icon_button.touch_rectangle) {
@@ -206,31 +197,24 @@ impl<'state> UiFrame<'state> {
         }
 
         icon_button
-            .draw_with_state(target, is_pressed)
+            .draw_with_state(self.frame, is_pressed)
             .map_err(Error::Draw)?;
         Ok(hold_button_state)
     }
 
     /// Formats `args` into a stack buffer and draws the label text.
-    pub fn label<D>(
-        &self,
-        target: &mut D,
+    pub fn label(
+        &mut self,
         label: &'static Label,
         args: fmt::Arguments<'_>,
-    ) -> Result<(), Error<D::Error>>
-    where
-        D: DrawTarget<Color = Rgb565>,
-    {
+    ) -> Result<(), Error<Frame::Error>> {
         let mut text = String::<LABEL_CAPACITY>::new();
         text.write_fmt(args)?;
-        label.draw(target, text.as_str()).map_err(Error::Draw)
+        label.draw(self.frame, text.as_str()).map_err(Error::Draw)
     }
 
     /// Draws the cyan touch cursor on top of everything when a touch is active.
-    pub fn draw_touch_cursor<D>(&self, target: &mut D) -> Result<(), Error<D::Error>>
-    where
-        D: DrawTarget<Color = Rgb565>,
-    {
+    pub fn draw_touch_cursor(&mut self) -> Result<(), Error<Frame::Error>> {
         let Some(touch_point) = self.state.touch_cursor else {
             return Ok(());
         };
@@ -242,7 +226,7 @@ impl<'state> UiFrame<'state> {
             (radius * 2 + 1) as u32,
         )
         .into_styled(PrimitiveStyle::with_fill(Rgb565::CSS_CYAN))
-        .draw(target)
+        .draw(self.frame)
         .map_err(Error::Draw)?;
         Ok(())
     }

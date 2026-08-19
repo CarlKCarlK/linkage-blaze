@@ -172,37 +172,33 @@ where
             draw_item_3d.project(&PROJECTION).draw(&mut frame);
         }
 
-        let mut ui_frame = UiFrame::new(&mut ui_state, touch_event);
+        let mut ui_frame = UiFrame::new(&mut ui_state, touch_event, &mut frame);
 
-        ui_frame.slider(&mut frame, &TILT_SLIDER, &mut params[TILT_PARAM_INDEX])?;
-        ui_frame.slider(&mut frame, &DOLLY_SLIDER, &mut params[DOLLY_PARAM_INDEX])?;
-        ui_frame.slider(
-            &mut frame,
-            &XY_VIEW_SLIDER,
-            &mut params[XY_VIEW_PARAM_INDEX],
-        )?;
+        ui_frame.slider(&TILT_SLIDER, &mut params[TILT_PARAM_INDEX])?;
+        ui_frame.slider(&DOLLY_SLIDER, &mut params[DOLLY_PARAM_INDEX])?;
+        ui_frame.slider(&XY_VIEW_SLIDER, &mut params[XY_VIEW_PARAM_INDEX])?;
         for (param_slider, param_index) in PARAM_SLIDERS.iter().zip(ARM_PARAM_INDEXES) {
-            if ui_frame.slider(&mut frame, param_slider, &mut params[param_index])? {
+            if ui_frame.slider(param_slider, &mut params[param_index])? {
                 reverse_kinematics.clear();
             }
         }
 
-        if ui_frame.button(&mut frame, &PREVIOUS_TARGET_BUTTON)? {
+        if ui_frame.button(&PREVIOUS_TARGET_BUTTON)? {
             reverse_kinematics.clear();
             target_seed = target_seed.wrapping_sub(1);
             randomize_target_from_seed(target_seed, &mut params);
         }
-        if ui_frame.button(&mut frame, &NEXT_TARGET_BUTTON)? {
+        if ui_frame.button(&NEXT_TARGET_BUTTON)? {
             reverse_kinematics.clear();
             target_seed = target_seed.wrapping_add(1);
             randomize_target_from_seed(target_seed, &mut params);
         }
-        if ui_frame.icon_button(&mut frame, reverse_kinematics.run_button())? {
+        if ui_frame.icon_button(reverse_kinematics.run_button())? {
             reverse_kinematics.toggle(&params)?;
         }
-        let hold_button_state = ui_frame.hold_button(&mut frame, &RK_STEP_BUTTON)?;
+        let hold_button_state = ui_frame.hold_button(&RK_STEP_BUTTON)?;
 
-        if ui_frame.button(&mut frame, &CALIBRATE_BUTTON)? {
+        if ui_frame.button(&CALIBRATE_BUTTON)? {
             return Ok(Exit::CalibrationRequested);
         }
 
@@ -216,14 +212,9 @@ where
         reverse_kinematics.hold_step(&mut params, hold_button_state, dt_seconds)?;
         reverse_kinematics.tick(&mut params, dt_seconds)?;
 
-        ui_frame.label(
-            &mut frame,
-            &TARGET_LABEL,
-            format_args!("target #{target_seed}"),
-        )?;
+        ui_frame.label(&TARGET_LABEL, format_args!("target #{target_seed}"))?;
         let distance_hundredths = target_distance_hundredths(&params)?;
         ui_frame.label(
-            &mut frame,
             &DISTANCE_LABEL,
             format_args!(
                 "distance {:02}.{:02}",
@@ -235,14 +226,13 @@ where
             previous_tick.and_then(|previous_tick| display_fps_since(previous_tick, current_tick))
         {
             ui_frame.label(
-                &mut frame,
                 &FPS_LABEL,
                 format_args!("{fps_whole:>2}.{fps_fraction} fps"),
             )?;
         }
-        ui_frame.label(&mut frame, &VERSION_LABEL, format_args!("{VERSION_TEXT}"))?;
+        ui_frame.label(&VERSION_LABEL, format_args!("{VERSION_TEXT}"))?;
 
-        ui_frame.draw_touch_cursor(&mut frame)?;
+        ui_frame.draw_touch_cursor()?;
 
         frame.flush().await.map_err(Error::Cyd)?;
         previous_tick = Some(current_tick);
