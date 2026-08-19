@@ -76,7 +76,6 @@ pub struct UiState {
     touch_cursor: Option<Point>,
     active_slider: Option<&'static Slider>,
     active_hold_button: Option<&'static IconButton>,
-    down_consumed: bool,
 }
 
 impl UiState {
@@ -86,7 +85,6 @@ impl UiState {
             touch_cursor: None,
             active_slider: None,
             active_hold_button: None,
-            down_consumed: false,
         }
     }
 }
@@ -94,27 +92,34 @@ impl UiState {
 /// Widget operations and input for one frame.
 pub struct UiFrame<'state> {
     state: &'state mut UiState,
-    touch_event: Option<TouchEvent>,
+    unclaimed_touch_down: Option<Point>,
 }
 
 impl<'state> UiFrame<'state> {
     /// Creates a frame and updates persistent state for its touch event.
     pub fn new(state: &'state mut UiState, touch_event: Option<TouchEvent>) -> Self {
-        state.down_consumed = false;
-
-        match touch_event {
-            Some(TouchEvent::Down { point }) | Some(TouchEvent::Move { point }) => {
+        let unclaimed_touch_down = match touch_event {
+            Some(TouchEvent::Down { point }) => {
                 state.touch_cursor = Some(point);
+                Some(point)
+            }
+            Some(TouchEvent::Move { point }) => {
+                state.touch_cursor = Some(point);
+                None
             }
             Some(TouchEvent::Up) => {
                 state.touch_cursor = None;
                 state.active_slider = None;
                 state.active_hold_button = None;
+                None
             }
-            None => {}
-        }
+            None => None,
+        };
 
-        Self { state, touch_event }
+        Self {
+            state,
+            unclaimed_touch_down,
+        }
     }
 
     /// Updates `value` from any captured drag, then draws the slider.
@@ -129,11 +134,8 @@ impl<'state> UiFrame<'state> {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        if let Some(TouchEvent::Down { point }) = self.touch_event {
-            if !self.state.down_consumed && slider.touch_rectangle.contains(point) {
-                self.state.active_slider = Some(slider);
-                self.state.down_consumed = true;
-            }
+        if self.claim_touch_down(slider.touch_rectangle) {
+            self.state.active_slider = Some(slider);
         }
         let is_active = self
             .state
@@ -159,7 +161,7 @@ impl<'state> UiFrame<'state> {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        let was_clicked = self.consume_down(button.touch_rectangle);
+        let was_clicked = self.claim_touch_down(button.touch_rectangle);
         button.draw(target).map_err(Error::Draw)?;
         Ok(was_clicked)
     }
@@ -173,7 +175,7 @@ impl<'state> UiFrame<'state> {
     where
         D: DrawTarget<Color = Rgb565>,
     {
-        let was_clicked = self.consume_down(icon_button.touch_rectangle);
+        let was_clicked = self.claim_touch_down(icon_button.touch_rectangle);
         icon_button.draw(target).map_err(Error::Draw)?;
         Ok(was_clicked)
     }
@@ -190,12 +192,9 @@ impl<'state> UiFrame<'state> {
     {
         let mut hold_button_state = HoldButtonState::Idle;
 
-        if let Some(TouchEvent::Down { point }) = self.touch_event {
-            if !self.state.down_consumed && icon_button.touch_rectangle.contains(point) {
-                self.state.active_hold_button = Some(icon_button);
-                self.state.down_consumed = true;
-                hold_button_state = HoldButtonState::Pressed;
-            }
+        if self.claim_touch_down(icon_button.touch_rectangle) {
+            self.state.active_hold_button = Some(icon_button);
+            hold_button_state = HoldButtonState::Pressed;
         }
 
         let is_pressed = self
@@ -248,19 +247,16 @@ impl<'state> UiFrame<'state> {
         Ok(())
     }
 
-    fn consume_down(&mut self, touch_rectangle: Rectangle) -> bool {
-        let Some(TouchEvent::Down { point }) = self.touch_event else {
+    fn claim_touch_down(&mut self, touch_rectangle: Rectangle) -> bool {
+        let Some(point) = self.unclaimed_touch_down else {
             return false;
         };
-        if self.state.down_consumed {
-            return false;
-        }
 
         if !touch_rectangle.contains(point) {
             return false;
         }
 
-        self.state.down_consumed = true;
+        self.unclaimed_touch_down = None;
         true
     }
 }
