@@ -48,10 +48,8 @@ linkage_file! {
 }
 
 // Prepend a linkage drawing style.
-// TODO0API The style prefix and file linkage use one typed fixed intermediate.
 const STYLE: LinkageFixed<0, 0, 3> = LinkageFixed::start().pen_width(3.5).pen_color(FIGURE_COLOR);
 const CLOCK_PARAM_NAMES: &[&str] = &["head_yrotation", "l_shldr_zrotation", "r_shldr_zrotation"];
-// TODO0API The explicit output capacity preserves fixed ownership while combining style and motion.
 const LINKAGE_WITH_STYLE: LinkageFixed<
     { pirouette::DOF },
     { pirouette::MARKS },
@@ -78,7 +76,7 @@ const PROJECTION: Projection = Projection::front_orthographic(
 // ── Background_bitmap ──────────────────────────────────────────────────────────
 
 /// Clock-face background_bitmap, loaded at compile time.
-const BACKGROUND_BITMAP: Image565Fixed<239, 319, { 239 * 319 }> =
+const BACKGROUND_BITMAP: Image565Fixed<240, 320, { 240 * 320 }> =
     tga!("../assets/clock_back.small.tga").to_565();
 
 const HOURS_SIGN_TGA: Image888Fixed<45, 73, { 45 * 73 }> = tga!("../assets/hours.small.tga");

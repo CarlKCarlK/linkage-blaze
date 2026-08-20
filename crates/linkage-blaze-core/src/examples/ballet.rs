@@ -39,11 +39,9 @@ linkage_file! {
         file: "../assets/mocap/pirouette.lb.rs",
     }
 }
-// TODO0API The drawing style is an owned fixed prefix for the file linkage.
 const STYLE: LinkageFixed<0, 0, 3> = LinkageFixed::start()
     .pen_color(FOREGROUND_COLOR)
     .pen_width(3.2);
-// TODO0API The typed fixed result makes the combined owner and capacity explicit.
 const LINKAGE: LinkageFixed<
     { pirouette::DOF },
     { pirouette::MARKS },

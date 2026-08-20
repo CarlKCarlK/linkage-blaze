@@ -22,19 +22,16 @@ linkage_file! {
 }
 const POSE_TOLERANCE: f32 = 1e-5;
 
-// TODO0API Named binary intermediate for the camera and grid inputs.
 const CAMERA_AND_GRID: LinkageFixed<
     { camera_control::DOF + grid9x9::DOF },
     { camera_control::MARKS + grid9x9::MARKS },
     { camera_control::STEP_COUNT + grid9x9::STEP_COUNT - 1 },
 > = camera_control::fixed().combine(grid9x9::view());
-// TODO0API The combination reserves one capacity slot for its restore suffix.
 const SCENE_WITH_ARM: LinkageFixed<
     { CAMERA_AND_GRID.dof() + armatron1::DOF },
     { CAMERA_AND_GRID.mark_count() + armatron1::MARKS },
     { CAMERA_AND_GRID.step_count() + armatron1::STEP_COUNT },
 > = CAMERA_AND_GRID.combine(armatron1::view());
-// TODO0API The final fixed combination preserves ownership and uses the annotated output size.
 const LINKAGE_FIXED: LinkageFixed<
     { SCENE_WITH_ARM.dof() + armatron1::DOF },
     { SCENE_WITH_ARM.mark_count() + armatron1::MARKS },
@@ -45,7 +42,6 @@ const LINKAGE_FIXED: LinkageFixed<
     .combine(armatron1::view())
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
-// TODO0API Separate arm-tip composition remains a named binary fixed intermediate.
 const ARM_TIP_LINKAGE_FIXED: LinkageFixed<
     { camera_control::DOF + armatron1::DOF },
     { camera_control::MARKS + armatron1::MARKS },
@@ -238,7 +234,6 @@ fn armatron_full_scene_linkage_built_with_buf() -> Result<(), linkage_blaze_core
     let camera_control = camera_control::buf();
     let grid9x9 = grid9x9::buf();
 
-    // TODO00PI Buffer combination consumes the left owner and copies the right view.
     let camera_and_grid: LinkageBuf<
         { camera_control::DOF + grid9x9::DOF },
         { camera_control::MARKS + grid9x9::MARKS },
@@ -340,7 +335,6 @@ fn linkage_buf_combine_combines_from_view() -> Result<(), linkage_blaze_core::Er
     let buf_a = LinkageBuf::from(&FIXED_A);
     let view_b = FIXED_B.view();
 
-    // TODO0API The output type supplies the combined DOF and mark capacities for `combine`.
     let combined: LinkageBuf<
         { FIXED_A.dof() + FIXED_B.dof() },
         { FIXED_A.mark_count() + FIXED_B.mark_count() },

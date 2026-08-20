@@ -62,19 +62,16 @@ linkage_file! {
         file: "../../assets/examples/armatron/armatron1.lb.rs",
     }
 }
-// TODO000API Named binary intermediates keep the three ordered scene inputs readable.
 const CAMERA_AND_GRID: LinkageFixed<
     { camera_control::DOF + grid9x9::DOF },
     { camera_control::MARKS + grid9x9::MARKS },
     { camera_control::STEP_COUNT + grid9x9::STEP_COUNT - 1 },
 > = camera_control::fixed().combine(grid9x9::view());
-// TODO000API The explicit joint-sphere capacity is the cost of ordinary fixed construction.
 const ARMATRON_WITH_JOINTS: LinkageFixed<
     { armatron1::DOF },
     { armatron1::MARKS },
     { joint_sphere_step_count(&armatron1::fixed()) },
 > = with_joint_spheres(armatron1::fixed(), 0.15);
-// TODO000API This typed fixed intermediate replaces the removed named-program macro.
 const SCENE_WITH_ARM: LinkageFixed<
     { CAMERA_AND_GRID.dof() + ARMATRON_WITH_JOINTS.dof() },
     { CAMERA_AND_GRID.mark_count() + ARMATRON_WITH_JOINTS.mark_count() },
@@ -82,7 +79,6 @@ const SCENE_WITH_ARM: LinkageFixed<
 > = CAMERA_AND_GRID.combine(ARMATRON_WITH_JOINTS.view());
 // `pen_color` and `sphere_param` each append one step after the ghost arm.
 const TARGET_SUFFIX_STEP_COUNT: usize = 2;
-// TODO000API The final scene combines the restored scene with a ghost arm and preserves fixed ownership.
 const LINKAGE_FIXED: LinkageFixed<
     { SCENE_WITH_ARM.dof() + armatron1::DOF },
     { SCENE_WITH_ARM.mark_count() + armatron1::MARKS },
@@ -92,11 +88,9 @@ const LINKAGE_FIXED: LinkageFixed<
     .combine(armatron1::view())
     .pen_color(Rgb888::CSS_RED)
     .sphere_param("close hand", 0.5, 0.0);
-// TODO000API Rendering borrows the final fixed owner through the common view boundary.
 const LINKAGE: LinkageView<{ LINKAGE_FIXED.dof() }, { LINKAGE_FIXED.mark_count() }> =
     LINKAGE_FIXED.view();
 // Minimal linkage used only to measure arm-tip distance to the target.
-// TODO000API This separate consumer linkage uses a named binary fixed intermediate.
 const ARM_TIP_LINKAGE_FIXED: LinkageFixed<
     { camera_control::DOF + armatron1::DOF },
     { camera_control::MARKS + armatron1::MARKS },
