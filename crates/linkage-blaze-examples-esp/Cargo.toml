@@ -2,6 +2,7 @@
 name = "linkage-blaze-examples-esp"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 # Shared CYD-oriented ESP examples. Each example is a standalone no_std binary

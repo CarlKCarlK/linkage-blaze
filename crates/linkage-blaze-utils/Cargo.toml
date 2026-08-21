@@ -2,6 +2,7 @@
 name = "linkage-blaze-utils"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 # Host-side dev tools with no natural home in the embedded crates: the
