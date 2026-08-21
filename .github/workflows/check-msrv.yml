@@ -13,6 +13,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check out device-envoy
+        uses: actions/checkout@v4
+        with:
+          repository: CarlKCarlK/device-envoy
+          ref: dev2026may
+          path: device-envoy-src
+
+      - name: Mirror local device-envoy patch path
+        run: |
+          mkdir -p ../mcu
+          ln -s "$GITHUB_WORKSPACE/device-envoy-src" ../mcu/device-envoy
+
       - name: Install Rust 1.93
         uses: dtolnay/rust-toolchain@1.93
 

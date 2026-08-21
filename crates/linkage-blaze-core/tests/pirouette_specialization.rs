@@ -16,7 +16,7 @@ linkage_file! {
 //   1: head_yrotation
 //   2: r_shldr_zrotation
 //   3: l_shldr_zrotation
-const PIROUETTE_BODY: LinkageFixed<4, 6, { pirouette::STEP_COUNT }> = pirouette::fixed()
+static PIROUETTE_BODY: LinkageFixed<4, 6, { pirouette::STEP_COUNT }> = pirouette::fixed()
     .freeze_param_name::<131>("l_shin_yrotation", 57.6)
     .retain_param_names::<4>(&[
         "head_yrotation",
@@ -172,7 +172,7 @@ fn pirouette_body_view_matches_buf() -> Result<(), linkage_blaze_core::Error> {
 fn pirouette_fixed_and_buf_freeze_retain_produce_same_result()
 -> Result<(), linkage_blaze_core::Error> {
     // Load the full pirouette as a LinkageBuf, apply the same freeze+retain
-    // pipeline as the const PIROUETTE_BODY, and verify the two paths agree.
+    // pipeline as PIROUETTE_BODY, and verify the two paths agree.
     let buf_body = LinkageBuf::<132, 6>::from(&pirouette::fixed())
         .freeze_param_name::<131>("l_shin_yrotation", 57.6)
         .retain_param_names::<4>(&[
