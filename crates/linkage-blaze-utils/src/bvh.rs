@@ -532,7 +532,7 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
     linkage = apply_bvh_joint_parameters(linkage, layout, joint_index);
 
     let joint_name = clip.joints[joint_index].name.as_str();
-    if mark_joints.iter().any(|&name| name == joint_name) {
+    if mark_joints.contains(&joint_name) {
         linkage = linkage.mark(intern_mark_name(joint_name));
     }
 

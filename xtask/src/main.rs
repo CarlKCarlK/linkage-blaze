@@ -490,7 +490,7 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         let output_dir = demo_dir.join(version);
         fs::create_dir_all(&output_dir)?;
         copy_directory_contents(&source_dir, &output_dir)?;
-        copy_cyd_simulator_assets(&repo_root, &source_dir, &output_dir)?;
+        copy_cyd_simulator_assets(repo_root, &source_dir, &output_dir)?;
 
         let out_name = find_pkg_out_name(&output_dir).map_err(|error| {
             Error::message(format!("{} ({version}): {error}", output_dir.display()))

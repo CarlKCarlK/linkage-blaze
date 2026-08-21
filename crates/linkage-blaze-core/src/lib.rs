@@ -302,6 +302,12 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         self.steps.len()
     }
 
+    /// Return whether this linkage has no steps.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.steps.is_empty()
+    }
+
     /// Return the active step count for const-evaluation helpers.
     #[doc(hidden)]
     pub const fn step_count(&self) -> usize {
@@ -414,10 +420,10 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
                     continue;
                 }
             };
-            if let Arg::Variable(v) = arg {
-                if v.index() == index {
-                    return (v.low(), v.high());
-                }
+            if let Arg::Variable(v) = arg
+                && v.index() == index
+            {
+                return (v.low(), v.high());
             }
             i += 1;
         }
@@ -1725,6 +1731,13 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     #[doc(hidden)]
     pub const fn len(&self) -> usize {
         self.len
+    }
+
+    /// Return whether this linkage has no active steps.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Return the number of parameters actually defined.
@@ -3277,6 +3290,12 @@ impl PenStyle {
     }
 }
 
+impl Default for PenStyle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Full pose after evaluating a linkage step.
 #[derive(Clone, Copy, Debug)]
 pub struct Pose {
@@ -3431,10 +3450,6 @@ impl StrokeSegment {
         self.width
     }
 }
-
-/// Iterator over poses produced by evaluating a linkage.
-///
-/// Yields one [`Pose`] after every linkage step, including the implicit [`Step::Start`].
 
 /// Iterator over styled poses produced by evaluating a linkage.
 ///
