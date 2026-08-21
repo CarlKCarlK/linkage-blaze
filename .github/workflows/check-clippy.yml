@@ -1,0 +1,38 @@
+name: Check Clippy
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Linkage Blaze
+        uses: actions/checkout@v4
+
+      - name: Check out device-envoy
+        uses: actions/checkout@v4
+        with:
+          repository: CarlKCarlK/device-envoy
+          ref: dev2026may
+          path: device-envoy-src
+
+      - name: Mirror local device-envoy patch path
+        run: |
+          mkdir -p ../mcu
+          ln -s "$GITHUB_WORKSPACE/device-envoy-src" ../mcu/device-envoy
+
+      - name: Install latest stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Clippy linkage-blaze-core without optional features
+        run: cargo clippy -p linkage-blaze-core --all-targets --no-default-features -- -D warnings
+
+      - name: Clippy linkage-blaze-core with alloc
+        run: cargo clippy -p linkage-blaze-core --all-targets --no-default-features --features alloc -- -D warnings
+
+      - name: Clippy linkage-blaze-utils
+        run: cargo clippy -p linkage-blaze-utils --all-targets -- -D warnings

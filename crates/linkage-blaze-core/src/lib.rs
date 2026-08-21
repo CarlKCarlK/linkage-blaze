@@ -2346,11 +2346,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
         Self {
             params: [Param::EMPTY; DOF],
             param_len: 0,
-            steps: {
-                let mut v = alloc::vec::Vec::new();
-                v.push(Step::Start);
-                v
-            },
+            steps: alloc::vec![Step::Start],
             mark_names: [""; MARKS],
             mark_len: 0,
         }
