@@ -25,8 +25,8 @@ jobs:
           mkdir -p ../mcu
           ln -s "$GITHUB_WORKSPACE/device-envoy-src" ../mcu/device-envoy
 
-      - name: Install latest stable Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.98.0
+        uses: dtolnay/rust-toolchain@1.98.0
 
       - name: Clippy linkage-blaze-core without optional features
         run: cargo clippy -p linkage-blaze-core --all-targets --no-default-features -- -D warnings
