@@ -4564,7 +4564,7 @@ mod tests {
     fn test_excel_pose_trace0_matches_expected() -> Result<(), Box<dyn StdError>> {
         // Fractions for [raise hand, bend elbow, close hand,
         //  lower arm, spin whole arm, spin hand].
-        let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
+        let params = [0.751_450_1, 0.500_200_4, 0.5, 1.0, 0.625_438_7, 0.0];
         assert_pose_trace_matches_expected("excel_pose_trace0.csv", LINKAGE0.view().poses(&params)?)
     }
 
@@ -4578,12 +4578,12 @@ mod tests {
     #[test]
     fn test_setting0_matches_excel_final_pose() -> Result<(), Box<dyn StdError>> {
         let params = [
-            0.7514501463, // raise hand
-            0.49,         // bend elbow
-            0.50011957,   // close hand
-            1.0,          // lower arm
-            0.6254387123, // spin whole arm
-            1.0,          // spin hand
+            0.751_450_1, // raise hand
+            0.49,        // bend elbow
+            0.50011957,  // close hand
+            1.0,         // lower arm
+            0.625_438_7, // spin whole arm
+            1.0,         // spin hand
         ];
         let pose = LINKAGE0.view().final_pose(&params)?;
         let expected = Pose::new(
@@ -4610,12 +4610,12 @@ mod tests {
         let pose = LINKAGE1.view().final_pose(&params)?;
         let expected = Pose::new(
             [
-                [-0.368124515, 0.929776430, 0.0],
-                [-0.929776430, -0.368124515, 0.0],
+                [-0.368_124_5, 0.929_776_43, 0.0],
+                [-0.929_776_43, -0.368_124_5, 0.0],
                 [0.0, 0.0, 1.0],
             ]
             .into(),
-            [-4.744067192, -2.626399040, 0.0].into(),
+            [-4.744_067, -2.626_399, 0.0].into(),
         );
 
         assert_pose_approx_eq(pose, expected);
@@ -4653,7 +4653,7 @@ mod tests {
     fn test_linkage0_png_matches_expected() -> Result<(), Box<dyn StdError>> {
         // Fractions for [raise hand, bend elbow, close hand,
         //  lower arm, spin whole arm, spin hand].
-        let params = [0.7514501463, 0.5002003842, 0.5, 1.0, 0.6254387123, 0.0];
+        let params = [0.751_450_1, 0.500_200_4, 0.5, 1.0, 0.625_438_7, 0.0];
 
         let canvas = draw_linkage_xy_canvas(&LINKAGE0, &params)?;
         assert_png_matches_expected("linkage0_xy.png", &canvas)

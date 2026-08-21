@@ -640,6 +640,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn parses_decimal() {
         let (v, end) = parse_f32(b"3.14", 0);
         assert_eq!(end, 4);

@@ -8,11 +8,11 @@ use core::{
 pub struct Vec3(pub [f32; 3]);
 
 trait F32Ext {
-    fn is_close_to(self, other: Self, tolerance: Self) -> bool;
+    fn close_to(self, other: Self, tolerance: Self) -> bool;
 }
 
 impl F32Ext for f32 {
-    fn is_close_to(self, other: Self, tolerance: Self) -> bool {
+    fn close_to(self, other: Self, tolerance: Self) -> bool {
         (self - other).abs() <= tolerance
     }
 }
@@ -38,7 +38,7 @@ impl Vec3 {
         self.0
             .iter()
             .zip(other.0.iter())
-            .all(|(left, right)| left.is_close_to(*right, tolerance))
+            .all(|(left, right)| left.close_to(*right, tolerance))
     }
 
     /// Return the dot product with `rhs`.
@@ -243,8 +243,8 @@ mod tests {
 
     #[test]
     fn test_degrees_to_radians() {
-        assert!(degrees_to_radians(180.0).is_close_to(PI, 1e-6));
-        assert!(degrees_to_radians(90.0).is_close_to(PI / 2.0, 1e-6));
+        assert!(degrees_to_radians(180.0).close_to(PI, 1e-6));
+        assert!(degrees_to_radians(90.0).close_to(PI / 2.0, 1e-6));
     }
 
     #[test]
@@ -268,14 +268,14 @@ mod tests {
         let left = Vec3::from([1.0, 2.0, 3.0]);
         let right = Vec3::from([4.0, -5.0, 6.0]);
 
-        assert!(left.dot(right).is_close_to(12.0, 1e-6));
+        assert!(left.dot(right).close_to(12.0, 1e-6));
     }
 
     #[test]
     fn test_vec3_length() {
         let vec3 = Vec3::from([3.0, 4.0, 0.0]);
 
-        assert!(vec3.length().is_close_to(5.0, 1e-6));
+        assert!(vec3.length().close_to(5.0, 1e-6));
     }
 
     #[test]
@@ -286,8 +286,8 @@ mod tests {
         let first_to_second = first.distance_to(second);
         let second_to_first = second.distance_to(first);
 
-        assert!(first_to_second.is_close_to(5.0, 1e-6));
-        assert!(first_to_second.is_close_to(second_to_first, 1e-6));
+        assert!(first_to_second.close_to(5.0, 1e-6));
+        assert!(first_to_second.close_to(second_to_first, 1e-6));
     }
 
     #[test]
