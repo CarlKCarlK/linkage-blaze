@@ -24,7 +24,9 @@ impl std::error::Error for Error {}
 
 #[wasm_bindgen]
 pub fn default_program() -> String {
-    include_str!("../../linkage-blaze-core/src/assets/examples/armatron/armatron1.lb.rs").into()
+    // Keep the editor's default program inside this crate so its published
+    // package does not depend on a sibling workspace directory.
+    include_str!("assets/armatron1.lb.rs").into()
 }
 
 #[wasm_bindgen]
