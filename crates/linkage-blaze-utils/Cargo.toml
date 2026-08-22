@@ -4,6 +4,13 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Host and WebAssembly tools for Linkage Blaze linkage programs"
+documentation = "https://docs.rs/linkage-blaze-utils"
+readme = "../../README.md"
+keywords = ["kinematics", "wasm", "bvh", "animation", "graphics"]
+categories = ["command-line-utilities", "wasm", "graphics"]
 
 # Host-side dev tools with no natural home in the embedded crates: the
 # browser program editor (`src/lib.rs`, a wasm-bindgen `cdylib`) and the

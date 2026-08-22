@@ -4,6 +4,13 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "No-std 3D turtle graphics for animated jointed figures"
+documentation = "https://docs.rs/linkage-blaze-core"
+readme = "../../README.md"
+keywords = ["kinematics", "graphics", "embedded", "no-std", "animation"]
+categories = ["embedded", "graphics", "no-std"]
 
 [dependencies]
 derive_more = { version = "2.1.1", default-features = false, features = ["from"] }

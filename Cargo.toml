@@ -14,6 +14,8 @@ version = "0.1.4"
 edition = "2024"
 rust-version = "1.93"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/CarlKCarlK/linkage-blaze"
+homepage = "https://github.com/CarlKCarlK/linkage-blaze"
 
 [workspace.dependencies]
 linkage-blaze-core = { path = "crates/linkage-blaze-core" }
