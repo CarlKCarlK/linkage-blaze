@@ -451,14 +451,14 @@ log = { version = "0.4", default-features = false }
 linkage-blaze-core.workspace = true
 
 [target.'cfg(target_os = "none")'.dependencies]
-device-envoy-core = { version = "0.1.0", default-features = false }
+device-envoy-core = { version = "0.1.1", default-features = false }
 embassy-time = "0.5.1"
 derive_more = { version = "2.1.1", default-features = false, features = [
     "from",
 ] }
 embassy-executor = "0.10.0"
 static_cell = "2.1.1"
-device-envoy-esp = { version = "0.1.0", default-features = false }
+device-envoy-esp = { version = "0.1.1", default-features = false }
 paste = "1.0"
 time = { version = "0.3.47", default-features = false }
 esp-hal = { version = "1.1.0", default-features = false, features = [
