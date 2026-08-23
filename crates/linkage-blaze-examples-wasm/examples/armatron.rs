@@ -5,7 +5,7 @@ use core::convert::Infallible;
 use device_envoy_core::cyd::display::Orientation;
 use device_envoy_core::wasm::cyd_web;
 use embedded_graphics::mono_font::ascii::FONT_6X10;
-use linkage_blaze_core::examples::armatron::{
+use linkage_blaze::examples::armatron::{
     self, BACKGROUND_COLOR, Error as ArmatronError, Exit, FOREGROUND_COLOR,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -22,7 +22,7 @@ const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(
     "A six-joint robot arm driven by inverse kinematics.",
     "A robot arm with six joints, modeled as a linkage and driven by inverse kinematics.",
     "Drag the controls on the panel to pose the arm or run the solver.",
-    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/armatron/main.rs",
+    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze/src/examples/armatron/main.rs",
 );
 
 #[wasm_bindgen]

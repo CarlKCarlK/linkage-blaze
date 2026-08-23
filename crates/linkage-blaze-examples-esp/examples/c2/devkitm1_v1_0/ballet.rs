@@ -13,7 +13,7 @@ use device_envoy_esp::init_and_start;
 use device_envoy_esp::{Error as DeviceEnvoyError, button::PressedTo, button_watch};
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::ballet::{
+use linkage_blaze::examples::ballet::{
     self, BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
 };
 use log::info;

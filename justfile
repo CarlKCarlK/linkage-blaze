@@ -22,15 +22,15 @@ run-armatron-spi board="2":
 
 # ── Tests / checks ───────────────────────────────────────────────────────────
 
-# Run linkage-blaze-core tests (unit tests + doc tests + alloc + examples integration tests)
+# Run linkage-blaze tests (unit tests + doc tests + alloc + examples integration tests)
 test-core:
-    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core
-    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features alloc
-    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-core --features examples-armatron,examples-ballet,examples-clock,examples-skeleton-clock
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze --features alloc
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze --features examples-armatron,examples-ballet,examples-clock,examples-skeleton-clock
 
-# Run linkage-blaze-utils tests (editor render logic + the bvh-to-lb converter)
+# Run the unpublished browser editor adapter tests.
 test-utils:
-    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-utils
+    env RUSTFLAGS="-D warnings" cargo test -p linkage-blaze-editor-wasm
 
 # Profile each command in check-all and write a Markdown report under specs/.
 profile-check-all:
@@ -81,7 +81,7 @@ bump-gallery-version version='':
 
 # Generate docs and open in browser
 docs:
-    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc --open
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze --no-deps --features alloc --open
 
 # Show generated docs
 show-docs:
@@ -103,9 +103,9 @@ _bundle-docs:
     rm -rf "$out_dir" "$archive"
     mkdir -p "$rustdoc_dir"
 
-    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze-core --no-deps --features alloc
+    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze --no-deps --features alloc
 
-    cp -R target/doc/linkage_blaze_core "$rustdoc_dir/"
+    cp -R target/doc/linkage_blaze "$rustdoc_dir/"
     cp target/doc/crates.js target/doc/help.html target/doc/search-index.js target/doc/settings.html target/doc/src-files.js "$rustdoc_dir/" 2>/dev/null || true
 
     {
@@ -113,7 +113,7 @@ _bundle-docs:
         printf -- 'Generated: %s UTC\n\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
         printf -- 'This bundle is intended for an outside AI reviewer. It includes repository guidance, Markdown docs, Cargo manifests, and generated rustdoc HTML copied under `rustdoc/`.\n\n'
         printf -- '## Rustdoc entry points\n\n'
-        printf -- '%s\n\n' '- `rustdoc/linkage_blaze_core/index.html`'
+        printf -- '%s\n\n' '- `rustdoc/linkage_blaze/index.html`'
         printf -- '## Repository docs and manifests\n\n'
     } > "$bundle"
 
@@ -147,7 +147,7 @@ generate-board-examples:
 # `linkage-blaze-examples-esp` crate. Example binaries land in
 # target/<triple>/release/examples/<name>.
 
-# Each example enables only its own `linkage-blaze-core` module, so unused
+# Each example enables only its own `linkage-blaze` module, so unused
 # example modules (and ballet's slow `MOTION` const) are never compiled.
 _armatron_args       := _esp_args + " --features armatron"
 _ballet_args         := _esp_args + " --features ballet"
@@ -213,13 +213,13 @@ run-ballet-esp:
     just build-ballet-esp
     source ~/export-esp.sh && env RUSTFLAGS="{{_ballet_esp_rustflags}}" cargo +esp run -p linkage-blaze-examples-esp --example ballet_esp32_generic {{_ballet_args}}
 
-# ── linkage-blaze-utils ──────────────────────────────────────────────────────
+# ── linkage-blaze-editor-wasm ──────────────────────────────────────────────────────
 
-_editor_crate := "crates/linkage-blaze-utils"
-_editor_www   := "crates/linkage-blaze-utils/www"
+_editor_crate := "crates/linkage-blaze-editor-wasm"
+_editor_www   := "crates/linkage-blaze-editor-wasm/www"
 
 check-editor:
-    cargo check -p linkage-blaze-utils --target wasm32-unknown-unknown
+    cargo check -p linkage-blaze-editor-wasm --target wasm32-unknown-unknown
 
 build-editor-deps:
     cd {{_editor_www}} && npm ci && npx esbuild deps-entry.js --bundle --format=esm --minify --outfile=vendor/editor-deps.js

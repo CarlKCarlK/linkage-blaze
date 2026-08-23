@@ -30,11 +30,14 @@ jobs:
         with:
           components: clippy
 
-      - name: Clippy linkage-blaze-core without optional features
-        run: cargo clippy -p linkage-blaze-core --all-targets --no-default-features -- -D warnings
+      - name: Clippy linkage-blaze without optional features
+        run: cargo clippy -p linkage-blaze --all-targets --no-default-features -- -D warnings
 
-      - name: Clippy linkage-blaze-core with alloc
-        run: cargo clippy -p linkage-blaze-core --all-targets --no-default-features --features alloc -- -D warnings
+      - name: Clippy linkage-blaze with alloc
+        run: cargo clippy -p linkage-blaze --all-targets --no-default-features --features alloc -- -D warnings
 
-      - name: Clippy linkage-blaze-utils
-        run: cargo clippy -p linkage-blaze-utils --all-targets -- -D warnings
+      - name: Clippy linkage-blaze with BVH
+        run: cargo clippy -p linkage-blaze --all-targets --no-default-features --features bvh -- -D warnings
+
+      - name: Clippy browser editor adapter
+        run: cargo clippy -p linkage-blaze-editor-wasm --all-targets -- -D warnings

@@ -2219,7 +2219,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "linkage-blaze-core"
+name = "linkage-blaze"
 version = "0.1.5"
 dependencies = [
  "derive_more",
@@ -2241,6 +2241,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "linkage-blaze-editor-wasm"
+version = "0.1.5"
+dependencies = [
+ "derive_more",
+ "linkage-blaze",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "linkage-blaze-examples-esp"
 version = "0.1.5"
 dependencies = [
@@ -2256,7 +2265,7 @@ dependencies = [
  "esp-println",
  "esp-rtos",
  "heapless 0.9.3",
- "linkage-blaze-core",
+ "linkage-blaze",
  "log",
  "paste",
  "static_cell",
@@ -2280,7 +2289,7 @@ dependencies = [
  "embassy-rp",
  "embassy-time",
  "embedded-graphics",
- "linkage-blaze-core",
+ "linkage-blaze",
  "panic-probe",
 ]
 
@@ -2293,20 +2302,11 @@ dependencies = [
  "embassy-time",
  "embedded-graphics",
  "js-sys",
- "linkage-blaze-core",
+ "linkage-blaze",
  "time",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "linkage-blaze-utils"
-version = "0.1.5"
-dependencies = [
- "derive_more",
- "linkage-blaze-core",
- "wasm-bindgen",
 ]
 
 [[package]]

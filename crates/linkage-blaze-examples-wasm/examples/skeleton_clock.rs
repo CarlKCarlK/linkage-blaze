@@ -7,7 +7,7 @@ use device_envoy_core::{
     wasm::{WifiConnectOutcome, cyd_web},
     wifi_auto::WifiAutoEvent,
 };
-use linkage_blaze_core::examples::skeleton_clock::{
+use linkage_blaze::examples::skeleton_clock::{
     self, BACKGROUND_COLOR, Error as SkeletonClockError, Exit, FOREGROUND_COLOR, ORIENTATION,
     TOP_FONT, WIFI_STATUS_RECTANGLE,
 };
@@ -25,7 +25,7 @@ const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(
     "A motion-captured figure holds the hour and minute on placards.",
     "A clock told by a motion-captured figure whose placards show the hour and minute.",
     "It follows your local clock. Use the shared time control to scrub to any time of day.",
-    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/skeleton_clock.rs",
+    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze/src/examples/skeleton_clock.rs",
 );
 
 #[wasm_bindgen]

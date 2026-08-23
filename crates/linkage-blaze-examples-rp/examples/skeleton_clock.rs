@@ -24,7 +24,7 @@ use device_envoy_rp::{
     },
 };
 use embassy_executor::Spawner;
-use linkage_blaze_core::examples::skeleton_clock::{
+use linkage_blaze::examples::skeleton_clock::{
     self, BACKGROUND_COLOR, Exit, FIGURE_TILE_GRID, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
     WIFI_STATUS_RECTANGLE,
 };

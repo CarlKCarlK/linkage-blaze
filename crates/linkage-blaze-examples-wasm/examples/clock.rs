@@ -7,7 +7,7 @@ use device_envoy_core::{
     wasm::{WifiConnectOutcome, cyd_web},
     wifi_auto::WifiAutoEvent,
 };
-use linkage_blaze_core::examples::clock::{
+use linkage_blaze::examples::clock::{
     self, BACKGROUND_COLOR, Error as ClockError, Exit, FOREGROUND_COLOR, ORIENTATION,
     WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE,
 };
@@ -25,7 +25,7 @@ const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(
     "An analog linkage clock with a digital strip and WiFi status.",
     "An analog clock whose hands are a tiny linkage posed by the time of day.",
     "It follows your local clock. Use the shared time control to scrub to any time of day.",
-    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/clock.rs",
+    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze/src/examples/clock.rs",
 );
 
 #[wasm_bindgen]

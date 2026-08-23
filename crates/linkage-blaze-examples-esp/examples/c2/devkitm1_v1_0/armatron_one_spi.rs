@@ -15,7 +15,7 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR};
+use linkage_blaze::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR};
 use log::info;
 
 esp_bootloader_esp_idf::esp_app_desc!();

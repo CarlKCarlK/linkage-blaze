@@ -9,8 +9,8 @@ mod tests {
     // The include above defines `pub static SAMPLES: [[f32; DOF]; SAMPLE_COUNT]`.
 
     #[allow(long_running_const_eval)]
-    const CONST_MOTION: linkage_blaze_core::bvh_parse::BvhMotion<132, 592> =
-        linkage_blaze_core::bvh_motion!("../../linkage-blaze-core/src/assets/mocap/pirouette.bvh");
+    const CONST_MOTION: linkage_blaze::bvh_parse::BvhMotion<132, 592> =
+        linkage_blaze::bvh_motion!("../../linkage-blaze/src/assets/mocap/pirouette.bvh");
 
     #[test]
     fn precomputed_matches_const_fn() {

@@ -12,7 +12,7 @@ use device_envoy_rp::{
     cyd::{CydDisplayRp, CydRp, CydStaticRp, DEFAULT_DISPLAY_SPI_HZ, Error as CydError},
 };
 use embassy_executor::Spawner;
-use linkage_blaze_core::examples::ballet::{
+use linkage_blaze::examples::ballet::{
     self, BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
 };
 use panic_probe as _;

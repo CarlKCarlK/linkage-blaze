@@ -54,10 +54,10 @@ arm = [
     "device-envoy-rp/arm",
 ]
 wifi = ["device-envoy-rp/wifi"]
-armatron = ["linkage-blaze-core/examples-armatron"]
-ballet = ["linkage-blaze-core/examples-ballet"]
-clock = ["linkage-blaze-core/examples-clock"]
-skeleton-clock = ["linkage-blaze-core/examples-skeleton-clock"]
+armatron = ["linkage-blaze/examples-armatron"]
+ballet = ["linkage-blaze/examples-ballet"]
+clock = ["linkage-blaze/examples-clock"]
+skeleton-clock = ["linkage-blaze/examples-skeleton-clock"]
 
 [dependencies]
 critical-section = { version = "1.2.0", default-features = false }
@@ -74,7 +74,7 @@ embassy-executor = { version = "0.10.0", default-features = false, features = [
     "defmt",
 ] }
 embassy-hal-internal = { version = "0.5.0", default-features = false, optional = true }
-linkage-blaze-core.workspace = true
+linkage-blaze.workspace = true
 panic-probe = { version = "=1.0.0", features = ["print-defmt"] }
 
 [target.'cfg(target_os = "none")'.dependencies]

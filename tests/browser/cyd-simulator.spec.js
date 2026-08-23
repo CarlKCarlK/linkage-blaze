@@ -8,7 +8,7 @@ const demos = [
     preview: "A motion-captured pirouette replayed as a linkage skeleton.",
     description: "A motion-captured pirouette converted into a linkage skeleton and replayed full screen.",
     controls: "Sit back and watch.",
-    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/ballet.rs",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze/src/examples/ballet.rs",
   },
   {
     slug: "clock",
@@ -17,7 +17,7 @@ const demos = [
     preview: "An analog linkage clock with a digital strip and WiFi status.",
     description: "An analog clock whose hands are a tiny linkage posed by the time of day.",
     controls: "It follows your local clock. Use the shared time control to scrub to any time of day.",
-    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/clock.rs",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze/src/examples/clock.rs",
   },
   {
     slug: "skeleton-clock",
@@ -26,7 +26,7 @@ const demos = [
     preview: "A motion-captured figure holds the hour and minute on placards.",
     description: "A clock told by a motion-captured figure whose placards show the hour and minute.",
     controls: "It follows your local clock. Use the shared time control to scrub to any time of day.",
-    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/skeleton_clock.rs",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze/src/examples/skeleton_clock.rs",
   },
   {
     slug: "armatron",
@@ -35,7 +35,7 @@ const demos = [
     preview: "A six-joint robot arm driven by inverse kinematics.",
     description: "A robot arm with six joints, modeled as a linkage and driven by inverse kinematics.",
     controls: "Drag the controls on the panel to pose the arm or run the solver.",
-    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/armatron/main.rs",
+    coreCodeUrl: "linkage-blaze/blob/main/crates/linkage-blaze/src/examples/armatron/main.rs",
   },
 ];
 

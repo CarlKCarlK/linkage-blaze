@@ -9,10 +9,26 @@
 - **[Live demo gallery](https://carlkcarlk.github.io/linkage-blaze/demos/)** - Preview and run the interactive browser demos.
 - **[GitHub repository](https://github.com/CarlKCarlK/linkage-blaze)** - Source, issues, and development history.
 
-### Published Libraries
+### Rust Crate
 
-- **`linkage-blaze-core`** - The `no_std` language, animation, and rendering core, supporting both allocation-free operation and optional allocation-backed APIs on embedded or host systems. [![crates.io - core](https://img.shields.io/crates/v/linkage-blaze-core?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze-core) [![docs.rs - core](https://img.shields.io/docsrs/linkage-blaze-core?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze-core)
-- **`linkage-blaze-utils`** - Host, command-line, and browser-editor utilities. [![crates.io - utils](https://img.shields.io/crates/v/linkage-blaze-utils?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze-utils) [![docs.rs - utils](https://img.shields.io/docsrs/linkage-blaze-utils?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze-utils)
+**`linkage-blaze`** is the single published crate. Its default build is
+allocation-free and does not require the Rust standard library. Enable `alloc`
+for runtime-owned programs and `bvh` for host-side motion-capture conversion.
+[![crates.io](https://img.shields.io/crates/v/linkage-blaze?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze)
+[![docs.rs](https://img.shields.io/docsrs/linkage-blaze?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze)
+
+```toml
+[dependencies]
+linkage-blaze = "0.1.5"
+```
+
+Use `linkage_blaze::{LinkageFixed, linkage_fixed}` for allocation-free ESP and
+RP applications. Add `features = ["alloc"]` for owned parsing and
+`features = ["bvh"]` for host-side BVH APIs. Install the converter with:
+
+```bash
+cargo install linkage-blaze --features bvh --bin bvh-to-lb
+```
 
 ### Platform Examples
 
@@ -20,7 +36,9 @@
 - **[ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp)** - CYD-oriented examples across supported ESP32 families and boards.
 - **[Browser / WASM](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-wasm)** - Browser builds behind the live gallery.
 
-The platform example packages use the workspace version but are not separately published to crates.io.
+The platform examples and browser adapter use the workspace version but are not
+separately published to crates.io. WASM applications provide their own
+`cdylib` and may depend on `linkage-blaze` with the `alloc` feature.
 
 ## What is Linkage Blaze?
 
@@ -37,8 +55,8 @@ The live gallery is the main showcase: **[carlkcarlk.github.io/linkage-blaze/dem
 It shows preview images of each demo and links to the live, interactive WASM versions.
 
 <p>
-  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze-core/tests/assets/armatron.png" alt="Armatron demo preview" width="200" />
-  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze-core/tests/assets/ballet.png" alt="Ballet demo preview" width="150" />
+  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/armatron.png" alt="Armatron demo preview" width="200" />
+  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/ballet.png" alt="Ballet demo preview" width="150" />
 </p>
 
 ## Example Linkage

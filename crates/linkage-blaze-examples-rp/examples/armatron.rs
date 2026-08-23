@@ -14,7 +14,7 @@ use device_envoy_rp::{
     flash_block::{FlashBlock as _, FlashBlockRp},
 };
 use embassy_executor::Spawner;
-use linkage_blaze_core::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR};
+use linkage_blaze::examples::armatron::{self, BACKGROUND_COLOR, Exit, FOREGROUND_COLOR};
 use panic_probe as _;
 
 #[embassy_executor::main]

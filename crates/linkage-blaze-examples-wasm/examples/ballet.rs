@@ -3,7 +3,7 @@
 use core::convert::Infallible;
 
 use device_envoy_core::wasm::cyd_web;
-use linkage_blaze_core::examples::ballet::{
+use linkage_blaze::examples::ballet::{
     self, BACKGROUND_COLOR, Error as BalletError, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -20,7 +20,7 @@ const PAGE_INFO: cyd_web::PageInfo = cyd_web::PageInfo::new(
     "A motion-captured pirouette replayed as a linkage skeleton.",
     "A motion-captured pirouette converted into a linkage skeleton and replayed full screen.",
     "Sit back and watch.",
-    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze-core/src/examples/ballet.rs",
+    "https://github.com/CarlKCarlK/linkage-blaze/blob/main/crates/linkage-blaze/src/examples/ballet.rs",
 );
 
 #[wasm_bindgen]

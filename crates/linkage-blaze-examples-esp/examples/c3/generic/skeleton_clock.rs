@@ -23,7 +23,7 @@ use device_envoy_esp::{
 };
 use embassy_executor::Spawner;
 use esp_backtrace as _;
-use linkage_blaze_core::examples::skeleton_clock::{
+use linkage_blaze::examples::skeleton_clock::{
     self, BACKGROUND_COLOR, Exit, FIGURE_TILE_GRID, FOREGROUND_COLOR, ORIENTATION, TOP_FONT,
     WIFI_STATUS_RECTANGLE,
 };

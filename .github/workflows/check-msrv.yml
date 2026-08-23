@@ -30,5 +30,7 @@ jobs:
 
       - name: Check workspace MSRV
         run: |
-          cargo check -p linkage-blaze-core --no-default-features
-          cargo check -p linkage-blaze-utils
+          cargo check -p linkage-blaze --no-default-features
+          cargo check -p linkage-blaze --no-default-features --features alloc
+          cargo check -p linkage-blaze --no-default-features --features bvh
+          cargo check -p linkage-blaze-editor-wasm

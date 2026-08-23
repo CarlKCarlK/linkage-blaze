@@ -9,7 +9,7 @@ mod linkage_esp_examples_generated;
 
 const PAGES_DIR: &str = "target/pages";
 const MANIFEST_PATH: &str = "pages/demos.tsv";
-const PREVIEW_EXAMPLE_CRATE: &str = "linkage-blaze-core";
+const PREVIEW_EXAMPLE_CRATE: &str = "linkage-blaze";
 const GALLERY_VERSIONS_DIR: &str = "pages/gallery";
 
 fn main() {
@@ -127,27 +127,28 @@ fn check_all() -> Result<()> {
         "generate board examples",
     )?;
     for (arguments, description) in [
+        (&["test", "-p", "linkage-blaze"][..], "linkage-blaze tests"),
         (
-            &["test", "-p", "linkage-blaze-core"][..],
-            "linkage-blaze-core tests",
+            &["test", "-p", "linkage-blaze", "--features", "alloc"][..],
+            "linkage-blaze alloc tests",
         ),
         (
-            &["test", "-p", "linkage-blaze-core", "--features", "alloc"][..],
-            "linkage-blaze-core alloc tests",
+            &["test", "-p", "linkage-blaze", "--features", "bvh"][..],
+            "linkage-blaze BVH tests",
         ),
         (
             &[
                 "test",
                 "-p",
-                "linkage-blaze-core",
+                "linkage-blaze",
                 "--features",
                 "examples-armatron,examples-ballet,examples-clock,examples-skeleton-clock",
             ][..],
-            "linkage-blaze-core example tests",
+            "linkage-blaze example tests",
         ),
         (
-            &["test", "-p", "linkage-blaze-utils"][..],
-            "linkage-blaze-utils tests",
+            &["test", "-p", "linkage-blaze-editor-wasm"][..],
+            "linkage-blaze-editor-wasm tests",
         ),
     ] {
         run_cargo_command(
@@ -157,6 +158,13 @@ fn check_all() -> Result<()> {
             description,
         )?;
     }
+
+    run_cargo_command(
+        &repo_root,
+        &["doc", "-p", "linkage-blaze", "--no-deps", "--all-features"],
+        Some(("RUSTDOCFLAGS", "-D warnings")),
+        "linkage-blaze all-feature documentation",
+    )?;
 
     let mut esp_command = Command::new("bash");
     esp_command.current_dir(&repo_root);
@@ -202,12 +210,25 @@ fn check_all() -> Result<()> {
         &[
             "check",
             "-p",
-            "linkage-blaze-utils",
+            "linkage-blaze-examples-wasm",
+            "--all-targets",
             "--target",
             "wasm32-unknown-unknown",
         ],
         Some(("RUSTFLAGS", "-D warnings")),
-        "linkage-blaze-utils WASM check",
+        "linkage-blaze-examples-wasm WASM checks",
+    )?;
+    run_cargo_command(
+        &repo_root,
+        &[
+            "check",
+            "-p",
+            "linkage-blaze-editor-wasm",
+            "--target",
+            "wasm32-unknown-unknown",
+        ],
+        Some(("RUSTFLAGS", "-D warnings")),
+        "linkage-blaze-editor-wasm WASM check",
     )?;
 
     let mut wasm_pack = Command::new("wasm-pack");
@@ -215,7 +236,7 @@ fn check_all() -> Result<()> {
     wasm_pack.env("RUSTFLAGS", "-D warnings");
     wasm_pack.args([
         "build",
-        "crates/linkage-blaze-utils",
+        "crates/linkage-blaze-editor-wasm",
         "--target",
         "web",
         "--out-dir",
@@ -223,7 +244,10 @@ fn check_all() -> Result<()> {
         "--out-name",
         "linkage_blaze_editor",
     ]);
-    run_command(&mut wasm_pack, "build linkage-blaze-utils WASM package")
+    run_command(
+        &mut wasm_pack,
+        "build linkage-blaze-editor-wasm WASM package",
+    )
 }
 
 fn build_rp_example(repo_root: &Path, example_name: &str, board: &str) -> Result<()> {
