@@ -2,51 +2,31 @@
 
 [![GitHub](https://img.shields.io/badge/github-linkage--blaze-8da0cb?style=flat&labelColor=555555&logo=github)](https://github.com/CarlKCarlK/linkage-blaze)
 
-3D turtle graphics for animated joints. Describe a figure with moves, turns, branches, links, joints, disks, and spheres. Then animate parameters to bring it to life.
+3D turtle graphics for animated joints. Describe a figure with moves, turns,
+branches, links, joints, disks, and spheres. Then animate parameters to bring it
+to life.
 
 ## Project Links
 
-- **[Live demo gallery](https://carlkcarlk.github.io/linkage-blaze/demos/)** - Preview and run the interactive browser demos.
-- **[GitHub repository](https://github.com/CarlKCarlK/linkage-blaze)** - Source, issues, and development history.
-
-### Rust Crate
-
-**`linkage-blaze`** is the single published crate. Its default build is
-allocation-free and does not require the Rust standard library. Enable `alloc`
-for runtime-owned programs and `bvh` for host-side motion-capture conversion.
-[![crates.io](https://img.shields.io/crates/v/linkage-blaze?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze)
-[![docs.rs](https://img.shields.io/docsrs/linkage-blaze?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze)
-
-```toml
-[dependencies]
-linkage-blaze = "0.1.5"
-```
-
-Use `linkage_blaze::{LinkageFixed, linkage_fixed}` for allocation-free ESP and
-RP applications. Add `features = ["alloc"]` for owned parsing and
-`features = ["bvh"]` for host-side BVH APIs. Install the converter with:
-
-```bash
-cargo install linkage-blaze --features bvh --bin bvh-to-lb
-```
-
-### Platform Examples
-
-- **[Raspberry Pi Pico / RP](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-rp)** - Pico 1 and Pico 2 examples, including Pico W variants.
-- **[ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp)** - CYD-oriented examples across supported ESP32 families and boards.
-- **[Browser / WASM](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-wasm)** - Browser builds behind the live gallery.
-
-The platform examples and browser adapter use the workspace version but are not
-separately published to crates.io. WASM applications provide their own
-`cdylib` and may depend on `linkage-blaze` with the `alloc` feature.
+- **[Live demo gallery](https://carlkcarlk.github.io/linkage-blaze/demos/)** -
+  Preview and run the interactive browser demos.
+- **[GitHub repository](https://github.com/CarlKCarlK/linkage-blaze)** - Source,
+  issues, and development history.
 
 ## What is Linkage Blaze?
 
-Linkage Blaze is a small language for making animated jointed drawings. It works like 3D turtle graphics: move forward, turn, branch, draw links, place joints, and add simple shapes such as disks and spheres. Animate a few parameters, and the drawing moves.
+Linkage Blaze is a small language for making animated jointed drawings. It works
+like 3D turtle graphics: move forward, turn, branch, draw links, place joints,
+and add simple shapes such as disks and spheres. Animate a few parameters, and
+the drawing moves.
 
-The demos use this to make clocks, skeletons, dancers, and robot-arm-like figures. Everything is a Rust workspace that renders on microcontrollers (e.g. the CYD / ESP32 display boards) and in the browser via WASM.
+The demos use this to make clocks, skeletons, dancers, and robot-arm-like
+figures. Everything is a Rust workspace that renders on microcontrollers (e.g.
+the CYD / ESP32 display boards) and in the browser via WASM.
 
-The core is `no_std` and allocation-free, so figures live in flash and animate on small microcontrollers. An opt-in `alloc` feature adds heap-based conveniences where an allocator is available.
+The core is `no_std` and allocation-free, so figures live in flash and animate
+on small microcontrollers. An opt-in `alloc` feature adds heap-based
+conveniences where an allocator is available.
 
 ## Gallery
 
@@ -61,7 +41,10 @@ It shows preview images of each demo and links to the live, interactive WASM ver
 
 ## Example Linkage
 
-This is the `armatron1.lb.rs` [(interactive editor)](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/#armatron) linkage based on a toy robot arm. It defines six parameters for the shoulder, elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark so the claw can branch into two fingers.
+This is the `armatron1.lb.rs` [(interactive editor)](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/#armatron)
+linkage based on a toy robot arm. It defines six parameters for the shoulder,
+elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark
+so the claw can branch into two fingers.
 
 ```rust,no_run
 linkage![
@@ -98,13 +81,45 @@ linkage![
 ]
 ```
 
-The linkage compiles to a `const` with no heap allocation and no runtime parsing, so it can live in flash on a microcontroller.
+The linkage compiles to a `const` with no heap allocation and no runtime
+parsing, so it can live in flash on a microcontroller.
 
-## Status
+## Articles
 
-⚠️ **Alpha / Experimental**
+- [Nine Rules for Compile-Time Work with Rust const fn](https://medium.com/@carlmkadie)
+  *expected August 2026*.
 
-The API is actively evolving. Not recommended for production use, but good for experimentation and learning.
+
+### Rust Crate
+
+**`linkage-blaze`** is the single published crate. Its default build is
+allocation-free and does not require the Rust standard library. Enable `alloc`
+for runtime-owned programs and `bvh` for host-side motion-capture conversion.
+[![crates.io](https://img.shields.io/crates/v/linkage-blaze?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze)
+[![docs.rs](https://img.shields.io/docsrs/linkage-blaze?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze)
+
+```toml
+[dependencies]
+linkage-blaze = "0.1.5"
+```
+
+Use `linkage_blaze::{LinkageFixed, linkage_fixed}` for allocation-free ESP and
+RP applications. Add `features = ["alloc"]` for owned parsing and
+`features = ["bvh"]` for host-side BVH APIs. Install the converter with:
+
+```bash
+cargo install linkage-blaze --features bvh --bin bvh-to-lb
+```
+
+### Platform Examples
+
+- **[Raspberry Pi Pico / RP](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-rp)** - Pico 1 and Pico 2 examples, including Pico W variants.
+- **[ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp)** - CYD-oriented examples across supported ESP32 families and boards.
+- **[Browser / WASM](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-wasm)** - Browser builds behind the live gallery.
+
+The platform examples and browser adapter use the workspace version but are not
+separately published to crates.io. WASM applications provide their own
+`cdylib` and may depend on `linkage-blaze` with the `alloc` feature.
 
 ## Policy on AI-assisted development and contributions
 
