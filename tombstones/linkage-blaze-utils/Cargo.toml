@@ -1,0 +1,14 @@
+[package]
+name = "linkage-blaze-utils"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Deprecated: use linkage-blaze for Linkage Blaze utilities"
+documentation = "https://docs.rs/linkage-blaze"
+readme = "README.md"
+publish = true
+
+[dependencies]

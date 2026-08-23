@@ -4,10 +4,10 @@
 
 ## Status
 
-Implemented for the next Linkage Blaze release and verified locally. Keep this
-spec through the 0.1.5 release, then consider deleting it after the clean-tree
-publication dry run and release are complete. Do not publish
-`linkage-blaze-core` or `linkage-blaze-utils` version 0.1.5 packages.
+Implemented and released as Linkage Blaze 0.1.5. The former package names may
+receive documentation-only 0.1.5 tombstones as specified in
+[`OLD_CRATE_TOMBSTONES_SPEC.md`](OLD_CRATE_TOMBSTONES_SPEC.md); those packages
+must not restore or preserve the old APIs.
 
 ## Summary
 
@@ -290,7 +290,9 @@ check or generation step if manual copies can drift.
 
 - Publish the new `linkage-blaze` package as version `0.1.5` so it continues
   the project version visible in demos and release history.
-- Do not publish `linkage-blaze-core` or `linkage-blaze-utils` version 0.1.5.
+- Publish only the documentation tombstones described by
+  [`OLD_CRATE_TOMBSTONES_SPEC.md`](OLD_CRATE_TOMBSTONES_SPEC.md) under the old
+  package names; do not publish compatibility implementations.
 - Leave the already published 0.1.4 packages available; there are no known
   users and yanking provides no useful redirect.
 - Mention in the repository release notes that the unified package supersedes

@@ -2,14 +2,18 @@
 
 [![GitHub](https://img.shields.io/badge/github-linkage--blaze-8da0cb?style=flat&labelColor=555555&logo=github)](https://github.com/CarlKCarlK/linkage-blaze)
 
-3D turtle graphics for animated joints. Describe a figure with moves, turns,
-branches, links, joints, disks, and spheres. Then animate parameters to bring it
-to life.
+3D turtle graphics for animated jointed figures. Describe a figure with moves,
+turns, branches, links, joints, disks, and spheres. Then animate parameters to
+bring it to life.
 
 ## Project Links
 
 - **[Live demo gallery](https://carlkcarlk.github.io/linkage-blaze/demos/)** -
   Preview and run the interactive browser demos.
+- **[Crate on crates.io](https://crates.io/crates/linkage-blaze)** - Releases,
+  installation information, and package metadata.
+- **[API documentation on docs.rs](https://docs.rs/linkage-blaze)** - Public
+  Rust API documentation.
 - **[GitHub repository](https://github.com/CarlKCarlK/linkage-blaze)** - Source,
   issues, and development history.
 
@@ -22,11 +26,12 @@ the drawing moves.
 
 The demos use this to make clocks, skeletons, dancers, and robot-arm-like
 figures. Everything is a Rust workspace that renders on microcontrollers (e.g.
-the CYD / ESP32 display boards) and in the browser via WASM.
+[Cheap Yellow Display (CYD)](https://github.com/CarlKCarlK/device-envoy) / ESP32
+boards) and in the browser via WASM.
 
-The core is `no_std` and allocation-free, so figures live in flash and animate
-on small microcontrollers. An opt-in `alloc` feature adds heap-based
-conveniences where an allocator is available.
+The default crate configuration is `no_std` and allocation-free, so figures
+live in flash and animate on small microcontrollers. An opt-in `alloc` feature
+adds heap-based conveniences where an allocator is available.
 
 ## Gallery
 
@@ -90,7 +95,7 @@ parsing, so it can live in flash on a microcontroller.
   *expected August 2026*.
 
 
-### Rust Crate
+## Rust Crate
 
 **`linkage-blaze`** is the single published crate. Its default build is
 allocation-free and does not require the Rust standard library. Enable `alloc`
@@ -111,7 +116,7 @@ RP applications. Add `features = ["alloc"]` for owned parsing and
 cargo install linkage-blaze --features bvh --bin bvh-to-lb
 ```
 
-### Platform Examples
+## Platform Examples
 
 - **[Raspberry Pi Pico / RP](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-rp)** - Pico 1 and Pico 2 examples, including Pico W variants.
 - **[ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp)** - CYD-oriented examples across supported ESP32 families and boards.
@@ -133,7 +138,7 @@ All code and documentation contributed to this repository must be reviewed, edit
 
 Licensed under either:
 
-- MIT license (see LICENSE-MIT)
-- Apache License, Version 2.0 (see LICENSE-APACHE)
+- [MIT license](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
 
 at your option.

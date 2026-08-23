@@ -7,6 +7,7 @@ members = [
     "crates/linkage-blaze-examples-esp",
     "crates/linkage-blaze-examples-rp",
 ]
+exclude = ["tombstones"]
 resolver = "3"
 
 [workspace.package]
