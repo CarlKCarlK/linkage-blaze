@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
-#![doc = "3D turtle graphics for animated jointed figures."]
+// TODO0 Review and improve the Linkage Blaze crate documentation.
+#![doc = include_str!("../../../README.md")]
 #![doc = ""]
-#![doc = "The default build is allocation-free and does not require `std`. Enable `alloc` for owned runtime linkages, `std` for host support, and `bvh` for host-side BVH parsing and conversion."]
-#![doc = "The primary fixed-capacity API is [`LinkageFixed`]. The allocation-backed API is [`LinkageBuf`], and BVH conversion is available under [`bvh`]."]
+#![doc = "## Coordinate System"]
 //!
 //! Model-space axes:
 //!

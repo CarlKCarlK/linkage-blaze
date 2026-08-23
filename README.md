@@ -51,7 +51,7 @@ linkage based on a toy robot arm. It defines six parameters for the shoulder,
 elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark
 so the claw can branch into two fingers.
 
-```rust,no_run
+```rust,ignore
 linkage![
     .define_param("raise hand", 0.5)
     .define_param("bend elbow", 0.5)
@@ -132,13 +132,13 @@ The use of AI tools is permitted for development and contributions to this repos
 
 All code and documentation contributed to this repository must be reviewed, edited, and validated by a human contributor. AI tools are not a substitute for design judgment, testing, or responsibility for correctness.
 
-[AGENTS.md](AGENTS.md) contains the general instructions and constraints given to AI tools used during development of this repository.
+[AGENTS.md](https://github.com/CarlKCarlK/linkage-blaze/blob/main/AGENTS.md) contains the general instructions and constraints given to AI tools used during development of this repository.
 
 ## License
 
 Licensed under either:
 
-- [MIT license](LICENSE-MIT)
-- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT license](https://github.com/CarlKCarlK/linkage-blaze/blob/main/LICENSE-MIT)
+- [Apache License, Version 2.0](https://github.com/CarlKCarlK/linkage-blaze/blob/main/LICENSE-APACHE)
 
 at your option.
