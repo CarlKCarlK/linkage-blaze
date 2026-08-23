@@ -4,6 +4,24 @@
 
 3D turtle graphics for animated joints. Describe a figure with moves, turns, branches, links, joints, disks, and spheres. Then animate parameters to bring it to life.
 
+## Project Links
+
+- **[Live demo gallery](https://carlkcarlk.github.io/linkage-blaze/demos/)** - Preview and run the interactive browser demos.
+- **[GitHub repository](https://github.com/CarlKCarlK/linkage-blaze)** - Source, issues, and development history.
+
+### Published Libraries
+
+- **`linkage-blaze-core`** - The `no_std` language, animation, and rendering core, supporting both allocation-free operation and optional allocation-backed APIs on embedded or host systems. [![crates.io - core](https://img.shields.io/crates/v/linkage-blaze-core?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze-core) [![docs.rs - core](https://img.shields.io/docsrs/linkage-blaze-core?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze-core)
+- **`linkage-blaze-utils`** - Host, command-line, and browser-editor utilities. [![crates.io - utils](https://img.shields.io/crates/v/linkage-blaze-utils?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze-utils) [![docs.rs - utils](https://img.shields.io/docsrs/linkage-blaze-utils?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze-utils)
+
+### Platform Examples
+
+- **[Raspberry Pi Pico / RP](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-rp)** - Pico 1 and Pico 2 examples, including Pico W variants.
+- **[ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp)** - CYD-oriented examples across supported ESP32 families and boards.
+- **[Browser / WASM](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-wasm)** - Browser builds behind the live gallery.
+
+The platform example packages use the workspace version but are not separately published to crates.io.
+
 ## What is Linkage Blaze?
 
 Linkage Blaze is a small language for making animated jointed drawings. It works like 3D turtle graphics: move forward, turn, branch, draw links, place joints, and add simple shapes such as disks and spheres. Animate a few parameters, and the drawing moves.

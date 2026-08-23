@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish = false
 
 # Shared CYD-oriented ESP examples. Each example is a standalone no_std binary
 # selected with `--example <name>`. The library target exists only to host the
