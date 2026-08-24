@@ -40,12 +40,14 @@ this review:
 
 ### 1. Review the complete documented feature surface
 
-- Change the local documentation recipe to build the same all-features public
-  surface configured for docs.rs rather than only `alloc`.
-- Regenerate rustdoc and review the newly visible `bvh` and feature-gated
-  `examples` module contents before changing the API.
-- Add decisions and work items for any public items missing from this review.
-  Do not begin structural implementation until this pass is complete.
+- **Complete.** Regenerated with `cargo doc -p linkage-blaze --lib --no-deps
+  --all-features` and reviewed the generated `bvh`, `bvh_parse`, and
+  feature-gated `examples` modules.
+- The source currently has `bvh` feature-gated and `bvh_parse` always present,
+  contrary to the resolved design; this is recorded as an implementation task,
+  not treated as the final surface.
+- The complete item-by-item findings are recorded in the Modules section below.
+- No API implementation changes are part of Step 1.
 
 ### 2. Establish the final module structure and names
 
@@ -126,49 +128,85 @@ Work items:
 
 ## Modules
 
-### `bvh_parse`
+### Step 1 findings: `bvh` and `bvh_parse`
 
-Decision: the compile-time BVH motion functionality is public API, but
-`bvh_parse` is an implementation-oriented public module name and its one-line
-description does not explain the API's normalization and compact storage.
+The final public namespace is one always-present `linkage_blaze::bvh` module.
+It contains allocation-free compile-time motion support unconditionally;
+host-side parsing and conversion APIs are gated by `bvh`. `bvh_parse` is not a
+final public module: its declarations are moved/re-exported into `bvh` or made
+private.
 
-Work items:
+#### Current `bvh` public items
 
-- Design one coherent public BVH namespace for the always-available,
-  allocation-free motion API and the `bvh`-feature host APIs. Prefer a
-  user-facing concept such as `bvh` or `bvh_motion` over the implementation
-  action `bvh_parse`, resolving the existing `bvh` module rather than adding a
-  second redundant API path.
-- Review every currently public item in `bvh_parse`. Keep user-facing motion
-  types and operations public, but reduce parser, normalization, and encoding
-  implementation details to crate visibility unless users need them directly.
-- Preserve a valid downstream expansion path for `bvh_motion!`. If a public
-  macro helper must remain public solely for macro expansion, use the
-  repository's documented `__` naming and `#[doc(hidden)]` macro-helper
-  exception.
-- Replace the module summary with documentation that identifies BVH as the
-  Biovision Hierarchy motion-capture format and explains compile-time parsing,
-  normalization, `u16` quantization, fixed-size storage, and `no_std` use.
-- Explain how the always-available compile-time motion API differs from the
-  optional host-side APIs enabled by the `bvh` feature.
+| Current item | Final path/name | Decision and documentation work |
+| --- | --- | --- |
+| `BvhClip` and fields `joints`, `samples`, `sample_time` | `bvh::Clip` | Keep public. Describe a parsed Biovision Hierarchy clip containing its joint hierarchy, motion samples, and frame interval. Keep `channel_count` private unless implementation proves otherwise. |
+| `BvhJoint` and all fields | `bvh::Joint` | Keep public. Explain parent index, model-space offset, ordered channels, and end-site representation. |
+| `BvhChannel` and variants | `bvh::Channel` | Keep public. Describe position versus rotation channels and document every variant in reader-facing language. |
+| `MotionSample` and `values` | `bvh::Sample` | Keep public. Describe one raw frame in channel order and state the physical units. |
+| `BvhParameterLayout`, `parameters`, `len`, `is_empty` | `bvh::ParameterLayout` | Keep public. Explain the discovered mapping and document both query methods. |
+| `BvhParameter` and all fields | `bvh::Parameter` | Keep public. Explain normalized linkage parameter name/index and source joint/channel. |
+| `discover_bvh_parameters` | `bvh::discover_parameters` | Keep public. Say that it maps ordered BVH channels to linkage parameters and retains source mapping. |
+| `build_bvh_linkage_buf` | `bvh::build_linkage_buf` | Keep public under host/`alloc` support. Explain capacities, defaults, named joint marks, and insufficient-capacity errors. |
+| `bvh_sample_params` | `bvh::sample_params` | Keep public. Describe conversion of one raw sample into normalized linkage values. |
+| `bvh_to_lb_rs` | `bvh::to_lb_rs` | Keep public as a host-side `.lb.rs` code-generation utility; explain that direct `Clip`/`Motion` use does not require it. |
+| `parse_bvh` | `bvh::parse` | Keep public under the host feature. Say that it parses hierarchy and motion sections and returns `Clip`, with malformed-input diagnostics. |
+| `Error` | `bvh::Error` | Keep public for host-side parsing, mapping, and conversion; document retained source diagnostics. |
 
-### `examples`
+The `bvh` summary must identify BVH as the **Biovision Hierarchy motion-capture
+file format**, distinguish compile-time `Motion` from host-side `Clip` parsing,
+and show the supported conversion path to a linkage.
 
-Decision: keep `examples` public under its current name. The ESP, RP, and WASM
-example crates consume this shared implementation across crate boundaries, and
-the name accurately describes its role. Its current description is too
-CYD-centric and does not explain its feature-gated contents or consumers.
+#### Current `bvh_parse` public items
 
-Work items:
+| Current item | Final decision |
+| --- | --- |
+| `bvh_motion!` | Keep as `bvh::motion!`; expose only a doc-hidden `__bvh_motion!` root helper required for downstream expansion. Remove the old public path. |
+| `BvhMotion`, associated `DOF` and `SAMPLE_COUNT` | Keep as `bvh::Motion`, preserving const-generic dimensions, compile-time parsing, normalized `[0, 1]` values, and quantized `u16` storage. Keep the associated constants if they remain useful for generic downstream code; describe them as linkage-parameter and sample counts. |
+| `BvhMotionSamples` | Make private and return it through `Motion::samples` as `impl Iterator<Item = [f32; DOF]>`. |
+| `PARAM_CENTER_U16`, `norm_to_u16`, `u16_to_norm` | Make private representation helpers unless downstream custom quantization is demonstrated. |
+| `parse_bvh_motion_section`, `parse_and_normalize_bvh_motion`, `normalize_bvh_motion`, `BvhNormalizePolicy` and its fields/`LINKAGE_BLAZE` constant | Make private. `Motion::from_bvh_bytes` is the supported entry point; do not expose the current fixed policy as a separate API without a concrete use case. |
+| `parse_f32`, `parse_uint`, `scale_pow10`, `scale_pow10_f64`, `count_bvh_channels`, `parse_bvh_channel_is_position`, `skip_token`, `find_after`, `bytes_match`, `skip_whitespace`, `skip_inline_whitespace`, `skip_to_next_line` | Make private parser helpers; their current rustdoc is an implementation leak. |
 
-- Rewrite the module summary as platform-neutral example application logic
-  shared by the ESP, RP, and WASM example crates.
-- Explain that each example submodule is opt-in and name the corresponding
-  feature: `examples-armatron`, `examples-ballet`, `examples-clock`, and
-  `examples-skeleton-clock`.
-- Clarify that the examples render through Device Envoy's CYD display and touch
-  abstractions without requiring readers to understand the internal phrase
-  "owned CYD parts."
+`Motion::new`, `from_bvh_bytes`, `dof`, `sample_count`, `sample`, `samples`,
+and `sample_into` remain public under `bvh::Motion`. Their docs must say
+“linkage parameters” rather than rely on unexplained “degrees of freedom,” and
+must state sample-index behavior and normalized-value units. The module docs
+must explain compile-time parsing, normalization, fixed-size storage, and
+`no_std` use, then contrast the optional host-side APIs.
+
+### Step 1 findings: `examples`
+
+Keep `linkage_blaze::examples` public. It is shared implementation consumed by
+the ESP, RP, and WASM example crates, not a general-purpose application
+framework. Its summary must be platform-neutral, identify Device Envoy CYD
+display/touch traits as the integration boundary, and name the feature gates:
+`examples-armatron`, `examples-ballet`, `examples-clock`, and
+`examples-skeleton-clock`.
+
+| Current module and public items | Final decision |
+| --- | --- |
+| `examples::armatron::{BACKGROUND_COLOR, FOREGROUND_COLOR, DOF, run, Error, Exit}` | Keep public. Document colors with approximate names, explain `DOF` as the linkage parameter count, and document run termination plus device/UI errors. |
+| `examples::armatron::reverse_kinematics` | Make private. It is an internal Armatron subsystem and has no external consumer. |
+| `examples::ballet::{ORIENTATION, TOP_FONT, BACKGROUND_COLOR, FOREGROUND_COLOR, run, StatusTextError, Error}` | Keep constants, `run`, and `Error` public. Make `StatusTextError` private or an internal error detail; the standalone wrapper is not a user-facing concept. Rewrite docs around the motion-captured renderer and flush errors. |
+| `examples::clock::{BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, WIFI_STATUS_FONT, WIFI_STATUS_RECTANGLE, MAX_FRAME_PIXEL_COUNT, run, splash, Exit, Error}` | Keep public because platform launchers consume them. Document each layout/configuration constant and the run/splash lifecycle. |
+| `examples::skeleton_clock::{BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT, WIFI_STATUS_RECTANGLE, FIGURE_TILE_GRID, run, splash, Exit, Error, MarkLookupError}` | Keep configuration, `run`, `splash`, `Exit`, and `Error` public. Remove `MarkLookupError` when mark lookup moves to `LinkageView`/the primary `Error`; it is an implementation wrapper. |
+| `examples::ui::{UiState, UiFrame, Slider, Button, IconButton, Icon, HoldButtonState, Label, Error}` | Make `examples::ui` and these widget types private: source search finds no external consumer and they support only Armatron. If a downstream use is found during implementation, revisit this one decision before changing visibility. |
+
+For retained items, replace vague or duplicate descriptions and remove “owned
+CYD parts” as unexplained terminology. Prefer private visibility over
+`#[doc(hidden)]`; do not add compatibility aliases. The `ui` visibility and
+`StatusTextError` visibility are the only genuinely consumer-dependent
+decisions found in this Step 1 pass.
+
+The public methods currently shown beneath `examples::ui` are included in the
+same private-API decision: `UiState::new`; `UiFrame::{new, slider, button,
+icon_button, hold_button, label, draw_touch_cursor}`; `Slider::{horizontal,
+vertical, column, label}`; `Button::{new, touch_rectangle}`;
+`IconButton::new`; and `Label::new`. The public enum variants
+`Icon::{Play, Stop, StepForward}` and
+`HoldButtonState::{Idle, Pressed, Held}` are likewise implementation details
+unless the module's visibility is reopened.
 
 ## Macros
 
