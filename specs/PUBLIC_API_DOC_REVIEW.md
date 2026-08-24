@@ -70,8 +70,6 @@ this review:
 - Update the core crate, editor, ESP examples, RP examples, WASM examples,
   integration tests, `.lb.rs` macro paths, generated-source expectations, and
   doctests in one coordinated migration.
-- Read the Device Envoy repository's `AGENTS.md` before changing or validating
-  CYD-facing integration, as required by the workspace instructions.
 
 ### 5. Rewrite public documentation for the final API
 
@@ -88,8 +86,7 @@ this review:
 
 - Run formatting, focused tests, doctests, and checks for each affected feature
   set while implementing.
-- Run `cargo check-all` for Linkage Blaze and the required Device Envoy local CI
-  before completion.
+- Run `cargo check-all` for Linkage Blaze before completion.
 - Regenerate all-features rustdoc, inspect the crate index and moved modules,
   and verify that links and examples resolve.
 - Compare the final public item list against this review and account for every

@@ -43,14 +43,6 @@ This file contains shared workspace rules for this repository.
 - Keep `map_err`, handwritten `From` implementations, and error flattening only for intentional semantic translation, contextual diagnostics, platform boundaries, or coherence exceptions. Document those exceptions nearby.
 - Never replace a useful source error with a label-only or unit variant. Unit and infallible conversions are appropriate only when the source carries no meaningful information.
 
-## Workspace Dependencies
-
-This workspace commonly includes the sibling Device Envoy repository at
-`../mcu/device-envoy`. When a task touches CYD/WASM simulator behavior,
-browser integration, generated Device Envoy assets, or any cross-repository
-interface, read that repository's `AGENTS.md` before acting; its rules are
-part of the task context.
-
 ## Development Tools
 
 Assume the repository's normal development tools are available, including
@@ -77,7 +69,7 @@ Put implementation specs (`*_SPEC.md` and similar planning documents) in the `sp
 
 ## Local CI
 
-`cargo check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite. When a task depends on Device Envoy, also run its `cargo check-all` command from the Device Envoy repository.
+`cargo check-all` is the local CI test. It tests, checks, and builds all crates across all targets (embedded, WASM, editor). Run this before pushing to verify everything works. The GitHub CI pipeline mirrors this same test suite.
 
 ## Module Structure Convention
 

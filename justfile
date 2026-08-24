@@ -83,7 +83,7 @@ bump-gallery-version version='':
 docs:
     # Cargo does not fingerprint the workspace-root README included by linkage-blaze.
     touch crates/linkage-blaze/src/lib.rs
-    env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze --no-deps --features alloc --open
+    env RUSTDOCFLAGS="-D warnings" cargo doc -p linkage-blaze --lib --no-deps --all-features --open
 
 # Show generated docs
 show-docs:

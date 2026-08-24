@@ -31,8 +31,8 @@ draw links, place joints, and add simple shapes such as disks and spheres.
 Animate a few parameters, and the drawing moves.
 
 The demos use this to make clocks, skeletons, dancers, and robot-arm-like
-figures. The workspace targets microcontrollers (e.g., the [ESP32 CYD API]
-(https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html) and
+figures. The workspace targets microcontrollers (e.g., the
+[ESP32 CYD API](https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html) and
 [RP CYD API](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html))
 and the browser via WASM.
 
