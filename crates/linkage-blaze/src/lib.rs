@@ -27,6 +27,7 @@ extern crate alloc;
 
 pub mod bvh;
 mod math;
+pub mod render;
 
 /// Platform-neutral example logic for the linkage-blaze CYD examples.
 ///
@@ -52,24 +53,16 @@ pub mod examples {
 #[cfg(feature = "alloc")]
 use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
 
-use core::{convert::Infallible, fmt};
-
-use device_envoy_core::{
-    cyd::display::DrawItem as DrawItem2d,
-    pixel_target::{PixelTarget, fill_ellipse_pixels, pixel_put},
-};
+use core::fmt;
 
 pub use embedded_graphics::{
-    pixelcolor::{Rgb565, Rgb888, WebColors},
-    prelude::{Point, RgbColor},
+    pixelcolor::{Rgb888, WebColors},
+    prelude::RgbColor,
 };
 use math::degrees_to_radians;
 pub use math::{Mat3, Vec3};
 
-/// Evaluated three-dimensional drawing geometry and projection helpers.
-pub mod render {
-    pub use super::{Disk, Item3d, Projection, Sphere, Stroke};
-}
+use render::{Disk, Item3d, Projection, Sphere, Stroke};
 
 /// A step in the robot arm linkage description.
 ///
@@ -229,6 +222,10 @@ pub enum Error {
     InvalidParameter { index: usize, value: f32 },
     /// The linkage did not produce its required implicit start pose.
     EmptyLinkage,
+    /// No mark with the requested name exists.
+    MarkNotFound,
+    /// More than one mark has the requested name.
+    MarkAmbiguous,
 }
 
 impl fmt::Display for Error {
@@ -238,6 +235,8 @@ impl fmt::Display for Error {
                 write!(formatter, "parameter {index} is out of range: {value}")
             }
             Self::EmptyLinkage => formatter.write_str("linkage produced no poses"),
+            Self::MarkNotFound => formatter.write_str("mark was not found"),
+            Self::MarkAmbiguous => formatter.write_str("mark name is ambiguous"),
         }
     }
 }
@@ -684,6 +683,14 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         self.poses(params)?.last().ok_or(Error::EmptyLinkage)
     }
 
+    /// Return the pose recorded at a named mark after evaluating the linkage.
+    pub fn pose_by_mark_name(&self, params: &[f32; DOF], name: &str) -> Result<Pose, Error> {
+        let mut draw_items =
+            DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, self.mark_len, params)?;
+        while draw_items.next().is_some() {}
+        draw_items.pose_by_mark_name(name)
+    }
+
     /// Iterate over all intermediate poses produced by evaluating this linkage.
     ///
     /// # Examples
@@ -745,7 +752,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// # Examples
     ///
     /// ```rust
-    /// # use linkage_blaze::{Item3d, LinkageFixed};
+    /// # use linkage_blaze::{LinkageFixed, render::Item3d};
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
@@ -761,8 +768,8 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     pub fn draw_items_3d<'b>(
         &'b self,
         params: &'b [f32; DOF],
-    ) -> Result<DrawItem3dIter<'b, DOF, MARKS>, Error> {
-        DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
+    ) -> Result<impl Iterator<Item = Item3d> + 'b, Error> {
+        DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, self.mark_len, params)
     }
 
     /// The number of [`Item3d`]s this linkage yields, evaluated at compile time.
@@ -3232,7 +3239,7 @@ pub enum PenState {
 
 /// Drawing state carried while evaluating a linkage.
 #[derive(Clone, Copy, Debug)]
-pub struct PenStyle {
+struct PenStyle {
     pen: PenState,
     color: Rgb888,
     width: f32,
@@ -3420,41 +3427,6 @@ impl StyledPose {
     }
 }
 
-/// A drawable pen-down forward segment produced by a linkage.
-#[derive(Clone, Copy, Debug)]
-pub struct Stroke {
-    start: Pose,
-    end: Pose,
-    color: Rgb888,
-    width: f32,
-}
-
-impl Stroke {
-    /// Return the segment start pose.
-    #[must_use]
-    pub const fn start(self) -> Pose {
-        self.start
-    }
-
-    /// Return the segment end pose.
-    #[must_use]
-    pub const fn end(self) -> Pose {
-        self.end
-    }
-
-    /// Return the segment pen color.
-    #[must_use]
-    pub const fn color(self) -> Rgb888 {
-        self.color
-    }
-
-    /// Return the segment pen width.
-    #[must_use]
-    pub const fn width(self) -> f32 {
-        self.width
-    }
-}
-
 /// Iterator over styled poses produced by evaluating a linkage.
 ///
 /// Yields after every linkage step, including non-forward steps and the implicit
@@ -3530,15 +3502,11 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
     }
 }
 
-/// Iterator over 3D draw items from a LinkageView (does not require const N).
 /// Iterator over [`Item3d`]s produced by evaluating a linkage.
-///
-/// Obtain via [`LinkageView::draw_items_3d`]. After exhausting the iterator the
-/// [`pose_by_mark_name`](DrawItem3dIter::pose_by_mark_name) method lets you query the final
-/// pose at any named mark.
-pub struct DrawItem3dIter<'a, const DOF: usize, const MARKS: usize> {
+struct DrawItem3dIter<'a, const DOF: usize, const MARKS: usize> {
     steps: &'a [Step],
     mark_names: &'a [&'static str; MARKS],
+    mark_len: usize,
     params: &'a [f32; DOF],
     index: usize,
     pose: Pose,
@@ -3550,12 +3518,14 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItem3dIter<'a, DOF, MARKS> {
     fn new(
         steps: &'a [Step],
         mark_names: &'a [&'static str; MARKS],
+        mark_len: usize,
         params_values: &'a [f32; DOF],
     ) -> Result<Self, Error> {
         validate_params(params_values)?;
         Ok(Self {
             steps,
             mark_names,
+            mark_len,
             params: params_values,
             index: 0,
             pose: Pose::start(),
@@ -3573,30 +3543,22 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItem3dIter<'a, DOF, MARKS> {
     ///
     /// # Errors
     ///
-    /// Returns [`MarkError::NotFound`] if no mark has the given name, or
-    /// [`MarkError::Ambiguous`] if more than one mark shares the name.
-    pub fn pose_by_mark_name(&self, name: &str) -> Result<Pose, MarkError> {
+    /// Returns an [`Error`] if no mark has the given name or if more than one
+    /// mark shares the name.
+    fn pose_by_mark_name(&self, name: &str) -> Result<Pose, Error> {
         let mut found = None;
-        for (index, &n) in self.mark_names.iter().enumerate() {
+        for (index, &n) in self.mark_names[..].iter().enumerate().take(self.mark_len) {
             if n == name {
                 if found.is_some() {
-                    return Err(MarkError::Ambiguous);
+                    return Err(Error::MarkAmbiguous);
                 }
                 found = Some(index);
             }
         }
         found
             .map(|index| self.marked[index].pose)
-            .ok_or(MarkError::NotFound)
+            .ok_or(Error::MarkNotFound)
     }
-}
-
-/// Error returned by [`DrawItem3dIter::pose_by_mark_name`] when a mark name does
-/// not uniquely identify a mark.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MarkError {
-    NotFound,
-    Ambiguous,
 }
 
 impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, MARKS> {
@@ -3673,356 +3635,6 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
         }
 
         None
-    }
-}
-
-/// A disk shape yielded by a linkage at the current pose.
-#[derive(Clone, Copy, Debug)]
-pub struct Disk {
-    pose: Pose,
-    radius: f32,
-    color: Rgb888,
-}
-
-impl Disk {
-    #[must_use]
-    pub const fn pose(self) -> Pose {
-        self.pose
-    }
-    #[must_use]
-    pub const fn radius(self) -> f32 {
-        self.radius
-    }
-    #[must_use]
-    pub const fn color(self) -> Rgb888 {
-        self.color
-    }
-}
-
-/// A sphere shape yielded by a linkage at the current pose.
-#[derive(Clone, Copy, Debug)]
-pub struct Sphere {
-    pose: Pose,
-    radius: f32,
-    color: Rgb888,
-}
-
-impl Sphere {
-    #[must_use]
-    pub const fn pose(self) -> Pose {
-        self.pose
-    }
-    #[must_use]
-    pub const fn radius(self) -> f32 {
-        self.radius
-    }
-    #[must_use]
-    pub const fn color(self) -> Rgb888 {
-        self.color
-    }
-}
-
-/// A 3D draw item produced by a linkage: a line stroke, a filled disk, or a sphere.
-#[derive(Clone, Copy, Debug)]
-pub enum Item3d {
-    Stroke(Stroke),
-    Disk(Disk),
-    Sphere(Sphere),
-}
-
-/// Projects a linkage 3D draw item into a CYD/device-envoy 2D draw item.
-pub trait DrawItem3dExt {
-    /// Project this 3D draw item through `projection` into pixel-space.
-    #[must_use]
-    fn project(self, projection: &Projection) -> DrawItem2d;
-}
-
-impl DrawItem3dExt for Item3d {
-    fn project(self, projection: &Projection) -> DrawItem2d {
-        match self {
-            Self::Stroke(stroke_segment) => DrawItem2d::Stroke {
-                start: stroke_segment.start().project(projection),
-                end: stroke_segment.end().project(projection),
-                color: stroke_segment.color(),
-                pixel_width: projection.project_width(stroke_segment.width()),
-            },
-            Self::Disk(disk_item) => {
-                let orientation = disk_item.pose().orientation();
-                DrawItem2d::Ellipse {
-                    center: disk_item.pose().project(projection),
-                    axis_a: projection.project_dir(
-                        disk_item.pose(),
-                        orientation.forward(),
-                        disk_item.radius(),
-                    ),
-                    axis_b: projection.project_dir(
-                        disk_item.pose(),
-                        orientation.left(),
-                        disk_item.radius(),
-                    ),
-                    color: disk_item.color(),
-                }
-            }
-            Self::Sphere(sphere_item) => DrawItem2d::Circle {
-                center: sphere_item.pose().project(projection),
-                pixel_radius: projection.project_radius(sphere_item.pose(), sphere_item.radius()),
-                color: sphere_item.color(),
-            },
-        }
-    }
-}
-
-/// Maps 3D world-space geometry to 2D pixel-space for a particular view.
-///
-/// All `project_*` methods return pixel-space values. Perspective renderers
-/// use the `pose` argument to apply depth-based scaling where needed.
-/// Draws 2D primitives in pixel space. All coordinates and sizes are pre-scaled.
-pub trait DrawSurface {
-    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32);
-    fn filled_ellipse(
-        &mut self,
-        center: (f32, f32),
-        axis_a: (f32, f32),
-        axis_b: (f32, f32),
-        color: Rgb888,
-    );
-    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888);
-}
-
-/// Maps world-space geometry to pixel space via an axis rotation plus an
-/// optional perspective divide.
-///
-/// The `rotation` matrix maps world axes onto camera axes: row 0 is the depth
-/// axis, row 1 is the source of target X, and row 2 is the source of target Y.
-/// `focal` of `None` is orthographic; `Some(f)` applies a focal-length
-/// perspective divide on the depth axis (larger `f` → less foreshortening).
-///
-/// Use the named constructors rather than building the matrix by hand:
-///
-/// ```rust,no_run
-/// # use linkage_blaze::{Point, Projection};
-/// let orthographic = Projection::front_orthographic(Point::new(84, 300), 1.575);
-/// let top = Projection::top_orthographic(Point::new(160, 160), 1.0);
-/// let perspective = Projection::front_perspective(Point::new(120, 160), 15.0, 30.0);
-/// ```
-pub struct Projection {
-    rotation: Mat3,
-    target_origin: Point,
-    scale: f32,
-    /// `None` is orthographic; `Some(focal)` is perspective.
-    focal: Option<f32>,
-}
-
-/// World Y → target X, world Z → target Y, world X → depth.
-const NEG_X_BASIS: Mat3 = Mat3([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
-
-/// World Y → target X, world X → target Y, world Z → depth.
-const NEG_Z_BASIS: Mat3 = Mat3([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]);
-
-impl Projection {
-    /// Orthographic front view, looking along negative X: world Y → target X
-    /// (negated), world Z → target Y (negated). `target_origin` is the point
-    /// in the parent drawing coordinate space where world Y=0 and world Z=0
-    /// project.
-    pub const fn front_orthographic(target_origin: Point, scale: f32) -> Self {
-        Self {
-            rotation: NEG_X_BASIS,
-            target_origin,
-            scale,
-            focal: None,
-        }
-    }
-
-    /// Orthographic top view, looking along negative Z: world Y → target X
-    /// (negated), world X → target Y (negated). `target_origin` is the point
-    /// in the parent drawing coordinate space where world Y=0 and world X=0
-    /// project.
-    pub const fn top_orthographic(target_origin: Point, scale: f32) -> Self {
-        Self {
-            rotation: NEG_Z_BASIS,
-            target_origin,
-            scale,
-            focal: None,
-        }
-    }
-
-    /// Perspective front view, looking along negative X (same axes as
-    /// [`Self::front_orthographic`]).
-    pub const fn front_perspective(target_origin: Point, scale: f32, focal: f32) -> Self {
-        Self {
-            rotation: NEG_X_BASIS,
-            target_origin,
-            scale,
-            focal: Some(focal),
-        }
-    }
-
-    // TODO Add a runtime constructor for camera-controlled projections if needed.
-
-    /// Map a world vector into camera axes `[depth, screen-x source, screen-y source]`.
-    #[inline]
-    fn world_to_camera(&self, v: Vec3) -> [f32; 3] {
-        let r = &self.rotation;
-        [
-            r[0][0] * v[0] + r[0][1] * v[1] + r[0][2] * v[2],
-            r[1][0] * v[0] + r[1][1] * v[1] + r[1][2] * v[2],
-            r[2][0] * v[0] + r[2][1] * v[1] + r[2][2] * v[2],
-        ]
-    }
-
-    #[inline]
-    fn depth_factor(&self, depth: f32) -> f32 {
-        match self.focal {
-            None => 1.0,
-            Some(focal) => focal / (focal + depth).max(focal * 0.05),
-        }
-    }
-
-    /// Project a world-space direction vector (scaled by `radius`) to pixel-space.
-    pub fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
-        let factor = self.depth_factor(self.world_to_camera(pose.position())[0]);
-        let d = self.world_to_camera(world_dir);
-        let r = radius * self.scale * factor;
-        (-d[1] * r, -d[2] * r)
-    }
-
-    /// Scale a world-space sphere radius to pixel-space.
-    pub fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
-        let factor = self.depth_factor(self.world_to_camera(pose.position())[0]);
-        radius * self.scale * factor
-    }
-
-    /// Scale a world-space stroke width to pixel-space.
-    pub fn project_width(&self, width: f32) -> f32 {
-        (width * self.scale).max(1.0)
-    }
-}
-
-/// Wraps a [`PixelTarget`] as a [`DrawSurface`] using embedded-graphics primitives.
-///
-/// `tile_origin` is the surface-space origin of the rendering coordinate system.
-/// Set it to `Point::new(0, 0)` to render to the full target without any offset.
-///
-/// ```rust,no_run
-/// # use device_envoy_core::pixel_target::PixelTarget;
-/// # use linkage_blaze::{PixelSurface, Rgb888};
-/// # use embedded_graphics::prelude::Point;
-/// # struct MyTarget;
-/// # impl PixelTarget for MyTarget {
-/// #     fn width(&self) -> usize { 240 }
-/// #     fn height(&self) -> usize { 320 }
-/// #     fn put_pixel(&mut self, _x: usize, _y: usize, _color: Rgb888) {}
-/// # }
-/// # let mut target = MyTarget;
-/// let mut surface = PixelSurface::new(&mut target);
-/// ```
-pub struct PixelSurface<'a, T: PixelTarget> {
-    pub target: &'a mut T,
-    pub tile_origin: embedded_graphics::prelude::Point,
-}
-
-impl<'a, T: PixelTarget> PixelSurface<'a, T> {
-    pub fn new(target: &'a mut T) -> Self {
-        Self {
-            target,
-            tile_origin: embedded_graphics::prelude::Point::new(0, 0),
-        }
-    }
-
-    /// Write one pixel at `(x, y)` in the drawing coordinate system, clipping to the target bounds.
-    pub fn put_pixel(&mut self, x: i32, y: i32, color: Rgb888) {
-        pixel_put(
-            self.target,
-            x - self.tile_origin.x,
-            y - self.tile_origin.y,
-            color,
-        );
-    }
-}
-
-struct TiledDrawAdapter<'a, T: PixelTarget> {
-    target: &'a mut T,
-    tile_origin: embedded_graphics::prelude::Point,
-}
-
-impl<T: PixelTarget> embedded_graphics::draw_target::DrawTarget for TiledDrawAdapter<'_, T> {
-    type Color = Rgb888;
-    type Error = Infallible;
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = embedded_graphics::Pixel<Rgb888>>,
-    {
-        for embedded_graphics::Pixel(point, color) in pixels {
-            pixel_put(
-                self.target,
-                point.x - self.tile_origin.x,
-                point.y - self.tile_origin.y,
-                color,
-            );
-        }
-        Ok(())
-    }
-}
-
-impl<T: PixelTarget> embedded_graphics::geometry::OriginDimensions for TiledDrawAdapter<'_, T> {
-    fn size(&self) -> embedded_graphics::geometry::Size {
-        embedded_graphics::geometry::Size::new(
-            self.target.width() as u32,
-            self.target.height() as u32,
-        )
-    }
-}
-
-impl<T: PixelTarget> DrawSurface for PixelSurface<'_, T> {
-    fn stroke(&mut self, start: (f32, f32), end: (f32, f32), color: Rgb888, pixel_width: f32) {
-        use embedded_graphics::{
-            Drawable,
-            primitives::{Line, Primitive, PrimitiveStyle},
-        };
-        let width = (pixel_width + 0.5) as u32;
-        Line::new(
-            embedded_graphics::prelude::Point::new(start.0 as i32, start.1 as i32),
-            embedded_graphics::prelude::Point::new(end.0 as i32, end.1 as i32),
-        )
-        .into_styled(PrimitiveStyle::with_stroke(color, width.max(1)))
-        .draw(&mut TiledDrawAdapter {
-            target: self.target,
-            tile_origin: self.tile_origin,
-        })
-        .unwrap();
-    }
-
-    fn filled_ellipse(
-        &mut self,
-        center: (f32, f32),
-        axis_a: (f32, f32),
-        axis_b: (f32, f32),
-        color: Rgb888,
-    ) {
-        let tile_origin = self.tile_origin;
-        let target = &mut *self.target;
-        fill_ellipse_pixels(center, axis_a, axis_b, |x, y| {
-            pixel_put(target, x - tile_origin.x, y - tile_origin.y, color);
-        });
-    }
-
-    fn filled_circle(&mut self, center: (f32, f32), pixel_radius: f32, color: Rgb888) {
-        use embedded_graphics::{
-            Drawable,
-            primitives::{Circle, Primitive, PrimitiveStyle},
-        };
-        let diameter = ((pixel_radius * 2.0) + 0.5) as u32;
-        Circle::with_center(
-            embedded_graphics::prelude::Point::new(center.0 as i32, center.1 as i32),
-            diameter.max(1),
-        )
-        .into_styled(PrimitiveStyle::with_fill(color))
-        .draw(&mut TiledDrawAdapter {
-            target: self.target,
-            tile_origin: self.tile_origin,
-        })
-        .unwrap();
     }
 }
 
@@ -4291,9 +3903,9 @@ mod tests {
     #[cfg(feature = "alloc")]
     use super::LinkageBuf;
     use super::{
-        Error, Item3d, LinkageFixed, LinkageView, Mat3, Point, Pose, Projection, Rgb565, Rgb888,
-        Step, StepArg, Vec3,
+        Error, Item3d, LinkageFixed, LinkageView, Mat3, Pose, Rgb888, Step, StepArg, Vec3,
     };
+    use crate::render::Projection;
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,
@@ -4301,6 +3913,7 @@ mod tests {
     use device_envoy_core::pixel_target::{
         rgb565_from_rgb888, rgb565_from_rgb888_components, rgb888_from_rgb565,
     };
+    use embedded_graphics::{pixelcolor::Rgb565, prelude::Point};
     use std::{boxed::Box, error::Error as StdError};
 
     const LINKAGE0: LinkageFixed<6, 0, 24> = LinkageFixed::start()
@@ -4497,6 +4110,38 @@ mod tests {
 
         assert!(actual.is_close_to(&Vec3::from([10.0, 0.0, 0.0]), 1e-6));
         Ok(())
+    }
+
+    #[test]
+    fn link_view_finds_named_mark_pose() -> Result<(), Box<dyn StdError>> {
+        const LINKAGE: LinkageFixed<0, 1, 4> = LinkageFixed::start().mark("tip").forward(2.0);
+
+        let pose = LINKAGE.view().pose_by_mark_name(&[], "tip")?;
+        assert_eq!(pose.position(), Vec3::from([0.0, 0.0, 0.0]));
+        Ok(())
+    }
+
+    #[test]
+    fn link_view_reports_missing_mark() {
+        const LINKAGE: LinkageFixed<0, 1, 2> = LinkageFixed::start().mark("tip");
+
+        assert!(matches!(
+            LINKAGE.view().pose_by_mark_name(&[], "missing"),
+            Err(Error::MarkNotFound)
+        ));
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn link_view_reports_ambiguous_mark() {
+        let first = LinkageBuf::<0, 1>::start().mark("tip");
+        let second = LinkageBuf::<0, 1>::start().mark("tip");
+        let linkage: LinkageBuf<0, 2> = first.combine(second.view());
+
+        assert!(matches!(
+            linkage.view().pose_by_mark_name(&[], "tip"),
+            Err(Error::MarkAmbiguous)
+        ));
     }
 
     #[test]

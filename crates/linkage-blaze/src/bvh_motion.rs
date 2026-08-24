@@ -44,6 +44,9 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 /// const MOTION: Motion<132, 592> =
 ///     linkage_blaze::bvh::motion!("path/to/motion.bvh");
 /// ```
+// This implementation helper must be public because the user-facing
+// `bvh::motion!` macro expands in downstream crates.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __bvh_motion {
     ($path:literal) => {

@@ -8,7 +8,7 @@ use core::{
 
 use crate::bvh::Motion as BvhMotion;
 use crate::render::Projection;
-use crate::{DrawItem3dExt, Error as LinkageError, LinkageFixed, Point, Rgb888, linkage_file};
+use crate::{Error as LinkageError, LinkageFixed, Rgb888, linkage_file};
 use device_envoy_core::{
     Error as CoreError,
     button::Button,
@@ -19,6 +19,7 @@ use device_envoy_core::{
 };
 use embassy_time::{Duration, Instant};
 use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
+use embedded_graphics::prelude::Point;
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 

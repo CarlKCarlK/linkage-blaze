@@ -65,15 +65,23 @@ Step 2-specific validation. The remaining Armatron golden-image failure is
 pre-existing: the same test fails in a clean `HEAD` checkout with the same
 diagnostic.
 
-### 3. Simplify evaluation and rendering APIs
+### 3. Simplify evaluation and rendering APIs — Complete
 
-- Add direct mark-pose lookup to `LinkageView`, integrate its failures into
-  `Error`, remove `MarkError`, and return an opaque draw-item iterator.
-- Inline `DrawItem3dExt::project` as an inherent method on `render::Item3d`.
-- Remove the unused `DrawSurface`/`PixelSurface` API island and make
+- Added direct mark-pose lookup to `LinkageView`, integrated missing and
+  ambiguous-name failures into `Error`, removed `MarkError`, and returned an
+  opaque draw-item iterator. Focused tests cover successful, missing, and
+  ambiguous mark names.
+- Moved `Item3d`, `Stroke`, `Disk`, `Sphere`, and `Projection` genuinely into
+  the public `render` module, and made projection an inherent method on
+  `render::Item3d`.
+- Removed the unused `DrawSurface`/`PixelSurface` API island and made
   `PenStyle` private.
-- Remove the root `Point` and `Rgb565` re-exports while retaining `Rgb888`,
+- Removed the root `Point` and `Rgb565` re-exports while retaining `Rgb888`,
   `RgbColor`, and `WebColors` with Linkage Blaze-specific documentation.
+- Restored Projection and public-method documentation for the resulting API.
+
+Focused tests, all-features rustdoc, and `cargo check-all` pass. The updated
+Armatron golden-image fixture is preserved.
 
 ### 4. Update every consumer
 

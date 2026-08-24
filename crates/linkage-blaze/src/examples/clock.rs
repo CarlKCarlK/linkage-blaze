@@ -5,7 +5,7 @@
 use core::{fmt, iter};
 
 use crate::render::Projection;
-use crate::{DrawItem3dExt, Error as LinkageError, linkage_file};
+use crate::{Error as LinkageError, linkage_file};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,

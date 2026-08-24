@@ -4,7 +4,7 @@
 use core::{array::from_fn, convert::Infallible, fmt};
 
 use crate::render::Projection;
-use crate::{DrawItem3dExt, Error as LinkageError, LinkageFixed, MarkError, Rgb888, linkage_file};
+use crate::{Error as LinkageError, LinkageFixed, Rgb888, linkage_file};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,
@@ -159,23 +159,24 @@ where
 
         // Create an iterator that will list every 3D item and its pose.
         let linkage = LINKAGE.view();
-        let mut draw_items_3d = linkage.draw_items_3d(&params)?;
+        let draw_items_3d = linkage.draw_items_3d(&params)?;
 
         // // Iterate 3d items, project to 2D, and collect 2D items and poses.
         let mut projected_items =
             heapless::Vec::<_, { LINKAGE.view().draw_item_3d_count() }>::new();
-        for draw_item_3d in draw_items_3d.by_ref() {
+        for draw_item_3d in draw_items_3d {
             projected_items
                 .push(draw_item_3d.project(&PROJECTION))
                 .map_err(Error::VecOverflow)?;
         }
 
-        // Using the exhausted iterator, find the position of the middle of the left hand.
-        let (hours_anchor_x, hours_anchor_y) =
-            mark_lookup(draw_items_3d.pose_by_mark_name("lMid2"))?.project(&PROJECTION);
-        // Find the position of the middle of the right hand.
-        let (minute_anchor_x, minute_anchor_y) =
-            mark_lookup(draw_items_3d.pose_by_mark_name("rMid2"))?.project(&PROJECTION);
+        // Find the positions of the middle fingers after evaluating the linkage.
+        let (hours_anchor_x, hours_anchor_y) = linkage
+            .pose_by_mark_name(&params, "lMid2")?
+            .project(&PROJECTION);
+        let (minute_anchor_x, minute_anchor_y) = linkage
+            .pose_by_mark_name(&params, "rMid2")?
+            .project(&PROJECTION);
 
         // Figure out where to draw the hour and minute placards.
         let hours_top_left = Point::new(
@@ -274,8 +275,7 @@ pub enum Exit {
 /// Error from the generic skeleton-clock loop, generic over the surface's flush
 /// error `FlushError`.
 ///
-/// Our own [`MarkLookupError`] gets a derived `From`, so it propagates with a
-/// plain `?`. The device's flush error `FlushError` and the overflow value are converted
+/// The device's flush error `FlushError` and the overflow value are converted
 /// explicitly with `.map_err(...)` at the call site: a blanket `From<FlushError>` would
 /// be greedy enough to collide with that concrete `From` under coherence.
 #[derive(Debug, derive_more::From)]
@@ -285,8 +285,6 @@ pub enum Error<FlushError> {
     /// Flushing a frame to the display failed.
     #[from(ignore)]
     Flush(FlushError),
-    /// A required figure mark was not found.
-    Mark(MarkLookupError),
     /// The projected-items scratch buffer was smaller than the linkage draw-item count.
     #[from(ignore)]
     VecOverflow(DrawItem),
@@ -468,13 +466,6 @@ fn draw_centered_sign_value<D>(
 }
 
 // ── Errors ────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, derive_more::From)]
-pub struct MarkLookupError(pub MarkError);
-
-fn mark_lookup<T>(result: Result<T, MarkError>) -> Result<T, MarkLookupError> {
-    Ok(result?)
-}
 
 #[cfg(test)]
 mod tests {
