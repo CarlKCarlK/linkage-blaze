@@ -83,11 +83,18 @@ diagnostic.
 Focused tests, all-features rustdoc, and `cargo check-all` pass. The updated
 Armatron golden-image fixture is preserved.
 
-### 4. Update every consumer
+### 4. Update every consumer — Complete
 
-- Update the core crate, editor, ESP examples, RP examples, WASM examples,
-  integration tests, `.lb.rs` macro paths, generated-source expectations, and
-  doctests in one coordinated migration.
+- Audited and updated the core crate, editor, ESP/RP/WASM examples, integration
+  tests, `.lb.rs` macro consumers, generated-source expectations, and doctests
+  for the finalized Step 2–3 API. The host BVH implementation now uses the
+  contextual `Clip`, `Joint`, `Channel`, `Parameter`, and `ParameterLayout`
+  names directly, and all rendering consumers use `render::*` paths.
+- Searched the repository for the removed names and paths, including old BVH,
+  argument, rendering, mark-error, surface, and root rendering names. No
+  obsolete consumer references remain outside this historical review spec.
+
+Formatting, all-features rustdoc, and `cargo check-all` pass.
 
 ### 5. Rewrite public documentation for the final API
 

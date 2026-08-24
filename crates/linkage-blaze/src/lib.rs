@@ -3902,10 +3902,8 @@ mod test_helpers;
 mod tests {
     #[cfg(feature = "alloc")]
     use super::LinkageBuf;
-    use super::{
-        Error, Item3d, LinkageFixed, LinkageView, Mat3, Pose, Rgb888, Step, StepArg, Vec3,
-    };
-    use crate::render::Projection;
+    use super::{Error, LinkageFixed, LinkageView, Mat3, Pose, Rgb888, Step, StepArg, Vec3};
+    use crate::render::{Item3d, Projection};
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
         draw_linkage_xy_canvas,

@@ -30,8 +30,8 @@ fn intern_mark_name(name: &str) -> &'static str {
 
 /// Parsed BVH clip: hierarchy plus motion samples.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct BvhClip {
-    pub joints: Vec<BvhJoint>,
+pub struct Clip {
+    pub joints: Vec<Joint>,
     pub samples: Vec<MotionSample>,
     pub sample_time: f32,
     channel_count: usize,
@@ -39,16 +39,16 @@ pub struct BvhClip {
 
 /// One BVH joint or end site.
 #[derive(Clone, Debug, PartialEq)]
-pub struct BvhJoint {
+pub struct Joint {
     pub name: String,
     pub parent: Option<usize>,
     pub offset: [f32; 3],
-    pub channels: Vec<BvhChannel>,
+    pub channels: Vec<Channel>,
 }
 
 /// BVH channel definition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BvhChannel {
+pub enum Channel {
     Xposition,
     Yposition,
     Zposition,
@@ -65,11 +65,11 @@ pub struct MotionSample {
 
 /// Parameter layout discovered from a BVH clip.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct BvhParameterLayout {
-    pub parameters: Vec<BvhParameter>,
+pub struct ParameterLayout {
+    pub parameters: Vec<Parameter>,
 }
 
-impl BvhParameterLayout {
+impl ParameterLayout {
     pub fn len(&self) -> usize {
         self.parameters.len()
     }
@@ -81,15 +81,15 @@ impl BvhParameterLayout {
 
 /// One Linkage parameter mapped back to a BVH channel.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BvhParameter {
+pub struct Parameter {
     pub index: usize,
     pub linkage_name: &'static str,
     pub joint_index: usize,
-    pub channel: BvhChannel,
+    pub channel: Channel,
 }
 
 /// Discover Linkage parameter slots from BVH channels.
-pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, Error> {
+pub fn discover_bvh_parameters(clip: &Clip) -> Result<ParameterLayout, Error> {
     let mut parameters = Vec::new();
 
     for (joint_index, joint) in clip.joints.iter().enumerate() {
@@ -98,7 +98,7 @@ pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, Err
         }
     }
 
-    Ok(BvhParameterLayout { parameters })
+    Ok(ParameterLayout { parameters })
 }
 
 /// Create a parameterized LinkageBuf from a BVH clip.
@@ -108,8 +108,8 @@ pub fn discover_bvh_parameters(clip: &BvhClip) -> Result<BvhParameterLayout, Err
 /// output linkage so callers can look up the pose of specific body parts after
 /// evaluation.  Hierarchical depth marks are always emitted in addition.
 pub fn build_bvh_linkage_buf<const DOF: usize, const MARKS: usize>(
-    clip: &BvhClip,
-    layout: &BvhParameterLayout,
+    clip: &Clip,
+    layout: &ParameterLayout,
     mark_joints: &[&str],
 ) -> Result<LinkageBuf<DOF, MARKS>, Error> {
     let defaults = clip.samples.first().map_or_else(
@@ -120,8 +120,8 @@ pub fn build_bvh_linkage_buf<const DOF: usize, const MARKS: usize>(
 }
 
 fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
-    clip: &BvhClip,
-    layout: &BvhParameterLayout,
+    clip: &Clip,
+    layout: &ParameterLayout,
     defaults: &[f32],
     mark_joints: &[&str],
 ) -> Result<LinkageBuf<DOF, MARKS>, Error> {
@@ -176,7 +176,7 @@ fn build_bvh_linkage_buf_with_defaults<const DOF: usize, const MARKS: usize>(
     Ok(linkage)
 }
 
-fn bvh_needed_mark_count(clip: &BvhClip, children: &[Vec<usize>], mark_joints: &[&str]) -> usize {
+fn bvh_needed_mark_count(clip: &Clip, children: &[Vec<usize>], mark_joints: &[&str]) -> usize {
     let root_count = clip.joints.iter().filter(|j| j.parent.is_none()).count();
     let origin_slots = usize::from(root_count >= 2);
 
@@ -196,7 +196,7 @@ fn bvh_needed_mark_count(clip: &BvhClip, children: &[Vec<usize>], mark_joints: &
     origin_slots + branching_depths.len() + named_mark_count
 }
 
-fn bvh_joint_depths(clip: &BvhClip) -> Vec<usize> {
+fn bvh_joint_depths(clip: &Clip) -> Vec<usize> {
     let mut depths = vec![0usize; clip.joints.len()];
     for (joint_index, joint) in clip.joints.iter().enumerate() {
         if let Some(parent) = joint.parent {
@@ -206,7 +206,7 @@ fn bvh_joint_depths(clip: &BvhClip) -> Vec<usize> {
     depths
 }
 
-fn bvh_annotations(clip: &BvhClip, children: &[Vec<usize>]) -> (Vec<String>, Vec<String>) {
+fn bvh_annotations(clip: &Clip, children: &[Vec<usize>]) -> (Vec<String>, Vec<String>) {
     let mut mark_annotations = Vec::new();
     let mut restore_annotations = Vec::new();
     for (joint_index, joint) in clip.joints.iter().enumerate() {
@@ -224,7 +224,7 @@ fn bvh_annotations(clip: &BvhClip, children: &[Vec<usize>]) -> (Vec<String>, Vec
 }
 
 fn collect_annotations(
-    clip: &BvhClip,
+    clip: &Clip,
     children: &[Vec<usize>],
     joint_index: usize,
     mark_annotations: &mut Vec<String>,
@@ -283,7 +283,7 @@ fn annotate_depth_step_lines(
 
 /// Return normalized Linkage parameter values for one motion sample.
 pub fn bvh_sample_params<const DOF: usize>(
-    layout: &BvhParameterLayout,
+    layout: &ParameterLayout,
     sample: &MotionSample,
 ) -> Result<[f32; DOF], Error> {
     if layout.len() > DOF {
@@ -325,7 +325,7 @@ pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
 }
 
 /// Parse BVH hierarchy and motion text.
-pub fn parse_bvh(source: &str) -> Result<BvhClip, Error> {
+pub fn parse_bvh(source: &str) -> Result<Clip, Error> {
     let mut parser = BvhParser::new(source);
 
     parser.expect("HIERARCHY")?;
@@ -355,7 +355,7 @@ pub fn parse_bvh(source: &str) -> Result<BvhClip, Error> {
         samples.push(MotionSample { values });
     }
 
-    Ok(BvhClip {
+    Ok(Clip {
         joints: parser.joints,
         samples,
         sample_time,
@@ -364,14 +364,14 @@ pub fn parse_bvh(source: &str) -> Result<BvhClip, Error> {
 }
 
 fn push_bvh_parameter(
-    parameters: &mut Vec<BvhParameter>,
+    parameters: &mut Vec<Parameter>,
     joint_index: usize,
     joint_name: &str,
-    channel: BvhChannel,
+    channel: Channel,
 ) {
     let index = parameters.len();
     let linkage_name = bvh_linkage_name(joint_name, channel);
-    parameters.push(BvhParameter {
+    parameters.push(Parameter {
         index,
         linkage_name,
         joint_index,
@@ -379,7 +379,7 @@ fn push_bvh_parameter(
     });
 }
 
-fn bvh_linkage_name(joint_name: &str, channel: BvhChannel) -> &'static str {
+fn bvh_linkage_name(joint_name: &str, channel: Channel) -> &'static str {
     let mut name = String::with_capacity(joint_name.len() + 1 + bvh_channel_name(channel).len());
     push_sanitized_name_part(&mut name, joint_name);
     name.push('_');
@@ -425,20 +425,20 @@ fn push_sanitized_name_part(name: &mut String, value: &str) {
     }
 }
 
-fn bvh_channel_name(channel: BvhChannel) -> &'static str {
+fn bvh_channel_name(channel: Channel) -> &'static str {
     match channel {
-        BvhChannel::Xposition => "xposition",
-        BvhChannel::Yposition => "yposition",
-        BvhChannel::Zposition => "zposition",
-        BvhChannel::Xrotation => "xrotation",
-        BvhChannel::Yrotation => "yrotation",
-        BvhChannel::Zrotation => "zrotation",
+        Channel::Xposition => "xposition",
+        Channel::Yposition => "yposition",
+        Channel::Zposition => "zposition",
+        Channel::Xrotation => "xrotation",
+        Channel::Yrotation => "yrotation",
+        Channel::Zrotation => "zrotation",
     }
 }
 
 fn apply_bvh_joint_parameters<const DOF: usize, const MARKS: usize>(
     mut linkage: LinkageBuf<DOF, MARKS>,
-    layout: &BvhParameterLayout,
+    layout: &ParameterLayout,
     joint_index: usize,
 ) -> LinkageBuf<DOF, MARKS> {
     for parameter in layout
@@ -448,12 +448,12 @@ fn apply_bvh_joint_parameters<const DOF: usize, const MARKS: usize>(
     {
         let (low, high) = bvh_parameter_range(parameter.channel);
         linkage = match parameter.channel {
-            BvhChannel::Xposition => linkage.left_param(parameter.linkage_name, low, high),
-            BvhChannel::Yposition => linkage.up_param(parameter.linkage_name, low, high),
-            BvhChannel::Zposition => linkage.forward_param(parameter.linkage_name, low, high),
-            BvhChannel::Xrotation => linkage.pitch_param(parameter.linkage_name, low, high),
-            BvhChannel::Yrotation => linkage.yaw_param(parameter.linkage_name, low, high),
-            BvhChannel::Zrotation => linkage.roll_param(parameter.linkage_name, low, high),
+            Channel::Xposition => linkage.left_param(parameter.linkage_name, low, high),
+            Channel::Yposition => linkage.up_param(parameter.linkage_name, low, high),
+            Channel::Zposition => linkage.forward_param(parameter.linkage_name, low, high),
+            Channel::Xrotation => linkage.pitch_param(parameter.linkage_name, low, high),
+            Channel::Yrotation => linkage.yaw_param(parameter.linkage_name, low, high),
+            Channel::Zrotation => linkage.roll_param(parameter.linkage_name, low, high),
         };
     }
 
@@ -461,7 +461,7 @@ fn apply_bvh_joint_parameters<const DOF: usize, const MARKS: usize>(
 }
 
 fn bvh_parameter_defaults(
-    layout: &BvhParameterLayout,
+    layout: &ParameterLayout,
     sample: &MotionSample,
 ) -> Result<Vec<f32>, Error> {
     let mut defaults = Vec::with_capacity(layout.len());
@@ -477,7 +477,7 @@ fn bvh_parameter_defaults(
     Ok(defaults)
 }
 
-fn normalize_bvh_parameter_default(parameter: &BvhParameter, value: f32) -> Result<f32, Error> {
+fn normalize_bvh_parameter_default(parameter: &Parameter, value: f32) -> Result<f32, Error> {
     let (low, high) = bvh_parameter_range(parameter.channel);
     let default = snap_centered_default((value - low) / (high - low));
 
@@ -502,14 +502,14 @@ fn snap_centered_default(default: f32) -> f32 {
     }
 }
 
-fn bvh_parameter_range(channel: BvhChannel) -> (f32, f32) {
+fn bvh_parameter_range(channel: Channel) -> (f32, f32) {
     match channel {
-        BvhChannel::Xposition | BvhChannel::Yposition | BvhChannel::Zposition => (-300.0, 300.0),
-        BvhChannel::Xrotation | BvhChannel::Yrotation | BvhChannel::Zrotation => (-720.0, 720.0),
+        Channel::Xposition | Channel::Yposition | Channel::Zposition => (-300.0, 300.0),
+        Channel::Xrotation | Channel::Yrotation | Channel::Zrotation => (-720.0, 720.0),
     }
 }
 
-fn bvh_children(clip: &BvhClip) -> Vec<Vec<usize>> {
+fn bvh_children(clip: &Clip) -> Vec<Vec<usize>> {
     let mut children = vec![Vec::new(); clip.joints.len()];
     for (joint_index, joint) in clip.joints.iter().enumerate() {
         if let Some(parent_index) = joint.parent {
@@ -522,8 +522,8 @@ fn bvh_children(clip: &BvhClip) -> Vec<Vec<usize>> {
 
 fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
     mut linkage: LinkageBuf<DOF, MARKS>,
-    clip: &BvhClip,
-    layout: &BvhParameterLayout,
+    clip: &Clip,
+    layout: &ParameterLayout,
     children: &[Vec<usize>],
     joint_index: usize,
     depth: usize,
@@ -568,7 +568,7 @@ fn append_bvh_joint<const DOF: usize, const MARKS: usize>(
 struct BvhParser {
     tokens: Vec<String>,
     index: usize,
-    joints: Vec<BvhJoint>,
+    joints: Vec<Joint>,
     channel_count: usize,
 }
 
@@ -589,7 +589,7 @@ impl BvhParser {
 
     fn parse_joint(&mut self, name: String, parent: Option<usize>) -> Result<usize, Error> {
         let joint_index = self.joints.len();
-        self.joints.push(BvhJoint {
+        self.joints.push(Joint {
             name,
             parent,
             offset: [0.0, 0.0, 0.0],
@@ -642,7 +642,7 @@ impl BvhParser {
     fn parse_end_site(&mut self, parent: usize) -> Result<usize, Error> {
         let end_index = self.joints.len();
         let name = format!("{}_end_{}", self.joints[parent].name, end_index);
-        self.joints.push(BvhJoint {
+        self.joints.push(Joint {
             name,
             parent: Some(parent),
             offset: [0.0, 0.0, 0.0],
@@ -672,15 +672,15 @@ impl BvhParser {
         Ok(())
     }
 
-    fn next_channel(&mut self) -> Result<BvhChannel, Error> {
+    fn next_channel(&mut self) -> Result<Channel, Error> {
         let token = self.next_string("BVH channel")?;
         match token.as_str() {
-            "Xposition" => Ok(BvhChannel::Xposition),
-            "Yposition" => Ok(BvhChannel::Yposition),
-            "Zposition" => Ok(BvhChannel::Zposition),
-            "Xrotation" => Ok(BvhChannel::Xrotation),
-            "Yrotation" => Ok(BvhChannel::Yrotation),
-            "Zrotation" => Ok(BvhChannel::Zrotation),
+            "Xposition" => Ok(Channel::Xposition),
+            "Yposition" => Ok(Channel::Yposition),
+            "Zposition" => Ok(Channel::Zposition),
+            "Xrotation" => Ok(Channel::Xrotation),
+            "Yrotation" => Ok(Channel::Yrotation),
+            "Zrotation" => Ok(Channel::Zrotation),
             _ => Err(Error::new(format!("unknown BVH channel `{token}`"))),
         }
     }
@@ -909,11 +909,11 @@ Frame Time: 0.0333333
     #[test]
     fn bvh_parameter_names_use_joint_and_channel_names() {
         assert_eq!(
-            bvh_linkage_name("rThumb1", BvhChannel::Zrotation),
+            bvh_linkage_name("rThumb1", Channel::Zrotation),
             "r_thumb1_zrotation"
         );
         assert_eq!(
-            bvh_linkage_name("leftEye", BvhChannel::Xposition),
+            bvh_linkage_name("leftEye", Channel::Xposition),
             "left_eye_xposition"
         );
     }
@@ -938,7 +938,7 @@ Frame Time: 0.0333333
             .view()
             .draw_items_3d(&params)?
             .find_map(|draw_item_3d| match draw_item_3d {
-                crate::Item3d::Stroke(stroke) => Some(stroke),
+                crate::render::Item3d::Stroke(stroke) => Some(stroke),
                 _ => None,
             })
             .expect("offset should draw a stroke");

@@ -19,8 +19,7 @@ mod host;
 
 #[cfg(feature = "bvh")]
 pub use host::{
-    BvhChannel as Channel, BvhClip as Clip, BvhJoint as Joint, BvhParameter as Parameter,
-    BvhParameterLayout as ParameterLayout, Error, MotionSample as Sample,
+    Channel, Clip, Error, Joint, MotionSample as Sample, Parameter, ParameterLayout,
     build_bvh_linkage_buf as build_linkage_buf, bvh_sample_params as sample_params,
     bvh_to_lb_rs as to_lb_rs, discover_bvh_parameters as discover_parameters, parse_bvh as parse,
 };

@@ -6,7 +6,7 @@ use core::{
     fmt::{self, Write},
 };
 
-use crate::bvh::Motion as BvhMotion;
+use crate::bvh::Motion;
 use crate::render::Projection;
 use crate::{Error as LinkageError, LinkageFixed, Rgb888, linkage_file};
 use device_envoy_core::{
@@ -51,7 +51,7 @@ const LINKAGE: LinkageFixed<
 // The motion capture data, read at compile time from BVH and stored in the binary.
 #[allow(long_running_const_eval)]
 // This can take ~8 seconds to compile.
-const MOTION: BvhMotion<{ pirouette::DOF }, 592> =
+const MOTION: Motion<{ pirouette::DOF }, 592> =
     crate::bvh::motion!("../assets/mocap/pirouette.bvh");
 const MOTION_FPS: f32 = 120.0; // the mocap was captured at 120fps, so we can run it at that speed.
 
