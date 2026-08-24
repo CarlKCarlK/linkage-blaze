@@ -73,8 +73,9 @@ const ARMATRON_WITH_JOINTS: LinkageFixed<
     { joint_sphere_step_count(&armatron1::fixed()) },
 > = with_joint_spheres(armatron1::fixed(), 0.15);
 const SCENE_WITH_ARM: LinkageFixed<
-    { CAMERA_AND_GRID.dof() + ARMATRON_WITH_JOINTS.dof() },
-    { CAMERA_AND_GRID.mark_count() + ARMATRON_WITH_JOINTS.mark_count() },
+    { CAMERA_AND_GRID.dof() + ARMATRON_WITH_JOINTS.dof() }, // Combined parameter count (DOF).
+    { CAMERA_AND_GRID.mark_count() + ARMATRON_WITH_JOINTS.mark_count() }, // Combined mark-slot count.
+    // `combine` omits the right-hand `Start`, leaving one spare slot for the later `restore`.
     { CAMERA_AND_GRID.step_count() + ARMATRON_WITH_JOINTS.step_count() },
 > = CAMERA_AND_GRID.combine(ARMATRON_WITH_JOINTS.view());
 // `pen_color` and `sphere_param` each append one step after the ghost arm.

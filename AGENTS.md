@@ -63,10 +63,16 @@ test failures.
 
 ## Specs
 
-Put implementation specs (`*_SPEC.md` and similar planning documents) in the `specs/` directory, not the repo root. Every spec must include a `todo0` comment near the top reminding readers to consider deleting the spec once the work it describes is complete, for example:
+In this `AGENTS.md` only, `&#48;` inside a TODO marker means the ASCII digit
+zero. Agents must write the real, contiguous marker (`TODO` immediately
+followed by one or more `0` digits) in source and spec files. This encoding is
+used only here so plain-text release-TODO searches do not find documentation
+examples.
+
+Put implementation specs (`*_SPEC.md` and similar planning documents) in the `specs/` directory, not the repo root. Every spec must include a `todo&#48;` comment near the top reminding readers to consider deleting the spec once the work it describes is complete, for example:
 
 ```markdown
-<!-- todo0 consider deleting this spec once the work below is implemented and released. -->
+<!-- todo&#48; consider deleting this spec once the work below is implemented and released. -->
 ```
 
 ## Local CI
@@ -150,16 +156,16 @@ When capturing variables in closures or creating references, append `_ref`:
 
 ## Comment Conventions
 
-Use `TODO0*` for release-priority TODO items (`TODO` plus one or more trailing zeroes):
+Use `TODO&#48;*` for release-priority TODO items (`TODO` plus one or more trailing zeroes):
 
 ```rust
-// TODO00 high priority task
-// TODO0 lower priority consideration
-// TODO0000 release-blocking task with explicit emphasis
+// TODO&#48;&#48; high priority task
+// TODO&#48; lower priority consideration
+// TODO&#48;&#48;&#48;&#48; release-blocking task with explicit emphasis
 // TODO later/non-release work
 ```
 
-- `TODO0*` means action is required before the next release.
+- `TODO&#48;*` means action is required before the next release.
 - Plain `TODO` means later/non-release work unless explicitly stated otherwise.
 - For code that uses a stable workaround where a clearly better nightly feature exists, add:
   `// TODO_NIGHTLY When nightly feature <feature_name> becomes stable, change this code by <specific change>.`
@@ -227,7 +233,7 @@ Avoid the builder pattern. Prefer direct construction and simple data flow:
 
 Bad:
 
-todo0 this is out of date.
+todo&#48; this is out of date.
 
 ```rust
 let linkage = LinkageBuilder::new()

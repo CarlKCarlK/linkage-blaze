@@ -28,8 +28,9 @@ const CAMERA_AND_GRID: LinkageFixed<
     { camera_control::STEP_COUNT + grid9x9::STEP_COUNT - 1 },
 > = camera_control::fixed().combine(grid9x9::view());
 const SCENE_WITH_ARM: LinkageFixed<
-    { CAMERA_AND_GRID.dof() + armatron1::DOF },
-    { CAMERA_AND_GRID.mark_count() + armatron1::MARKS },
+    { CAMERA_AND_GRID.dof() + armatron1::DOF }, // Combined parameter count (DOF).
+    { CAMERA_AND_GRID.mark_count() + armatron1::MARKS }, // Combined mark-slot count.
+    // `combine` omits the right-hand `Start`, leaving one spare slot for the later `restore`.
     { CAMERA_AND_GRID.step_count() + armatron1::STEP_COUNT },
 > = CAMERA_AND_GRID.combine(armatron1::view());
 const LINKAGE_FIXED: LinkageFixed<
