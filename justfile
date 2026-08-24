@@ -81,6 +81,8 @@ bump-gallery-version version='':
 
 # Generate docs and open in browser
 docs:
+    # Cargo does not fingerprint the workspace-root README included by linkage-blaze.
+    touch crates/linkage-blaze/src/lib.rs
     env RUSTFLAGS="-D warnings" cargo doc -p linkage-blaze --no-deps --features alloc --open
 
 # Show generated docs

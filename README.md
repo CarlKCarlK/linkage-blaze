@@ -6,20 +6,24 @@
 turns, branches, links, joints, disks, and spheres. Then animate parameters to
 bring it to life.
 
+<p>
+  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/armatron.png" alt="Armatron demo preview" height="200" />
+  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/ballet.png" alt="Ballet demo preview" height="200" />
+</p>
+
 ## Project Links
 
 - **[Live demo gallery](https://carlkcarlk.github.io/linkage-blaze/demos/)** -
   Preview and run the interactive browser demos.
 - **[Crate on crates.io](https://crates.io/crates/linkage-blaze)** - Releases,
   installation information, and package metadata.
-- **[API documentation on docs.rs](https://docs.rs/linkage-blaze)** - Public
-  Rust API documentation.
+- **[Documentation on docs.rs](https://docs.rs/linkage-blaze)**
 - **[GitHub repository](https://github.com/CarlKCarlK/linkage-blaze)** - Source,
   issues, and development history.
 
 ## What is Linkage Blaze?
 
-Linkage Blaze is a small language for making animated jointed drawings. It works
+Linkage Blaze is Rust-based domain-spepcific language (DSL) for making animated jointed drawings. It works
 like 3D turtle graphics: move forward, turn, branch, draw links, place joints,
 and add simple shapes such as disks and spheres. Animate a few parameters, and
 the drawing moves.
@@ -39,10 +43,7 @@ The live gallery is the main showcase: **[carlkcarlk.github.io/linkage-blaze/dem
 
 It shows preview images of each demo and links to the live, interactive WASM versions.
 
-<p>
-  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/armatron.png" alt="Armatron demo preview" width="200" />
-  <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/ballet.png" alt="Ballet demo preview" width="150" />
-</p>
+<a href="https://carlkcarlk.github.io/linkage-blaze/demos/"><img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/gallery.png" alt="Linkage Blaze demo gallery preview" width="800" /></a>
 
 ## Example Linkage
 
