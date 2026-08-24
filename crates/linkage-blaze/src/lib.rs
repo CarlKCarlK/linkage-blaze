@@ -25,9 +25,7 @@ extern crate std;
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-#[cfg(feature = "bvh")]
 pub mod bvh;
-pub mod bvh_parse;
 mod math;
 
 /// Platform-neutral example logic for the linkage-blaze CYD examples.
@@ -68,6 +66,11 @@ pub use embedded_graphics::{
 use math::degrees_to_radians;
 pub use math::{Mat3, Vec3};
 
+/// Evaluated three-dimensional drawing geometry and projection helpers.
+pub mod render {
+    pub use super::{Disk, Item3d, Projection, Sphere, Stroke};
+}
+
 /// A step in the robot arm linkage description.
 ///
 /// Model-space axes:
@@ -83,17 +86,17 @@ pub enum Step {
     /// Reset to the origin with the identity orientation.
     Start,
     /// Rotate around local +Z.
-    Yaw(Arg),
+    Yaw(StepArg),
     /// Rotate around local +Y.
-    Pitch(Arg),
+    Pitch(StepArg),
     /// Rotate around local +X.
-    Roll(Arg),
+    Roll(StepArg),
     /// Advance along local +X by the given distance.
-    Forward(Arg),
+    Forward(StepArg),
     /// Advance along local +Y by the given distance.
-    Left(Arg),
+    Left(StepArg),
     /// Advance along local +Z by the given distance.
-    Up(Arg),
+    Up(StepArg),
     /// Lift the pen so later moves do not draw.
     PenUp,
     /// Lower the pen so later moves draw.
@@ -105,11 +108,11 @@ pub enum Step {
     /// Add a filled disk at the current pose, in the local +X/+Y plane.
     Disk(f32),
     /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
-    DiskParam(VariableArg),
+    DiskParam(ParamArg),
     /// Add a sphere centered at the current pose.
     Sphere(f32),
     /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
-    SphereParam(VariableArg),
+    SphereParam(ParamArg),
     /// Save the current pose and pen state into a resolved mark slot.
     Mark { index: usize },
     /// Restore a previously marked pose and pen state (index resolved at build time).
@@ -120,14 +123,14 @@ pub enum Step {
 ///
 /// Rotation arguments are stored as radians. Translation arguments are stored as linkage distances.
 #[derive(Clone, Copy, Debug)]
-pub enum Arg {
+pub enum StepArg {
     Fixed(f32),
-    Variable(VariableArg),
+    Variable(ParamArg),
 }
 
 /// A variable argument with its degree-of-freedom index and legal range.
 #[derive(Clone, Copy, Debug)]
-pub struct VariableArg {
+pub struct ParamArg {
     index: usize,
     low: f32,
     span: f32,
@@ -159,7 +162,7 @@ impl Param {
     }
 }
 
-impl Arg {
+impl StepArg {
     fn resolve<const DOF: usize>(&self, params: &[f32; DOF]) -> f32 {
         match self {
             Self::Fixed(value) => *value,
@@ -175,7 +178,7 @@ impl Arg {
     }
 }
 
-impl VariableArg {
+impl ParamArg {
     const fn new(index: usize, low: f32, high: f32) -> Self {
         Self {
             index,
@@ -419,13 +422,13 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
                 | Step::Forward(arg)
                 | Step::Left(arg)
                 | Step::Up(arg) => arg,
-                Step::DiskParam(v) | Step::SphereParam(v) => Arg::Variable(v),
+                Step::DiskParam(v) | Step::SphereParam(v) => StepArg::Variable(v),
                 _ => {
                     i += 1;
                     continue;
                 }
             };
-            if let Arg::Variable(v) = arg
+            if let StepArg::Variable(v) = arg
                 && v.index() == index
             {
                 return (v.low(), v.high());
@@ -742,7 +745,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// # Examples
     ///
     /// ```rust
-    /// # use linkage_blaze::{DrawItem3d, LinkageFixed};
+    /// # use linkage_blaze::{Item3d, LinkageFixed};
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
@@ -750,7 +753,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// # fn example() -> Result<(), linkage_blaze::Error> {
     /// # let view = LINKAGE.view();
     /// let has_stroke = view.draw_items_3d(&[])?
-    ///     .any(|item| matches!(item, DrawItem3d::Stroke(_)));
+    ///     .any(|item| matches!(item, Item3d::Stroke(_)));
     /// assert!(has_stroke);
     /// # Ok(())
     /// # }
@@ -762,7 +765,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, params)
     }
 
-    /// The number of [`DrawItem3d`]s this linkage yields, evaluated at compile time.
+    /// The number of [`Item3d`]s this linkage yields, evaluated at compile time.
     ///
     /// Which steps emit a draw item depends only on the linkage's steps and pen
     /// state (which moves draw, which shapes are emitted), never on the runtime
@@ -826,15 +829,15 @@ fn push_arg_step<const DOF: usize, const MARKS: usize>(
     source: &mut String,
     fixed_method: &str,
     variable_method: &str,
-    arg: Arg,
+    arg: StepArg,
     degrees: bool,
 ) {
     match arg {
-        Arg::Fixed(value) => {
+        StepArg::Fixed(value) => {
             let value = if degrees { value.to_degrees() } else { value };
             push_fixed_step(source, fixed_method, value);
         }
-        Arg::Variable(variable_arg) => {
+        StepArg::Variable(variable_arg) => {
             let low = if degrees {
                 variable_arg.low().to_degrees()
             } else {
@@ -872,7 +875,7 @@ fn push_variable_step<const DOF: usize, const MARKS: usize>(
     linkage_view: &LinkageView<'_, DOF, MARKS>,
     source: &mut String,
     method: &str,
-    variable_arg: VariableArg,
+    variable_arg: ParamArg,
 ) {
     source.push_str("    .");
     source.push_str(method);
@@ -1357,22 +1360,22 @@ macro_rules! emit_fixed_step_methods {
     () => {
         // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
         pub const fn yaw(self, degrees: f32) -> Self {
-            self.push(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
+            self.push(Step::Yaw(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         pub const fn pitch(self, degrees: f32) -> Self {
-            self.push(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
+            self.push(Step::Pitch(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         pub const fn roll(self, degrees: f32) -> Self {
-            self.push(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
+            self.push(Step::Roll(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         pub const fn forward(self, distance: f32) -> Self {
-            self.push(Step::Forward(Arg::Fixed(distance)))
+            self.push(Step::Forward(StepArg::Fixed(distance)))
         }
         pub const fn left(self, distance: f32) -> Self {
-            self.push(Step::Left(Arg::Fixed(distance)))
+            self.push(Step::Left(StepArg::Fixed(distance)))
         }
         pub const fn up(self, distance: f32) -> Self {
-            self.push(Step::Up(Arg::Fixed(distance)))
+            self.push(Step::Up(StepArg::Fixed(distance)))
         }
         pub const fn pen_up(self) -> Self {
             self.push(Step::PenUp)
@@ -1397,45 +1400,45 @@ macro_rules! emit_fixed_step_methods {
         // Parameterized methods (yaw_param, pitch_param, etc.)
         pub const fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
+            self.push(Step::Yaw(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
         pub const fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
+            self.push(Step::Pitch(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
         pub const fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Roll(Arg::Variable(VariableArg::from_degrees(
+            self.push(Step::Roll(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
         pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Forward(Arg::Variable(VariableArg::new(
+            self.push(Step::Forward(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
         pub const fn left_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Left(Arg::Variable(VariableArg::new(
+            self.push(Step::Left(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
         pub const fn up_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
+            self.push(Step::Up(StepArg::Variable(ParamArg::new(index, low, high))))
         }
         pub const fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::DiskParam(VariableArg::new(index, low, high)))
+            self.push(Step::DiskParam(ParamArg::new(index, low, high)))
         }
         pub const fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push(Step::SphereParam(VariableArg::new(index, low, high)))
+            self.push(Step::SphereParam(ParamArg::new(index, low, high)))
         }
 
         // Restore is an ordinary fluent DSL method. Structural extension macros
@@ -1459,22 +1462,22 @@ macro_rules! emit_buf_step_methods {
     () => {
         // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
         pub fn yaw(self, degrees: f32) -> Self {
-            self.push_step(Step::Yaw(Arg::Fixed(degrees_to_radians(degrees))))
+            self.push_step(Step::Yaw(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         pub fn pitch(self, degrees: f32) -> Self {
-            self.push_step(Step::Pitch(Arg::Fixed(degrees_to_radians(degrees))))
+            self.push_step(Step::Pitch(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         pub fn roll(self, degrees: f32) -> Self {
-            self.push_step(Step::Roll(Arg::Fixed(degrees_to_radians(degrees))))
+            self.push_step(Step::Roll(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         pub fn forward(self, distance: f32) -> Self {
-            self.push_step(Step::Forward(Arg::Fixed(distance)))
+            self.push_step(Step::Forward(StepArg::Fixed(distance)))
         }
         pub fn left(self, distance: f32) -> Self {
-            self.push_step(Step::Left(Arg::Fixed(distance)))
+            self.push_step(Step::Left(StepArg::Fixed(distance)))
         }
         pub fn up(self, distance: f32) -> Self {
-            self.push_step(Step::Up(Arg::Fixed(distance)))
+            self.push_step(Step::Up(StepArg::Fixed(distance)))
         }
         pub fn pen_up(self) -> Self {
             self.push_step(Step::PenUp)
@@ -1499,45 +1502,45 @@ macro_rules! emit_buf_step_methods {
         // Parameterized methods (yaw_param, pitch_param, etc.)
         pub fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Yaw(Arg::Variable(VariableArg::from_degrees(
+            self.push_step(Step::Yaw(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
         pub fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Pitch(Arg::Variable(VariableArg::from_degrees(
+            self.push_step(Step::Pitch(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
         pub fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Roll(Arg::Variable(VariableArg::from_degrees(
+            self.push_step(Step::Roll(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
         pub fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Forward(Arg::Variable(VariableArg::new(
+            self.push_step(Step::Forward(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
         pub fn left_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Left(Arg::Variable(VariableArg::new(
+            self.push_step(Step::Left(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
         pub fn up_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::Up(Arg::Variable(VariableArg::new(index, low, high))))
+            self.push_step(Step::Up(StepArg::Variable(ParamArg::new(index, low, high))))
         }
         pub fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::DiskParam(VariableArg::new(index, low, high)))
+            self.push_step(Step::DiskParam(ParamArg::new(index, low, high)))
         }
         pub fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
-            self.push_step(Step::SphereParam(VariableArg::new(index, low, high)))
+            self.push_step(Step::SphereParam(ParamArg::new(index, low, high)))
         }
 
         // Restore methods - handled specially for LinkageBuf
@@ -2169,77 +2172,77 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
             let step = self.steps[i];
             i += 1;
             let merged = match step {
-                Step::Yaw(Arg::Fixed(v)) => {
+                Step::Yaw(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.len {
-                        if let Step::Yaw(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Yaw(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Yaw(Arg::Fixed(total))
+                    Step::Yaw(StepArg::Fixed(total))
                 }
-                Step::Pitch(Arg::Fixed(v)) => {
+                Step::Pitch(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.len {
-                        if let Step::Pitch(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Pitch(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Pitch(Arg::Fixed(total))
+                    Step::Pitch(StepArg::Fixed(total))
                 }
-                Step::Roll(Arg::Fixed(v)) => {
+                Step::Roll(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.len {
-                        if let Step::Roll(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Roll(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Roll(Arg::Fixed(total))
+                    Step::Roll(StepArg::Fixed(total))
                 }
-                Step::Forward(Arg::Fixed(v)) => {
+                Step::Forward(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.len {
-                        if let Step::Forward(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Forward(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Forward(Arg::Fixed(total))
+                    Step::Forward(StepArg::Fixed(total))
                 }
-                Step::Left(Arg::Fixed(v)) => {
+                Step::Left(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.len {
-                        if let Step::Left(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Left(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Left(Arg::Fixed(total))
+                    Step::Left(StepArg::Fixed(total))
                 }
-                Step::Up(Arg::Fixed(v)) => {
+                Step::Up(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.len {
-                        if let Step::Up(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Up(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Up(Arg::Fixed(total))
+                    Step::Up(StepArg::Fixed(total))
                 }
                 other => other,
             };
@@ -2838,77 +2841,77 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
             let step = self.steps[i];
             i += 1;
             let merged = match step {
-                Step::Yaw(Arg::Fixed(v)) => {
+                Step::Yaw(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.steps.len() {
-                        if let Step::Yaw(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Yaw(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Yaw(Arg::Fixed(total))
+                    Step::Yaw(StepArg::Fixed(total))
                 }
-                Step::Pitch(Arg::Fixed(v)) => {
+                Step::Pitch(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.steps.len() {
-                        if let Step::Pitch(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Pitch(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Pitch(Arg::Fixed(total))
+                    Step::Pitch(StepArg::Fixed(total))
                 }
-                Step::Roll(Arg::Fixed(v)) => {
+                Step::Roll(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.steps.len() {
-                        if let Step::Roll(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Roll(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Roll(Arg::Fixed(total))
+                    Step::Roll(StepArg::Fixed(total))
                 }
-                Step::Forward(Arg::Fixed(v)) => {
+                Step::Forward(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.steps.len() {
-                        if let Step::Forward(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Forward(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Forward(Arg::Fixed(total))
+                    Step::Forward(StepArg::Fixed(total))
                 }
-                Step::Left(Arg::Fixed(v)) => {
+                Step::Left(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.steps.len() {
-                        if let Step::Left(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Left(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Left(Arg::Fixed(total))
+                    Step::Left(StepArg::Fixed(total))
                 }
-                Step::Up(Arg::Fixed(v)) => {
+                Step::Up(StepArg::Fixed(v)) => {
                     let mut total = v;
                     while i < self.steps.len() {
-                        if let Step::Up(Arg::Fixed(v2)) = self.steps[i] {
+                        if let Step::Up(StepArg::Fixed(v2)) = self.steps[i] {
                             total += v2;
                             i += 1;
                         } else {
                             break;
                         }
                     }
-                    Step::Up(Arg::Fixed(total))
+                    Step::Up(StepArg::Fixed(total))
                 }
                 other => other,
             };
@@ -2992,28 +2995,28 @@ const fn str_eq(left: &str, right: &str) -> bool {
 const fn is_fixed_noop(step: Step) -> bool {
     matches!(
         step,
-        Step::Yaw(Arg::Fixed(v))
-        | Step::Pitch(Arg::Fixed(v))
-        | Step::Roll(Arg::Fixed(v))
-        | Step::Forward(Arg::Fixed(v))
-        | Step::Left(Arg::Fixed(v))
-        | Step::Up(Arg::Fixed(v))
+        Step::Yaw(StepArg::Fixed(v))
+        | Step::Pitch(StepArg::Fixed(v))
+        | Step::Roll(StepArg::Fixed(v))
+        | Step::Forward(StepArg::Fixed(v))
+        | Step::Left(StepArg::Fixed(v))
+        | Step::Up(StepArg::Fixed(v))
         if v == 0.0
     )
 }
 
 const fn rewrite_arg_for_freeze(
-    arg: Arg,
+    arg: StepArg,
     is_frozen: &[bool],
     frozen_at_default: &[bool],
     frozen_raw: &[f32],
     params: &[Param],
     new_param_index: &[usize],
     is_rotation: bool,
-) -> Arg {
+) -> StepArg {
     match arg {
-        Arg::Fixed(_) => arg,
-        Arg::Variable(variable_arg) => {
+        StepArg::Fixed(_) => arg,
+        StepArg::Variable(variable_arg) => {
             if is_frozen[variable_arg.index] {
                 let physical = frozen_physical_value(
                     variable_arg,
@@ -3022,9 +3025,9 @@ const fn rewrite_arg_for_freeze(
                     params,
                     is_rotation,
                 );
-                Arg::Fixed(physical)
+                StepArg::Fixed(physical)
             } else {
-                Arg::Variable(VariableArg {
+                StepArg::Variable(ParamArg {
                     index: new_param_index[variable_arg.index],
                     low: variable_arg.low,
                     span: variable_arg.span,
@@ -3108,7 +3111,7 @@ const fn rewrite_step_for_freeze(
                 );
                 Step::Disk(physical)
             } else {
-                Step::DiskParam(VariableArg {
+                Step::DiskParam(ParamArg {
                     index: new_param_index[variable_arg.index],
                     low: variable_arg.low,
                     span: variable_arg.span,
@@ -3126,7 +3129,7 @@ const fn rewrite_step_for_freeze(
                 );
                 Step::Sphere(physical)
             } else {
-                Step::SphereParam(VariableArg {
+                Step::SphereParam(ParamArg {
                     index: new_param_index[variable_arg.index],
                     low: variable_arg.low,
                     span: variable_arg.span,
@@ -3138,7 +3141,7 @@ const fn rewrite_step_for_freeze(
 }
 
 const fn frozen_physical_value(
-    variable_arg: VariableArg,
+    variable_arg: ParamArg,
     frozen_at_default: &[bool],
     frozen_raw: &[f32],
     params: &[Param],
@@ -3158,7 +3161,7 @@ const fn frozen_physical_value(
     }
 }
 
-const fn assert_raw_value_in_range(variable_arg: VariableArg, physical: f32) {
+const fn assert_raw_value_in_range(variable_arg: ParamArg, physical: f32) {
     let high = variable_arg.low + variable_arg.span;
     let (min, max) = if variable_arg.low <= high {
         (variable_arg.low, high)
@@ -3419,14 +3422,14 @@ impl StyledPose {
 
 /// A drawable pen-down forward segment produced by a linkage.
 #[derive(Clone, Copy, Debug)]
-pub struct StrokeSegment {
+pub struct Stroke {
     start: Pose,
     end: Pose,
     color: Rgb888,
     width: f32,
 }
 
-impl StrokeSegment {
+impl Stroke {
     /// Return the segment start pose.
     #[must_use]
     pub const fn start(self) -> Pose {
@@ -3528,7 +3531,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
 }
 
 /// Iterator over 3D draw items from a LinkageView (does not require const N).
-/// Iterator over [`DrawItem3d`]s produced by evaluating a linkage.
+/// Iterator over [`Item3d`]s produced by evaluating a linkage.
 ///
 /// Obtain via [`LinkageView::draw_items_3d`]. After exhausting the iterator the
 /// [`pose_by_mark_name`](DrawItem3dIter::pose_by_mark_name) method lets you query the final
@@ -3597,7 +3600,7 @@ pub enum MarkError {
 }
 
 impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, MARKS> {
-    type Item = DrawItem3d;
+    type Item = Item3d;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.index < self.steps.len() {
@@ -3630,7 +3633,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
                 Step::Forward(_) | Step::Left(_) | Step::Up(_)
                     if matches!(pen_style.pen(), PenState::Down) =>
                 {
-                    return Some(DrawItem3d::Stroke(StrokeSegment {
+                    return Some(Item3d::Stroke(Stroke {
                         start: start_pose,
                         end: self.pose,
                         color: pen_style.color(),
@@ -3638,28 +3641,28 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
                     }));
                 }
                 Step::Disk(radius) => {
-                    return Some(DrawItem3d::Disk(DiskItem {
+                    return Some(Item3d::Disk(Disk {
                         pose: start_pose,
                         radius: *radius,
                         color: pen_style.color(),
                     }));
                 }
                 Step::DiskParam(var_arg) => {
-                    return Some(DrawItem3d::Disk(DiskItem {
+                    return Some(Item3d::Disk(Disk {
                         pose: start_pose,
                         radius: var_arg.resolve(self.params),
                         color: pen_style.color(),
                     }));
                 }
                 Step::Sphere(radius) => {
-                    return Some(DrawItem3d::Sphere(SphereItem {
+                    return Some(Item3d::Sphere(Sphere {
                         pose: start_pose,
                         radius: *radius,
                         color: pen_style.color(),
                     }));
                 }
                 Step::SphereParam(var_arg) => {
-                    return Some(DrawItem3d::Sphere(SphereItem {
+                    return Some(Item3d::Sphere(Sphere {
                         pose: start_pose,
                         radius: var_arg.resolve(self.params),
                         color: pen_style.color(),
@@ -3675,13 +3678,13 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
 
 /// A disk shape yielded by a linkage at the current pose.
 #[derive(Clone, Copy, Debug)]
-pub struct DiskItem {
+pub struct Disk {
     pose: Pose,
     radius: f32,
     color: Rgb888,
 }
 
-impl DiskItem {
+impl Disk {
     #[must_use]
     pub const fn pose(self) -> Pose {
         self.pose
@@ -3698,13 +3701,13 @@ impl DiskItem {
 
 /// A sphere shape yielded by a linkage at the current pose.
 #[derive(Clone, Copy, Debug)]
-pub struct SphereItem {
+pub struct Sphere {
     pose: Pose,
     radius: f32,
     color: Rgb888,
 }
 
-impl SphereItem {
+impl Sphere {
     #[must_use]
     pub const fn pose(self) -> Pose {
         self.pose
@@ -3721,10 +3724,10 @@ impl SphereItem {
 
 /// A 3D draw item produced by a linkage: a line stroke, a filled disk, or a sphere.
 #[derive(Clone, Copy, Debug)]
-pub enum DrawItem3d {
-    Stroke(StrokeSegment),
-    Disk(DiskItem),
-    Sphere(SphereItem),
+pub enum Item3d {
+    Stroke(Stroke),
+    Disk(Disk),
+    Sphere(Sphere),
 }
 
 /// Projects a linkage 3D draw item into a CYD/device-envoy 2D draw item.
@@ -3734,7 +3737,7 @@ pub trait DrawItem3dExt {
     fn project(self, projection: &Projection) -> DrawItem2d;
 }
 
-impl DrawItem3dExt for DrawItem3d {
+impl DrawItem3dExt for Item3d {
     fn project(self, projection: &Projection) -> DrawItem2d {
         match self {
             Self::Stroke(stroke_segment) => DrawItem2d::Stroke {
@@ -4288,8 +4291,8 @@ mod tests {
     #[cfg(feature = "alloc")]
     use super::LinkageBuf;
     use super::{
-        Arg, DrawItem3d, Error, LinkageFixed, LinkageView, Mat3, Point, Pose, Projection, Rgb565,
-        Rgb888, Step, Vec3,
+        Error, Item3d, LinkageFixed, LinkageView, Mat3, Point, Pose, Projection, Rgb565, Rgb888,
+        Step, StepArg, Vec3,
     };
     use crate::test_helpers::{
         assert_png_matches_expected, assert_pose_approx_eq, assert_pose_trace_matches_expected,
@@ -4423,7 +4426,7 @@ mod tests {
             .expect("zero-width pen should still produce a stroke");
 
         match draw_item_3d {
-            DrawItem3d::Stroke(stroke_segment) => {
+            Item3d::Stroke(stroke_segment) => {
                 assert_eq!(stroke_segment.width(), 0.0);
             }
             _ => panic!("expected stroke from zero-width pen"),
@@ -5171,9 +5174,9 @@ mod tests {
         let steps = STRIPPED.steps();
         assert_eq!(steps.len(), 5);
         assert!(matches!(steps[0], Step::Start));
-        assert!(matches!(steps[1], Step::Yaw(Arg::Fixed(value)) if value == 0.0));
+        assert!(matches!(steps[1], Step::Yaw(StepArg::Fixed(value)) if value == 0.0));
         assert_fixed_move(steps[2], 2.0);
-        assert!(matches!(steps[3], Step::Left(Arg::Fixed(value)) if value == 0.0));
+        assert!(matches!(steps[3], Step::Left(StepArg::Fixed(value)) if value == 0.0));
         assert_fixed_up(steps[4], 1.0);
     }
 
@@ -5314,8 +5317,8 @@ mod tests {
     }
 
     fn assert_draw_items_3d_close(
-        mut left: impl Iterator<Item = DrawItem3d>,
-        mut right: impl Iterator<Item = DrawItem3d>,
+        mut left: impl Iterator<Item = Item3d>,
+        mut right: impl Iterator<Item = Item3d>,
         tolerance: f32,
     ) {
         loop {
@@ -5328,18 +5331,18 @@ mod tests {
         }
     }
 
-    fn assert_draw_item_3d_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
+    fn assert_draw_item_3d_close(left: Item3d, right: Item3d, tolerance: f32) {
         match (left, right) {
-            (DrawItem3d::Stroke(left), DrawItem3d::Stroke(right)) => {
+            (Item3d::Stroke(left), Item3d::Stroke(right)) => {
                 assert_pose_close(left.start(), right.start(), tolerance);
                 assert_pose_close(left.end(), right.end(), tolerance);
                 assert!((left.width() - right.width()).abs() <= tolerance);
             }
-            (DrawItem3d::Disk(left), DrawItem3d::Disk(right)) => {
+            (Item3d::Disk(left), Item3d::Disk(right)) => {
                 assert_pose_close(left.pose(), right.pose(), tolerance);
                 assert!((left.radius() - right.radius()).abs() <= tolerance);
             }
-            (DrawItem3d::Sphere(left), DrawItem3d::Sphere(right)) => {
+            (Item3d::Sphere(left), Item3d::Sphere(right)) => {
                 assert_pose_close(left.pose(), right.pose(), tolerance);
                 assert!((left.radius() - right.radius()).abs() <= tolerance);
             }
@@ -5357,14 +5360,14 @@ mod tests {
 
     fn assert_fixed_move(step: Step, expected: f32) {
         match step {
-            Step::Forward(Arg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
+            Step::Forward(StepArg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
             _ => panic!("expected fixed forward step"),
         }
     }
 
     fn assert_fixed_up(step: Step, expected: f32) {
         match step {
-            Step::Up(Arg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
+            Step::Up(StepArg::Fixed(actual)) => assert!((actual - expected).abs() <= 1e-6),
             _ => panic!("expected fixed up step"),
         }
     }

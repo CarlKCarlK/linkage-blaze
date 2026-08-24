@@ -41,13 +41,13 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 ///
 /// ```rust,ignore
 /// #[allow(long_running_const_eval)]
-/// const MOTION: BvhMotion<132, 592> =
-///     linkage_blaze::bvh_motion!("path/to/motion.bvh");
+/// const MOTION: Motion<132, 592> =
+///     linkage_blaze::bvh::motion!("path/to/motion.bvh");
 /// ```
 #[macro_export]
-macro_rules! bvh_motion {
+macro_rules! __bvh_motion {
     ($path:literal) => {
-        $crate::bvh_parse::BvhMotion::from_bvh_bytes(include_bytes!($path))
+        $crate::bvh::Motion::from_bvh_bytes(include_bytes!($path))
     };
 }
 
@@ -56,13 +56,13 @@ macro_rules! bvh_motion {
 /// BVH normalization snaps near-center values to exactly 0.5 (the linkage
 /// parameter center/default). This constant preserves that exact 0.5 through
 /// the u16 round-trip without floating-point rounding error.
-pub const PARAM_CENTER_U16: u16 = 32768;
+const PARAM_CENTER_U16: u16 = 32768;
 
 /// Encode a normalized `[0.0, 1.0]` parameter value as a `u16`.
 ///
 /// Panics at compile time if `v` is outside `[0.0, 1.0]`.
-/// Exactly 0.5 maps to [`PARAM_CENTER_U16`] and back without error.
-pub const fn norm_to_u16(v: f32) -> u16 {
+/// Exactly 0.5 maps to the internal center value and back without error.
+const fn norm_to_u16(v: f32) -> u16 {
     assert!(v >= 0.0, "normalized value is below 0.0");
     assert!(v <= 1.0, "normalized value is above 1.0");
     if v == 0.5 {
@@ -74,8 +74,8 @@ pub const fn norm_to_u16(v: f32) -> u16 {
 
 /// Decode a `u16` back to a normalized `[0.0, 1.0]` parameter value.
 ///
-/// [`PARAM_CENTER_U16`] decodes to exactly 0.5.
-pub const fn u16_to_norm(x: u16) -> f32 {
+/// The internal center value decodes to exactly 0.5.
+const fn u16_to_norm(x: u16) -> f32 {
     if x == PARAM_CENTER_U16 {
         0.5
     } else {
@@ -87,12 +87,12 @@ pub const fn u16_to_norm(x: u16) -> f32 {
 ///
 /// Each `f32` parameter in `[0.0, 1.0]` is encoded as a `u16` in `[0, 65535]`,
 /// halving memory use. Decode one motion sample at a time with
-/// [`sample`](BvhMotion::sample) or [`sample_into`](BvhMotion::sample_into).
-pub struct BvhMotion<const DOF: usize, const SAMPLE_COUNT: usize> {
+/// [`sample`](Motion::sample) or [`sample_into`](Motion::sample_into).
+pub struct Motion<const DOF: usize, const SAMPLE_COUNT: usize> {
     motion: [[u16; DOF]; SAMPLE_COUNT],
 }
 
-impl<const DOF: usize, const SAMPLE_COUNT: usize> BvhMotion<DOF, SAMPLE_COUNT> {
+impl<const DOF: usize, const SAMPLE_COUNT: usize> Motion<DOF, SAMPLE_COUNT> {
     /// The number of degrees of freedom (channels per motion sample).
     pub const DOF: usize = DOF;
 
@@ -150,15 +150,15 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> BvhMotion<DOF, SAMPLE_COUNT> {
     /// Use `.enumerate()` when the sample index is needed:
     ///
     /// ```rust,no_run
-    /// # use linkage_blaze::bvh_parse::BvhMotion;
-    /// # let motion = BvhMotion::<3, 2>::new([[0; 3]; 2]);
+    /// # use linkage_blaze::bvh::Motion;
+    /// # let motion = Motion::<3, 2>::new([[0; 3]; 2]);
     /// for (sample_index, params) in motion.samples().enumerate() {
     ///     let _params: &[f32; 3] = &params;
     ///     let _index: usize = sample_index;
     /// }
     /// ```
-    pub fn samples(&self) -> BvhMotionSamples<'_, DOF, SAMPLE_COUNT> {
-        BvhMotionSamples {
+    pub fn samples(&self) -> impl Iterator<Item = [f32; DOF]> + '_ {
+        MotionSamples {
             motion: self,
             sample_index: 0,
         }
@@ -175,14 +175,14 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> BvhMotion<DOF, SAMPLE_COUNT> {
     }
 }
 
-/// Iterator over motion samples of a [`BvhMotion`], created by [`BvhMotion::samples`].
-pub struct BvhMotionSamples<'a, const DOF: usize, const SAMPLE_COUNT: usize> {
-    motion: &'a BvhMotion<DOF, SAMPLE_COUNT>,
+/// Iterator over motion samples of a [`Motion`], created by [`Motion::samples`].
+struct MotionSamples<'a, const DOF: usize, const SAMPLE_COUNT: usize> {
+    motion: &'a Motion<DOF, SAMPLE_COUNT>,
     sample_index: usize,
 }
 
 impl<'a, const DOF: usize, const SAMPLE_COUNT: usize> Iterator
-    for BvhMotionSamples<'a, DOF, SAMPLE_COUNT>
+    for MotionSamples<'a, DOF, SAMPLE_COUNT>
 {
     type Item = [f32; DOF];
 
@@ -202,7 +202,7 @@ impl<'a, const DOF: usize, const SAMPLE_COUNT: usize> Iterator
 }
 
 impl<const DOF: usize, const SAMPLE_COUNT: usize> ExactSizeIterator
-    for BvhMotionSamples<'_, DOF, SAMPLE_COUNT>
+    for MotionSamples<'_, DOF, SAMPLE_COUNT>
 {
 }
 
@@ -212,7 +212,7 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> ExactSizeIterator
 /// `bytes` is the full BVH file.  `DOF` and `SAMPLE_COUNT` must exactly match the
 /// channel count and sample count in the file; the parser asserts on mismatch
 /// and panics at compile time if either is wrong.
-pub const fn parse_bvh_motion_section<const DOF: usize, const SAMPLE_COUNT: usize>(
+const fn parse_bvh_motion_section<const DOF: usize, const SAMPLE_COUNT: usize>(
     bytes: &[u8],
 ) -> [[f32; DOF]; SAMPLE_COUNT] {
     // Pre-pass: count channels in HIERARCHY to validate DOF before any parsing.
@@ -265,7 +265,7 @@ pub const fn parse_bvh_motion_section<const DOF: usize, const SAMPLE_COUNT: usiz
 
 // ── float parser ─────────────────────────────────────────────────────────────
 
-pub const fn parse_f32(bytes: &[u8], start: usize) -> (f32, usize) {
+const fn parse_f32(bytes: &[u8], start: usize) -> (f32, usize) {
     let mut i = start;
 
     let negative = i < bytes.len() && bytes[i] == b'-';
@@ -341,7 +341,7 @@ pub const fn parse_f32(bytes: &[u8], start: usize) -> (f32, usize) {
     (value as f32, i)
 }
 
-pub const fn parse_uint(bytes: &[u8], start: usize) -> (usize, usize) {
+const fn parse_uint(bytes: &[u8], start: usize) -> (usize, usize) {
     let mut i = start;
     let mut value: usize = 0;
     let mut digit_count: usize = 0;
@@ -354,19 +354,7 @@ pub const fn parse_uint(bytes: &[u8], start: usize) -> (usize, usize) {
     (value, i)
 }
 
-pub const fn scale_pow10(mut value: f32, mut exp: i32) -> f32 {
-    while exp > 0 {
-        value *= 10.0;
-        exp -= 1;
-    }
-    while exp < 0 {
-        value /= 10.0;
-        exp += 1;
-    }
-    value
-}
-
-pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
+const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
     while exp > 0 {
         value *= 10.0;
         exp -= 1;
@@ -379,9 +367,9 @@ pub const fn scale_pow10_f64(mut value: f64, mut exp: i32) -> f64 {
 }
 
 /// Parse and normalize a BVH file's motion section in one step.
-pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT: usize>(
+const fn parse_and_normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT: usize>(
     bytes: &[u8],
-) -> BvhMotion<DOF, SAMPLE_COUNT> {
+) -> Motion<DOF, SAMPLE_COUNT> {
     let raw = parse_bvh_motion_section::<DOF, SAMPLE_COUNT>(bytes);
     let channel_is_position = parse_bvh_channel_is_position::<DOF>(bytes);
     let normalized = normalize_bvh_motion::<DOF, SAMPLE_COUNT>(
@@ -389,7 +377,7 @@ pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT
         channel_is_position,
         BvhNormalizePolicy::LINKAGE_BLAZE,
     );
-    BvhMotion::from_normalized(normalized)
+    Motion::from_normalized(normalized)
 }
 
 // ── normalization policy and helper ──────────────────────────────────────────
@@ -400,15 +388,15 @@ pub const fn parse_and_normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT
 /// of a valid-range declaration.  They are a Linkage Blaze design choice:
 /// each parameter is stored as a `[0, 1]` float mapped from the physical range
 /// below.  Keep them here, not buried inside the parser.
-pub struct BvhNormalizePolicy {
-    pub position_low: f32,
-    pub position_high: f32,
-    pub rotation_low: f32,
-    pub rotation_high: f32,
+struct BvhNormalizePolicy {
+    position_low: f32,
+    position_high: f32,
+    rotation_low: f32,
+    rotation_high: f32,
     /// Normalized value to snap toward (typically 0.5 = centered).
-    pub snap_center: f32,
+    snap_center: f32,
     /// Half-width of the snap band around `snap_center`.
-    pub snap_epsilon: f32,
+    snap_epsilon: f32,
 }
 
 impl BvhNormalizePolicy {
@@ -428,7 +416,7 @@ impl BvhNormalizePolicy {
 /// - `raw` — output of [`parse_bvh_motion_section`]
 /// - `is_position` — output of [`parse_bvh_channel_is_position`]
 /// - `policy` — Linkage Blaze parameter-range and snap policy
-pub const fn normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT: usize>(
+const fn normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT: usize>(
     raw: [[f32; DOF]; SAMPLE_COUNT],
     is_position: [bool; DOF],
     policy: BvhNormalizePolicy,
@@ -485,7 +473,7 @@ pub const fn normalize_bvh_motion<const DOF: usize, const SAMPLE_COUNT: usize>(
 ///
 /// Sums every `CHANNELS N ...` line before the `MOTION` keyword.  Used by
 /// [`parse_bvh_motion_section`] to validate `DOF` before any motion parsing.
-pub const fn count_bvh_channels(bytes: &[u8]) -> usize {
+const fn count_bvh_channels(bytes: &[u8]) -> usize {
     let hierarchy_end = find_motion_offset(bytes);
     let mut i = 0;
     let mut total = 0usize;
@@ -508,7 +496,7 @@ pub const fn count_bvh_channels(bytes: &[u8]) -> usize {
 ///
 /// Reads every `CHANNELS N <type>...` line before the `MOTION` keyword, in
 /// order.  Panics if the total channel count does not equal `DOF`.
-pub const fn parse_bvh_channel_is_position<const DOF: usize>(bytes: &[u8]) -> [bool; DOF] {
+const fn parse_bvh_channel_is_position<const DOF: usize>(bytes: &[u8]) -> [bool; DOF] {
     let hierarchy_end = find_motion_offset(bytes);
 
     let mut result = [false; DOF];
@@ -555,7 +543,7 @@ const fn find_motion_offset(bytes: &[u8]) -> usize {
 }
 
 /// Skip forward past the current non-whitespace token.
-pub const fn skip_token(bytes: &[u8], mut i: usize) -> usize {
+const fn skip_token(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() {
         match bytes[i] {
             b' ' | b'\t' | b'\r' | b'\n' => break,
@@ -569,7 +557,7 @@ pub const fn skip_token(bytes: &[u8], mut i: usize) -> usize {
 
 /// Scan forward from `start` for `needle`; return the index just after it.
 /// Panics at compile time if the needle is not found.
-pub const fn find_after(bytes: &[u8], start: usize, needle: &[u8]) -> usize {
+const fn find_after(bytes: &[u8], start: usize, needle: &[u8]) -> usize {
     let mut i = start;
     while i + needle.len() <= bytes.len() {
         if bytes_match(bytes, i, needle) {
@@ -580,7 +568,7 @@ pub const fn find_after(bytes: &[u8], start: usize, needle: &[u8]) -> usize {
     panic!("BVH: needle not found in byte stream");
 }
 
-pub const fn bytes_match(bytes: &[u8], start: usize, needle: &[u8]) -> bool {
+const fn bytes_match(bytes: &[u8], start: usize, needle: &[u8]) -> bool {
     let mut j = 0;
     while j < needle.len() {
         if start + j >= bytes.len() || bytes[start + j] != needle[j] {
@@ -591,7 +579,7 @@ pub const fn bytes_match(bytes: &[u8], start: usize, needle: &[u8]) -> bool {
     true
 }
 
-pub const fn skip_whitespace(bytes: &[u8], mut i: usize) -> usize {
+const fn skip_whitespace(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() {
         match bytes[i] {
             b' ' | b'\t' | b'\r' | b'\n' => i += 1,
@@ -604,7 +592,7 @@ pub const fn skip_whitespace(bytes: &[u8], mut i: usize) -> usize {
 /// Like `skip_whitespace` but does not cross newlines — used after header
 /// keywords (`Frames:`, `Frame Time:`) so a missing value on the same line
 /// fails at parse time rather than silently consuming the next line.
-pub const fn skip_inline_whitespace(bytes: &[u8], mut i: usize) -> usize {
+const fn skip_inline_whitespace(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() {
         match bytes[i] {
             b' ' | b'\t' | b'\r' => i += 1,
@@ -614,7 +602,7 @@ pub const fn skip_inline_whitespace(bytes: &[u8], mut i: usize) -> usize {
     i
 }
 
-pub const fn skip_to_next_line(bytes: &[u8], mut i: usize) -> usize {
+const fn skip_to_next_line(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() && bytes[i] != b'\n' {
         i += 1;
     }
@@ -824,23 +812,6 @@ mod tests {
     #[should_panic(expected = "expected at least one digit")]
     fn parse_uint_rejects_empty() {
         parse_uint(b"", 0);
-    }
-
-    // ── scale_pow10 ───────────────────────────────────────────────────────
-
-    #[test]
-    fn scale_up() {
-        assert!((scale_pow10(1.0, 3) - 1000.0).abs() < 1e-4);
-    }
-
-    #[test]
-    fn scale_down() {
-        assert!((scale_pow10(1000.0, -3) - 1.0).abs() < 1e-4);
-    }
-
-    #[test]
-    fn scale_zero_exp() {
-        assert!((scale_pow10(42.0, 0) - 42.0).abs() < 1e-6);
     }
 
     // ── find_after ────────────────────────────────────────────────────────
@@ -1185,7 +1156,7 @@ Frame Time:\t0.033\n\
         normalize_bvh_motion::<1, 1>([[-301.0f32]; 1], [true], BvhNormalizePolicy::LINKAGE_BLAZE);
     }
 
-    // ── norm_to_u16 / u16_to_norm / BvhMotion ────────────────────────────────
+    // ── norm_to_u16 / u16_to_norm / Motion ────────────────────────────────
 
     #[test]
     fn u16_endpoints_are_exact() {
@@ -1203,7 +1174,7 @@ Frame Time:\t0.033\n\
 
     #[test]
     fn sample_into_expands_one_sample() {
-        let motion = BvhMotion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
+        let motion = Motion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
         let mut params = [99.0f32; 3];
         motion.sample_into(0, &mut params);
         assert_eq!(params, [0.0, 0.5, 1.0]);
@@ -1211,7 +1182,7 @@ Frame Time:\t0.033\n\
 
     #[test]
     fn sample_and_sample_into_agree() {
-        let motion = BvhMotion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
+        let motion = Motion::<3, 1>::new([[0, PARAM_CENTER_U16, 65535]]);
         let mut params = [0.0f32; 3];
         motion.sample_into(0, &mut params);
         assert_eq!(motion.sample(0), params);
@@ -1220,7 +1191,7 @@ Frame Time:\t0.033\n\
     #[test]
     fn samples_iter_yields_arrays() {
         let motion =
-            BvhMotion::<2, 3>::new([[0, 65535], [PARAM_CENTER_U16, PARAM_CENTER_U16], [65535, 0]]);
+            Motion::<2, 3>::new([[0, 65535], [PARAM_CENTER_U16, PARAM_CENTER_U16], [65535, 0]]);
         let mut iter = motion.samples();
         assert_eq!(iter.next(), Some(motion.sample(0)));
         assert_eq!(iter.next(), Some(motion.sample(1)));
@@ -1230,13 +1201,13 @@ Frame Time:\t0.033\n\
 
     #[test]
     fn samples_iter_exact_size() {
-        let motion = BvhMotion::<2, 4>::new([[0; 2]; 4]);
-        assert_eq!(motion.samples().len(), 4);
+        let motion = Motion::<2, 4>::new([[0; 2]; 4]);
+        assert_eq!(motion.samples().count(), 4);
     }
 
     #[test]
     fn sample_count_matches_const() {
-        let motion = BvhMotion::<2, 5>::new([[0; 2]; 5]);
+        let motion = Motion::<2, 5>::new([[0; 2]; 5]);
         assert_eq!(motion.sample_count(), 5);
     }
 }

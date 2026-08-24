@@ -49,13 +49,21 @@ this review:
 - The complete item-by-item findings are recorded in the Modules section below.
 - No API implementation changes are part of Step 1.
 
-### 2. Establish the final module structure and names
+### 2. Establish the final module structure and names — Complete
 
-- Create the always-present `bvh` facade, move compile-time motion support and
+- **Complete.** Created the always-present `bvh` facade, moved compile-time motion support and
   host-only support behind it, and establish contextual public names.
-- Create the `render` module and move its public types without root aliases.
-- Rename `Arg`/`VariableArg` to `StepArg`/`ParamArg` and update public variants.
-- Keep `LinkageBuf` and `linkage_buf!` unchanged except for documentation.
+- **Complete.** Created the `render` module and moved its public types without
+  retaining the old draw-type names.
+- **Complete.** Renamed `Arg`/`VariableArg` to `StepArg`/`ParamArg` and updated
+  public variants.
+- **Complete.** Kept `LinkageBuf` and `linkage_buf!` unchanged except for
+  documentation.
+
+Focused tests, all-features rustdoc, and `cargo check-all` completed the
+Step 2-specific validation. The remaining Armatron golden-image failure is
+pre-existing: the same test fails in a clean `HEAD` checkout with the same
+diagnostic.
 
 ### 3. Simplify evaluation and rendering APIs
 

@@ -1,6 +1,6 @@
 use std::{env, fs, process};
 
-use linkage_blaze::bvh::bvh_to_lb_rs;
+use linkage_blaze::bvh::to_lb_rs;
 
 fn main() {
     if let Err(error) = run() {
@@ -29,7 +29,7 @@ fn run() -> Result<(), String> {
 
     let source = fs::read_to_string(&input_path)
         .map_err(|error| format!("failed to read `{input_path}`: {error}"))?;
-    let lb_rs = bvh_to_lb_rs::<256, 64>(&source, &mark_joints)
+    let lb_rs = to_lb_rs::<256, 64>(&source, &mark_joints)
         .map_err(|error| format!("failed to convert `{input_path}`: {error}"))?;
     fs::write(&output_path, lb_rs)
         .map_err(|error| format!("failed to write `{output_path}`: {error}"))?;

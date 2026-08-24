@@ -3,9 +3,8 @@
 
 use core::{array::from_fn, convert::Infallible, fmt};
 
-use crate::{
-    DrawItem3dExt, Error as LinkageError, LinkageFixed, MarkError, Projection, Rgb888, linkage_file,
-};
+use crate::render::Projection;
+use crate::{DrawItem3dExt, Error as LinkageError, LinkageFixed, MarkError, Rgb888, linkage_file};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,

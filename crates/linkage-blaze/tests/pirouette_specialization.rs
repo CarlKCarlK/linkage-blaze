@@ -1,6 +1,7 @@
 #[cfg(feature = "alloc")]
 use linkage_blaze::LinkageBuf;
-use linkage_blaze::{DrawItem3d, LinkageFixed, Pose, Vec3, linkage_file};
+use linkage_blaze::render::Item3d;
+use linkage_blaze::{LinkageFixed, Pose, Vec3, linkage_file};
 
 // Pirouette BVH sample: 132 DOF (one per motion-capture channel), 6 mark slots,
 // 538 steps.
@@ -56,15 +57,15 @@ fn pirouette_body_evaluates_without_alloc_storage() -> Result<(), linkage_blaze:
     for draw_item_3d in view.draw_items_3d(&params)? {
         item_count += 1;
         match draw_item_3d {
-            DrawItem3d::Stroke(stroke_segment) => {
+            Item3d::Stroke(stroke_segment) => {
                 assert_pose_finite(stroke_segment.start());
                 assert_pose_finite(stroke_segment.end());
             }
-            DrawItem3d::Disk(disk_item) => {
+            Item3d::Disk(disk_item) => {
                 assert_pose_finite(disk_item.pose());
                 assert!(disk_item.radius().is_finite());
             }
-            DrawItem3d::Sphere(sphere_item) => {
+            Item3d::Sphere(sphere_item) => {
                 assert_pose_finite(sphere_item.pose());
                 assert!(sphere_item.radius().is_finite());
             }
@@ -202,18 +203,18 @@ fn full_pirouette_defaults() -> [f32; 132] {
     PIROUETTE_FULL_VIEW.param_defaults()
 }
 
-fn assert_draw_item_3d_close(left: DrawItem3d, right: DrawItem3d, tolerance: f32) {
+fn assert_draw_item_3d_close(left: Item3d, right: Item3d, tolerance: f32) {
     match (left, right) {
-        (DrawItem3d::Stroke(left), DrawItem3d::Stroke(right)) => {
+        (Item3d::Stroke(left), Item3d::Stroke(right)) => {
             assert_pose_close(left.start(), right.start(), tolerance);
             assert_pose_close(left.end(), right.end(), tolerance);
             assert!((left.width() - right.width()).abs() <= tolerance);
         }
-        (DrawItem3d::Disk(left), DrawItem3d::Disk(right)) => {
+        (Item3d::Disk(left), Item3d::Disk(right)) => {
             assert_pose_close(left.pose(), right.pose(), tolerance);
             assert!((left.radius() - right.radius()).abs() <= tolerance);
         }
-        (DrawItem3d::Sphere(left), DrawItem3d::Sphere(right)) => {
+        (Item3d::Sphere(left), Item3d::Sphere(right)) => {
             assert_pose_close(left.pose(), right.pose(), tolerance);
             assert!((left.radius() - right.radius()).abs() <= tolerance);
         }

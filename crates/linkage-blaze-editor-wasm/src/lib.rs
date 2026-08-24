@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
-use linkage_blaze::{DrawItem3d, Error as LinkageError, LinkageBuf, RgbColor};
+use linkage_blaze::render::Item3d;
+use linkage_blaze::{Error as LinkageError, LinkageBuf, RgbColor};
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
 #[derive(Debug, derive_more::From)]
@@ -173,23 +174,23 @@ enum Primitive {
     },
 }
 
-impl From<DrawItem3d> for Primitive {
-    fn from(draw_item_3d: DrawItem3d) -> Self {
+impl From<Item3d> for Primitive {
+    fn from(draw_item_3d: Item3d) -> Self {
         match draw_item_3d {
-            DrawItem3d::Stroke(stroke) => Self::Segment {
+            Item3d::Stroke(stroke) => Self::Segment {
                 start: Vec3::from(stroke.start().position().into_array()),
                 end: Vec3::from(stroke.end().position().into_array()),
                 width: stroke.width(),
                 color: Color::from_rgb888(stroke.color()),
             },
-            DrawItem3d::Disk(disk) => Self::Disk {
+            Item3d::Disk(disk) => Self::Disk {
                 center: Vec3::from(disk.pose().position().into_array()),
                 normal: Vec3::from(disk.pose().orientation().up().into_array()),
                 radius: disk.radius(),
                 width: 0.0,
                 color: Color::from_rgb888(disk.color()),
             },
-            DrawItem3d::Sphere(sphere) => Self::Sphere {
+            Item3d::Sphere(sphere) => Self::Sphere {
                 center: Vec3::from(sphere.pose().position().into_array()),
                 radius: sphere.radius(),
                 color: Color::from_rgb888(sphere.color()),
