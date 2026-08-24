@@ -18,6 +18,7 @@ impl F32Ext for f32 {
 }
 
 impl Vec3 {
+    /// The zero position or direction.
     pub const ZERO: Self = Self([0.0, 0.0, 0.0]);
 
     /// Borrow the underlying array.
@@ -116,13 +117,15 @@ impl Mul<f32> for Vec3 {
     }
 }
 
-/// 3x3 rotation matrix, row-major: mat\[row\]\[col\].
+/// Local-frame orientation matrix stored row-major: `mat[row][col]`.
 ///
-/// Columns are local-frame axes: col 0 = +X (forward), col 1 = +Y (left), col 2 = +Z (up).
+/// Columns are local-frame axes: column 0 = +X (forward), column 1 = +Y
+/// (left), and column 2 = +Z (up).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Mat3(pub [[f32; 3]; 3]);
 
 impl Mat3 {
+    /// Identity orientation with model and local axes aligned.
     pub const IDENTITY: Self = Self([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
 
     /// Borrow the underlying array.

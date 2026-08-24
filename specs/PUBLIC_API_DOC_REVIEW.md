@@ -96,16 +96,27 @@ Armatron golden-image fixture is preserved.
 
 Formatting, all-features rustdoc, and `cargo check-all` pass.
 
-### 5. Rewrite public documentation for the final API
+### 5. Rewrite public documentation for the final API — Complete
 
-- Apply every summary and visibility work item in this review after names and
-  module paths are stable.
-- Add the compile-checked crate Quick Start and goal-oriented navigation.
-- Update all top-level BVH wording to identify the Biovision Hierarchy
-  motion-capture file format.
-- Remove "Logo-style," robot-arm-only framing, unexplained degree-of-freedom
-  terminology, duplicate summaries, and ignored examples serving as primary
-  guidance.
+- Applied the remaining public summary, field, variant, method, module, macro,
+  and re-export documentation work after the API paths stabilized.
+- Added a compile-checked crate Quick Start and goal-oriented links for asset
+  files, platform examples, the live gallery, and Biovision Hierarchy data.
+- Distinguished always-available `bvh::Motion` from feature-gated host parsing
+  and conversion APIs, and expanded BVH as the Biovision Hierarchy
+  motion-capture file format in public entry-point documentation.
+- Removed robot-arm-only and “Logo-style” framing, clarified linkage-parameter
+  terminology and CYD integration, and removed duplicate summaries.
+- Made implementation-only example surfaces private where the consumer audit
+  found no external API requirement: `examples::ui` and
+  `armatron::reverse_kinematics`; the internal `StatusTextError` wrapper was
+  removed. Public example modules and platform entry points remain available.
+- Converted public examples to `rust,no_run` doctests where an executable
+  example is appropriate. External `.lb.rs` and BVH asset inclusions are shown
+  as explicitly labeled `text` excerpts because their call-site assets cannot
+  be supplied to rustdoc.
+
+All-features doctests and rustdoc pass, and `cargo check-all` passes.
 
 ### 6. Validate and review the generated result
 

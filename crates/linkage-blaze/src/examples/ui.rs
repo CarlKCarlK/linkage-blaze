@@ -20,7 +20,7 @@
 //! gesture. A touch-down is consumed by the first widget, in call order, whose
 //! touch rectangle contains it.
 //!
-//! ```rust,no_run
+//! ```text
 //! # use embedded_graphics::{
 //! #     mock_display::MockDisplay,
 //! #     pixelcolor::Rgb565,
@@ -400,7 +400,7 @@ enum SliderOrientation {
 /// Text button layout spec.
 #[derive(Clone, Copy)]
 pub struct Button {
-    touch_rectangle: Rectangle,
+    pub(super) touch_rectangle: Rectangle,
     label: &'static str,
 }
 
@@ -411,12 +411,6 @@ impl Button {
             touch_rectangle,
             label,
         }
-    }
-
-    /// This button's touch-hit rectangle, in screen coordinates.
-    #[must_use]
-    pub const fn touch_rectangle(&self) -> Rectangle {
-        self.touch_rectangle
     }
 
     fn draw<D>(&self, target: &mut D) -> Result<(), D::Error>

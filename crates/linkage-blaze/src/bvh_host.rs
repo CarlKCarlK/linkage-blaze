@@ -1,4 +1,5 @@
-//! BVH motion-capture parsing for Linkage Blaze.
+//! Host-side parsing and conversion for the Biovision Hierarchy (BVH)
+//! motion-capture file format.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -28,67 +29,91 @@ fn intern_mark_name(name: &str) -> &'static str {
     leaked
 }
 
-/// Parsed BVH clip: hierarchy plus motion samples.
+/// Parsed Biovision Hierarchy motion-capture clip: hierarchy plus samples.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Clip {
+    /// Joints in hierarchy order, including end sites.
     pub joints: Vec<Joint>,
+    /// Raw motion samples in the file's channel order.
     pub samples: Vec<MotionSample>,
+    /// Duration of one motion frame in seconds.
     pub sample_time: f32,
     channel_count: usize,
 }
 
-/// One BVH joint or end site.
+/// One joint or end site from a Biovision Hierarchy skeleton.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Joint {
+    /// Joint name from the source file.
     pub name: String,
+    /// Index of the parent joint, or `None` for the root.
     pub parent: Option<usize>,
+    /// Model-space offset from the parent, in source units.
     pub offset: [f32; 3],
+    /// Ordered position and rotation channels for this joint.
     pub channels: Vec<Channel>,
 }
 
-/// BVH channel definition.
+/// A position or rotation channel in a Biovision Hierarchy joint.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Channel {
+    /// Position along the source X axis.
     Xposition,
+    /// Position along the source Y axis.
     Yposition,
+    /// Position along the source Z axis.
     Zposition,
+    /// Rotation about the source X axis, in degrees.
     Xrotation,
+    /// Rotation about the source Y axis, in degrees.
     Yrotation,
+    /// Rotation about the source Z axis, in degrees.
     Zrotation,
 }
 
-/// One BVH motion sample.
+/// One raw motion frame in the file's channel order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MotionSample {
+    /// Channel values; positions use source distance units and rotations use degrees.
     pub values: Vec<f32>,
 }
 
-/// Parameter layout discovered from a BVH clip.
+/// Linkage-parameter mapping discovered from a parsed BVH clip.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ParameterLayout {
+    /// Parameters in the order used by the generated linkage.
     pub parameters: Vec<Parameter>,
 }
 
 impl ParameterLayout {
+    /// Return the number of discovered linkage parameters.
     pub fn len(&self) -> usize {
         self.parameters.len()
     }
 
+    /// Return whether no linkage parameters were discovered.
     pub fn is_empty(&self) -> bool {
         self.parameters.is_empty()
     }
 }
 
-/// One Linkage parameter mapped back to a BVH channel.
+/// One linkage parameter mapped back to a source joint and channel.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Parameter {
+    /// Zero-based index in the generated linkage parameter array.
     pub index: usize,
+    /// Name used by the generated linkage DSL.
     pub linkage_name: &'static str,
+    /// Index of the source joint in [`Clip::joints`].
     pub joint_index: usize,
+    /// Source channel represented by this parameter.
     pub channel: Channel,
 }
 
-/// Discover Linkage parameter slots from BVH channels.
+/// Discover ordered linkage parameters from a parsed BVH clip.
+///
+/// The returned layout retains the source joint and channel for each generated
+/// parameter so samples can be converted consistently.
 pub fn discover_bvh_parameters(clip: &Clip) -> Result<ParameterLayout, Error> {
     let mut parameters = Vec::new();
 
@@ -101,9 +126,9 @@ pub fn discover_bvh_parameters(clip: &Clip) -> Result<ParameterLayout, Error> {
     Ok(ParameterLayout { parameters })
 }
 
-/// Create a parameterized LinkageBuf from a BVH clip.
+/// Create a parameterized [`LinkageBuf`] from a parsed BVH clip.
 ///
-/// `mark_joints` is a list of joint names that should get a named mark at their
+/// `mark_joints` lists joint names that receive named marks at their
 /// position after their own transform is applied.  These marks persist in the
 /// output linkage so callers can look up the pose of specific body parts after
 /// evaluation.  Hierarchical depth marks are always emitted in addition.
@@ -281,7 +306,7 @@ fn annotate_depth_step_lines(
     result
 }
 
-/// Return normalized Linkage parameter values for one motion sample.
+/// Return normalized linkage-parameter values for one BVH motion-capture frame.
 pub fn bvh_sample_params<const DOF: usize>(
     layout: &ParameterLayout,
     sample: &MotionSample,
@@ -302,7 +327,7 @@ pub fn bvh_sample_params<const DOF: usize>(
     Ok(params)
 }
 
-/// Convert BVH motion text into generated `.lb.rs` source.
+/// Convert Biovision Hierarchy motion-capture text into generated `.lb.rs` source.
 ///
 /// The generated linkage uses defaults from the first BVH motion sample, so
 /// loading the generated file starts in a captured pose. Mark names use
@@ -324,7 +349,7 @@ pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
     ))
 }
 
-/// Parse BVH hierarchy and motion text.
+/// Parse Biovision Hierarchy skeleton and motion text into a [`Clip`].
 pub fn parse_bvh(source: &str) -> Result<Clip, Error> {
     let mut parser = BvhParser::new(source);
 
@@ -756,7 +781,7 @@ fn is_nearly_zero_degrees(degrees: f32) -> bool {
     degrees.abs() < ANGLE_EPSILON_DEGREES
 }
 
-/// BVH parser error.
+/// Diagnostic returned by host-side Biovision Hierarchy parsing and conversion.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Error {
     line_number: Option<usize>,

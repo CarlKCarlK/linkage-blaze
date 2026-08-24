@@ -1,6 +1,7 @@
-//! The generic "clock" example: an analog clock face whose hands are driven by a
-//! tiny [`linkage`](crate::linkage), with a digital time read-out
-//! above it.
+//! A clock display example driven by a parameterized linkage.
+//!
+//! The public entry points are platform-neutral; a platform launcher supplies
+//! the Device Envoy display and touch implementations.
 
 use core::{fmt, iter};
 
@@ -34,11 +35,17 @@ use time::OffsetDateTime;
 
 // ── Public constants ────────────────────────────────────────────────────────────────
 
-pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(3, 7, 14); // near-black blue (3, 7, 14)
-pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(210, 160, 80); // dim gold (210, 160, 80)
+/// Near-black blue clock background.
+pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(3, 7, 14);
+/// Dim-gold clock foreground.
+pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(210, 160, 80);
+/// Display orientation used by the clock renderer.
 pub const ORIENTATION: Orientation = Orientation::Landscape;
+/// Font used for Wi-Fi status text.
 pub const WIFI_STATUS_FONT: MonoFont<'static> = FONT_6X10;
+/// Rectangle reserved for Wi-Fi status text.
 pub const WIFI_STATUS_RECTANGLE: Rectangle = Rectangle::new(Point::new(256, 5), Size::new(62, 10));
+/// Maximum number of pixels drawn in one clock frame.
 pub const MAX_FRAME_PIXEL_COUNT: usize =
     max_rectangle_pixel_count(WIFI_STATUS_RECTANGLE, TIME_RECTANGLE);
 

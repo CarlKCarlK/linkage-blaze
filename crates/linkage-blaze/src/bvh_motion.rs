@@ -1,4 +1,5 @@
-//! Const-fn parser for the BVH motion section.
+//! Const-fn support for normalized motion from the Biovision Hierarchy (BVH)
+//! motion-capture file format.
 //!
 //! Parses the numeric subset used in BVH motion files:
 //!
@@ -30,7 +31,7 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 
 // ── public API ───────────────────────────────────────────────────────────────
 
-/// Parse and normalize a BVH file embedded at compile time.
+/// Embed, parse, and normalize a BVH motion-capture file at compile time.
 ///
 /// The path is resolved relative to the file that invokes the macro, exactly
 /// like a bare `include_bytes!`.  `DOF` and `SAMPLE_COUNT` are inferred from
@@ -39,11 +40,13 @@ const MAX_MANTISSA_DIGITS: usize = 18;
 ///
 /// # Example
 ///
-/// ```rust,ignore
-/// #[allow(long_running_const_eval)]
+/// ```text
 /// const MOTION: Motion<132, 592> =
 ///     linkage_blaze::bvh::motion!("path/to/motion.bvh");
 /// ```
+///
+/// The path is an asset supplied by the calling crate, so the invocation is
+/// shown as an asset excerpt rather than as a doctest.
 // This implementation helper must be public because the user-facing
 // `bvh::motion!` macro expands in downstream crates.
 #[doc(hidden)]
@@ -96,7 +99,7 @@ pub struct Motion<const DOF: usize, const SAMPLE_COUNT: usize> {
 }
 
 impl<const DOF: usize, const SAMPLE_COUNT: usize> Motion<DOF, SAMPLE_COUNT> {
-    /// The number of degrees of freedom (channels per motion sample).
+    /// The number of linkage parameters in each motion sample.
     pub const DOF: usize = DOF;
 
     /// The number of motion samples in this clip.
@@ -107,7 +110,7 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> Motion<DOF, SAMPLE_COUNT> {
         Self { motion }
     }
 
-    /// Parse and normalize a BVH file's bytes into this motion type.
+    /// Parse and normalize BVH motion-capture bytes into this motion type.
     ///
     /// `DOF` and `SAMPLE_COUNT` are inferred from the type annotation.
     /// Panics at compile time if the file's channel count or sample count
@@ -130,7 +133,7 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> Motion<DOF, SAMPLE_COUNT> {
         Self { motion: data }
     }
 
-    /// Return the number of degrees of freedom (channels per motion sample).
+    /// Return the number of linkage parameters in each motion sample.
     pub const fn dof(&self) -> usize {
         DOF
     }

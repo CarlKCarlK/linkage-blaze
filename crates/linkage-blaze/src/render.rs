@@ -1,11 +1,15 @@
 //! Evaluated three-dimensional drawing geometry and projection helpers.
+//!
+//! [`Item3d`] values are produced by [`crate::LinkageView::draw_items_3d`].
+//! Use [`Item3d::project`] with a [`Projection`] when adapting them to a
+//! Device Envoy display, or inspect the payloads directly in another renderer.
 
 use super::{Pose, Vec3};
 use embedded_graphics::prelude::Point;
 
 use super::Rgb888;
 
-/// A drawable pen-down forward segment produced by a linkage.
+/// A drawable pen-down movement emitted while evaluating a linkage.
 #[derive(Clone, Copy, Debug)]
 pub struct Stroke {
     pub(crate) start: Pose,
@@ -15,29 +19,29 @@ pub struct Stroke {
 }
 
 impl Stroke {
-    /// Return the segment start pose.
+    /// Return the pose at the start of the segment.
     #[must_use]
     pub const fn start(self) -> Pose {
         self.start
     }
-    /// Return the segment end pose.
+    /// Return the pose at the end of the segment.
     #[must_use]
     pub const fn end(self) -> Pose {
         self.end
     }
-    /// Return the segment pen color.
+    /// Return the segment color.
     #[must_use]
     pub const fn color(self) -> Rgb888 {
         self.color
     }
-    /// Return the segment pen width.
+    /// Return the segment width in linkage units.
     #[must_use]
     pub const fn width(self) -> f32 {
         self.width
     }
 }
 
-/// A disk emitted while evaluating a linkage.
+/// A filled disk emitted while evaluating a linkage.
 #[derive(Clone, Copy, Debug)]
 pub struct Disk {
     pub(crate) pose: Pose,
@@ -46,15 +50,18 @@ pub struct Disk {
 }
 
 impl Disk {
+    /// Return the disk center pose.
     #[must_use]
     pub const fn pose(self) -> Pose {
         self.pose
     }
     #[must_use]
+    /// Return the disk radius in linkage units.
     pub const fn radius(self) -> f32 {
         self.radius
     }
     #[must_use]
+    /// Return the disk color.
     pub const fn color(self) -> Rgb888 {
         self.color
     }
@@ -69,30 +76,39 @@ pub struct Sphere {
 }
 
 impl Sphere {
+    /// Return the sphere center pose.
     #[must_use]
     pub const fn pose(self) -> Pose {
         self.pose
     }
     #[must_use]
+    /// Return the sphere radius in linkage units.
     pub const fn radius(self) -> f32 {
         self.radius
     }
     #[must_use]
+    /// Return the sphere color.
     pub const fn color(self) -> Rgb888 {
         self.color
     }
 }
 
-/// A 3D draw item produced by a linkage: a line stroke, a filled disk, or a sphere.
+/// Three-dimensional geometry emitted while evaluating a linkage.
 #[derive(Clone, Copy, Debug)]
 pub enum Item3d {
+    /// A pen-down movement represented as a colored segment.
     Stroke(Stroke),
+    /// A filled disk at the current pose.
     Disk(Disk),
+    /// A sphere centered at the current pose.
     Sphere(Sphere),
 }
 
 impl Item3d {
-    /// Project this 3D draw item through `projection` into pixel-space.
+    /// Project this item into a Device Envoy 2D display draw item.
+    ///
+    /// The projection controls the camera orientation, scale, target pixel,
+    /// and optional perspective depth scaling.
     #[must_use]
     pub fn project(self, projection: &Projection) -> device_envoy_core::cyd::display::DrawItem {
         match self {
@@ -124,7 +140,7 @@ impl Item3d {
     }
 }
 
-/// Maps world-space geometry to pixel space for a particular view.
+/// Camera projection from Linkage Blaze world coordinates to pixel coordinates.
 ///
 /// The rotation maps world axes onto camera axes: row 0 is depth, row 1 is the
 /// source of screen X, and row 2 is the source of screen Y. Named constructors
@@ -141,7 +157,7 @@ const NEG_X_BASIS: super::Mat3 = super::Mat3([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 
 const NEG_Z_BASIS: super::Mat3 = super::Mat3([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]]);
 
 impl Projection {
-    /// Orthographic front view, looking along negative X.
+    /// Create an orthographic front view looking along negative X.
     pub const fn front_orthographic(target_origin: Point, scale: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
@@ -151,7 +167,7 @@ impl Projection {
         }
     }
 
-    /// Orthographic top view, looking along negative Z.
+    /// Create an orthographic top view looking along negative Z.
     pub const fn top_orthographic(target_origin: Point, scale: f32) -> Self {
         Self {
             rotation: NEG_Z_BASIS,
@@ -161,7 +177,7 @@ impl Projection {
         }
     }
 
-    /// Perspective front view, looking along negative X.
+    /// Create a perspective front view looking along negative X.
     pub const fn front_perspective(target_origin: Point, scale: f32, focal: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
@@ -187,7 +203,7 @@ impl Projection {
         }
     }
 
-    /// Project a world-space direction vector scaled by `radius`.
+    /// Project a world-space direction, scaled by a world-space radius.
     pub fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
         let factor = self.depth_factor(self.world_to_camera(pose.position())[0]);
         let direction = self.world_to_camera(world_dir);
@@ -195,12 +211,12 @@ impl Projection {
         (-direction[1] * scaled_radius, -direction[2] * scaled_radius)
     }
 
-    /// Scale a world-space sphere radius to pixel-space.
+    /// Convert a world-space sphere radius to pixels at a pose's depth.
     pub fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
         radius * self.scale * self.depth_factor(self.world_to_camera(pose.position())[0])
     }
 
-    /// Scale a world-space stroke width to pixel-space.
+    /// Convert a world-space stroke width to pixels.
     pub fn project_width(&self, width: f32) -> f32 {
         (width * self.scale).max(1.0)
     }

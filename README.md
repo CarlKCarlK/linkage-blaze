@@ -5,8 +5,8 @@
 [![docs.rs](https://img.shields.io/docsrs/linkage-blaze?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze)
 
 3D turtle graphics for animated jointed figures. Describe a figure with moves,
-turns, branches, links, joints, disks, and spheres. Then animate parameters to
-bring it to life.
+turns, branches, links, joints, disks, and spheres, then animate normalized
+linkage parameters to bring it to life.
 
 <p>
   <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/armatron.png" alt="Armatron demo preview" height="200" />
@@ -30,15 +30,43 @@ jointed drawings. It works like 3D turtle graphics: move forward, turn, branch,
 draw links, place joints, and add simple shapes such as disks and spheres.
 Animate a few parameters, and the drawing moves.
 
-The demos use this to make clocks, skeletons, dancers, and robot-arm-like
-figures. The workspace targets microcontrollers (e.g., the
-[ESP32 CYD API](https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html) and
-[RP CYD API](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html))
-and the browser via WASM.
+The demos include clocks, skeletons, dancers, and articulated figures. The
+workspace targets microcontrollers through Device Envoy's CYD (Cheap Yellow
+Display) APIs, including the [ESP32 CYD API](https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html)
+and [RP CYD API](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html),
+as well as the browser through WASM.
 
 The default crate configuration is `no_std` and allocation-free, so figures
 live in flash and animate on small microcontrollers. An opt-in `alloc` feature
 adds heap-based conveniences where an allocator is available.
+
+## Quick Start
+
+Define a small [`LinkageFixed`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html)
+in a `const`, obtain its borrowed [`LinkageView`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html)
+with [`LinkageFixed::view`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html#method.view),
+supply one normalized value for each named parameter, and evaluate a
+[`Pose`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.Pose.html) with
+[`LinkageView::final_pose`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html#method.final_pose):
+
+```rust,no_run
+# use linkage_blaze::{LinkageFixed, Vec3};
+# fn main() -> Result<(), linkage_blaze::Error> {
+const LINKAGE: LinkageFixed<1, 0, 4> = LinkageFixed::start()
+    .define_param("reach", 0.5)
+    .forward_param("reach", 1.0, 5.0);
+
+let view = LINKAGE.view();
+let pose = view.final_pose(&[0.5])?;
+assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+# Ok(())
+# }
+```
+
+For a named external asset, use [`linkage_file!`](https://docs.rs/linkage-blaze/latest/linkage_blaze/macro.linkage_file.html)
+with a `.lb.rs` file. Use the platform examples for display integration and
+the [`bvh`](https://docs.rs/linkage-blaze/latest/linkage_blaze/bvh/index.html)
+module for Biovision Hierarchy motion-capture data.
 
 ## Gallery
 
@@ -50,12 +78,11 @@ It shows preview images of each demo and links to the live, interactive WASM ver
 
 ## Example Linkage
 
-This is the `armatron1.lb.rs` [(interactive editor)](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/#armatron)
-linkage based on a toy robot arm. It defines six parameters for the shoulder,
-elbow, and hand, then builds a simple robot-arm-like figure with a wrist mark
-so the claw can branch into two fingers.
+This is an excerpt from the `armatron1.lb.rs` asset, available in the
+[(interactive editor)](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/#armatron).
+It demonstrates named parameters, colors, movement, marks, and branching.
 
-```rust,ignore
+```text
 linkage![
     .define_param("raise hand", 0.5)
     .define_param("bend elbow", 0.5)
@@ -110,7 +137,7 @@ The default `linkage-blaze` build is designed for embedded systems:
 Optional features add host-side capabilities:
 
 - `alloc` enables owned parsing.
-- `bvh` enables host-side APIs for reading BVH (Biovision Hierarchy)
+- `bvh` enables host-side APIs for reading Biovision Hierarchy (BVH)
   motion-capture files.
 
 ```toml
@@ -121,7 +148,7 @@ linkage-blaze = "<latest version>"
 Replace `<latest version>` with the current release shown on
 [crates.io](https://crates.io/crates/linkage-blaze).
 
-Install the BVH converter with:
+Install the Biovision Hierarchy (BVH) converter with:
 
 ```bash
 cargo install linkage-blaze --features bvh --bin bvh-to-lb
@@ -130,7 +157,7 @@ cargo install linkage-blaze --features bvh --bin bvh-to-lb
 ## Platform Examples
 
 - **[Raspberry Pi Pico / RP](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-rp)** - Pico 1 and Pico 2 examples, including Pico W variants.
-- **[ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp)** - CYD-oriented examples across supported ESP32 families and boards.
+- **[ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp)** - Cheap Yellow Display examples across supported ESP32 families and boards.
 - **[Browser / WASM](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-wasm)** - Browser builds behind the live gallery.
 
 The platform examples and browser adapter use the workspace version but are not

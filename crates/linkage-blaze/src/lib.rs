@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
-// TODO0 Review and improve the Linkage Blaze crate documentation.
+// TODO0 Review and improve the Linkage Blaze crate documentation. (may no longer apply)
 #![doc = include_str!("../../../README.md")]
 #![doc = ""]
 #![doc = "## Coordinate System"]
@@ -17,7 +17,8 @@
 //! - pitch = rotate about local +Y
 //! - roll = rotate about local +X
 
-//todo "DOF" == params = parameters. do these names make sense? are they explained well?
+// TODO "DOF" == params = parameters. Do these names make sense, and are they
+// explained well? (may no longer apply)
 
 #[cfg(test)]
 extern crate std;
@@ -29,13 +30,12 @@ pub mod bvh;
 mod math;
 pub mod render;
 
-/// Platform-neutral example logic for the linkage-blaze CYD examples.
+/// Platform-neutral example logic for the Linkage Blaze display examples.
 ///
-/// The device abstraction itself lives in [`device_envoy_core::cyd`]; this module
-/// holds the generic examples (`armatron`, `skeleton_clock`, `clock`, `ballet`) written
-/// against the owned CYD parts:
-/// [`CydDisplay`](device_envoy_core::cyd::CydDisplay) and
-/// [`CydTouch`](device_envoy_core::cyd::CydTouch).
+/// The device boundary is provided by Device Envoy's CYD (Cheap Yellow Display)
+/// traits. This module contains reusable example loops for Armatron, ballet,
+/// clock, and skeleton-clock applications. Enable the corresponding
+/// `examples-*` feature to include each example.
 pub mod examples {
     #[cfg(feature = "examples-armatron")]
     #[path = "armatron/main.rs"]
@@ -47,7 +47,7 @@ pub mod examples {
     #[cfg(feature = "examples-skeleton-clock")]
     pub mod skeleton_clock;
     #[cfg(feature = "examples-armatron")]
-    pub mod ui;
+    mod ui;
 }
 
 #[cfg(feature = "alloc")]
@@ -55,16 +55,18 @@ use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
 
 use core::fmt;
 
-pub use embedded_graphics::{
-    pixelcolor::{Rgb888, WebColors},
-    prelude::RgbColor,
-};
+/// RGB color used by pen and shape operations in a linkage.
+pub use embedded_graphics::pixelcolor::Rgb888;
+/// CSS named colors available as `Rgb888::CSS_*` constants in linkage assets.
+pub use embedded_graphics::pixelcolor::WebColors;
+/// Channel access and basic color constants for [`Rgb888`].
+pub use embedded_graphics::prelude::RgbColor;
 use math::degrees_to_radians;
 pub use math::{Mat3, Vec3};
 
 use render::{Disk, Item3d, Projection, Sphere, Stroke};
 
-/// A step in the robot arm linkage description.
+/// One movement, drawing, shape, mark, or restore operation in a linkage.
 ///
 /// Model-space axes:
 ///
@@ -100,28 +102,36 @@ pub enum Step {
     PenWidth(f32),
     /// Add a filled disk at the current pose, in the local +X/+Y plane.
     Disk(f32),
-    /// Add a filled disk at the current pose; radius is driven by a degree-of-freedom parameter.
+    /// Add a filled disk at the current pose with a parameter-driven radius.
     DiskParam(ParamArg),
     /// Add a sphere centered at the current pose.
     Sphere(f32),
-    /// Add a sphere centered at the current pose; radius is driven by a degree-of-freedom parameter.
+    /// Add a sphere centered at the current pose with a parameter-driven radius.
     SphereParam(ParamArg),
     /// Save the current pose and pen state into a resolved mark slot.
-    Mark { index: usize },
+    Mark {
+        /// Resolved slot used to store the pose and pen state.
+        index: usize,
+    },
     /// Restore a previously marked pose and pen state (index resolved at build time).
-    Restore { index: usize },
+    Restore {
+        /// Resolved slot containing the pose and pen state to restore.
+        index: usize,
+    },
 }
 
-/// A fixed argument or a variable argument driven by a degree-of-freedom parameter.
+/// A fixed operation value or a value interpolated from a normalized linkage parameter.
 ///
 /// Rotation arguments are stored as radians. Translation arguments are stored as linkage distances.
 #[derive(Clone, Copy, Debug)]
 pub enum StepArg {
+    /// A fixed rotation in radians or fixed translation in linkage units.
     Fixed(f32),
+    /// A value interpolated from a normalized linkage parameter.
     Variable(ParamArg),
 }
 
-/// A variable argument with its degree-of-freedom index and legal range.
+/// A linkage parameter reference and the operation-value range it controls.
 #[derive(Clone, Copy, Debug)]
 pub struct ParamArg {
     index: usize,
@@ -129,7 +139,7 @@ pub struct ParamArg {
     span: f32,
 }
 
-/// A named runtime linkage parameter.
+/// A named linkage parameter with a normalized default value.
 #[derive(Clone, Copy, Debug)]
 pub struct Param {
     name: &'static str,
@@ -196,7 +206,7 @@ impl ParamArg {
         self.low + param * self.span
     }
 
-    /// Return the degree-of-freedom parameter index.
+    /// Return the zero-based linkage parameter index.
     #[must_use]
     pub const fn index(self) -> usize {
         self.index
@@ -215,11 +225,16 @@ impl ParamArg {
     }
 }
 
-/// Error returned when evaluating a linkage fails.
+/// Error returned by linkage evaluation and named-mark lookup.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Error {
     /// A parameter was outside the normalized range `0.0..=1.0`.
-    InvalidParameter { index: usize, value: f32 },
+    InvalidParameter {
+        /// Zero-based index of the invalid parameter.
+        index: usize,
+        /// Supplied value, which was outside `0.0..=1.0`.
+        value: f32,
+    },
     /// The linkage did not produce its required implicit start pose.
     EmptyLinkage,
     /// No mark with the requested name exists.
@@ -244,14 +259,15 @@ impl fmt::Display for Error {
 #[cfg(test)]
 impl std::error::Error for Error {}
 
-/// The canonical operational API for evaluating and composing a linkage.
+/// A borrowed linkage used to evaluate, compose, and render a linkage.
 ///
-/// `LinkageView` erases fixed step capacity while preserving the degree-of-freedom and mark
-/// dimensions. Obtain one with [`LinkageFixed::view()`] or [`LinkageBuf::view()`].
+/// It erases fixed step capacity while preserving the linkage-parameter and
+/// mark dimensions. Obtain one with [`LinkageFixed::view`] or
+/// [`LinkageBuf::view`].
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// # use linkage_blaze::{LinkageFixed, Vec3};
 /// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
@@ -275,7 +291,7 @@ pub struct LinkageView<'a, const DOF: usize, const MARKS: usize> {
 }
 
 impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
-    /// The number of runtime parameters (degrees of freedom).
+    /// The number of linkage parameters expected at evaluation time.
     pub const DOF: usize = DOF;
 
     /// The number of mark slots in this view.
@@ -297,7 +313,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
         }
     }
 
-    /// Return the number of runtime parameters (degrees of freedom).
+    /// Return the number of linkage parameters expected at evaluation time.
     #[must_use]
     pub const fn dof(&self) -> usize {
         DOF
@@ -329,7 +345,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::{LinkageFixed, Vec3};
     /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("yaw", 0.5)
@@ -349,7 +365,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.0)
@@ -403,8 +419,13 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// for a given linkage, so resolve it once — ideally in a `const` — and never
     /// per frame:
     ///
-    /// ```ignore
-    /// const HOURS_RANGE: (f32, f32) = LINKAGE.scan_param_range(1);
+    /// ```rust,no_run
+    /// # use linkage_blaze::LinkageFixed;
+    /// # const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
+    /// #     .define_param("hour", 0.5)
+    /// #     .define_param("minute", 0.5)
+    /// #     .forward_param("minute", 0.0, 1.0);
+    /// const HOURS_RANGE: (f32, f32) = LINKAGE.view().scan_param_range(1);
     /// ```
     ///
     /// # Panics
@@ -633,7 +654,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<3, 0, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.0)
@@ -664,7 +685,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::{LinkageFixed, Vec3};
     /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("yaw", 0.5)
@@ -684,6 +705,22 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     }
 
     /// Return the pose recorded at a named mark after evaluating the linkage.
+    ///
+    /// Returns [`Error::MarkNotFound`] when `name` is absent and
+    /// [`Error::MarkAmbiguous`] when more than one mark has that name.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use linkage_blaze::{LinkageFixed, Vec3};
+    /// # fn example() -> Result<(), linkage_blaze::Error> {
+    /// const LINKAGE: LinkageFixed<0, 1, 4> =
+    ///     LinkageFixed::start().forward(2.0).mark("tip");
+    /// let pose = LINKAGE.view().pose_by_mark_name(&[], "tip")?;
+    /// assert!(pose.position().is_close_to(&Vec3::from([2.0, 0.0, 0.0]), 1e-5));
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn pose_by_mark_name(&self, params: &[f32; DOF], name: &str) -> Result<Pose, Error> {
         let mut draw_items =
             DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, self.mark_len, params)?;
@@ -695,7 +732,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::{LinkageFixed, Vec3};
     /// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
     ///     .define_param("distance", 0.5)
@@ -722,7 +759,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::{LinkageFixed, Vec3, PenState};
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
@@ -751,7 +788,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::{LinkageFixed, render::Item3d};
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
@@ -780,7 +817,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
@@ -1366,83 +1403,103 @@ fn parse_u8_arg(line_number: usize, method_name: &str, value: &str) -> Result<u8
 macro_rules! emit_fixed_step_methods {
     () => {
         // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
+        /// Rotate about local +Z by a fixed number of degrees.
         pub const fn yaw(self, degrees: f32) -> Self {
             self.push(Step::Yaw(StepArg::Fixed(degrees_to_radians(degrees))))
         }
+        /// Rotate about local +Y by a fixed number of degrees.
         pub const fn pitch(self, degrees: f32) -> Self {
             self.push(Step::Pitch(StepArg::Fixed(degrees_to_radians(degrees))))
         }
+        /// Rotate about local +X by a fixed number of degrees.
         pub const fn roll(self, degrees: f32) -> Self {
             self.push(Step::Roll(StepArg::Fixed(degrees_to_radians(degrees))))
         }
+        /// Move along local +X by a fixed linkage distance.
         pub const fn forward(self, distance: f32) -> Self {
             self.push(Step::Forward(StepArg::Fixed(distance)))
         }
+        /// Move along local +Y by a fixed linkage distance.
         pub const fn left(self, distance: f32) -> Self {
             self.push(Step::Left(StepArg::Fixed(distance)))
         }
+        /// Move along local +Z by a fixed linkage distance.
         pub const fn up(self, distance: f32) -> Self {
             self.push(Step::Up(StepArg::Fixed(distance)))
         }
+        /// Stop emitting strokes for subsequent movement.
         pub const fn pen_up(self) -> Self {
             self.push(Step::PenUp)
         }
+        /// Emit strokes for subsequent movement.
         pub const fn pen_down(self) -> Self {
             self.push(Step::PenDown)
         }
+        /// Set the color used by subsequent emitted geometry.
         pub const fn pen_color(self, color: Rgb888) -> Self {
             self.push(Step::PenColor(color))
         }
+        /// Set the stroke width in linkage units.
         pub const fn pen_width(self, width: f32) -> Self {
             assert!(width >= 0.0, "pen width must be non-negative");
             self.push(Step::PenWidth(width))
         }
+        /// Emit a filled disk with a fixed radius at the current pose.
         pub const fn disk(self, radius: f32) -> Self {
             self.push(Step::Disk(radius))
         }
+        /// Emit a sphere with a fixed radius at the current pose.
         pub const fn sphere(self, radius: f32) -> Self {
             self.push(Step::Sphere(radius))
         }
 
         // Parameterized methods (yaw_param, pitch_param, etc.)
+        /// Rotate about local +Z using a named parameter mapped to degrees.
         pub const fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Yaw(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
+        /// Rotate about local +Y using a named parameter mapped to degrees.
         pub const fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Pitch(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
+        /// Rotate about local +X using a named parameter mapped to degrees.
         pub const fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Roll(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
+        /// Move along local +X using a named parameter mapped to distances.
         pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Forward(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
+        /// Move along local +Y using a named parameter mapped to distances.
         pub const fn left_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Left(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
+        /// Move along local +Z using a named parameter mapped to distances.
         pub const fn up_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Up(StepArg::Variable(ParamArg::new(index, low, high))))
         }
+        /// Emit a disk whose radius comes from a named parameter.
         pub const fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::DiskParam(ParamArg::new(index, low, high)))
         }
+        /// Emit a sphere whose radius comes from a named parameter.
         pub const fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::SphereParam(ParamArg::new(index, low, high)))
@@ -1450,6 +1507,7 @@ macro_rules! emit_fixed_step_methods {
 
         // Restore is an ordinary fluent DSL method. Structural extension macros
         // resize the backing array before replaying it.
+        /// Restore the pose and pen state saved by an earlier named mark.
         pub const fn restore(self, name: &'static str) -> Self {
             let index = match self.mark_index(name) {
                 Some(i) => i,
@@ -1468,83 +1526,103 @@ macro_rules! emit_fixed_step_methods {
 macro_rules! emit_buf_step_methods {
     () => {
         // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
+        /// Rotate about local +Z by a fixed number of degrees.
         pub fn yaw(self, degrees: f32) -> Self {
             self.push_step(Step::Yaw(StepArg::Fixed(degrees_to_radians(degrees))))
         }
+        /// Rotate about local +Y by a fixed number of degrees.
         pub fn pitch(self, degrees: f32) -> Self {
             self.push_step(Step::Pitch(StepArg::Fixed(degrees_to_radians(degrees))))
         }
+        /// Rotate about local +X by a fixed number of degrees.
         pub fn roll(self, degrees: f32) -> Self {
             self.push_step(Step::Roll(StepArg::Fixed(degrees_to_radians(degrees))))
         }
+        /// Move along local +X by a fixed linkage distance.
         pub fn forward(self, distance: f32) -> Self {
             self.push_step(Step::Forward(StepArg::Fixed(distance)))
         }
+        /// Move along local +Y by a fixed linkage distance.
         pub fn left(self, distance: f32) -> Self {
             self.push_step(Step::Left(StepArg::Fixed(distance)))
         }
+        /// Move along local +Z by a fixed linkage distance.
         pub fn up(self, distance: f32) -> Self {
             self.push_step(Step::Up(StepArg::Fixed(distance)))
         }
+        /// Stop emitting strokes for subsequent movement.
         pub fn pen_up(self) -> Self {
             self.push_step(Step::PenUp)
         }
+        /// Emit strokes for subsequent movement.
         pub fn pen_down(self) -> Self {
             self.push_step(Step::PenDown)
         }
+        /// Set the color used by subsequent emitted geometry.
         pub fn pen_color(self, color: Rgb888) -> Self {
             self.push_step(Step::PenColor(color))
         }
+        /// Set the stroke width in linkage units.
         pub fn pen_width(self, width: f32) -> Self {
             assert!(width >= 0.0, "pen width must be non-negative");
             self.push_step(Step::PenWidth(width))
         }
+        /// Emit a filled disk with a fixed radius at the current pose.
         pub fn disk(self, radius: f32) -> Self {
             self.push_step(Step::Disk(radius))
         }
+        /// Emit a sphere with a fixed radius at the current pose.
         pub fn sphere(self, radius: f32) -> Self {
             self.push_step(Step::Sphere(radius))
         }
 
         // Parameterized methods (yaw_param, pitch_param, etc.)
+        /// Rotate about local +Z using a named parameter mapped to degrees.
         pub fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::Yaw(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
+        /// Rotate about local +Y using a named parameter mapped to degrees.
         pub fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::Pitch(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
+        /// Rotate about local +X using a named parameter mapped to degrees.
         pub fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::Roll(StepArg::Variable(ParamArg::from_degrees(
                 index, low, high,
             ))))
         }
+        /// Move along local +X using a named parameter mapped to distances.
         pub fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::Forward(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
+        /// Move along local +Y using a named parameter mapped to distances.
         pub fn left_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::Left(StepArg::Variable(ParamArg::new(
                 index, low, high,
             ))))
         }
+        /// Move along local +Z using a named parameter mapped to distances.
         pub fn up_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::Up(StepArg::Variable(ParamArg::new(index, low, high))))
         }
+        /// Emit a disk whose radius comes from a named parameter.
         pub fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::DiskParam(ParamArg::new(index, low, high)))
         }
+        /// Emit a sphere whose radius comes from a named parameter.
         pub fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push_step(Step::SphereParam(ParamArg::new(index, low, high)))
@@ -1669,11 +1747,11 @@ impl LinkageStepCount {
     }
 }
 
-/// A fixed-capacity const linkage expression/storage type.
+/// An allocation-free linkage with compile-time-fixed capacities.
 ///
-/// `LinkageFixed` stores linkage steps and parameters in fixed-size arrays, enabling
-/// `const` construction and evaluation without allocation. Use the fluent DSL methods
-/// to extend the linkage expression and define complex arm kinematics at compile time.
+/// `LinkageFixed` stores linkage steps and parameters in fixed-size arrays,
+/// enabling `const` construction and evaluation without allocation. Use the
+/// fluent DSL methods to define a linkage in firmware or other `no_std` code.
 ///
 /// Parameter indexes are identities. Parameter names are labels/selectors and may
 /// be duplicated. Use `freeze_param_index` and `retain_param_indexes` for precise
@@ -1715,7 +1793,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 
     /// Create a borrowed view for evaluation and rendering.
     ///
-    /// The view erases the step capacity `N` while preserving the degree-of-freedom `DOF`.
+    /// The view erases step capacity `N` while preserving linkage-parameter
+    /// count `DOF`.
     /// All evaluation methods (poses, draw_items_3d, etc.) operate on the view.
     #[must_use]
     #[inline]
@@ -2289,7 +2368,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 }
 
 #[cfg(feature = "alloc")]
-/// A growable linkage expression/storage type.
+/// An allocator-backed, growable linkage buffer for runtime construction or parsing.
 ///
 /// `LinkageBuf` stores linkage steps in a [`Vec`] and parameters in an array,
 /// allowing dynamic growth at runtime. Unlike [`LinkageFixed`], construction is not `const`,
@@ -2305,7 +2384,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 ///
 /// # Building linkage expressions
 ///
-/// ```rust
+/// ```rust,no_run
 /// # #[cfg(feature = "alloc")]
 /// # {
 /// # use linkage_blaze::{LinkageBuf, Vec3};
@@ -2323,7 +2402,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 ///
 /// # Converting from fixed storage
 ///
-/// ```rust
+/// ```rust,no_run
 /// # #[cfg(feature = "alloc")]
 /// # {
 /// # use linkage_blaze::{LinkageFixed, LinkageBuf, Vec3};
@@ -2340,12 +2419,6 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 /// # }
 /// ```
 #[derive(Clone)]
-/// A growable linkage expression/storage type.
-///
-/// Parameter specialization follows the same rules as [`LinkageFixed`]:
-/// parameter indexes are identities, names are labels/selectors and may be
-/// duplicated, name-based freezing must be unambiguous, and raw freeze values are
-/// operation values rather than normalized slider values.
 pub struct LinkageBuf<const DOF: usize, const MARKS: usize> {
     params: [Param; DOF],
     param_len: usize,
@@ -2384,7 +2457,8 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
 
     /// Create a borrowed view for evaluation and rendering.
     ///
-    /// The view erases the step capacity while preserving the degree-of-freedom `DOF`.
+    /// The view erases step capacity while preserving linkage-parameter count
+    /// `DOF`.
     /// All evaluation methods (poses, draw_items_3d, etc.) operate on the view.
     #[must_use]
     #[inline]
@@ -2486,7 +2560,7 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # #[cfg(feature = "alloc")]
     /// # {
     /// # use linkage_blaze::{LinkageBuf, Vec3};
@@ -3230,10 +3304,12 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
     }
 }
 
-/// Logo-style pen state for linkage drawing.
+/// Whether movement currently emits strokes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PenState {
+    /// Movement does not emit strokes.
     Up,
+    /// Movement emits strokes.
     Down,
 }
 
@@ -3307,7 +3383,7 @@ impl Default for PenStyle {
     }
 }
 
-/// Full pose after evaluating a linkage step.
+/// A 3D position and local-frame orientation after evaluating a linkage step.
 #[derive(Clone, Copy, Debug)]
 pub struct Pose {
     orientation: Mat3,
@@ -3394,7 +3470,7 @@ impl Pose {
     }
 }
 
-/// Full pose plus Logo-style pen state after evaluating a linkage step.
+/// A [`Pose`] plus the pen state, color, and width active after a linkage step.
 #[derive(Clone, Copy, Debug)]
 pub struct StyledPose {
     pose: Pose,
@@ -3647,17 +3723,11 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
 // `__linkage_blaze_start!` macro that selects the storage type.
 // The file must not call `start!()` and must not define `macro_rules! linkage`.
 
-/// Callback macro used inside `.lb.rs` linkage files.
+/// Define a linkage expression inside a `.lb.rs` asset file.
 ///
-/// A `.lb.rs` file is a complete Rust expression that contains exactly one
-/// `linkage![ ... ]` invocation.  The body is a fluent DSL chain of
-/// leading-dot method calls (e.g. `.define_param(...)`, `.forward(...)`,
-/// `.mark(...)`).
-///
-/// `linkage!` is a *callback* macro: it does not know the storage type on its
-/// own. The including macro ([`linkage_fixed!`] or [`linkage_buf!`]) defines
-/// the local helper `__linkage_blaze_start!` immediately before the
-/// `include!`, which `linkage!` calls to obtain the correctly-typed builder.
+/// Applications normally load the file through [`linkage_file!`],
+/// [`linkage_fixed!`], or [`linkage_buf!`]; this macro is the asset-file
+/// expression itself.
 ///
 /// ## `.lb.rs` convention
 ///
@@ -3669,15 +3739,20 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
 ///
 /// ## Example `.lb.rs` file
 ///
-/// ```rust,ignore
+/// ```rust,no_run
+/// # use linkage_blaze::{linkage, LinkageFixed, Rgb888};
+/// # macro_rules! __linkage_blaze_start {
+/// #     () => { LinkageFixed::<2, 1, 8>::start() };
+/// # }
+/// # let _linkage: LinkageFixed<2, 1, 8> =
 /// linkage![
 ///     .define_param("hour", 0.0)
 ///     .define_param("face spin", 0.5)
 ///     .roll_param("face spin", -90.0, 90.0)
 ///     .mark("face")
-///     .pen_color(Rgb888::new(33, 79, 155))
+///     .pen_color(Rgb888::new(33, 79, 155)) // medium blue
 ///     .disk(66.0)
-/// ]
+/// ];
 /// ```
 #[macro_export]
 macro_rules! linkage {
@@ -3700,9 +3775,9 @@ macro_rules! linkage {
 /// Supply the meaningful parameter and mark dimensions; the step capacity is
 /// measured from the included file during const evaluation.
 ///
-/// ```rust,no_run
-/// # use linkage_blaze::{linkage, linkage_fixed, LinkageFixed, Rgb888};
-/// const CLOCK: LinkageFixed<2, 2, 48> = linkage_fixed!("assets/examples/clock.lb.rs", 2, 2);
+/// ```text
+/// const CLOCK: LinkageFixed<2, 2, 48> =
+///     linkage_fixed!("assets/examples/clock.lb.rs", 2, 2);
 /// ```
 #[macro_export]
 macro_rules! linkage_fixed {
@@ -3779,20 +3854,13 @@ macro_rules! __linkage_file_buf {
 /// to the source and constructors; it does not choose a final application
 /// view or backing-storage strategy.
 ///
-/// ```rust,no_run
-/// # use linkage_blaze::{linkage, linkage_file};
+/// ```text
 /// linkage_file! {
 ///     clock_linkage {
 ///         file: "assets/examples/clock.lb.rs",
 ///     }
 /// }
-///
-/// const CLOCK_LINKAGE: clock_linkage::View =
-///     clock_linkage::view();
-/// # #[cfg(feature = "alloc")]
-/// # fn load() {
-/// let _clock = clock_linkage::buf();
-/// # }
+/// let clock = clock_linkage::view();
 /// ```
 #[macro_export]
 macro_rules! linkage_file {
@@ -3867,15 +3935,23 @@ macro_rules! linkage_file {
 ///
 /// Prefer the one-argument form with an explicit type annotation:
 ///
-/// ```rust,ignore
-/// let clock: LinkageBuf<2, 4> =
-///     linkage_buf!("clock.lb.rs");
+/// ```text
+/// let clock: LinkageBuf<2, 4> = linkage_buf!("clock.lb.rs");
+/// ```
+///
+/// The macro form is an asset-file include and therefore needs a real `.lb.rs`
+/// fixture at the call site. The equivalent type construction is compile
+/// checked here:
+///
+/// ```rust,no_run
+/// # use linkage_blaze::LinkageBuf;
+/// let _clock: LinkageBuf<2, 4> = LinkageBuf::start();
 /// ```
 ///
 /// Use the explicit-number form only when the surrounding type cannot be
 /// inferred:
 ///
-/// ```rust,ignore
+/// ```text
 /// let clock = linkage_buf!("clock.lb.rs", 2, 4);
 /// ```
 #[cfg(feature = "alloc")]

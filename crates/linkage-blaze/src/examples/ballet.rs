@@ -1,5 +1,7 @@
-//! The generic "ballet" example: free-runs a motion-captured pirouette across
-//! the full screen, with an fps / slow-motion status line.
+//! A motion-captured ballet display example.
+//!
+//! The linkage asset was converted from the Biovision Hierarchy motion-capture
+//! file format and is sampled at compile time with [`crate::bvh::Motion`].
 
 use core::{
     convert::Infallible,
@@ -24,14 +26,18 @@ use embedded_graphics::prelude::Point;
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
 // The CYD display supports landscape, portrait, and the inverted form of each.
+/// Display orientation used by the ballet renderer.
 pub const ORIENTATION: Orientation = Orientation::Portrait;
+/// Font used for the motion status line.
 pub const TOP_FONT: MonoFont<'static> = FONT_6X10;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
 // Default colors.
-pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal
-pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold
+/// Near-black warm-charcoal background color.
+pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11);
+/// Warm pale-gold figure color.
+pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123);
 
 // The linkage (skeleton) previously converted from BVH to lb.rs format.
 linkage_file! {
@@ -116,16 +122,13 @@ where
     }
 }
 
-#[derive(Debug, derive_more::From)]
-pub struct StatusTextError(pub fmt::Error);
-
 /// Errors from the generic ballet loop.
 #[derive(Debug, derive_more::From)]
 pub enum Error<FlushError> {
     /// A runtime linkage parameter was invalid.
     Linkage(LinkageError),
     /// Formatting the status line failed.
-    StatusText(StatusTextError),
+    StatusText(fmt::Error),
     /// A device-envoy-core operation failed (for example, the background_bitmap's
     /// dimensions didn't match the frame's).
     Core(CoreError),
@@ -147,7 +150,7 @@ fn sample_duration(_started: Instant) -> Duration {
 fn status_text(
     sample_index: usize,
     last_sample_duration: Option<Duration>,
-) -> Result<heapless::String<64>, StatusTextError> {
+) -> Result<heapless::String<64>, fmt::Error> {
     let mut status_text = heapless::String::<64>::new();
 
     let Some(last_sample_duration) = last_sample_duration else {

@@ -1,5 +1,7 @@
-//! The generic "skeleton clock" example: a motion-captured figure whose limbs
-//! act as clock hands, with hour/minute placards hanging from its hands.
+//! A clock display example that renders a motion-captured skeleton.
+//!
+//! The included asset originated in the Biovision Hierarchy motion-capture
+//! format and is stored as a compile-time `.lb.rs` linkage asset.
 
 use core::{array::from_fn, convert::Infallible, fmt};
 
@@ -32,9 +34,11 @@ use device_envoy_core::cyd::{
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
-pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11); // near-black warm charcoal (13, 13, 11)
+/// Near-black warm-charcoal background.
+pub const BACKGROUND_COLOR: Rgb888 = Rgb888::new(13, 13, 11);
 const FIGURE_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
-pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123); // warm pale gold (255, 214, 123)
+/// Warm pale-gold figure color.
+pub const FOREGROUND_COLOR: Rgb888 = Rgb888::new(255, 214, 123);
 const PLACARD_TEXT_COLOR: Rgb888 = BACKGROUND_COLOR; // dark text on the light sign face
 
 // ── Linkage ────────────────────────────────────────────────────────────
@@ -94,8 +98,11 @@ const MINUTE_SIGN_VALUE_CENTER: Point = Point::new(22, 56);
 
 // ── Screen / tile layout ─────────────────────────────────────────────────────
 
+/// Display orientation used by the skeleton-clock renderer.
 pub const ORIENTATION: Orientation = Orientation::Portrait;
+/// Font used for the clock placards.
 pub const TOP_FONT: MonoFont<'static> = FONT_7X13;
+/// Rectangle reserved for Wi-Fi status text.
 pub const WIFI_STATUS_RECTANGLE: Rectangle = Rectangle::new(Point::new(6, 6), Size::new(155, 14));
 const TIME_RECTANGLE: Rectangle = Rectangle::new(
     Point::new(
@@ -116,6 +123,7 @@ const FIGURE_Y: u32 = if WIFI_STATUS_RECTANGLE.top_left.y as u32 + WIFI_STATUS_R
 } else {
     TIME_RECTANGLE.top_left.y as u32 + TIME_RECTANGLE.size.height
 };
+/// Tile layout used to draw the skeleton figure.
 pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
     Point::new(0, FIGURE_Y as i32),
     Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),

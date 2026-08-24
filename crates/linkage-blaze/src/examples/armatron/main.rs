@@ -1,13 +1,14 @@
-//! Generic helpers for the armatron example.
+//! A reusable Armatron display example.
 //!
-//! The device-agnostic game loop lives here.
+//! The device-agnostic loop renders an articulated linkage and interactive
+//! controls through Device Envoy's CYD (Cheap Yellow Display) traits.
 //!
 //! The generic loop redraws every frame, updates immediate-mode controls, and
 //! flushes frames through [`CydDisplay`].
 
 mod controlled;
 mod controls;
-pub mod reverse_kinematics;
+mod reverse_kinematics;
 
 use core::convert::Infallible;
 
@@ -34,7 +35,9 @@ use reverse_kinematics::ReverseKinematics;
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 
+/// Background color for the Armatron display.
 pub const BACKGROUND_COLOR: Rgb888 = Rgb888::CSS_BLACK;
+/// Foreground color for the Armatron display.
 pub const FOREGROUND_COLOR: Rgb888 = Rgb888::CSS_WHITE;
 
 // ---- linkages ----
@@ -117,6 +120,7 @@ const ARM_PARAM_INDEXES: [usize; PARAM_SLIDER_COUNT] = {
     }
     indexes
 };
+/// Number of normalized linkage parameters used by the Armatron scene.
 pub const DOF: usize = LINKAGE.dof();
 
 const PROJECTION: Projection = Projection::front_perspective(
@@ -232,10 +236,10 @@ where
     }
 }
 
-/// Error from the generic armatron loop, generic over the CYD device error `CydError`.
+/// Error from the generic Armatron loop, generic over the display-device error `CydError`.
 ///
-/// Local UI errors such as [`UiError`] get a derived `From`, so they propagate
-/// with a plain `?`. The CYD device error `CydError` is the one exception: it
+/// Local UI errors get a derived `From`, so they propagate with a plain `?`.
+/// The display-device error `CydError` is the one exception: it
 /// is converted explicitly with `.map_err(Error::Cyd)` at the call site,
 /// because a blanket `From<CydError>` would overlap with those concrete `From`s under
 /// coherence.
@@ -250,8 +254,10 @@ pub enum Error<CydError> {
     Cyd(CydError),
 }
 
+/// Successful reason for leaving the Armatron application loop.
 #[derive(Debug)]
 pub enum Exit {
+    /// The user requested touch-screen calibration.
     CalibrationRequested,
 }
 
@@ -279,7 +285,7 @@ mod tests {
     #[test]
     fn tapping_the_calibrate_button_requests_calibration() -> Result<(), Error<CydMemoryError>> {
         let mut memory_cyd = test_memory_cyd();
-        let touch_rectangle = CALIBRATE_BUTTON.touch_rectangle();
+        let touch_rectangle = CALIBRATE_BUTTON.touch_rectangle;
         let touch_center = touch_rectangle.top_left
             + embedded_graphics::geometry::Point::new(
                 touch_rectangle.size.width as i32 / 2,

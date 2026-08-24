@@ -1,9 +1,13 @@
-//! Compile-time and host-side support for the Biovision Hierarchy (BVH)
-//! motion-capture file format.
+//! Support for the Biovision Hierarchy (BVH) motion-capture file format.
 //!
-//! [`Motion`] is always available and parses normalized, fixed-size motion at
-//! compile time without allocation. The optional `bvh` feature adds host-side
-//! parsing and conversion APIs such as [`parse`] and [`Clip`].
+//! [`Motion`] is always available: it parses fixed-size, normalized motion at
+//! compile time without allocation and works in `no_std` firmware. The
+//! optional `bvh` feature adds host-side parsing and conversion APIs such as
+//! [`parse`], [`Clip`], and [`build_linkage_buf`].
+//!
+//! Use `bvh::motion!` for embedded motion data. On a host,
+//! parse a complete BVH file with [`parse`], discover its linkage parameters,
+//! and convert it with [`build_linkage_buf`].
 
 #[path = "bvh_motion.rs"]
 mod motion;
