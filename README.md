@@ -1,6 +1,8 @@
 # linkage-blaze
 
 [![GitHub](https://img.shields.io/badge/github-linkage--blaze-8da0cb?style=flat&labelColor=555555&logo=github)](https://github.com/CarlKCarlK/linkage-blaze)
+[![crates.io](https://img.shields.io/crates/v/linkage-blaze?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze)
+[![docs.rs](https://img.shields.io/docsrs/linkage-blaze?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze)
 
 3D turtle graphics for animated jointed figures. Describe a figure with moves,
 turns, branches, links, joints, disks, and spheres. Then animate parameters to
@@ -23,15 +25,16 @@ bring it to life.
 
 ## What is Linkage Blaze?
 
-Linkage Blaze is Rust-based domain-spepcific language (DSL) for making animated jointed drawings. It works
-like 3D turtle graphics: move forward, turn, branch, draw links, place joints,
-and add simple shapes such as disks and spheres. Animate a few parameters, and
-the drawing moves.
+Linkage Blaze is a Rust-based domain-specific language (DSL) for making animated
+jointed drawings. It works like 3D turtle graphics: move forward, turn, branch,
+draw links, place joints, and add simple shapes such as disks and spheres.
+Animate a few parameters, and the drawing moves.
 
 The demos use this to make clocks, skeletons, dancers, and robot-arm-like
-figures. Everything is a Rust workspace that renders on microcontrollers (e.g.
-[Cheap Yellow Display (CYD)](https://github.com/CarlKCarlK/device-envoy) / ESP32
-boards) and in the browser via WASM.
+figures. The workspace targets microcontrollers (e.g., the [ESP32 CYD API]
+(https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html) and
+[RP CYD API](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html))
+and the browser via WASM.
 
 The default crate configuration is `no_std` and allocation-free, so figures
 live in flash and animate on small microcontrollers. An opt-in `alloc` feature
@@ -87,7 +90,7 @@ linkage![
 ]
 ```
 
-The linkage compiles to a `const` with no heap allocation and no runtime
+The linkage compiles into a `const` with no heap allocation and no runtime
 parsing, so it can live in flash on a microcontroller.
 
 ## Articles
@@ -96,22 +99,29 @@ parsing, so it can live in flash on a microcontroller.
   *expected August 2026*.
 
 
-## Rust Crate
+## Usage
 
-**`linkage-blaze`** is the single published crate. Its default build is
-allocation-free and does not require the Rust standard library. Enable `alloc`
-for runtime-owned programs and `bvh` for host-side motion-capture conversion.
-[![crates.io](https://img.shields.io/crates/v/linkage-blaze?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze)
-[![docs.rs](https://img.shields.io/docsrs/linkage-blaze?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze)
+The default `linkage-blaze` build is designed for embedded systems:
+
+- It does not require the Rust standard library (`no_std`).
+- It does not use heap allocation.
+- ESP and RP applications can use `LinkageFixed` and `linkage_fixed`.
+
+Optional features add host-side capabilities:
+
+- `alloc` enables owned parsing.
+- `bvh` enables host-side APIs for reading BVH (Biovision Hierarchy)
+  motion-capture files.
 
 ```toml
 [dependencies]
-linkage-blaze = "0.1.5"
+linkage-blaze = "<latest version>"
 ```
 
-Use `linkage_blaze::{LinkageFixed, linkage_fixed}` for allocation-free ESP and
-RP applications. Add `features = ["alloc"]` for owned parsing and
-`features = ["bvh"]` for host-side BVH APIs. Install the converter with:
+Replace `<latest version>` with the current release shown on
+[crates.io](https://crates.io/crates/linkage-blaze).
+
+Install the BVH converter with:
 
 ```bash
 cargo install linkage-blaze --features bvh --bin bvh-to-lb
