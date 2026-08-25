@@ -3,7 +3,11 @@ use core::{
     ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
 };
 
-/// 3D position or vector [x, y, z].
+/// 3D position or vector `[x, y, z]`.
+///
+/// `Vec3` is used for linkage positions and directions. Its arithmetic,
+/// indexing, array conversion, and approximate comparison are demonstrated in
+/// the [pose and coordinate example](crate::Pose#pose-and-coordinate-values).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Vec3(pub [f32; 3]);
 
@@ -121,6 +125,10 @@ impl Mul<f32> for Vec3 {
 ///
 /// Columns are local-frame axes: column 0 = +X (forward), column 1 = +Y
 /// (left), and column 2 = +Z (up).
+///
+/// Rotation constructors, axis accessors, matrix multiplication, array access,
+/// and approximate comparison are demonstrated in the
+/// [pose and coordinate example](crate::Pose#pose-and-coordinate-values).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Mat3(pub [[f32; 3]; 3]);
 

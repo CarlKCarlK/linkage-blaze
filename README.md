@@ -104,7 +104,7 @@ stores an allocation-free linkage in fixed-capacity arrays. Start at the origin,
 optionally define normalized parameters, and append movement and drawing steps
 with the fluent methods:
 
-```rust,no_run
+```rust
 # use linkage_blaze::LinkageFixed;
 const ARM: LinkageFixed<1, 1, 8> = LinkageFixed::start()
     .define_param("shoulder", 0.5)
@@ -121,7 +121,7 @@ capacity. Unused step capacity is allowed.
 [`LinkageFixed::combine`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html#method.combine)
 appends another linkage without replaying its initial `Start` step:
 
-```rust,no_run
+```rust
 # use linkage_blaze::LinkageFixed;
 const BASE: LinkageFixed<0, 0, 2> = LinkageFixed::start().forward(2.0);
 const TIP: LinkageFixed<0, 0, 2> = LinkageFixed::start().left(1.0);
@@ -136,7 +136,7 @@ Call [`LinkageFixed::view`](https://docs.rs/linkage-blaze/latest/linkage_blaze/s
 to borrow a linkage, then pass one normalized value per parameter to
 [`LinkageView::final_pose`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html#method.final_pose):
 
-```rust,no_run
+```rust
 # use linkage_blaze::{LinkageFixed, Vec3};
 # fn main() -> Result<(), linkage_blaze::Error> {
 const LINKAGE: LinkageFixed<1, 0, 4> = LinkageFixed::start()
@@ -156,7 +156,7 @@ evaluates strokes and shapes as an iterator of
 [`render::Item3d`](https://docs.rs/linkage-blaze/latest/linkage_blaze/render/enum.Item3d.html)
 values. A platform renderer can project and draw each item without allocating:
 
-```rust,no_run
+```rust
 # use linkage_blaze::{LinkageFixed, render::Item3d};
 # fn main() -> Result<(), linkage_blaze::Error> {
 const LINKAGE: LinkageFixed<0, 0, 3> = LinkageFixed::start()
@@ -183,7 +183,7 @@ examples for display integration.
 Put a long fluent expression in a `.lb.rs` asset file. The file contains one
 `linkage![...]` expression with leading-dot methods:
 
-```rust,no_run
+```rust
 # use linkage_blaze::{LinkageFixed, linkage};
 # macro_rules! __linkage_blaze_start {
 #     () => { LinkageFixed::<1, 1, 4>::start() };
@@ -232,7 +232,7 @@ preview, and use **Save** or **Save As** to write the edited `.lb.rs` file.
 Editor output uses the same syntax as the allocator-backed parser, so it can be
 checked before use:
 
-```rust,no_run
+```rust
 # #[cfg(feature = "alloc")]
 # fn main() -> Result<(), String> {
 use linkage_blaze::LinkageBuf;

@@ -115,7 +115,7 @@ Formatting, all-features rustdoc, and `cargo check-all` pass.
   found no external API requirement: `examples::ui` and
   `armatron::reverse_kinematics`; the internal `StatusTextError` wrapper was
   removed. Public example modules and platform entry points remain available.
-- Converted public examples to `rust,no_run` doctests where an executable
+- Converted public examples to `rust` doctests where an executable
   example is appropriate. External `.lb.rs` and BVH asset inclusions are shown
   as explicitly labeled `text` excerpts because their call-site assets cannot
   be supplied to rustdoc.
@@ -140,7 +140,7 @@ All-features doctests and rustdoc pass, and `cargo check-all` passes.
   for; removed names, root rendering paths, compatibility paths, and private
   helpers are absent.
 
-### 7. Make `linkage_file!` the only public asset-loading macro — Complete
+### 7. Make `linkage_file!` the only public asset-loading macro — Complete (reopened and revalidated)
 
 This follow-up deliberately amends the earlier decision to expose three ways
 to load the same `.lb.rs` asset. `linkage_file!` already infers dimensions and
@@ -179,7 +179,7 @@ Implementation work:
   generated module. Link that example to the macro documentation for the full
   generated API. Readers should be able to answer when to choose `view()`,
   `fixed()`, or `buf()` without discovering another page by accident.
-- Prefer `rust,no_run` doctests for every example that can compile in rustdoc.
+- Prefer `rust` doctests for every example that can compile in rustdoc.
   Because a `linkage_file!` invocation needs a real call-site-relative `.lb.rs`
   asset that rustdoc cannot provide, label that invocation as an external-file
   excerpt rather than disguising it as a doctest. Compile-check the same
@@ -208,6 +208,12 @@ Validation:
 - Modify only this repository and do not commit. Mark Step 7 complete only when
   all validation passes.
 
+Reopened review finding: the original `#[cfg(feature = "alloc")]` tokens were
+evaluated in downstream macro consumers, so `buf()` could be incorrectly
+omitted or exposed. Feature-selected, hidden expansion helpers now decide this
+while `linkage-blaze` itself is built. Executable doctests and downstream
+fixture tests cover both feature configurations.
+
 Implementation and validation complete: `linkage_file!` now constructs its
 fixed and optional growable access directly, the standalone loaders and their
 direct tests/docs are removed, and the generated rustdoc macro list contains
@@ -215,6 +221,164 @@ only `linkage!` and `linkage_file!`. Fixture tests cover no-`alloc` metadata,
 fixed/view access, and `alloc` buffer access. Formatting, focused tests,
 all-features tests and doctests, all-features rustdoc, `cargo check-all`, and
 `git diff --check` pass.
+
+### 8. Give every important public API a tested example — Complete (reopened and revalidated)
+
+`LinkageFixed` is the primary allocation-free construction type, but its type
+page does not yet teach the complete construction flow well enough. It is the
+starting point for a broader final coverage pass: every important user-facing
+operation should have a doctest or link directly to one. Improve this later
+without redesigning the API or reopening the storage decisions resolved above.
+
+Coverage rule:
+
+- Inventory the generated all-features public API by module before editing.
+  Classify each public module, type, trait, macro, associated item, and method
+  as user-facing behavior or support/data surface. Record genuinely ambiguous
+  classifications instead of silently excluding them.
+- Every important user-facing operation must either contain a focused
+  `rust` doctest or link directly to a shared `rust` doctest that
+  names and calls that exact operation. A generic link to the crate Quick Start
+  does not count unless the Quick Start actually exercises the item.
+- Shared examples are preferred for coherent method families. Each covered
+  method's documentation must identify what the shared example demonstrates
+  and link to its exact heading or item, so readers do not have to search.
+- Public data carriers, fields, variants, constants, and trivial query methods
+  do not each need artificial standalone examples when their use is already
+  obvious in a containing tested example. Their documentation must link to
+  that example when seeing real usage materially improves understanding.
+- External-file APIs are not exempt from compile checking. If rustdoc cannot
+  directly provide a call-site-relative asset, add a small published doc
+  fixture or narrowly scoped documentation support that lets the public example
+  compile without teaching test-only paths or exposing a new user-facing API.
+  Keep a matching integration test only as additional coverage, not as a
+  substitute for a doctest.
+
+Documentation work:
+
+- Put one compact canonical `rust` doctest on `LinkageFixed`. Define a
+  small `const` linkage with exact, explained `DOF`, `MARKS`, and `N` values;
+  include a named parameter, movement, a mark, and one visible rendering
+  operation. Then obtain a view, evaluate parameter values, and verify a
+  meaningful final pose or marked pose. Hide only irrelevant setup.
+- Explain the three const generic capacities in reader-facing language,
+  including the implicit start step and the difference between step capacity
+  `N` and active step count. State that `LinkageFixed` does not impose a
+  built-in 256-step limit: callers choose `N`, while `linkage_file!` measures
+  an asset and supplies its exact value.
+- Explain when users should construct `LinkageFixed` directly and when they
+  should declare an external `.lb.rs` asset with `linkage_file!`. Link directly
+  to the saved-linkage example and to `LinkageView` for evaluation/rendering.
+- Apply the coverage rule to every public `LinkageFixed` associated constant
+  and method. Group fluent construction methods into a few coherent examples
+  rather than duplicating boilerplate on every method.
+- Provide focused examples for the concepts that do not fit naturally in the
+  canonical construction example: combining linkages, parameter
+  freezing/retaining, simplifying fixed operations, converting to
+  `LinkageBuf` with `alloc`, and discovering or validating capacities. Examples
+  must demonstrate outcomes, not merely compile a chain of calls.
+- Keep imports concise and use imported names instead of `crate::`-prefixed
+  paths in code. Use `rust`, not `ignore`, for compilable examples.
+- Continue through the other important public surfaces after `LinkageFixed`,
+  including `LinkageView`, `LinkageBuf`, evaluation and rendering operations,
+  `linkage!`/`linkage_file!`, and the always-present and feature-gated `bvh`
+  APIs. Include public `examples` entry points where downstream applications
+  are expected to call them; do not force examples onto implementation-only
+  support items merely because macro expansion requires public visibility.
+
+Required root-item coverage checklist:
+
+- [`Mat3`] — show its role as a [`Pose`] orientation, construct or obtain a
+  rotation, and demonstrate the resulting forward/left/up axis. Link its array
+  accessors, rotation constructors, axis queries, comparison helper, and
+  multiplication behavior to examples that exercise them.
+- [`Param`] and [`ParamArg`] — show how a named normalized linkage parameter is
+  defined and how a step argument maps that normalized value into an operation
+  range. Prefer links from these data types to a fluent `LinkageFixed`
+  construction example rather than asking users to construct private fields.
+- [`Pose`] — show position and orientation together, including a pose obtained
+  by evaluating a linkage. Cover construction, the start pose, position,
+  orientation, projection, and approximate comparison through doctests or
+  precise links.
+- [`StyledPose`] — show why it differs from [`Pose`] by demonstrating evaluated
+  drawing state as well as transform state. Cover every public query method in
+  the linked example.
+- [`Vec3`] — demonstrate positions/directions, array conversion or indexing,
+  vector arithmetic, scaling, and approximate comparison without presenting it
+  as an unrelated general-purpose math library.
+- [`Error`] — show normal `Result` propagation and at least one meaningful
+  handled failure, such as invalid parameters or missing/ambiguous marks. Link
+  producing methods and relevant variants to those examples.
+- [`PenState`] — show how pen-up and pen-down linkage steps affect rendered
+  strokes or styled evaluation; do not provide a context-free enum-only
+  example.
+- [`Step`] and [`StepArg`] — connect their variants to the fluent linkage DSL
+  and evaluation behavior. Use direct construction only where it is genuinely
+  part of the intended API; otherwise link to tested fluent construction
+  examples that produce and exercise the corresponding operations.
+- [`Rgb888`], [`RgbColor`], and [`WebColors`] — use one coherent color example
+  showing numeric RGB construction, channel access through [`RgbColor`], and a
+  CSS named color from [`WebColors`] in linkage rendering. Each re-export's
+  documentation must link directly to that tested example.
+
+This checklist is a minimum, not the complete inventory. Discovering another
+important public item during the all-features audit still invokes the coverage
+rule above.
+
+Reopened review findings: the prior `rust` examples hid runtime-invalid
+assertions, and several public methods had only implied rather than exact links
+to shared examples. The examples are now executable `rust` doctests by default,
+floating-point assertions use tolerances, and public method families link to
+their named shared examples.
+
+**Complete.** The all-features inventory was reviewed by crate root, `render`,
+`bvh`, storage/evaluation types, and public example entry points. User-facing
+construction, evaluation, rendering, color, coordinate, error, pen-state, and
+BVH operations now have focused `rust` examples or links to named shared
+examples. Data carriers and platform-boundary entry points were retained with
+contextual documentation; macro-expansion helpers remain implementation-only.
+The host BVH example uses a small inline published fixture because a
+call-site-relative external asset cannot be supplied by rustdoc.
+
+Validation:
+
+- Run all-features doctests and record the passing count.
+- Regenerate all-features rustdoc and read the rendered `LinkageFixed` page in
+  order. It must establish the type's purpose, explain all capacities, show a
+  useful first construction, and provide obvious routes to composition,
+  specialization, file assets, and evaluation.
+- Review every all-features rustdoc module page and verify each important item
+  satisfies the coverage rule. Follow every example link and confirm its target
+  names and exercises the referenced operation.
+- Search generated rustdoc and source documentation for `ignore` fences and
+  unlinked claims such as "see the example." Replace them with compiling
+  `rust` doctests or precise links unless a genuinely unavoidable case
+  is documented in the spec for human review.
+- Run `cargo fmt --all`, focused library tests affected by documentation
+  examples, `cargo check-all`, and `git diff --check`. Do not suppress warnings
+  or modify sibling repositories.
+
+Validation completed: `cargo fmt --all`, 35 executable all-features doctests,
+focused downstream `linkage_file!` tests with and without `alloc`, 164
+all-features library tests, all-features rustdoc inspection, escalated
+`cargo check-all`, and `git diff --check` passed. The validation output retains the repository's
+existing long-const-evaluation, embedded linker, generated-accessor, and
+upstream future-incompatibility warnings; none were suppressed.
+
+The executable-doctest follow-up is also complete: the color example's
+rendering statements now execute inside `main`, the valid inline BVH fixture is
+attached to the feature-gated host `parse` API rather than guarded inside the
+always-present module example, and alloc-gated method examples no longer repeat
+an ineffective doctest feature guard. All 35 all-features doctests pass without
+rustdoc's non-running-`main` warning; the no-default-features run also passes
+its 31 applicable doctests.
+
+The reopened executable-doctest review is complete: hidden examples now use
+executable `main` functions, and the BVH, render, error, canonical linkage,
+fluent-operation, and styled-pose assertions all run. The render example calls
+the `Stroke`, `Disk`, and `Sphere` payload accessors directly, and the fluent
+method family links to an example that invokes each fixed and parameterized
+operation.
 
 ## Crate Landing Page
 
@@ -228,7 +392,7 @@ Work items:
 
 - Add a short Quick Start near the beginning of the crate documentation, before
   the extended gallery and example material.
-- Make the Quick Start a compilable `rust,no_run` doctest. It should construct a
+- Make the Quick Start a compilable `rust` doctest. It should construct a
   small `const` [`LinkageFixed`], obtain its [`LinkageView`], supply one animated
   parameter value, and evaluate a visible result such as the final [`Pose`].
 - Keep the example small enough to reveal the core flow at a glance: define a
@@ -425,6 +589,8 @@ Work item:
 - Replace "expression/storage type" in the index summary with a direct
   description such as "An allocation-free linkage with compile-time-fixed
   capacities." Link to the crate Quick Start.
+- Complete the type-page examples and method-level coverage described in
+  Step 8 before considering this documentation review finished.
 
 #### `LinkageView`
 

@@ -350,6 +350,20 @@ pub fn bvh_to_lb_rs<const DOF: usize, const MARKS: usize>(
 }
 
 /// Parse Biovision Hierarchy skeleton and motion text into a [`Clip`].
+///
+/// ```rust
+/// # use linkage_blaze::bvh::{build_linkage_buf, discover_parameters as discover_bvh_parameters, parse as parse_bvh, sample_params as bvh_sample_params, to_lb_rs as bvh_to_lb_rs};
+/// # fn main() -> Result<(), linkage_blaze::bvh::Error> {
+/// const SOURCE: &str = "HIERARCHY ROOT Root { OFFSET 0 0 0 CHANNELS 6 Xposition Yposition Zposition Xrotation Yrotation Zrotation End Site { OFFSET 0 1 0 } } MOTION Frames: 1 Frame Time: 0.0333333 0 0 0 0 0 0";
+/// let clip = parse_bvh(SOURCE)?;
+/// let layout = discover_bvh_parameters(&clip)?;
+/// let params = bvh_sample_params::<6>(&layout, &clip.samples[0])?;
+/// let linkage = build_linkage_buf::<6, 0>(&clip, &layout, &[])?;
+/// let _saved_source = bvh_to_lb_rs::<6, 0>(SOURCE, &[])?;
+/// assert_eq!(params.len(), linkage.view().dof());
+/// # Ok(())
+/// # }
+/// ```
 pub fn parse_bvh(source: &str) -> Result<Clip, Error> {
     let mut parser = BvhParser::new(source);
 

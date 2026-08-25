@@ -56,10 +56,33 @@ use alloc::{borrow::ToOwned, boxed::Box, format, string::String, vec::Vec};
 use core::fmt;
 
 /// RGB color used by pen and shape operations in a linkage.
+///
+/// Construct numeric colors with [`Rgb888::new`], inspect channels through
+/// [`RgbColor`], or use a CSS name from [`WebColors`]. The same values are used
+/// by rendered [`render::Item3d`] geometry:
+///
+/// # Color and rendering
+///
+/// ```rust
+/// # use linkage_blaze::{LinkageFixed, Rgb888, RgbColor, WebColors};
+/// # fn main() -> Result<(), linkage_blaze::Error> {
+/// const LINKAGE: LinkageFixed<0, 0, 3> = LinkageFixed::start()
+///     .pen_color(Rgb888::new(12, 34, 56))
+///     .forward(1.0);
+/// let numeric = Rgb888::new(12, 34, 56);
+/// assert_eq!((numeric.r(), numeric.g(), numeric.b()), (12, 34, 56));
+/// let named = Rgb888::CSS_BLUE;
+/// assert_eq!(named.b(), 255);
+/// let _item = LINKAGE.view().draw_items_3d(&[])?.next();
+/// # Ok(())
+/// # }
+/// ```
 pub use embedded_graphics::pixelcolor::Rgb888;
 /// CSS named colors available as `Rgb888::CSS_*` constants in linkage assets.
+/// See the [color and rendering example](Rgb888#color-and-rendering).
 pub use embedded_graphics::pixelcolor::WebColors;
 /// Channel access and basic color constants for [`Rgb888`].
+/// See the [color and rendering example](Rgb888#color-and-rendering).
 pub use embedded_graphics::prelude::RgbColor;
 use math::degrees_to_radians;
 pub use math::{Mat3, Vec3};
@@ -67,6 +90,9 @@ pub use math::{Mat3, Vec3};
 use render::{Disk, Item3d, Projection, Sphere, Stroke};
 
 /// One movement, drawing, shape, mark, or restore operation in a linkage.
+///
+/// [`LinkageFixed`] and [`linkage!`] are the usual ways to create steps; direct
+/// construction is useful when inspecting or implementing a linkage backend.
 ///
 /// Model-space axes:
 ///
@@ -122,6 +148,10 @@ pub enum Step {
 
 /// A fixed operation value or a value interpolated from a normalized linkage parameter.
 ///
+/// Fluent `*_param` methods create the [`Variable`](Self::Variable) form and
+/// map a normalized parameter to an operation range. See the
+/// [canonical linkage example](LinkageFixed#canonical-construction-and-evaluation).
+///
 /// Rotation arguments are stored as radians. Translation arguments are stored as linkage distances.
 #[derive(Clone, Copy, Debug)]
 pub enum StepArg {
@@ -132,6 +162,10 @@ pub enum StepArg {
 }
 
 /// A linkage parameter reference and the operation-value range it controls.
+///
+/// The index refers to a named parameter in [`LinkageFixed`]; `low` and `high`
+/// are the operation's endpoints, while evaluation still receives a normalized
+/// `0.0..=1.0` value. See [`LinkageFixed::define_param`] and its fluent methods.
 #[derive(Clone, Copy, Debug)]
 pub struct ParamArg {
     index: usize,
@@ -140,6 +174,9 @@ pub struct ParamArg {
 }
 
 /// A named linkage parameter with a normalized default value.
+///
+/// Parameters are declared with [`LinkageFixed::define_param`] and inspected
+/// through [`LinkageView::param`].
 #[derive(Clone, Copy, Debug)]
 pub struct Param {
     name: &'static str,
@@ -153,12 +190,16 @@ impl Param {
     };
 
     /// Return the parameter's display name.
+    ///
+    /// See the [canonical construction and evaluation example](LinkageFixed#canonical-construction-and-evaluation).
     #[must_use]
     pub const fn name(self) -> &'static str {
         self.name
     }
 
     /// Return the parameter's normalized default value.
+    ///
+    /// See the [canonical construction and evaluation example](LinkageFixed#canonical-construction-and-evaluation).
     #[must_use]
     pub const fn default(self) -> f32 {
         self.default
@@ -207,18 +248,25 @@ impl ParamArg {
     }
 
     /// Return the zero-based linkage parameter index.
+    ///
+    /// `ParamArg` values are produced by fluent `*_param` methods; see the
+    /// [canonical construction and evaluation example](LinkageFixed#canonical-construction-and-evaluation).
     #[must_use]
     pub const fn index(self) -> usize {
         self.index
     }
 
     /// Return the low end of the parameter range.
+    ///
+    /// The range is in operation units, not normalized parameter units.
     #[must_use]
     pub const fn low(self) -> f32 {
         self.low
     }
 
     /// Return the high end of the parameter range.
+    ///
+    /// The range is in operation units, not normalized parameter units.
     #[must_use]
     pub const fn high(self) -> f32 {
         self.low + self.span
@@ -226,6 +274,28 @@ impl ParamArg {
 }
 
 /// Error returned by linkage evaluation and named-mark lookup.
+///
+/// Normal evaluation uses `Result` propagation. Handle [`Self::InvalidParameter`]
+/// when user-controlled normalized values are invalid, and
+/// [`Self::MarkNotFound`] or [`Self::MarkAmbiguous`] when looking up named marks.
+/// The producing operations are [`LinkageView::final_pose`] and
+/// [`LinkageView::pose_by_mark_name`].
+///
+/// ```rust
+/// # use linkage_blaze::{Error, LinkageFixed};
+/// # fn main() {
+/// let linkage: LinkageFixed<1, 0, 2> = LinkageFixed::start()
+///     .define_param("distance", 0.5)
+///     .forward_param("distance", 0.0, 1.0);
+/// match linkage.view().final_pose(&[1.5]) {
+///     Err(Error::InvalidParameter { index, value }) => {
+///         assert_eq!(index, 0);
+///         assert_eq!(value, 1.5);
+///     }
+///     _ => panic!("expected invalid parameter"),
+/// }
+/// # }
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Error {
     /// A parameter was outside the normalized range `0.0..=1.0`.
@@ -267,13 +337,13 @@ impl std::error::Error for Error {}
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust
 /// # use linkage_blaze::{LinkageFixed, Vec3};
 /// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
 ///
-/// # fn example() -> Result<(), linkage_blaze::Error> {
+/// # fn main() -> Result<(), linkage_blaze::Error> {
 /// # let view = LINKAGE.view();
 /// let pose = view.final_pose(&[0.5])?;
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
@@ -345,7 +415,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::{LinkageFixed, Vec3};
     /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("yaw", 0.5)
@@ -365,7 +435,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.0)
@@ -384,7 +454,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.25)
@@ -419,7 +489,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// for a given linkage, so resolve it once — ideally in a `const` — and never
     /// per frame:
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// # const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     /// #     .define_param("hour", 0.5)
@@ -485,6 +555,8 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// Copy this view into fixed backing storage.
     ///
     /// `N` must be large enough for the active steps.
+    ///
+    /// See the [fixed-storage example](LinkageBuf#converting-from-fixed-storage).
     pub const fn to_fixed<const N: usize>(self) -> LinkageFixed<DOF, MARKS, N> {
         assert!(
             self.steps.len() <= N,
@@ -572,6 +644,8 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// The output is intended for editor interchange and generated linkage files.
     /// Color values are emitted as `Rgb888::new(r, g, b)` calls.
+    ///
+    /// See the [growable storage and serialization examples](LinkageBuf#building-linkage-expressions).
     #[cfg(feature = "alloc")]
     #[must_use]
     pub fn to_lb_rs(&self) -> String {
@@ -654,7 +728,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<3, 0, 8> = LinkageFixed::start()
     ///     .define_param("x", 0.0)
@@ -685,7 +759,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::{LinkageFixed, Vec3};
     /// const LINKAGE: LinkageFixed<2, 0, 8> = LinkageFixed::start()
     ///     .define_param("yaw", 0.5)
@@ -693,7 +767,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///     .yaw_param("yaw", -90.0, 90.0)
     ///     .forward_param("distance", 1.0, 5.0);
     ///
-    /// # fn example() -> Result<(), linkage_blaze::Error> {
+    /// # fn main() -> Result<(), linkage_blaze::Error> {
     /// # let view = LINKAGE.view();
     /// let pose = view.final_pose(&[0.5, 0.6])?;
     /// assert!(pose.position().is_close_to(&Vec3::from([3.4, 0.0, 0.0]), 1e-5));
@@ -711,9 +785,9 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::{LinkageFixed, Vec3};
-    /// # fn example() -> Result<(), linkage_blaze::Error> {
+    /// # fn main() -> Result<(), linkage_blaze::Error> {
     /// const LINKAGE: LinkageFixed<0, 1, 4> =
     ///     LinkageFixed::start().forward(2.0).mark("tip");
     /// let pose = LINKAGE.view().pose_by_mark_name(&[], "tip")?;
@@ -732,13 +806,13 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::{LinkageFixed, Vec3};
     /// const LINKAGE: LinkageFixed<1, 0, 8> = LinkageFixed::start()
     ///     .define_param("distance", 0.5)
     ///     .forward_param("distance", 1.0, 5.0);
     ///
-    /// # fn example() -> Result<(), linkage_blaze::Error> {
+    /// # fn main() -> Result<(), linkage_blaze::Error> {
     /// # let view = LINKAGE.view();
     /// let mut poses = view.poses(&[0.5])?;
     /// let start = poses.next().expect("linkage always has start pose");
@@ -759,13 +833,13 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::{LinkageFixed, Vec3, PenState};
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
-    /// # fn example() -> Result<(), linkage_blaze::Error> {
+    /// # fn main() -> Result<(), linkage_blaze::Error> {
     /// # let view = LINKAGE.view();
     /// let mut styled = view.styled_poses(&[])?;
     /// let start = styled.next().expect("has start");
@@ -788,13 +862,13 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::{LinkageFixed, render::Item3d};
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
     ///     .forward(2.0);
     ///
-    /// # fn example() -> Result<(), linkage_blaze::Error> {
+    /// # fn main() -> Result<(), linkage_blaze::Error> {
     /// # let view = LINKAGE.view();
     /// let has_stroke = view.draw_items_3d(&[])?
     ///     .any(|item| matches!(item, Item3d::Stroke(_)));
@@ -817,7 +891,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<0, 0, 8> = LinkageFixed::start()
     ///     .forward(1.0)
@@ -1404,57 +1478,73 @@ macro_rules! emit_fixed_step_methods {
     () => {
         // Fixed-argument methods (yaw, pitch, roll, forward, etc.)
         /// Rotate about local +Z by a fixed number of degrees.
+        ///
+        /// See the [canonical construction and evaluation example](LinkageFixed#fluent-operations).
         pub const fn yaw(self, degrees: f32) -> Self {
             self.push(Step::Yaw(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         /// Rotate about local +Y by a fixed number of degrees.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn pitch(self, degrees: f32) -> Self {
             self.push(Step::Pitch(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         /// Rotate about local +X by a fixed number of degrees.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn roll(self, degrees: f32) -> Self {
             self.push(Step::Roll(StepArg::Fixed(degrees_to_radians(degrees))))
         }
         /// Move along local +X by a fixed linkage distance.
+        ///
+        /// See the [canonical construction and evaluation example](LinkageFixed#fluent-operations).
         pub const fn forward(self, distance: f32) -> Self {
             self.push(Step::Forward(StepArg::Fixed(distance)))
         }
         /// Move along local +Y by a fixed linkage distance.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn left(self, distance: f32) -> Self {
             self.push(Step::Left(StepArg::Fixed(distance)))
         }
         /// Move along local +Z by a fixed linkage distance.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn up(self, distance: f32) -> Self {
             self.push(Step::Up(StepArg::Fixed(distance)))
         }
         /// Stop emitting strokes for subsequent movement.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn pen_up(self) -> Self {
             self.push(Step::PenUp)
         }
         /// Emit strokes for subsequent movement.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn pen_down(self) -> Self {
             self.push(Step::PenDown)
         }
         /// Set the color used by subsequent emitted geometry.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn pen_color(self, color: Rgb888) -> Self {
             self.push(Step::PenColor(color))
         }
         /// Set the stroke width in linkage units.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn pen_width(self, width: f32) -> Self {
             assert!(width >= 0.0, "pen width must be non-negative");
             self.push(Step::PenWidth(width))
         }
         /// Emit a filled disk with a fixed radius at the current pose.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn disk(self, radius: f32) -> Self {
             self.push(Step::Disk(radius))
         }
         /// Emit a sphere with a fixed radius at the current pose.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn sphere(self, radius: f32) -> Self {
             self.push(Step::Sphere(radius))
         }
 
         // Parameterized methods (yaw_param, pitch_param, etc.)
         /// Rotate about local +Z using a named parameter mapped to degrees.
+        ///
+        /// See the [canonical construction and evaluation example](LinkageFixed#fluent-operations).
         pub const fn yaw_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Yaw(StepArg::Variable(ParamArg::from_degrees(
@@ -1462,6 +1552,7 @@ macro_rules! emit_fixed_step_methods {
             ))))
         }
         /// Rotate about local +Y using a named parameter mapped to degrees.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn pitch_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Pitch(StepArg::Variable(ParamArg::from_degrees(
@@ -1469,6 +1560,7 @@ macro_rules! emit_fixed_step_methods {
             ))))
         }
         /// Rotate about local +X using a named parameter mapped to degrees.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn roll_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Roll(StepArg::Variable(ParamArg::from_degrees(
@@ -1476,6 +1568,8 @@ macro_rules! emit_fixed_step_methods {
             ))))
         }
         /// Move along local +X using a named parameter mapped to distances.
+        ///
+        /// See the [canonical construction and evaluation example](LinkageFixed#fluent-operations).
         pub const fn forward_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Forward(StepArg::Variable(ParamArg::new(
@@ -1483,6 +1577,7 @@ macro_rules! emit_fixed_step_methods {
             ))))
         }
         /// Move along local +Y using a named parameter mapped to distances.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn left_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Left(StepArg::Variable(ParamArg::new(
@@ -1490,16 +1585,19 @@ macro_rules! emit_fixed_step_methods {
             ))))
         }
         /// Move along local +Z using a named parameter mapped to distances.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn up_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::Up(StepArg::Variable(ParamArg::new(index, low, high))))
         }
         /// Emit a disk whose radius comes from a named parameter.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn disk_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::DiskParam(ParamArg::new(index, low, high)))
         }
         /// Emit a sphere whose radius comes from a named parameter.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn sphere_param(self, name: &str, low: f32, high: f32) -> Self {
             let index = self.expect_param_index(name);
             self.push(Step::SphereParam(ParamArg::new(index, low, high)))
@@ -1508,6 +1606,7 @@ macro_rules! emit_fixed_step_methods {
         // Restore is an ordinary fluent DSL method. Structural extension macros
         // resize the backing array before replaying it.
         /// Restore the pose and pen state saved by an earlier named mark.
+        /// See the [canonical construction example](LinkageFixed#fluent-operations).
         pub const fn restore(self, name: &'static str) -> Self {
             let index = match self.mark_index(name) {
                 Some(i) => i,
@@ -1753,6 +1852,78 @@ impl LinkageStepCount {
 /// enabling `const` construction and evaluation without allocation. Use the
 /// fluent DSL methods to define a linkage in firmware or other `no_std` code.
 ///
+/// The three const capacities are independent: `DOF` is the number of runtime
+/// parameters, `MARKS` is the number of named pose slots, and `N` is the step
+/// storage capacity. `N` includes the implicit [`Step::Start`] step; the active
+/// count is [`step_count`](Self::step_count). There is no built-in 256-step
+/// limit: choose `N` for the asset, or let [`linkage_file!`] measure an external
+/// `.lb.rs` asset and generate the fixed storage.
+///
+/// Use [`LinkageFixed`] directly for small source-defined linkages. Use
+/// [`linkage_file!`] for a saved linkage asset, then obtain its
+/// [`LinkageView`] for evaluation and rendering. The canonical example below
+/// shows construction, parameter evaluation, marks, and visible geometry.
+///
+/// # Fluent operations
+///
+/// This compact example exercises the fixed and parameterized construction methods.
+///
+/// ```rust
+/// # use linkage_blaze::{LinkageFixed, Rgb888};
+/// const LINKAGE: LinkageFixed<1, 1, 32> = LinkageFixed::start()
+///     .define_param("value", 0.5)
+///     .yaw(15.0)
+///     .pitch(5.0)
+///     .roll(2.0)
+///     .forward(1.0)
+///     .left(1.0)
+///     .up(1.0)
+///     .pen_up()
+///     .pen_down()
+///     .pen_color(Rgb888::new(0, 0, 255))
+///     .pen_width(0.25)
+///     .disk(0.25)
+///     .sphere(0.5)
+///     .yaw_param("value", -15.0, 15.0)
+///     .pitch_param("value", -5.0, 5.0)
+///     .roll_param("value", -2.0, 2.0)
+///     .forward_param("value", 0.0, 1.0)
+///     .left_param("value", 0.0, 1.0)
+///     .up_param("value", 0.0, 1.0)
+///     .disk_param("value", 0.1, 0.5)
+///     .sphere_param("value", 0.1, 0.5)
+///     .mark("saved")
+///     .restore("saved");
+/// assert!(LINKAGE.step_count() > 1);
+/// ```
+///
+/// # Canonical construction and evaluation
+///
+/// ```rust
+/// # use linkage_blaze::{LinkageFixed, Rgb888, Vec3};
+/// const LINKAGE: LinkageFixed<1, 1, 8> = LinkageFixed::start()
+///     .define_param("reach", 0.5)
+///     .forward_param("reach", 1.0, 3.0)
+///     .mark("tip")
+///     .pen_color(Rgb888::new(0, 0, 255))
+///     .disk(0.25);
+/// const ACTIVE_STEPS: usize = LINKAGE.step_count();
+/// const _: () = assert!(ACTIVE_STEPS < LinkageFixed::<1, 1, 8>::N);
+/// const _: () = assert!(LinkageFixed::<1, 1, 8>::DOF == 1);
+/// const _: () = assert!(LinkageFixed::<1, 1, 8>::MARKS == 1);
+///
+/// # fn main() -> Result<(), linkage_blaze::Error> {
+/// let view = LINKAGE.view();
+/// let params = [0.5];
+/// let final_pose = view.final_pose(&params)?;
+/// assert!(final_pose.position().is_close_to(&Vec3::from([2.0, 0.0, 0.0]), 1e-5));
+/// let marked_pose = view.pose_by_mark_name(&params, "tip")?;
+/// assert!(marked_pose.position().is_close_to(&Vec3::from([2.0, 0.0, 0.0]), 1e-5));
+/// assert_eq!(view.draw_item_3d_count(), 2);
+/// # Ok(())
+/// # }
+/// ```
+///
 /// Parameter indexes are identities. Parameter names are labels/selectors and may
 /// be duplicated. Use `freeze_param_index` and `retain_param_indexes` for precise
 /// specialization. Name-based freezing requires exactly one matching parameter,
@@ -1770,6 +1941,8 @@ pub struct LinkageFixed<const DOF: usize, const MARKS: usize, const N: usize> {
 
 impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MARKS, N> {
     /// Start a fixed-size linkage with an implicit origin row.
+    ///
+    /// See the [canonical construction and evaluation example](#canonical-construction-and-evaluation).
     pub const fn start() -> Self {
         assert!(N > 0, "linkage must have room for the implicit start step");
         Self {
@@ -1782,13 +1955,19 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
         }
     }
 
-    /// Number of runtime parameters this linkage expects.
+    /// Number of runtime parameters this linkage expects (`DOF`).
+    ///
+    /// See the [canonical construction and evaluation example](#canonical-construction-and-evaluation).
     pub const DOF: usize = DOF;
 
-    /// Step-slot capacity of this linkage.
+    /// Step-slot capacity of this linkage (`N`), including the implicit start step.
+    ///
+    /// See the [capacity example](#canonical-construction-and-evaluation).
     pub const N: usize = N;
 
-    /// Mark-slot capacity of this linkage.
+    /// Mark-slot capacity of this linkage (`MARKS`).
+    ///
+    /// See the [capacity example](#canonical-construction-and-evaluation).
     pub const MARKS: usize = MARKS;
 
     /// Create a borrowed view for evaluation and rendering.
@@ -1796,6 +1975,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// The view erases step capacity `N` while preserving linkage-parameter
     /// count `DOF`.
     /// All evaluation methods (poses, draw_items_3d, etc.) operate on the view.
+    ///
+    /// See the [canonical construction and evaluation example](#canonical-construction-and-evaluation).
     #[must_use]
     #[inline]
     pub const fn view(&self) -> LinkageView<'_, DOF, MARKS> {
@@ -1808,6 +1989,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     }
 
     /// Return the number of runtime parameters this linkage expects.
+    ///
+    /// See the [canonical construction and evaluation example](#canonical-construction-and-evaluation).
     #[must_use]
     pub const fn dof(&self) -> usize {
         DOF
@@ -1816,6 +1999,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// Return the number of steps actually used (including the implicit start step).
     ///
     /// Use this to discover the correct `N` after building with an oversized capacity.
+    ///
+    /// See the [capacity example](#canonical-construction-and-evaluation).
     #[must_use]
     pub const fn step_count(&self) -> usize {
         self.len
@@ -1836,7 +2021,12 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 
     /// Return the number of parameters actually defined.
     ///
+    /// This is useful when discovering capacities from an intentionally oversized
+    /// declaration; `linkage_file!` performs the same measurement for assets.
+    ///
     /// Use this to discover the correct `DOF` after building with an oversized capacity.
+    ///
+    /// See the [capacity example](#canonical-construction-and-evaluation).
     #[must_use]
     pub const fn param_count(&self) -> usize {
         self.param_len
@@ -1845,6 +2035,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// Return the number of distinct mark names actually used.
     ///
     /// Use this to discover the correct `MARKS` after building with an oversized capacity.
+    ///
+    /// See the [capacity example](#canonical-construction-and-evaluation).
     #[must_use]
     pub const fn mark_count(&self) -> usize {
         self.mark_len
@@ -1854,6 +2046,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///
     /// Duplicate names are allowed; later definitions shadow earlier ones when
     /// a DSL method like `yaw_param` looks up the name.
+    ///
+    /// See the [canonical construction and evaluation example](LinkageFixed#canonical-construction-and-evaluation).
     pub const fn define_param(mut self, name: &'static str, default: f32) -> Self {
         assert!(
             self.param_len < DOF,
@@ -1871,6 +2065,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     emit_fixed_step_methods!();
 
     /// Save the current pose and pen state under a name for later recall.
+    ///
+    /// See the [canonical construction and evaluation example](LinkageFixed#canonical-construction-and-evaluation).
     pub const fn mark(mut self, name: &'static str) -> Self {
         let index = match self.mark_index(name) {
             Some(index) => index,
@@ -1940,7 +2136,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<2, 0, 6> = LinkageFixed::start()
     ///     .define_param("angle", 0.5)
@@ -1977,7 +2173,7 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<2, 0, 6> = LinkageFixed::start()
     ///     .define_param("angle", 0.5)
@@ -2013,6 +2209,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// This is useful for specialization from declared defaults. Unlike
     /// [`freeze_param_index`](Self::freeze_param_index), one default-normalized
     /// parameter can legally feed steps with different raw ranges.
+    ///
+    /// See the [parameter specialization example](Self::freeze_param_index).
     pub const fn freeze_param_index_at_default<const OUT_DOF: usize>(
         self,
         param_index: usize,
@@ -2036,9 +2234,11 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// Retained slots are reindexed densely in original parameter-slot order, not
     /// caller-list order. Duplicate indexes and out-of-bounds indexes panic.
     ///
+    /// See the [parameter specialization example](Self::retain_param_indexes).
+    ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::LinkageFixed;
     /// const LINKAGE: LinkageFixed<3, 0, 8> = LinkageFixed::start()
     ///     .define_param("angle", 0.5)
@@ -2102,6 +2302,8 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     /// Each requested name must exist. If a requested name matches multiple
     /// parameter slots, all matching slots are retained. Duplicate names in the
     /// requested name list panic.
+    ///
+    /// See the [parameter specialization example](Self::retain_param_indexes).
     pub const fn retain_param_names<const OUT_DOF: usize>(
         self,
         names: &[&'static str],
@@ -2353,6 +2555,23 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
     ///
     /// The `other` linkage's implicit `Start` step is skipped so evaluation continues
     /// from wherever `self` ends rather than resetting to the origin.
+    ///
+    /// For a complete construction and evaluation route, see the
+    /// [canonical example](LinkageFixed#canonical-construction-and-evaluation).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use linkage_blaze::{LinkageFixed, Vec3};
+    /// const FIRST: LinkageFixed<0, 0, 4> = LinkageFixed::start().forward(1.0);
+    /// const SECOND: LinkageFixed<0, 0, 4> = LinkageFixed::start().left(2.0);
+    /// const COMBINED: LinkageFixed<0, 0, 8> = FIRST.combine(SECOND.view());
+    /// # fn main() -> Result<(), linkage_blaze::Error> {
+    /// let pose = COMBINED.view().final_pose(&[])?;
+    /// assert!(pose.position().is_close_to(&Vec3::from([1.0, 2.0, 0.0]), 1e-5));
+    /// # Ok(())
+    /// # }
+    /// ```
     pub const fn combine<
         const DOF2: usize,
         const MARKS2: usize,
@@ -2384,11 +2603,9 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 ///
 /// # Building linkage expressions
 ///
-/// ```rust,no_run
-/// # #[cfg(feature = "alloc")]
-/// # {
+/// ```rust
 /// # use linkage_blaze::{LinkageBuf, Vec3};
-/// # fn example() -> Result<(), linkage_blaze::Error> {
+/// # fn main() -> Result<(), linkage_blaze::Error> {
 /// let linkage: LinkageBuf<1, 0> = LinkageBuf::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
@@ -2397,16 +2614,13 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
 /// # Ok(())
 /// # }
-/// # }
 /// ```
 ///
 /// # Converting from fixed storage
 ///
-/// ```rust,no_run
-/// # #[cfg(feature = "alloc")]
-/// # {
+/// ```rust
 /// # use linkage_blaze::{LinkageFixed, LinkageBuf, Vec3};
-/// # fn example() -> Result<(), linkage_blaze::Error> {
+/// # fn main() -> Result<(), linkage_blaze::Error> {
 /// const FIXED: LinkageFixed<1, 0, 8> = LinkageFixed::start()
 ///     .define_param("distance", 0.5)
 ///     .forward_param("distance", 1.0, 5.0);
@@ -2415,7 +2629,6 @@ impl<const DOF: usize, const MARKS: usize, const N: usize> LinkageFixed<DOF, MAR
 /// let pose = buf.view().final_pose(&[0.5])?;
 /// assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
 /// # Ok(())
-/// # }
 /// # }
 /// ```
 #[derive(Clone)]
@@ -2430,6 +2643,8 @@ pub struct LinkageBuf<const DOF: usize, const MARKS: usize> {
 #[cfg(feature = "alloc")]
 impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// Start a growable linkage with an implicit origin.
+    ///
+    /// See the [building linkage expressions example](LinkageBuf#building-linkage-expressions).
     pub fn start() -> Self {
         Self {
             params: [Param::EMPTY; DOF],
@@ -2445,6 +2660,8 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// Accepts the editor format with a leading `linkage![` or `linkage! [` wrapper
     /// and a trailing `]`, plus the fluent leading-dot method calls used by the
     /// linkage DSL.
+    ///
+    /// For a saved external asset, prefer [`linkage_file!`].
     pub fn from_lb_rs(source: &str) -> Result<Self, String> {
         parse_lb_rs(source)
     }
@@ -2460,6 +2677,8 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// The view erases step capacity while preserving linkage-parameter count
     /// `DOF`.
     /// All evaluation methods (poses, draw_items_3d, etc.) operate on the view.
+    ///
+    /// See the [building linkage expressions example](LinkageBuf#building-linkage-expressions).
     #[must_use]
     #[inline]
     pub fn view(&self) -> LinkageView<'_, DOF, MARKS> {
@@ -2560,11 +2779,9 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
-    /// # #[cfg(feature = "alloc")]
-    /// # {
+    /// ```rust
     /// # use linkage_blaze::{LinkageBuf, Vec3};
-    /// # fn example() -> Result<(), linkage_blaze::Error> {
+    /// # fn main() -> Result<(), linkage_blaze::Error> {
     /// let a = LinkageBuf::<1, 0>::start()
     ///     .define_param("x", 0.5)
     ///     .forward_param("x", 0.0, 10.0);
@@ -2578,7 +2795,6 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// let params = [0.5, 0.5];
     /// let pose = c.view().final_pose(&params)?;
     /// # Ok(())
-    /// # }
     /// # }
     /// ```
     pub fn combine<
@@ -2654,6 +2870,8 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     /// slider value: rotations use degrees, while translations, radii, and widths
     /// use linkage units. The raw value must be inside every referenced step range
     /// for this slot.
+    ///
+    /// See the [growable storage example](LinkageBuf#building-linkage-expressions).
     pub fn freeze_param_index<const OUT_DOF: usize>(
         self,
         param_index: usize,
@@ -2719,6 +2937,8 @@ impl<const DOF: usize, const MARKS: usize> LinkageBuf<DOF, MARKS> {
     }
 
     /// Retain exactly the listed parameter slots and freeze all others at their defaults.
+    ///
+    /// See the [growable storage example](LinkageBuf#building-linkage-expressions).
     pub fn retain_param_indexes<const OUT_DOF: usize>(
         self,
         indexes: &[usize],
@@ -3305,6 +3525,10 @@ fn rotation_matrix<const DOF: usize>(step: &Step, params: &[f32; DOF]) -> Mat3 {
 }
 
 /// Whether movement currently emits strokes.
+///
+/// [`PenState::Up`] suppresses movement strokes; [`PenState::Down`] emits them.
+/// The state is visible on [`StyledPose`] and is also reflected by
+/// [`LinkageView::draw_items_3d`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PenState {
     /// Movement does not emit strokes.
@@ -3384,6 +3608,34 @@ impl Default for PenStyle {
 }
 
 /// A 3D position and local-frame orientation after evaluating a linkage step.
+///
+/// # Pose and coordinate values
+///
+/// ```rust
+/// # use core::f32::consts::FRAC_PI_2;
+/// # use embedded_graphics::prelude::Point;
+/// # use linkage_blaze::{Mat3, Pose, Vec3};
+/// # use linkage_blaze::render::Projection;
+/// let rotation = Mat3::yaw(FRAC_PI_2) * Mat3::IDENTITY;
+/// let forward = rotation.forward();
+/// let left = rotation.left();
+/// let up = rotation.up();
+/// assert!(forward.is_close_to(&Vec3::from([0.0, 1.0, 0.0]), 1e-5));
+/// assert!(left[0] < 0.0);
+/// assert_eq!(up.into_array(), [0.0, 0.0, 1.0]);
+/// assert!((rotation.as_array()[0][0]).abs() < 1e-5);
+/// let position = Vec3::from([1.0, 2.0, 3.0]);
+/// let offset = (position + Vec3::from([1.0, 0.0, 0.0])) * 2.0;
+/// assert_eq!(offset[0], 4.0);
+/// assert!(offset.distance_to(position) > 0.0);
+/// assert!(offset.is_close_to(&Vec3::from([4.0, 4.0, 6.0]), 1e-5));
+/// let pose = Pose::new(rotation, position);
+/// let start = Pose::start();
+/// let _orientation = pose.orientation();
+/// let _position = pose.position();
+/// let _screen = pose.project(&Projection::front_orthographic(Point::new(0, 0), 10.0));
+/// assert!(!pose.is_close_to(&start, 1e-5));
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Pose {
     orientation: Mat3,
@@ -3392,6 +3644,8 @@ pub struct Pose {
 
 impl Pose {
     /// Create a pose from an orientation and position.
+    ///
+    /// See the [pose and coordinate example](#pose-and-coordinate-values).
     #[must_use]
     pub const fn new(orientation: Mat3, position: Vec3) -> Self {
         Self {
@@ -3401,6 +3655,8 @@ impl Pose {
     }
 
     /// Project this pose's position through `projection` into screen-space `(x, y)`.
+    ///
+    /// See the [pose and coordinate example](#pose-and-coordinate-values).
     #[must_use]
     pub fn project(self, projection: &Projection) -> (f32, f32) {
         let c = projection.world_to_camera(self.position());
@@ -3412,6 +3668,8 @@ impl Pose {
     }
 
     /// Return the origin pose with identity orientation.
+    ///
+    /// See the [pose and coordinate example](#pose-and-coordinate-values).
     #[must_use]
     pub const fn start() -> Self {
         Self {
@@ -3471,6 +3729,30 @@ impl Pose {
 }
 
 /// A [`Pose`] plus the pen state, color, and width active after a linkage step.
+///
+/// Use [`LinkageView::styled_poses`] when the rendering state matters in
+/// addition to geometry:
+///
+/// # Styled evaluation
+///
+/// ```rust
+/// # use linkage_blaze::{LinkageFixed, PenState, Rgb888};
+/// # fn main() -> Result<(), linkage_blaze::Error> {
+/// const LINKAGE: LinkageFixed<0, 0, 4> = LinkageFixed::start()
+///     .pen_color(Rgb888::new(255, 0, 0))
+///     .pen_width(0.25)
+///     .forward(1.0);
+/// let view = LINKAGE.view();
+/// let mut poses = view.styled_poses(&[])?;
+/// let start = poses.next().ok_or(linkage_blaze::Error::EmptyLinkage)?;
+/// assert_eq!(start.pen(), PenState::Down);
+/// assert_eq!(start.color(), Rgb888::new(255, 255, 255));
+/// assert_eq!(start.width(), 0.1);
+/// let end = poses.next().ok_or(linkage_blaze::Error::EmptyLinkage)?;
+/// assert_eq!(end.color(), Rgb888::new(255, 0, 0));
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct StyledPose {
     pose: Pose,
@@ -3479,12 +3761,16 @@ pub struct StyledPose {
 
 impl StyledPose {
     /// Return this styled pose's geometry.
+    ///
+    /// See the [styled evaluation example](#styled-evaluation).
     #[must_use]
     pub const fn pose(self) -> Pose {
         self.pose
     }
 
     /// Return this styled pose's pen state.
+    ///
+    /// See the [styled evaluation example](#styled-evaluation).
     #[must_use]
     pub const fn pen(self) -> PenState {
         self.pen_style.pen()
@@ -3738,7 +4024,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
 ///
 /// ## Example `.lb.rs` file
 ///
-/// ```rust,no_run
+/// ```rust
 /// # use linkage_blaze::{linkage, LinkageFixed, Rgb888};
 /// # macro_rules! __linkage_blaze_start {
 /// #     () => { LinkageFixed::<2, 1, 8>::start() };
@@ -3799,6 +4085,36 @@ macro_rules! linkage {
 /// #[cfg(feature = "alloc")]
 /// let clock: clock_linkage::Buf = clock_linkage::buf();
 /// ```
+// The helper is public because `linkage_file!` expands in a downstream crate;
+// the feature-selected definition must be chosen while this crate is built,
+// not by a downstream crate's unrelated feature set.
+#[cfg(feature = "alloc")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __linkage_file_buf_items {
+    ($path:literal) => {
+        pub type Buf = $crate::LinkageBuf<DOF, MARKS>;
+
+        pub fn buf() -> Buf {
+            macro_rules! __linkage_blaze_start {
+                () => {
+                    $crate::LinkageBuf::<DOF, MARKS>::start()
+                };
+            }
+            include!($path)
+        }
+
+        const _: fn() -> Buf = buf;
+    };
+}
+
+#[cfg(not(feature = "alloc"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __linkage_file_buf_items {
+    ($path:literal) => {};
+}
+
 #[macro_export]
 macro_rules! linkage_file {
     ($(#[$attribute:meta])* $visibility:vis $name:ident {
@@ -3871,18 +4187,7 @@ macro_rules! linkage_file {
 
             const _: View = view();
 
-            #[cfg(feature = "alloc")]
-            pub type Buf = $crate::LinkageBuf<DOF, MARKS>;
-
-            #[cfg(feature = "alloc")]
-            pub fn buf() -> Buf {
-                macro_rules! __linkage_blaze_start {
-                    () => {
-                        $crate::LinkageBuf::<DOF, MARKS>::start()
-                    };
-                }
-                include!($path)
-            }
+            $crate::__linkage_file_buf_items!($path);
         }
     };
     ($($tokens:tt)*) => {

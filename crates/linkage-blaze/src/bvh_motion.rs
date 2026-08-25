@@ -93,7 +93,9 @@ const fn u16_to_norm(x: u16) -> f32 {
 ///
 /// Each `f32` parameter in `[0.0, 1.0]` is encoded as a `u16` in `[0, 65535]`,
 /// halving memory use. Decode one motion sample at a time with
-/// [`sample`](Motion::sample) or [`sample_into`](Motion::sample_into).
+/// [`sample`](Motion::sample) or [`sample_into`](Motion::sample_into). This
+/// allocation-free type is always available; host-side BVH parsing and
+/// conversion APIs are in [`crate::bvh`] behind the `bvh` feature.
 pub struct Motion<const DOF: usize, const SAMPLE_COUNT: usize> {
     motion: [[u16; DOF]; SAMPLE_COUNT],
 }
@@ -106,6 +108,8 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> Motion<DOF, SAMPLE_COUNT> {
     pub const SAMPLE_COUNT: usize = SAMPLE_COUNT;
 
     /// Construct from a pre-quantized `u16` sample array.
+    ///
+    /// For a file asset, use the [`bvh::motion!`](crate::bvh) macro instead.
     pub const fn new(motion: [[u16; DOF]; SAMPLE_COUNT]) -> Self {
         Self { motion }
     }
@@ -134,11 +138,15 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> Motion<DOF, SAMPLE_COUNT> {
     }
 
     /// Return the number of linkage parameters in each motion sample.
+    ///
+    /// This is the `DOF` capacity used by the associated linkage.
     pub const fn dof(&self) -> usize {
         DOF
     }
 
     /// Return the number of motion samples.
+    ///
+    /// This is the `SAMPLE_COUNT` capacity of the embedded clip.
     pub const fn sample_count(&self) -> usize {
         SAMPLE_COUNT
     }
@@ -155,7 +163,7 @@ impl<const DOF: usize, const SAMPLE_COUNT: usize> Motion<DOF, SAMPLE_COUNT> {
     /// Each item is a `[f32; DOF]` parameter array for one sample.
     /// Use `.enumerate()` when the sample index is needed:
     ///
-    /// ```rust,no_run
+    /// ```rust
     /// # use linkage_blaze::bvh::Motion;
     /// # let motion = Motion::<3, 2>::new([[0; 3]; 2]);
     /// for (sample_index, params) in motion.samples().enumerate() {
