@@ -12,8 +12,10 @@ mod reverse_kinematics;
 
 use core::convert::Infallible;
 
-use crate::render::Projection;
-use crate::{Error as LinkageError, LinkageFixed, LinkageView, Rgb888, Step, linkage_file};
+use crate::{
+    Error as LinkageError, LinkageFixed, LinkageView, Rgb888, Step, linkage_file,
+    render::Projection,
+};
 use device_envoy_core::{
     button::Button,
     cyd::{

@@ -21,8 +21,12 @@ this review:
   parsing and conversion APIs behind the `bvh` feature.
 - Use contextual BVH names: `bvh::Motion`, `bvh::motion!`, and host-side names
   such as `bvh::Clip` rather than repeating the `Bvh` prefix inside the module.
-- Keep `LinkageBuf` and `linkage_buf!`. `Buf` distinguishes growable,
-  allocator-backed storage from the fixed owner and borrowed view.
+- Keep `LinkageBuf`; `Buf` distinguishes growable, allocator-backed storage
+  from the fixed owner and borrowed view. Make `linkage_file!` the sole
+  user-facing macro for loading `.lb.rs` assets. Remove the redundant
+  standalone `linkage_fixed!` and `linkage_buf!` macros after making
+  `linkage_file!` independent of them; do not retain hidden compatibility
+  aliases under those names.
 - Use one `render` module for evaluated drawing geometry and projection:
   `render::Item3d`, `render::Stroke`, `render::Disk`, `render::Sphere`, and
   `render::Projection`.
@@ -57,8 +61,9 @@ this review:
   retaining the old draw-type names.
 - **Complete.** Renamed `Arg`/`VariableArg` to `StepArg`/`ParamArg` and updated
   public variants.
-- **Complete.** Kept `LinkageBuf` and `linkage_buf!` unchanged except for
-  documentation.
+- **Complete at the time.** Kept `LinkageBuf` and `linkage_buf!` unchanged
+  except for documentation. Step 7 deliberately supersedes the macro part of
+  this decision while retaining `LinkageBuf`.
 
 Focused tests, all-features rustdoc, and `cargo check-all` completed the
 Step 2-specific validation. The remaining Armatron golden-image failure is
@@ -135,6 +140,51 @@ All-features doctests and rustdoc pass, and `cargo check-all` passes.
   render types, renamed argument types, and finalized root APIs are accounted
   for; removed names, root rendering paths, compatibility paths, and private
   helpers are absent.
+
+### 7. Make `linkage_file!` the only public asset-loading macro
+
+This follow-up deliberately amends the earlier decision to expose three ways
+to load the same `.lb.rs` asset. `linkage_file!` already infers dimensions and
+provides fixed, view, and feature-gated growable access, so it is the sole
+documented and exported asset-loading macro.
+
+Implementation work:
+
+- Keep `LinkageFixed`, `LinkageView`, and `LinkageBuf` public. This change is
+  about the redundant loading macros, not the storage types.
+- Remove the exported `linkage_fixed!` and `linkage_buf!` macros. Do not leave
+  deprecated, compatibility, or `#[doc(hidden)]` aliases under those names.
+- Refactor `linkage_file!` so its generated `fixed()` and feature-gated `buf()`
+  no longer expand either removed macro. Reuse its measured fixed value where
+  practical and keep any exported expansion helper clearly implementation-only
+  with an `__` prefix, `#[doc(hidden)]`, and a comment explaining why downstream
+  macro expansion requires public visibility.
+- Keep `linkage_file!` as the public entry point. Its generated module must
+  continue to expose inferred `DOF`, `MARKS`, and `STEP_COUNT`; `Fixed`, `View`,
+  and, with `alloc`, `Buf`; and `fixed()`, `view()`, and, with `alloc`, `buf()`.
+- Replace direct tests of `linkage_fixed!` and `linkage_buf!` with tests through
+  a `linkage_file!` declaration. Cover fixed, view, and growable access and the
+  inferred dimensions without weakening existing compile-time checks.
+- Update the crate documentation, README, doctests, examples, generated
+  expectations, and all workspace consumers so they teach and use
+  `linkage_file!`. Documentation for `linkage!` should say that `.lb.rs` files
+  are loaded through `linkage_file!` only.
+- Search the complete workspace for both removed macro names. After updating
+  this spec's historical findings, neither name should remain in source,
+  documentation, tests, templates, or generated expectations.
+
+Validation:
+
+- Run `cargo fmt --all`.
+- Run focused tests covering `linkage_file!` with and without `alloc`, then the
+  all-features library tests and doctests.
+- Regenerate all-features rustdoc and inspect the crate index and macro list.
+  `linkage_file!` and `linkage!` must remain visible; `linkage_fixed!` and
+  `linkage_buf!` must be absent.
+- Run `cargo check-all` and `git diff --check`. Do not suppress existing or new
+  warnings.
+- Modify only this repository and do not commit. Mark Step 7 complete only when
+  all validation passes.
 
 ## Crate Landing Page
 
@@ -290,20 +340,20 @@ Work items:
 - Rewrite the index summary to say that `linkage!` defines the linkage
   expression inside a `.lb.rs` asset file.
 - Keep the detailed documentation explaining that callers normally load the
-  file through `linkage_file!`, `linkage_fixed!`, or `linkage_buf!`, with the
-  callback mechanics presented as secondary implementation context.
+  file through `linkage_file!`, with the callback mechanics presented as
+  secondary implementation context.
 
 ### `linkage_buf!`
 
-Decision: keep this `alloc`-gated macro public under its current name. It
-matches [`LinkageBuf`], the growable, allocator-backed representation. The
-current summary is accurate but does not distinguish that storage from the
-fixed form.
+Amended decision: remove this standalone macro from the public API. Keep
+[`LinkageBuf`] public and expose growable loading through the feature-gated
+`buf()` generated by [`linkage_file!`]. The separate expression macro adds a
+second route to the same asset without a demonstrated consumer need.
 
 Work item:
 
-- State in the index summary that the macro requires `alloc` and includes a
-  `.lb.rs` asset as a growable [`LinkageBuf`] expression.
+- Make the hidden `linkage_file!` expansion helper construct [`LinkageBuf`]
+  directly, then remove `linkage_buf!` and its direct tests and documentation.
 
 ### `linkage_file!`
 
@@ -320,10 +370,15 @@ Work item:
 
 ### `linkage_fixed!`
 
-Decision: keep this macro public under its current name. It matches
-`LinkageFixed`, and the current summary clearly says that it includes a
-`.lb.rs` file as a fixed linkage expression. No top-level API work item is
-needed unless the later `LinkageFixed` review changes the type name or role.
+Amended decision: remove this standalone macro from the public API. Keep
+[`LinkageFixed`] public and expose fixed loading through the `fixed()` generated
+by [`linkage_file!`]. The named declaration infers all dimensions and is clearer
+than requiring callers to repeat parameter and mark counts.
+
+Work item:
+
+- Make `linkage_file!` produce `fixed()` without expanding `linkage_fixed!`,
+  then remove `linkage_fixed!` and its direct tests and documentation.
 
 ## Structs
 

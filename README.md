@@ -4,9 +4,8 @@
 [![crates.io](https://img.shields.io/crates/v/linkage-blaze?style=flat&color=fc8d62&logo=rust)](https://crates.io/crates/linkage-blaze)
 [![docs.rs](https://img.shields.io/docsrs/linkage-blaze?style=flat&color=66c2a5&labelColor=555555)](https://docs.rs/linkage-blaze)
 
-3D turtle graphics for animated jointed figures. Describe a figure with moves,
-turns, branches, links, joints, disks, and spheres, then animate normalized
-linkage parameters to bring it to life.
+3D turtle graphics for animated jointed mechanisms and figures. Describe a figure with moves,
+turns, branches, links, joints, disks, and spheres, then animate parameters to bring it to life. Runs both `no_std` and `std`.
 
 <p>
   <img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/armatron.png" alt="Armatron demo preview" height="200" />
@@ -30,43 +29,14 @@ jointed drawings. It works like 3D turtle graphics: move forward, turn, branch,
 draw links, place joints, and add simple shapes such as disks and spheres.
 Animate a few parameters, and the drawing moves.
 
-The demos include clocks, skeletons, dancers, and articulated figures. The
+The demos include robot arms, clocks, and motion-controlled skeletons. The
 workspace targets microcontrollers through Device Envoy's CYD (Cheap Yellow
-Display) APIs, including the [ESP32 CYD API](https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html)
-and [RP CYD API](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html),
-as well as the browser through WASM.
+Display) APIs ([ESP32](https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html)
+, [RP](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html), [WASM](https://docs.rs/device-envoy-core/latest/device_envoy_core/wasm/struct.CydWasm.html)).
 
 The default crate configuration is `no_std` and allocation-free, so figures
 live in flash and animate on small microcontrollers. An opt-in `alloc` feature
 adds heap-based conveniences where an allocator is available.
-
-## Quick Start
-
-Define a small [`LinkageFixed`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html)
-in a `const`, obtain its borrowed [`LinkageView`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html)
-with [`LinkageFixed::view`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html#method.view),
-supply one normalized value for each named parameter, and evaluate a
-[`Pose`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.Pose.html) with
-[`LinkageView::final_pose`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html#method.final_pose):
-
-```rust,no_run
-# use linkage_blaze::{LinkageFixed, Vec3};
-# fn main() -> Result<(), linkage_blaze::Error> {
-const LINKAGE: LinkageFixed<1, 0, 4> = LinkageFixed::start()
-    .define_param("reach", 0.5)
-    .forward_param("reach", 1.0, 5.0);
-
-let view = LINKAGE.view();
-let pose = view.final_pose(&[0.5])?;
-assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
-# Ok(())
-# }
-```
-
-For a named external asset, use [`linkage_file!`](https://docs.rs/linkage-blaze/latest/linkage_blaze/macro.linkage_file.html)
-with a `.lb.rs` file. Use the platform examples for display integration and
-the [`bvh`](https://docs.rs/linkage-blaze/latest/linkage_blaze/bvh/index.html)
-module for Biovision Hierarchy motion-capture data.
 
 ## Gallery
 
@@ -76,65 +46,21 @@ It shows preview images of each demo and links to the live, interactive WASM ver
 
 <a href="https://carlkcarlk.github.io/linkage-blaze/demos/"><img src="https://raw.githubusercontent.com/CarlKCarlK/linkage-blaze/main/crates/linkage-blaze/tests/assets/gallery.png" alt="Linkage Blaze demo gallery preview" width="800" /></a>
 
-## Example Linkage
-
-This is an excerpt from the `armatron1.lb.rs` asset, available in the
-[(interactive editor)](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/#armatron).
-It demonstrates named parameters, colors, movement, marks, and branching.
-
-```text
-linkage![
-    .define_param("raise hand", 0.5)
-    .define_param("bend elbow", 0.5)
-    .define_param("close hand", 0.0)
-    .define_param("lower arm", 0.5)
-    .define_param("spin whole arm", 0.5)
-    .define_param("spin hand", 0.5)
-    .yaw_param("spin whole arm", 180.0, -180.0)
-    .pen_color(Rgb888::new(0, 139, 139)) // dark cyan (0, 139, 139)
-    .pen_width(0.15)
-    .up(2.5)
-    .pitch_param("lower arm", -30.0, 0.0)
-    .forward(3.0)
-    .yaw_param("bend elbow", 90.0, -90.0)
-    .forward(3.0)
-    .pitch_param("raise hand", 90.0, -90.0)
-    .forward(1.0)
-    .roll_param("spin hand", -180.0, 180.0)
-    .forward(0.5)
-    .mark("wrist")
-    .yaw(90.0)
-    .forward_param("close hand", 0.5, 0.0)
-    .left(-1.0)
-    .restore("wrist")
-    .yaw(-90.0)
-    .forward_param("close hand", 0.5, 0.0)
-    .left(1.0)
-    .restore("wrist")
-    .pen_up()
-    .forward(0.25)
-    .pen_down()
-]
-```
-
-The linkage compiles into a `const` with no heap allocation and no runtime
-parsing, so it can live in flash on a microcontroller.
-
 ## Articles
 
-- [Nine Rules for Compile-Time Work with Rust const fn](https://medium.com/@carlmkadie)
-  *expected August 2026*.
+- [Nine Rules for Compile-Time Work with Rust const fn: Parse files, build tables, and catch mistakes … without a build script](https://medium.com/@carlmkadie)
+  *expected September 2026*.
 
 
 ## Usage
 
-The default `linkage-blaze` build is designed for embedded systems:
+`linkage-blaze` can run on embedded systems:
 
 - It does not require the Rust standard library (`no_std`).
 - It does not use heap allocation.
 - ESP and RP applications can use `LinkageFixed` and `linkage_fixed`.
 
-Optional features add host-side capabilities:
+It can also run, with more features, in `std` runs:
 
 - `alloc` enables owned parsing.
 - `bvh` enables host-side APIs for reading Biovision Hierarchy (BVH)
@@ -163,6 +89,164 @@ cargo install linkage-blaze --features bvh --bin bvh-to-lb
 The platform examples and browser adapter use the workspace version but are not
 separately published to crates.io. WASM applications provide their own
 `cdylib` and may depend on `linkage-blaze` with the `alloc` feature.
+
+## Quick Start
+
+The core workflow is: construct one or more linkages, combine them, obtain a
+borrowed [`LinkageView`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html),
+and evaluate that view for geometry or a final pose.
+
+### 1. Construct a linkage from steps
+
+[`LinkageFixed`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html)
+stores an allocation-free linkage in fixed-capacity arrays. Start at the origin,
+optionally define normalized parameters, and append movement and drawing steps
+with the fluent methods:
+
+```rust,no_run
+# use linkage_blaze::LinkageFixed;
+const ARM: LinkageFixed<1, 1, 8> = LinkageFixed::start()
+    .define_param("shoulder", 0.5)
+    .yaw_param("shoulder", -90.0, 90.0)
+    .forward(3.0)
+    .mark("hand");
+```
+
+The const generic arguments are the parameter count, mark-slot count, and step
+capacity. Unused step capacity is allowed.
+
+### 2. Combine linkages
+
+[`LinkageFixed::combine`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html#method.combine)
+appends another linkage without replaying its initial `Start` step:
+
+```rust,no_run
+# use linkage_blaze::LinkageFixed;
+const BASE: LinkageFixed<0, 0, 2> = LinkageFixed::start().forward(2.0);
+const TIP: LinkageFixed<0, 0, 2> = LinkageFixed::start().left(1.0);
+const FIGURE: LinkageFixed<0, 0, 4> = BASE.combine(TIP.view());
+```
+
+The output type states the combined parameter, mark, and step capacities.
+
+### 3. Evaluate the final pose
+
+Call [`LinkageFixed::view`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageFixed.html#method.view)
+to borrow a linkage, then pass one normalized value per parameter to
+[`LinkageView::final_pose`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html#method.final_pose):
+
+```rust,no_run
+# use linkage_blaze::{LinkageFixed, Vec3};
+# fn main() -> Result<(), linkage_blaze::Error> {
+const LINKAGE: LinkageFixed<1, 0, 4> = LinkageFixed::start()
+    .define_param("reach", 0.5)
+    .forward_param("reach", 1.0, 5.0);
+
+let pose = LINKAGE.view().final_pose(&[0.5])?;
+assert!(pose.position().is_close_to(&Vec3::from([3.0, 0.0, 0.0]), 1e-5));
+# Ok(())
+# }
+```
+
+### 4. Evaluate for rendering
+
+[`LinkageView::draw_items_3d`](https://docs.rs/linkage-blaze/latest/linkage_blaze/struct.LinkageView.html#method.draw_items_3d)
+evaluates strokes and shapes as an iterator of
+[`render::Item3d`](https://docs.rs/linkage-blaze/latest/linkage_blaze/render/enum.Item3d.html)
+values. A platform renderer can project and draw each item without allocating:
+
+```rust,no_run
+# use linkage_blaze::{LinkageFixed, render::Item3d};
+# fn main() -> Result<(), linkage_blaze::Error> {
+const LINKAGE: LinkageFixed<0, 0, 3> = LinkageFixed::start()
+    .forward(2.0)
+    .left(1.0);
+
+let stroke_count = LINKAGE
+    .view()
+    .draw_items_3d(&[])?
+    .filter(|item| matches!(item, Item3d::Stroke(_)))
+    .count();
+assert_eq!(stroke_count, 2);
+# Ok(())
+# }
+```
+
+See the complete [ESP32](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-esp),
+[RP](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-rp),
+and [WASM](https://github.com/CarlKCarlK/linkage-blaze/tree/main/crates/linkage-blaze-examples-wasm)
+examples for display integration.
+
+### 5. Save and import a large linkage
+
+Put a long fluent expression in a `.lb.rs` asset file. The file contains one
+`linkage![...]` expression with leading-dot methods:
+
+```rust,no_run
+# use linkage_blaze::{LinkageFixed, linkage};
+# macro_rules! __linkage_blaze_start {
+#     () => { LinkageFixed::<1, 1, 4>::start() };
+# }
+# let linkage: LinkageFixed<1, 1, 4> =
+linkage![
+    .define_param("reach", 0.5)
+    .forward_param("reach", 1.0, 5.0)
+    .mark("tip")
+];
+# assert_eq!(linkage.view().dof(), 1);
+```
+
+Import it with [`linkage_file!`](https://docs.rs/linkage-blaze/latest/linkage_blaze/macro.linkage_file.html).
+The macro measures the asset at compile time and creates a module containing
+its exact fixed type, value, and borrowed view:
+
+```text
+use linkage_blaze::linkage_file;
+
+linkage_file! {
+    figure {
+        file: "assets/figure.lb.rs",
+    }
+}
+
+let view = figure::view();
+```
+
+The import is a text excerpt because rustdoc cannot provide the external asset file at the macro call site. The repository's `linkage_file` integration test compile-checks the complete external-file import path.
+
+### 6. Edit a large linkage
+
+Open the [interactive Linkage Blaze editor](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/)
+to edit and preview `.lb.rs` assets. Open an existing file or paste an
+expression, adjust its generated parameter controls while watching the 3D
+preview, and use **Save** or **Save As** to write the edited `.lb.rs` file.
+
+Editor output uses the same syntax as the allocator-backed parser, so it can be
+checked before use:
+
+```rust,no_run
+# #[cfg(feature = "alloc")]
+# fn main() -> Result<(), String> {
+use linkage_blaze::LinkageBuf;
+
+let edited_source = r#"
+linkage![
+    .define_param("reach", 0.5)
+    .forward_param("reach", 1.0, 5.0)
+    .mark("tip")
+]
+"#;
+let linkage = LinkageBuf::<1, 1>::from_lb_rs(edited_source)?;
+assert_eq!(linkage.view().dof(), 1);
+# Ok(())
+# }
+# #[cfg(not(feature = "alloc"))]
+# fn main() {}
+```
+
+For motion-capture input, see the
+[`bvh` module](https://docs.rs/linkage-blaze/latest/linkage_blaze/bvh/index.html)
+and its Biovision Hierarchy conversion APIs.
 
 ## Policy on AI-assisted development and contributions
 

@@ -5,8 +5,7 @@
 
 use core::{array::from_fn, convert::Infallible, fmt};
 
-use crate::render::Projection;
-use crate::{Error as LinkageError, LinkageFixed, Rgb888, linkage_file};
+use crate::{Error as LinkageError, LinkageFixed, Rgb888, linkage_file, render::Projection};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,
