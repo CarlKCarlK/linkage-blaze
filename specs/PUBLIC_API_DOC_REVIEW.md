@@ -118,15 +118,23 @@ Formatting, all-features rustdoc, and `cargo check-all` pass.
 
 All-features doctests and rustdoc pass, and `cargo check-all` passes.
 
-### 6. Validate and review the generated result
+### 6. Validate and review the generated result — Complete
 
-- Run formatting, focused tests, doctests, and checks for each affected feature
-  set while implementing.
-- Run `cargo check-all` for Linkage Blaze before completion.
-- Regenerate all-features rustdoc, inspect the crate index and moved modules,
-  and verify that links and examples resolve.
-- Compare the final public item list against this review and account for every
-  addition, removal, rename, and relocation.
+- Formatting, focused all-features library tests, all-features doctests, and
+  all-features rustdoc pass. The focused library suite reports 164 passing
+  tests, and the doctest suite reports 22 passing tests.
+- `cargo check-all` passes across core, embedded examples, editor, RP, ESP,
+  and WASM targets, including the generated board examples and wasm-pack
+  output.
+- Inspected the generated crate index and the `bvh`, `render`, and `examples`
+  module pages. The Quick Start and contextual links resolve, the finalized
+  BVH and render items appear in their moved modules, and implementation-only
+  example modules are absent from the public index.
+- Compared the generated public item list with the resolved design: the
+  always-available `bvh::Motion`, feature-gated host BVH items, `bvh::motion!`,
+  render types, renamed argument types, and finalized root APIs are accounted
+  for; removed names, root rendering paths, compatibility paths, and private
+  helpers are absent.
 
 ## Crate Landing Page
 
