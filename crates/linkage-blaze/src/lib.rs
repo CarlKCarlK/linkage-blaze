@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
-// TODO0 Review and improve the Linkage Blaze crate documentation. (may no longer apply)
 #![doc = include_str!("../../../README.md")]
 #![doc = ""]
 #![doc = "## Coordinate System"]
