@@ -3719,15 +3719,14 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
 // A `.lb.rs` file is a complete Rust expression.
 // It contains one `linkage![ ... ]` invocation.
 // The body is a fluent DSL chain of leading-dot method calls.
-// The including macro (`linkage_fixed!` or `linkage_buf!`) defines the local
-// `__linkage_blaze_start!` macro that selects the storage type.
+// The including macro defines the local `__linkage_blaze_start!` macro that
+// selects the storage type.
 // The file must not call `start!()` and must not define `macro_rules! linkage`.
 
 /// Define a linkage expression inside a `.lb.rs` asset file.
 ///
-/// Applications normally load the file through [`linkage_file!`],
-/// [`linkage_fixed!`], or [`linkage_buf!`]; this macro is the asset-file
-/// expression itself.
+/// Applications load the file through [`linkage_file!`]; this macro is the
+/// asset-file expression itself.
 ///
 /// ## `.lb.rs` convention
 ///
@@ -3735,7 +3734,7 @@ impl<const DOF: usize, const MARKS: usize> Iterator for DrawItem3dIter<'_, DOF, 
 /// - The body begins with leading-dot methods (no explicit `start()` call).
 /// - The file must **not** call `start!()`.
 /// - The file must **not** define `macro_rules! linkage`.
-/// - Use [`linkage_fixed!`] or [`linkage_buf!`] to include the file.
+/// - Use [`linkage_file!`] to include the file and choose its storage accessors.
 ///
 /// ## Example `.lb.rs` file
 ///
@@ -3761,106 +3760,44 @@ macro_rules! linkage {
     };
 }
 
-/// Include a `.lb.rs` linkage file as a [`LinkageFixed`] expression.
-///
-/// For a named application asset, use [`linkage_file!`].
-/// Use `linkage_fixed!` when a one-off expression is clearer than a named
-/// declaration.
-///
-/// The path is relative to the source file containing the macro invocation
-/// (same rules as `include!`).  The file must contain exactly one
-/// `linkage![ ... ]` invocation using the fluent DSL — see [`linkage!`] for
-/// the full `.lb.rs` convention.
-///
-/// Supply the meaningful parameter and mark dimensions; the step capacity is
-/// measured from the included file during const evaluation.
-///
-/// ```text
-/// const CLOCK: LinkageFixed<2, 2, 48> =
-///     linkage_fixed!("assets/examples/clock.lb.rs", 2, 2);
-/// ```
-#[macro_export]
-macro_rules! linkage_fixed {
-    ($path:literal, $dof:expr, $marks:expr) => {{
-        const __LINKAGE_BLAZE_MEASURED: $crate::LinkageStepCount = {
-            macro_rules! __linkage_blaze_start {
-                () => {
-                    $crate::LinkageStepCount::start()
-                };
-            }
-            include!($path)
-        };
-        const __LINKAGE_BLAZE_FIXED: $crate::LinkageFixed<
-            { $dof },
-            { $marks },
-            { __LINKAGE_BLAZE_MEASURED.step_count() },
-        > = {
-            macro_rules! __linkage_blaze_start {
-                () => {
-                    $crate::LinkageFixed::<
-                        { $dof },
-                        { $marks },
-                        { __LINKAGE_BLAZE_MEASURED.step_count() },
-                    >::start()
-                };
-            }
-            let linkage = include!($path);
-            assert!(
-                linkage.param_count() == $dof,
-                "DOF must equal the number of defined parameters"
-            );
-            assert!(
-                linkage.mark_count() == $marks,
-                "MARKS must equal the number of defined marks"
-            );
-            linkage
-        };
-        __LINKAGE_BLAZE_FIXED
-    }};
-    ($path:literal) => {{
-        compile_error!("linkage_fixed! requires the DOF and MARKS arguments");
-    }};
-}
-
-// These exported helpers are implementation details required by the public
-// declaration macro when it expands in a downstream crate.
-#[cfg(feature = "alloc")]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __linkage_file_buf {
-    ($path:literal) => {
-        /// Load the declared `.lb.rs` body into growable storage.
-        pub type Buf = $crate::LinkageBuf<DOF, MARKS>;
-
-        pub fn buf() -> Buf {
-            $crate::linkage_buf!($path, DOF, MARKS)
-        }
-    };
-}
-
-#[cfg(not(feature = "alloc"))]
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __linkage_file_buf {
-    ($path:literal) => {};
-}
-
 /// Declare access to one external `.lb.rs` linkage file as a Rust module.
 ///
-/// The file is measured during const evaluation. `DOF`, `MARKS`, and
-/// `STEP_COUNT` are inferred from the body, while `fixed`
-/// materializes exact fixed storage. With `alloc`, `buf` loads
-/// the same body into growable storage. This declaration only provides access
-/// to the source and constructors; it does not choose a final application
-/// view or backing-storage strategy.
+/// The file is measured during const evaluation. The generated module exposes
+/// inferred `DOF`, `MARKS`, and `STEP_COUNT` constants, `Fixed` and `View` type
+/// aliases, and `fixed()` and `view()` accessors. With `alloc`, it also exposes
+/// a `Buf` alias and `buf()` accessor for growable storage.
+///
+/// The declaration itself needs a real call-site-relative asset, so the
+/// complete invocation is shown as an external-file excerpt. The repository's
+/// `linkage_file` integration test compile-checks the same declaration and
+/// accessors.
 ///
 /// ```text
+/// use linkage_blaze::linkage_file;
+///
 /// linkage_file! {
 ///     clock_linkage {
 ///         file: "assets/examples/clock.lb.rs",
 ///     }
 /// }
-/// let clock = clock_linkage::view();
+///
+/// const CLOCK_DOF: usize = clock_linkage::DOF;
+/// const CLOCK_STEPS: usize = clock_linkage::STEP_COUNT;
+/// type ClockFixed = clock_linkage::Fixed;
+/// type ClockView = clock_linkage::View;
+///
+/// const CLOCK: ClockFixed = clock_linkage::fixed();
+/// const CLOCK_VIEW: ClockView = clock_linkage::view();
+/// # let _ = (CLOCK_DOF, CLOCK_STEPS, CLOCK, CLOCK_VIEW);
+/// ```
+///
+/// ## `alloc`
+///
+/// With `alloc`, use `buf()` when the linkage must be growable at runtime:
+///
+/// ```text
+/// #[cfg(feature = "alloc")]
+/// let clock: clock_linkage::Buf = clock_linkage::buf();
 /// ```
 #[macro_export]
 macro_rules! linkage_file {
@@ -3904,8 +3841,26 @@ macro_rules! linkage_file {
                 include!($path)
             };
 
+            const __FIXED: Fixed = {
+                macro_rules! __linkage_blaze_start {
+                    () => {
+                        $crate::LinkageFixed::<DOF, MARKS, STEP_COUNT>::start()
+                    };
+                }
+                let linkage = include!($path);
+                assert!(
+                    linkage.param_count() == DOF,
+                    "DOF must equal the number of defined parameters"
+                );
+                assert!(
+                    linkage.mark_count() == MARKS,
+                    "MARKS must equal the number of defined marks"
+                );
+                linkage
+            };
+
             pub const fn fixed() -> Fixed {
-                $crate::linkage_fixed!($path, DOF, MARKS)
+                __FIXED
             }
 
             const __VIEW: View = fixed().view();
@@ -3916,59 +3871,23 @@ macro_rules! linkage_file {
 
             const _: View = view();
 
-            $crate::__linkage_file_buf!($path);
+            #[cfg(feature = "alloc")]
+            pub type Buf = $crate::LinkageBuf<DOF, MARKS>;
+
+            #[cfg(feature = "alloc")]
+            pub fn buf() -> Buf {
+                macro_rules! __linkage_blaze_start {
+                    () => {
+                        $crate::LinkageBuf::<DOF, MARKS>::start()
+                    };
+                }
+                include!($path)
+            }
         }
     };
     ($($tokens:tt)*) => {
         compile_error!("linkage_file! accepts exactly one file declaration per invocation");
     };
-}
-
-/// Include a `.lb.rs` linkage file as a [`LinkageBuf`] expression.
-///
-/// Requires the `alloc` feature.  The path follows the same rules as
-/// `include!`.  The file must contain exactly one `linkage![ ... ]`
-/// invocation — see [`linkage!`] for the full `.lb.rs` convention.
-/// For a named application asset, prefer [`linkage_file!`].
-///
-/// ## Forms
-///
-/// Prefer the one-argument form with an explicit type annotation:
-///
-/// ```text
-/// let clock: LinkageBuf<2, 4> = linkage_buf!("clock.lb.rs");
-/// ```
-///
-/// The macro form is an asset-file include and therefore needs a real `.lb.rs`
-/// fixture at the call site. The equivalent type construction is compile
-/// checked here:
-///
-/// ```rust,no_run
-/// # use linkage_blaze::LinkageBuf;
-/// let _clock: LinkageBuf<2, 4> = LinkageBuf::start();
-/// ```
-///
-/// Use the explicit-number form only when the surrounding type cannot be
-/// inferred:
-///
-/// ```text
-/// let clock = linkage_buf!("clock.lb.rs", 2, 4);
-/// ```
-#[cfg(feature = "alloc")]
-#[macro_export]
-macro_rules! linkage_buf {
-    ($path:literal) => {{
-        macro_rules! __linkage_blaze_start {
-            () => {
-                $crate::LinkageBuf::start()
-            };
-        }
-        include!($path)
-    }};
-    ($path:literal, $dof:expr, $marks:expr) => {{
-        let linkage: $crate::LinkageBuf<$dof, $marks> = $crate::linkage_buf!($path);
-        linkage
-    }};
 }
 
 #[cfg(test)]

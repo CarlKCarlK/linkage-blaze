@@ -1,9 +1,6 @@
 #![cfg(feature = "alloc")]
 
-use linkage_blaze::{
-    LinkageBuf, LinkageFixed, Rgb888, Vec3, WebColors, linkage, linkage_buf, linkage_file,
-    linkage_fixed,
-};
+use linkage_blaze::{LinkageBuf, LinkageFixed, Rgb888, Vec3, WebColors, linkage_file};
 
 mod common_linkage_tests;
 use common_linkage_tests::assert_linkages_equivalent;
@@ -89,36 +86,28 @@ fn named_program_buf_matches_fixed() -> Result<(), linkage_blaze::Error> {
 }
 
 #[test]
-fn linkage_fixed_include_works_in_function_body() -> Result<(), linkage_blaze::Error> {
-    let clock = linkage_fixed!("linkages/clock.lb.rs", clock_hands::DOF, clock_hands::MARKS);
-    let clock_explicit =
-        linkage_fixed!("linkages/clock.lb.rs", clock_hands::DOF, clock_hands::MARKS);
+fn linkage_file_fixed_and_view_accessors_work_in_function_body() -> Result<(), linkage_blaze::Error>
+{
+    let clock = clock_hands::fixed();
+    let clock_view = clock_hands::view();
 
     assert_eq!(clock.view().dof(), clock_hands::DOF);
-    assert_eq!(clock_explicit.view().dof(), clock_hands::DOF);
+    assert_eq!(clock_view.dof(), clock_hands::DOF);
     let params = [0.25_f32, 0.5];
-    let p_ref = clock_hands::view().final_pose(&params)?.position();
-    let p_const_explicit = clock_explicit.view().final_pose(&params)?.position();
+    let p_ref = clock_view.final_pose(&params)?.position();
     let p_local = clock.view().final_pose(&params)?.position();
-    assert!(p_ref.is_close_to(&p_const_explicit, POSE_TOLERANCE));
     assert!(p_ref.is_close_to(&p_local, POSE_TOLERANCE));
     Ok(())
 }
 
 #[cfg(feature = "alloc")]
 #[test]
-fn linkage_buf_include_works() -> Result<(), linkage_blaze::Error> {
-    let clock = linkage_buf!("linkages/clock.lb.rs", { clock_hands::DOF }, {
-        clock_hands::MARKS
-    });
-    let clock_explicit = linkage_buf!("linkages/clock.lb.rs", { clock_hands::DOF }, {
-        clock_hands::MARKS
-    });
+fn linkage_file_buf_accessor_works() -> Result<(), linkage_blaze::Error> {
+    let clock = clock_hands::buf();
 
     assert_eq!(clock.view().dof(), clock_hands::DOF);
-    assert_eq!(clock_explicit.view().dof(), clock_hands::DOF);
     let params = [0.25_f32, 0.5];
-    let p_fixed = clock_hands::view().final_pose(&params)?.position();
+    let p_fixed = clock_hands::fixed().view().final_pose(&params)?.position();
     let p_buf = clock.view().final_pose(&params)?.position();
     assert!(p_fixed.is_close_to(&p_buf, POSE_TOLERANCE));
     Ok(())
