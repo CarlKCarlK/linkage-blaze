@@ -6,7 +6,6 @@
 //! The generic loop redraws every frame, updates immediate-mode controls, and
 //! flushes frames through [`CydDisplay`].
 
-mod controlled;
 mod controls;
 mod reverse_kinematics;
 
