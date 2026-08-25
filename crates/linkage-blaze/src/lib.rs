@@ -278,8 +278,7 @@ impl ParamArg {
 /// Normal evaluation uses `Result` propagation. Handle [`Self::InvalidParameter`]
 /// when user-controlled normalized values are invalid, and
 /// [`Self::MarkNotFound`] or [`Self::MarkAmbiguous`] when looking up named marks.
-/// The producing operations are [`LinkageView::final_pose`] and
-/// [`LinkageView::pose_by_mark_name`].
+/// Named-mark errors are returned by [`DrawItem3dIter::pose_by_mark_name`].
 ///
 /// ```rust
 /// # use linkage_blaze::{Error, LinkageFixed};
@@ -757,6 +756,10 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
 
     /// Return the final pose after evaluating all steps.
     ///
+    /// This evaluates the linkage immediately. When rendering or looking up
+    /// marked poses in the same pass, use the [`DrawItem3dIter`] returned by
+    /// [`Self::draw_items_3d`] and inspect it after exhaustion instead.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -776,30 +779,6 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     /// ```
     pub fn final_pose(&self, params: &[f32; DOF]) -> Result<Pose, Error> {
         self.poses(params)?.last().ok_or(Error::EmptyLinkage)
-    }
-
-    /// Return the pose recorded at a named mark after evaluating the linkage.
-    ///
-    /// Returns [`Error::MarkNotFound`] when `name` is absent and
-    /// [`Error::MarkAmbiguous`] when more than one mark has that name.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use linkage_blaze::{LinkageFixed, Vec3};
-    /// # fn main() -> Result<(), linkage_blaze::Error> {
-    /// const LINKAGE: LinkageFixed<0, 1, 4> =
-    ///     LinkageFixed::start().forward(2.0).mark("tip");
-    /// let pose = LINKAGE.view().pose_by_mark_name(&[], "tip")?;
-    /// assert!(pose.position().is_close_to(&Vec3::from([2.0, 0.0, 0.0]), 1e-5));
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn pose_by_mark_name(&self, params: &[f32; DOF], name: &str) -> Result<Pose, Error> {
-        let mut draw_items =
-            DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, self.mark_len, params)?;
-        while draw_items.next().is_some() {}
-        draw_items.pose_by_mark_name(name)
     }
 
     /// Iterate over all intermediate poses produced by evaluating this linkage.
@@ -879,7 +858,7 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     pub fn draw_items_3d<'b>(
         &'b self,
         params: &'b [f32; DOF],
-    ) -> Result<impl Iterator<Item = Item3d> + 'b, Error> {
+    ) -> Result<DrawItem3dIter<'b, DOF, MARKS>, Error> {
         DrawItem3dIter::<DOF, MARKS>::new(self.steps, self.mark_names, self.mark_len, params)
     }
 
@@ -1915,9 +1894,11 @@ impl LinkageStepCount {
 /// # fn main() -> Result<(), linkage_blaze::Error> {
 /// let view = LINKAGE.view();
 /// let params = [0.5];
-/// let final_pose = view.final_pose(&params)?;
+/// let mut items = view.draw_items_3d(&params)?;
+/// while items.next().is_some() {}
+/// let final_pose = items.final_pose();
 /// assert!(final_pose.position().is_close_to(&Vec3::from([2.0, 0.0, 0.0]), 1e-5));
-/// let marked_pose = view.pose_by_mark_name(&params, "tip")?;
+/// let marked_pose = items.pose_by_mark_name("tip")?;
 /// assert!(marked_pose.position().is_close_to(&Vec3::from([2.0, 0.0, 0.0]), 1e-5));
 /// assert_eq!(view.draw_item_3d_count(), 2);
 /// # Ok(())
@@ -3865,7 +3846,35 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
 }
 
 /// Iterator over [`Item3d`]s produced by evaluating a linkage.
-struct DrawItem3dIter<'a, const DOF: usize, const MARKS: usize> {
+///
+/// Exhaust the iterator before calling [`Self::pose_by_mark_name`] so the
+/// iterator has evaluated every mark and restore step. Keeping this iterator
+/// allows rendering and named-pose lookup to share one evaluation.
+///
+/// # One-pass evaluation
+///
+/// ```rust,no_run
+/// # use linkage_blaze::LinkageFixed;
+/// const LINKAGE: LinkageFixed<0, 1, 6> = LinkageFixed::start()
+///     .forward(1.0)
+///     .mark("tip")
+///     .forward(2.0);
+///
+/// # fn main() -> Result<(), linkage_blaze::Error> {
+/// let view = LINKAGE.view();
+/// let mut items = view.draw_items_3d(&[])?;
+/// while let Some(item) = items.next() {
+///     // Render or otherwise consume `item` here.
+///     drop(item);
+/// }
+/// let tip = items.pose_by_mark_name("tip")?;
+/// let final_pose = items.final_pose();
+/// assert_eq!(tip.position()[0], 1.0);
+/// assert_eq!(final_pose.position()[0], 3.0);
+/// # Ok(())
+/// # }
+/// ```
+pub struct DrawItem3dIter<'a, const DOF: usize, const MARKS: usize> {
     steps: &'a [Step],
     mark_names: &'a [&'static str; MARKS],
     mark_len: usize,
@@ -3901,13 +3910,13 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItem3dIter<'a, DOF, MARKS> {
 
     /// Return the pose recorded at the named mark at the current point in iteration.
     ///
-    /// Call this after the iterator is exhausted to inspect final joint positions.
+    /// Call this after the iterator is exhausted to inspect the recorded mark pose.
     ///
     /// # Errors
     ///
     /// Returns an [`Error`] if no mark has the given name or if more than one
     /// mark shares the name.
-    fn pose_by_mark_name(&self, name: &str) -> Result<Pose, Error> {
+    pub fn pose_by_mark_name(&self, name: &str) -> Result<Pose, Error> {
         let mut found = None;
         for (index, &n) in self.mark_names[..].iter().enumerate().take(self.mark_len) {
             if n == name {
@@ -3920,6 +3929,15 @@ impl<'a, const DOF: usize, const MARKS: usize> DrawItem3dIter<'a, DOF, MARKS> {
         found
             .map(|index| self.marked[index].pose)
             .ok_or(Error::MarkNotFound)
+    }
+
+    /// Return the current pose, which is the final pose after exhaustion.
+    ///
+    /// Call this after the iterator is exhausted to obtain the final pose
+    /// without evaluating the linkage a second time.
+    #[must_use]
+    pub fn final_pose(&self) -> Pose {
+        self.pose
     }
 }
 
@@ -4414,7 +4432,10 @@ mod tests {
     fn link_view_finds_named_mark_pose() -> Result<(), Box<dyn StdError>> {
         const LINKAGE: LinkageFixed<0, 1, 4> = LinkageFixed::start().mark("tip").forward(2.0);
 
-        let pose = LINKAGE.view().pose_by_mark_name(&[], "tip")?;
+        let view = LINKAGE.view();
+        let mut items = view.draw_items_3d(&[])?;
+        while items.next().is_some() {}
+        let pose = items.pose_by_mark_name("tip")?;
         assert_eq!(pose.position(), Vec3::from([0.0, 0.0, 0.0]));
         Ok(())
     }
@@ -4423,8 +4444,11 @@ mod tests {
     fn link_view_reports_missing_mark() {
         const LINKAGE: LinkageFixed<0, 1, 2> = LinkageFixed::start().mark("tip");
 
+        let view = LINKAGE.view();
+        let mut items = view.draw_items_3d(&[]).expect("valid parameters");
+        while items.next().is_some() {}
         assert!(matches!(
-            LINKAGE.view().pose_by_mark_name(&[], "missing"),
+            items.pose_by_mark_name("missing"),
             Err(Error::MarkNotFound)
         ));
     }
@@ -4436,8 +4460,11 @@ mod tests {
         let second = LinkageBuf::<0, 1>::start().mark("tip");
         let linkage: LinkageBuf<0, 2> = first.combine(second.view());
 
+        let view = linkage.view();
+        let mut items = view.draw_items_3d(&[]).expect("valid parameters");
+        while items.next().is_some() {}
         assert!(matches!(
-            linkage.view().pose_by_mark_name(&[], "tip"),
+            items.pose_by_mark_name("tip"),
             Err(Error::MarkAmbiguous)
         ));
     }

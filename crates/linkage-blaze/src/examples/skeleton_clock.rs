@@ -166,23 +166,23 @@ where
 
         // Create an iterator that will list every 3D item and its pose.
         let linkage = LINKAGE.view();
-        let draw_items_3d = linkage.draw_items_3d(&params)?;
+        let mut draw_items_3d = linkage.draw_items_3d(&params)?;
 
         // // Iterate 3d items, project to 2D, and collect 2D items and poses.
         let mut projected_items =
             heapless::Vec::<_, { LINKAGE.view().draw_item_3d_count() }>::new();
-        for draw_item_3d in draw_items_3d {
+        for draw_item_3d in &mut draw_items_3d {
             projected_items
                 .push(draw_item_3d.project(&PROJECTION))
                 .map_err(Error::VecOverflow)?;
         }
 
         // Find the positions of the middle fingers after evaluating the linkage.
-        let (hours_anchor_x, hours_anchor_y) = linkage
-            .pose_by_mark_name(&params, "lMid2")?
+        let (hours_anchor_x, hours_anchor_y) = draw_items_3d
+            .pose_by_mark_name("lMid2")?
             .project(&PROJECTION);
-        let (minute_anchor_x, minute_anchor_y) = linkage
-            .pose_by_mark_name(&params, "rMid2")?
+        let (minute_anchor_x, minute_anchor_y) = draw_items_3d
+            .pose_by_mark_name("rMid2")?
             .project(&PROJECTION);
 
         // Figure out where to draw the hour and minute placards.
