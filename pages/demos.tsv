@@ -1,5 +1,5 @@
-clock	Clock	v5	crates/linkage-blaze-examples-wasm	clock	www	linkage_blaze_clock_wasm	v2,v3,v4,v5
-armatron	Armatron	v5	crates/linkage-blaze-examples-wasm	armatron	www	linkage_blaze_armatron_wasm	v1,v2,v3,v4,v5
-ballet	Ballet	v5	crates/linkage-blaze-examples-wasm	ballet	www	linkage_blaze_classic_wasm	v1,v2,v3,v4,v5
-skeleton-clock	Skeleton Clock	v5	crates/linkage-blaze-examples-wasm	skeleton_clock	www	linkage_blaze_skeleton_clock_wasm	v1,v2,v3,v4,v5
-editor	Editor	v4	crates/linkage-blaze-editor-wasm		crates/linkage-blaze-editor-wasm/www	linkage_blaze_editor	v1,v2,v3,v4
+clock	Clock	v6	crates/linkage-blaze-examples-wasm	clock	www	linkage_blaze_clock_wasm	v2,v3,v4,v5,v6
+armatron	Armatron	v6	crates/linkage-blaze-examples-wasm	armatron	www	linkage_blaze_armatron_wasm	v1,v2,v3,v4,v5,v6
+ballet	Ballet	v6	crates/linkage-blaze-examples-wasm	ballet	www	linkage_blaze_classic_wasm	v1,v2,v3,v4,v5,v6
+skeleton-clock	Skeleton Clock	v6	crates/linkage-blaze-examples-wasm	skeleton_clock	www	linkage_blaze_skeleton_clock_wasm	v1,v2,v3,v4,v5,v6
+editor	Editor	v5	crates/linkage-blaze-editor-wasm		crates/linkage-blaze-editor-wasm/www	linkage_blaze_editor	v1,v2,v3,v4,v5
