@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
-#![doc = include_str!("../../../README.md")]
+#![doc = include_str!(concat!(env!("OUT_DIR"), "/README.md"))]
 #![doc = ""]
 #![doc = "## Coordinate System"]
 //!
