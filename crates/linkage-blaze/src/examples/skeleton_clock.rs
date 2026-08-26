@@ -195,45 +195,43 @@ where
             minute_anchor_y as i32,
         );
 
-        // On each tile-backed frame ...
-        // (Can't use a `for` loop and Iterator because each yielded frame
-        // borrows the CYD's reusable pixel buff. This is the "lending
-        // iterator" patten.)
-        let mut tiles = display.tiles(FIGURE_TILE_GRID);
-        while let Some(mut tile) = tiles.next() {
-            BACKGROUND_BITMAP.draw(&mut tile).unwrap_infallible();
+        // Replay the complete screen-coordinate scene once per tile. The
+        // callback owns neither the reusable buffer nor the flush sequence.
+        display
+            .for_each_tile(FIGURE_TILE_GRID, |tile| {
+                BACKGROUND_BITMAP.draw(tile).unwrap_infallible();
 
-            // Draw the projected items from the linkage.
-            for projected_item in &projected_items {
-                projected_item.draw(&mut tile);
-            }
+                // Draw the projected items from the linkage.
+                for projected_item in &projected_items {
+                    projected_item.draw(tile);
+                }
 
-            // Draw the hour sign and number
-            HOURS_SIGN_BITMAP
-                .at(hours_top_left)
-                .draw_masked(&HOURS_SIGN_MASK, &mut tile)
-                .unwrap_infallible();
-            draw_centered_sign_value(
-                &mut tile,
-                hours_top_left,
-                HOURS_SIGN_VALUE_CENTER,
-                hour_12 as u32,
-            );
+                // Draw the hour sign and number
+                HOURS_SIGN_BITMAP
+                    .at(hours_top_left)
+                    .draw_masked(&HOURS_SIGN_MASK, tile)
+                    .unwrap_infallible();
+                draw_centered_sign_value(
+                    tile,
+                    hours_top_left,
+                    HOURS_SIGN_VALUE_CENTER,
+                    hour_12 as u32,
+                );
 
-            // Draw the minute sign and number.
-            MINUTE_SIGN_BITMAP
-                .at(minute_top_left)
-                .draw_masked(&MINUTE_SIGN_MASK, &mut tile)
-                .unwrap_infallible();
-            draw_centered_sign_value(
-                &mut tile,
-                minute_top_left,
-                MINUTE_SIGN_VALUE_CENTER,
-                minute as u32,
-            );
-
-            tile.flush().await.map_err(Error::Flush)?;
-        }
+                // Draw the minute sign and number.
+                MINUTE_SIGN_BITMAP
+                    .at(minute_top_left)
+                    .draw_masked(&MINUTE_SIGN_MASK, tile)
+                    .unwrap_infallible();
+                draw_centered_sign_value(
+                    tile,
+                    minute_top_left,
+                    MINUTE_SIGN_VALUE_CENTER,
+                    minute as u32,
+                );
+            })
+            .await
+            .map_err(Error::Flush)?;
     }
 }
 
@@ -263,11 +261,12 @@ where
         .await
         .map_err(Error::Flush)?;
 
-    let mut tiles = display.tiles(FIGURE_TILE_GRID);
-    while let Some(mut frame) = tiles.next() {
-        BACKGROUND_BITMAP.draw(&mut frame).unwrap_infallible();
-        frame.flush().await.map_err(Error::Flush)?;
-    }
+    display
+        .for_each_tile(FIGURE_TILE_GRID, |frame| {
+            BACKGROUND_BITMAP.draw(frame).unwrap_infallible();
+        })
+        .await
+        .map_err(Error::Flush)?;
 
     Ok(())
 }
@@ -424,7 +423,7 @@ const fn str_eq(left: &str, right: &str) -> bool {
 // ── Skeleton-clock-specific overlay drawing ──────────────────────────────────
 
 // All overlay drawing happens against a `DrawTarget` whose coordinates are in
-// figure-rectangle space; tiled frames from `CydDisplay::tiles` subtract the shared
+// figure-rectangle space; tiled callbacks replay screen coordinates and subtract the shared
 // figure-rectangle tile top-left so these functions never need to know they are
 // rendering into a tile.
 
