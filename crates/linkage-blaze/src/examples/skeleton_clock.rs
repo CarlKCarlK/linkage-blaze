@@ -26,8 +26,8 @@ use time::OffsetDateTime;
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, Image888Fixed, MaskFixed, Orientation, mask_byte_count,
-        tga, tiling::TileGrid,
+        CydFrame, DrawItem, Image565Fixed, Image888Fixed, MaskFixed, MaskedDrawable, Orientation,
+        mask_byte_count, tga, tiling::TileGrid,
     },
 };
 

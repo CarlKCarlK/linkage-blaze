@@ -109,7 +109,8 @@ where
         time_frame.fill(background565);
         Text::with_text_style(
             time_text.as_str(),
-            Point::new(TIME_RECTANGLE.size.width as i32 / 2, TIME_TEXT_TOP_PADDING),
+            TIME_RECTANGLE.top_left
+                + Point::new(TIME_RECTANGLE.size.width as i32 / 2, TIME_TEXT_TOP_PADDING),
             MonoTextStyle::new(&TIME_FONT, time_color),
             TIME_TEXT_STYLE,
         )
