@@ -124,8 +124,10 @@ const FIGURE_Y: u32 = if WIFI_STATUS_RECTANGLE.top_left.y as u32 + WIFI_STATUS_R
 };
 /// Tile layout used to draw the skeleton figure.
 pub const FIGURE_TILE_GRID: TileGrid = TileGrid::new(
-    Point::new(0, FIGURE_Y as i32),
-    Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),
+    Rectangle::new(
+        Point::new(0, FIGURE_Y as i32),
+        Size::new(ORIENTATION.width(), ORIENTATION.height() - FIGURE_Y),
+    ),
     3,
     3,
 );
