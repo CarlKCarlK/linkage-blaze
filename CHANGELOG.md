@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.7 (unreleased)
+## 0.1.7
 
 - Updated the CYD examples for Device Envoy 0.1.3's simplified drawing,
   tiling, and fallible touch APIs.
