@@ -228,7 +228,9 @@ where
                 format_args!("{fps_whole:>2}.{fps_fraction} fps"),
             )?;
         }
-        ui_frame.label(&VERSION_LABEL, format_args!("{VERSION_TEXT}"))?;
+        if !cfg!(test) {
+            ui_frame.label(&VERSION_LABEL, format_args!("{VERSION_TEXT}"))?;
+        }
 
         ui_frame.draw_touch_cursor()?;
 
