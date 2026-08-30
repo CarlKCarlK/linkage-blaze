@@ -7,6 +7,8 @@
 - Added immutable `v7` snapshots for the Clock, Skeleton Clock, and Armatron
   demos and for the gallery page, capturing material changes made after the
   previous `v6` snapshots.
+- Added a canonical release checklist covering demo-version audits, automatic
+  WASM/Pages deployment, crate publication, tagging, and final verification.
 
 ## 0.1.7
 

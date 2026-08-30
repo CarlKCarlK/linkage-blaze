@@ -21,6 +21,8 @@ turns, branches, links, joints, disks, and spheres, then animate parameters to b
 - **[Documentation on docs.rs](https://docs.rs/linkage-blaze)**
 - **[GitHub repository](https://github.com/CarlKCarlK/linkage-blaze)** - Source,
   issues, and development history.
+- **[Release checklist](docs/release_checklist.md)** - Crate, demo-version,
+  GitHub Pages, and publication procedure.
 
 ## What is Linkage Blaze?
 
