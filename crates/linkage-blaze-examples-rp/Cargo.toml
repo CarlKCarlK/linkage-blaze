@@ -66,8 +66,8 @@ cortex-m-rt = { version = "0.7.5", optional = true }
 defmt = "=1.0.1"
 defmt-rtt = "=1.1.0"
 derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
-device-envoy-core = { version = "0.1.3", default-features = false }
-device-envoy-rp = { version = "0.1.3", default-features = false }
+device-envoy-core = { version = "0.1.4", default-features = false }
+device-envoy-rp = { version = "0.1.4", default-features = false }
 embedded-graphics = { version = "0.8", default-features = false }
 embassy-executor = { version = "0.10.0", default-features = false, features = [
     "executor-thread",
