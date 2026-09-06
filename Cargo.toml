@@ -11,7 +11,7 @@ exclude = ["tombstones"]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 rust-version = "1.93"
 license = "MIT OR Apache-2.0"
@@ -19,7 +19,7 @@ repository = "https://github.com/CarlKCarlK/linkage-blaze"
 homepage = "https://github.com/CarlKCarlK/linkage-blaze"
 
 [workspace.dependencies]
-linkage-blaze = { version = "0.1.8", path = "crates/linkage-blaze" }
+linkage-blaze = { version = "0.1.9", path = "crates/linkage-blaze" }
 
 # Build against the local sister `device-envoy` working copy instead of the
 # published crates.io releases, so `cargo check-all` catches breakage from

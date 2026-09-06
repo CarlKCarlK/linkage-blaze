@@ -429,19 +429,22 @@ fn cyd_one_spi_conflicting_pin(board_profile: BoardProfile) -> Option<u8> {
     let display = board_profile.cyd_display_wiring;
     let touch = board_profile.cyd_touch_wiring;
     let pins = [
-        display.sck_pin_num,
-        display.mosi_pin_num,
-        display.miso_pin_num,
-        display.cs_pin_num,
-        display.dc_pin_num,
+        Some(display.sck_pin_num),
+        Some(display.mosi_pin_num),
+        Some(display.miso_pin_num),
+        Some(display.cs_pin_num),
+        Some(display.dc_pin_num),
         display.rst_pin_num,
-        display.backlight_pin_num,
-        touch.cs_pin_num,
-        touch.irq_pin_num,
-        board_profile.button_pin,
+        Some(display.backlight_pin_num),
+        Some(touch.cs_pin_num),
+        Some(touch.irq_pin_num),
+        Some(board_profile.button_pin),
     ];
-    for (index, &pin) in pins.iter().enumerate() {
-        if pins[..index].contains(&pin) {
+    for (index, pin) in pins.iter().copied().enumerate() {
+        let Some(pin) = pin else {
+            continue;
+        };
+        if pins[..index].contains(&Some(pin)) {
             return Some(pin);
         }
     }
