@@ -9,7 +9,7 @@ use device_envoy_esp::{
     Error as DeviceEnvoyError,
     button::PressedTo,
     button_watch,
-    cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
+    cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, NoDisplayReset, Orientation},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
@@ -42,15 +42,15 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
 
     static CYD_STATIC: CydStaticEsp<{ CydEspOneSpi::SCREEN_PIXELS }> = CydEspOneSpi::new_static();
     let mut cyd = CydEspOneSpi::new(
-        &CYD_STATIC, // statics
-        p.SPI2,      // spi
-        p.GPIO14,    // sck_pin
-        p.GPIO13,    // mosi_pin
-        p.GPIO12,    // miso_pin
-        p.GPIO15,    // lcd_cs_pin
-        p.GPIO2,     // lcd_dc_pin
-        p.GPIO4,     // lcd_rst_pin
-        p.GPIO21,    // lcd_backlight_pin
+        &CYD_STATIC,    // statics
+        p.SPI2,         // spi
+        p.GPIO14,       // sck_pin
+        p.GPIO13,       // mosi_pin
+        p.GPIO12,       // miso_pin
+        p.GPIO15,       // lcd_cs_pin
+        p.GPIO2,        // lcd_dc_pin
+        NoDisplayReset, // lcd_rst_pin
+        p.GPIO21,       // lcd_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
         p.GPIO33,                     // touch_cs_pin
         p.GPIO36,                     // touch_irq_pin

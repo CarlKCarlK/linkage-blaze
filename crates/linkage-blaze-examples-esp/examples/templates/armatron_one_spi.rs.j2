@@ -10,7 +10,7 @@ use device_envoy_esp::{
     Error as DeviceEnvoyError,
     button::PressedTo,
     button_watch,
-    cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation},
+    cyd::{CydEspOneSpi, CydStaticEsp, DEFAULT_FONT, Orientation{% if cyd_display_rst_pin is none %}, NoDisplayReset{% endif %}},
     flash_block::{FlashBlock as _, FlashBlockEsp},
     init_and_start,
 };
@@ -53,7 +53,7 @@ async fn inner_main(spawner: Spawner) -> Result<Infallible, Error> {
         p.GPIO{{ cyd_display_miso_pin }}, // miso_pin
         p.GPIO{{ cyd_display_cs_pin }}, // lcd_cs_pin
         p.GPIO{{ cyd_display_dc_pin }}, // lcd_dc_pin
-        p.GPIO{{ cyd_display_rst_pin }}, // lcd_rst_pin
+        {% if cyd_display_rst_pin is none %}NoDisplayReset,{% else %}p.GPIO{{ cyd_display_rst_pin }},{% endif %} // lcd_rst_pin
         p.GPIO{{ cyd_display_backlight_pin }}, // lcd_backlight_pin
         DEFAULT_DISPLAY_SPI_HZ,
         p.GPIO{{ cyd_touch_cs_pin }}, // touch_cs_pin

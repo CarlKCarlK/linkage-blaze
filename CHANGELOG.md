@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.9
+
+- Updated the Core, RP, and ESP dependencies and CI integration to Device
+  Envoy 0.1.5.
+- Added immutable `v8` snapshots for the Armatron demo and gallery page,
+  capturing Device Envoy's reduced browser touch latency.
+- Updated generated ESP examples to support displays whose reset is wired to
+  the board reset rather than a dedicated GPIO.
+
 ## 0.1.8
 
 - Updated the Core, RP, and ESP dependencies and CI integration to Device

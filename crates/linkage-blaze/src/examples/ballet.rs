@@ -181,6 +181,7 @@ mod tests {
         button::Button,
         memory::{CydMemory, assert_framebuffer_matches_expected_png},
     };
+    use embedded_graphics::{geometry::Point, image::GetPixel};
     use futures_executor::block_on;
 
     use super::{BACKGROUND_COLOR, FOREGROUND_COLOR, ORIENTATION, TOP_FONT, run};
@@ -217,8 +218,8 @@ mod tests {
         for position_y in 0..ORIENTATION.height() as usize {
             for position_x in 0..ORIENTATION.width() as usize {
                 assert_eq!(
-                    restarted.pixel(position_x, position_y),
-                    baseline.pixel(position_x, position_y),
+                    restarted.pixel(Point::new(position_x as i32, position_y as i32)),
+                    baseline.pixel(Point::new(position_x as i32, position_y as i32)),
                     "restarted frame differs at ({position_x}, {position_y})",
                 );
             }
