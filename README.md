@@ -50,9 +50,9 @@ It shows preview images of each demo and links to the live, interactive WASM ver
 
 ## Articles
 
-- [Nine Rules for Compile-Time Work with Rust const fn: Parse files, build tables, and catch mistakes … without a build script](https://medium.com/@carlmkadie)
-  *expected September 2026*.
-
+- [Nine Rules for Compile-Time Work with Rust `const fn`](https://medium.com/gitconnected/nine-rules-for-compile-time-work-with-rust-const-fn-part-1-a29f7dd62b2f),
+  published in *Level Up Coding*, includes examples from Linkage Blaze and Device
+  Envoy.
 
 ## Usage
 
