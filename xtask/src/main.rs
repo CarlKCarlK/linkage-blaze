@@ -8,6 +8,7 @@ use std::process::Command;
 mod linkage_esp_examples_generated;
 
 const PAGES_DIR: &str = "target/pages";
+const FAVICON_FILES: [&str; 3] = ["favicon.ico", "favicon.png", "favicon.svg"];
 const MANIFEST_PATH: &str = "pages/demos.tsv";
 const PREVIEW_EXAMPLE_CRATE: &str = "linkage-blaze";
 const GALLERY_VERSIONS_DIR: &str = "pages/gallery";
@@ -315,6 +316,12 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
 
     remove_dir_if_exists(pages_dir)?;
     fs::create_dir_all(pages_dir.join("demos"))?;
+    for favicon_file in FAVICON_FILES {
+        fs::copy(
+            Path::new("pages").join(favicon_file),
+            pages_dir.join(favicon_file),
+        )?;
+    }
 
     let mut demos_index_body = String::new();
 
@@ -336,6 +343,7 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
         &pages_dir.join("index.html"),
         "Linkage Blaze Demos",
         "./demos/",
+        "./favicon",
     )?;
 
     let gallery_versions = list_gallery_versions(Path::new(GALLERY_VERSIONS_DIR))?;
@@ -343,6 +351,7 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
         &pages_dir.join("demos/index.html"),
         &demos_index_body,
         &gallery_versions_section_html(&gallery_versions),
+        "../favicon",
     )?;
     copy_gallery_versions(pages_dir, &gallery_versions)?;
 
@@ -359,7 +368,7 @@ fn build_pages(selected_demo: Option<&str>) -> Result<()> {
 /// older rendering, reachable at `/demos/<version>/` once served.
 fn bump_gallery_version(requested_version: Option<&str>) -> Result<()> {
     let demos = load_manifest(Path::new(MANIFEST_PATH))?;
-    let html = render_gallery_html(&demos, "../", "")?;
+    let html = render_gallery_html(&demos, "../", "", "../../favicon")?;
 
     let gallery_dir = Path::new(GALLERY_VERSIONS_DIR);
     fs::create_dir_all(gallery_dir)?;
@@ -491,6 +500,7 @@ fn build_demo(repo_root: &Path, pages_dir: &Path, demo_record: &DemoRecord) -> R
         &demo_dir.join("index.html"),
         &demo_record.title,
         &format!("./{}/", demo_record.current_version),
+        "../../favicon",
     )?;
     fs::write(
         demo_dir.join("current.json"),
@@ -804,10 +814,15 @@ fn capture_demo_preview(
     Ok(())
 }
 
-fn write_demos_index_file(path: &Path, body: &str, gallery_versions_section: &str) -> Result<()> {
+fn write_demos_index_file(
+    path: &Path,
+    body: &str,
+    gallery_versions_section: &str,
+    favicon_path: &str,
+) -> Result<()> {
     fs::write(
         path,
-        render_gallery_html_from_body(body, gallery_versions_section),
+        render_gallery_html_from_body(body, gallery_versions_section, favicon_path),
     )?;
     Ok(())
 }
@@ -816,6 +831,7 @@ fn render_gallery_html(
     demos: &[DemoRecord],
     path_prefix: &str,
     gallery_versions_section: &str,
+    favicon_path: &str,
 ) -> Result<String> {
     let mut body = String::new();
     for demo_record in demos {
@@ -827,13 +843,19 @@ fn render_gallery_html(
     Ok(render_gallery_html_from_body(
         &body,
         gallery_versions_section,
+        favicon_path,
     ))
 }
 
-fn render_gallery_html_from_body(body: &str, gallery_versions_section: &str) -> String {
+fn render_gallery_html_from_body(
+    body: &str,
+    gallery_versions_section: &str,
+    favicon_path: &str,
+) -> String {
     DEMOS_INDEX_TEMPLATE
         .replace("$body", body)
         .replace("$gallery_versions_section", gallery_versions_section)
+        .replace("$favicon_path", favicon_path)
 }
 
 /// Lists frozen gallery snapshots under `pages/gallery/`, oldest first, by the
@@ -912,10 +934,11 @@ fn copy_gallery_versions(pages_dir: &Path, gallery_versions: &[String]) -> Resul
     Ok(())
 }
 
-fn write_redirect(path: &Path, title: &str, target: &str) -> Result<()> {
+fn write_redirect(path: &Path, title: &str, target: &str, favicon_path: &str) -> Result<()> {
     let html = REDIRECT_TEMPLATE
         .replace("$title", title)
-        .replace("$target", target);
+        .replace("$target", target)
+        .replace("$favicon_path", favicon_path);
     fs::write(path, html)?;
     Ok(())
 }
@@ -1263,6 +1286,9 @@ const REDIRECT_TEMPLATE: &str = r#"<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="$favicon_path.ico" />
+  <link rel="icon" href="$favicon_path.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="$favicon_path.png" />
   <script>
     const target = "$target";
     window.location.replace(`${target}${window.location.hash}`);
@@ -1284,6 +1310,9 @@ const DEMOS_INDEX_TEMPLATE: &str = r#"<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="$favicon_path.ico" />
+  <link rel="icon" href="$favicon_path.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="$favicon_path.png" />
   <title>Linkage Blaze Demos</title>
   <style>
     :root {
