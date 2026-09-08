@@ -50,9 +50,12 @@ It shows preview images of each demo and links to the live, interactive WASM ver
 
 ## Articles
 
-- [Nine Rules for Compile-Time Work with Rust `const fn`](https://medium.com/gitconnected/nine-rules-for-compile-time-work-with-rust-const-fn-part-1-a29f7dd62b2f),
+- [Nine Rules for Compile-Time Work with Rust `const fn` (Part 1)](https://medium.com/gitconnected/nine-rules-for-compile-time-work-with-rust-const-fn-part-1-a29f7dd62b2f),
   published in *Level Up Coding*, includes examples from Linkage Blaze and Device
   Envoy.
+- [Nine Rules for Compile-Time Work with Rust `const fn` (Part 2)](https://medium.com/gitconnected/nine-rules-for-compile-time-work-with-rust-const-fn-part-2-76ccd0e8a965)
+  uses Linkage Blaze to demonstrate a compile-time DSL and examines the practical
+  limits of `const fn`.
 
 ## Usage
 
