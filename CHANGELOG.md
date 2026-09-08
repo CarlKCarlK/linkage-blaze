@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.10
+
+- Updated the Core, RP, and ESP dependencies and CI/Pages integration to
+  Device Envoy 0.1.6.
+- Updated native CYD examples to use Device Envoy's corrected runtime display
+  orientation behavior and landscape calibration buffer sizing.
+- Kept the existing immutable demo and gallery versions because Device Envoy
+  0.1.6 does not change the WASM implementation or browser shell assets.
+
 ## 0.1.9
 
 - Updated the Core, RP, and ESP dependencies and CI integration to Device
