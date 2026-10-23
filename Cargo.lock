@@ -676,7 +676,6 @@ dependencies = [
  "log",
  "macro-schema",
  "mipidsi",
- "paste",
  "portable-atomic",
  "serde",
  "smart-leds",
