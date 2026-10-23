@@ -2269,7 +2269,6 @@ dependencies = [
  "heapless 0.9.3",
  "linkage-blaze",
  "log",
- "paste",
  "static_cell",
  "time",
 ]
