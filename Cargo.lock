@@ -165,11 +165,11 @@ checksum = "211713d2e9fb4793ce4360a712c0764264aff6be48932ccf02ca2a331c0436a9"
 dependencies = [
  "btuuid",
  "defmt 1.0.1",
- "embassy-sync 0.8.0",
+ "embassy-sync 0.7.2",
  "embedded-io 0.7.1",
  "embedded-io-async 0.7.0",
  "futures-intrusive",
- "heapless 0.9.3",
+ "heapless 0.8.0",
 ]
 
 [[package]]
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "device-envoy-core"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "crc32fast",
  "critical-section",
@@ -652,7 +652,7 @@ dependencies = [
 
 [[package]]
 name = "device-envoy-esp"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "derive_more",
  "device-envoy-core",
@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "device-envoy-rp"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -2363,18 +2363,18 @@ dependencies = [
 
 [[package]]
 name = "macro-schema"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c87e1b8c3e4e8a1f36c7746847dad1dc959b91f6a512abb262cc0dfe3e36f9c5"
+checksum = "5cb9d3394aee92caddf593ba8a6d23fd9207c34ae2056c0c956e407515725599"
 dependencies = [
  "macro-schema-derive",
 ]
 
 [[package]]
 name = "macro-schema-core"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dea1109dedc4af7be7d9267287bfd667a4fa0018ae0109b48eedcb93c9f727c5"
+checksum = "97b0908e05d9100ed3d8ea4661d87a81a26d006d0aaba384560a93d04c7abf77"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -2384,9 +2384,9 @@ dependencies = [
 
 [[package]]
 name = "macro-schema-derive"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37252ffe8fad20846248190229e2b3daceaaa0bb1e1881dd60e1e0dea1590845"
+checksum = "52e784ab006068b3572170d5433a4b4f1ddec35c5b3a772b22f4a8e8b705f34f"
 dependencies = [
  "macro-schema-core",
 ]
