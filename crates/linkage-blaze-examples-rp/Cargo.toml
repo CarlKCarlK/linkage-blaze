@@ -63,7 +63,7 @@ skeleton-clock = ["linkage-blaze/examples-skeleton-clock"]
 critical-section = { version = "1.2.0", default-features = false }
 cortex-m = { version = "0.7.7", optional = true }
 cortex-m-rt = { version = "0.7.5", optional = true }
-defmt = "=1.0.1"
+defmt = "=1.2.0"
 defmt-rtt = "=1.1.0"
 derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
 device-envoy-core = { version = "0.2.0", default-features = false }
