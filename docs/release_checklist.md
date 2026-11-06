@@ -60,7 +60,11 @@ just bump-gallery-version
 - Update the workspace `linkage-blaze` dependency requirement.
 - Update all Device Envoy requirements together when coordinating a Device
   Envoy release.
-- Update the Device Envoy tag used by the Clippy, MSRV, and Pages workflows.
+- Update the Device Envoy tag in `.github/device-envoy-ref`. The Clippy, MSRV,
+  and Pages workflows check out device-envoy at that tag, through
+  `.github/actions/checkout-device-envoy`, because the workspace's
+  `[patch.crates-io]` builds against a sibling checkout. A tag older than the
+  Device Envoy version requirement fails every workflow.
 - Refresh the lockfile through Cargo and review it so unrelated packages do not
   move:
 
