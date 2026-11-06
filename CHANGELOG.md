@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.11
+
+- Updated the Core, RP, and ESP dependencies and CI/Pages integration to
+  Device Envoy 0.2.0 (RP 0.2.1). Device Envoy's declaration macros are now
+  defined with `macro-schema`.
+- Updated the native RP and ESP examples to the Device Envoy 0.2.0 API:
+  `init_and_start!(p)` with `new_rmt80` and `new_ledc`, and no `paste`
+  dependency in user crates.
+- Moved `defmt` to 1.2.0.
+- Kept the existing immutable demo and gallery versions because Device Envoy
+  0.2.0 does not change the WASM implementation or browser shell assets.
+
 ## 0.1.10
 
 - Updated the Core, RP, and ESP dependencies and CI/Pages integration to
