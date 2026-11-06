@@ -685,7 +685,7 @@ dependencies = [
 
 [[package]]
 name = "device-envoy-rp"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -2220,7 +2220,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "linkage-blaze"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "derive_more",
  "device-envoy-core",
@@ -2242,7 +2242,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-editor-wasm"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "derive_more",
  "linkage-blaze",
@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-examples-esp"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "derive_more",
  "device-envoy-core",
@@ -2273,7 +2273,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-examples-rp"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -2294,7 +2294,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-examples-wasm"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "device-envoy-core",
  "embassy-executor",
@@ -2310,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-xtask"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "derive_more",
