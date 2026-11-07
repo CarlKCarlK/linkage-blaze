@@ -11,7 +11,7 @@
 //! ```rust
 //! # use embedded_graphics::{mock_display::MockDisplay, prelude::*};
 //! # use linkage_blaze::{LinkageFixed, Rgb888, Vec3};
-//! # use linkage_blaze::render::{Item2d, Item3d, Projection};
+//! # use linkage_blaze::render::{Item3d, Projection};
 //! # fn main() -> Result<(), linkage_blaze::Error> {
 //! const LINKAGE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
 //!     .forward(1.0)
@@ -22,16 +22,11 @@
 //! let mut items = view.draw_items_3d(&[])?;
 //! match items.next() {
 //!     Some(Item3d::Stroke(stroke)) => {
-//!         let item_2d = Item3d::Stroke(stroke).project(&projection);
 //!         let _ = (stroke.start(), stroke.end(), stroke.color(), stroke.width());
-//!         // Draw onto any embedded-graphics target whose color is `Rgb888`
-//!         // (use `.color_converted()` for other color types).
-//!         let mut display = MockDisplay::<Rgb888>::new();
-//!         display.set_allow_out_of_bounds_drawing(true);
-//!         item_2d.draw(&mut display).unwrap_or_else(|infallible| match infallible {});
-//!         if let Item2d::Stroke { start, end, .. } = item_2d {
-//!             let _ = (start, end);
-//!         }
+//!         let item_2d = Item3d::Stroke(stroke).project(&projection);
+//!         # let mut display = MockDisplay::<Rgb888>::new();
+//!         # display.set_allow_out_of_bounds_drawing(true);
+//!         let Ok(()) = item_2d.draw(&mut display); // any embedded-graphics target
 //!     }
 //!     _ => return Err(linkage_blaze::Error::EmptyLinkage),
 //! }
