@@ -21,6 +21,8 @@ derive_more = { version = "2.1.1", default-features = false, features = ["from"]
 # Optional: only the `examples-*` features use Device Envoy. The library itself
 # renders through embedded-graphics and has no Device Envoy dependency.
 device-envoy-core = { version = "0.2.0", default-features = false, optional = true }
+# Embeds example images into the rustdoc output; used only by the `doc-images` feature.
+embed-doc-image = { version = "0.1.4", optional = true }
 embassy-time = "0.5.1"
 embassy-futures = "0.1.2"
 embedded-graphics = { version = "0.8", default-features = false }
@@ -37,6 +39,8 @@ default = []
 alloc = []
 std = ["alloc"]
 bvh = ["std"]
+# Embed example images in the generated docs (docs.rs builds with all features).
+doc-images = ["dep:embed-doc-image"]
 # Each generic example is gated behind its own feature so a consumer compiles
 # only the example it actually uses — in particular `examples-ballet`'s heavy
 # embedded `MOTION` const is evaluated only when that feature is on. Nothing

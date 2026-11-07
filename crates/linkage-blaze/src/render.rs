@@ -1,52 +1,78 @@
 //! Evaluated three-dimensional drawing geometry and projection helpers.
 //!
-//! [`Item3d`] values are produced by [`crate::LinkageView::draw_items_3d`].
-//! Use [`Item3d::project`] with a [`Projection`] to get a pixel-space
-//! [`Item2d`], which draws onto any embedded-graphics
-//! [`DrawTarget`]. You can also
-//! inspect either item's payload directly in another renderer.
+//! [`LinkageView::draw_items_3d`](crate::LinkageView::draw_items_3d) yields
+//! [`Item3d`] values. [`Item3d::project`] with a [`Projection`] turns each one
+//! into a pixel-space [`Item2d`], which draws onto any embedded-graphics
+//! [`DrawTarget`]. To render some other way, read the 3D data directly from
+//! [`Stroke`], [`Disk`], and [`Sphere`].
 //!
-//! # Rendering evaluated items
+//! # Example
+//!
+//! This draws a small robot arm:
+//!
+#![cfg_attr(
+    feature = "doc-images",
+    doc = ::embed_doc_image::embed_image!("render_example", "tests/assets/render_example.png")
+)]
+#![cfg_attr(
+    feature = "doc-images",
+    doc = "![A small robot arm: gray turntable, blue upper arm, orange forearm, and a crimson two-finger gripper.][render_example]"
+)]
 //!
 //! ```rust
-//! # use embedded_graphics::{mock_display::MockDisplay, prelude::*};
-//! # use linkage_blaze::{LinkageFixed, Rgb888, Vec3};
-//! # use linkage_blaze::render::{Item3d, Projection};
-//! # fn main() -> Result<(), linkage_blaze::Error> {
-//! const LINKAGE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
-//!     .forward(1.0)
-//!     .disk(0.25)
-//!     .sphere(0.5);
-//! let projection = Projection::front_orthographic(Point::new(0, 0), 10.0);
-//! let view = LINKAGE.view();
-//! let mut items = view.draw_items_3d(&[])?;
-//! match items.next() {
-//!     Some(Item3d::Stroke(stroke)) => {
-//!         let _ = (stroke.start(), stroke.end(), stroke.color(), stroke.width());
-//!         let item_2d = Item3d::Stroke(stroke).project(&projection);
-//!         # let mut display = MockDisplay::<Rgb888>::new();
-//!         # display.set_allow_out_of_bounds_drawing(true);
-//!         let Ok(()) = item_2d.draw(&mut display); // any embedded-graphics target
-//!     }
-//!     _ => return Err(linkage_blaze::Error::EmptyLinkage),
+//! # use embedded_graphics::{pixelcolor::{Rgb888, WebColors}, prelude::*};
+//! # use linkage_blaze::{LinkageFixed, render::Projection};
+//! # struct Display(Vec<Rgb888>);
+//! # impl OriginDimensions for Display {
+//! #     fn size(&self) -> Size { Size::new(300, 300) }
+//! # }
+//! # impl DrawTarget for Display {
+//! #     type Color = Rgb888;
+//! #     type Error = core::convert::Infallible;
+//! #     fn draw_iter<I: IntoIterator<Item = Pixel<Rgb888>>>(&mut self, pixels: I) -> Result<(), Self::Error> {
+//! #         for Pixel(point, color) in pixels {
+//! #             if (0..300).contains(&point.x) && (0..300).contains(&point.y) {
+//! #                 self.0[point.y as usize * 300 + point.x as usize] = color;
+//! #             }
+//! #         }
+//! #         Ok(())
+//! #     }
+//! # }
+//! # fn main() -> Result<(), Box<dyn core::error::Error>> {
+//! # let mut display = Display(vec![Rgb888::WHITE; 300 * 300]);
+//! const ARM: LinkageFixed<0, 1, 21> = LinkageFixed::start()
+//!     .pitch(-20.0) // tilt the scene toward the camera
+//!     .pen_color(Rgb888::CSS_DIM_GRAY)
+//!     .disk(2.5) // turntable
+//!     .pitch(-75.0)
+//!     .pen_width(0.4)
+//!     .pen_color(Rgb888::CSS_STEEL_BLUE)
+//!     .forward(3.5) // upper arm
+//!     .sphere(0.5) // elbow
+//!     .yaw(-70.0)
+//!     .pen_color(Rgb888::CSS_DARK_ORANGE)
+//!     .forward(3.0) // forearm
+//!     .sphere(0.45) // wrist
+//!     .pen_color(Rgb888::CSS_CRIMSON)
+//!     .pen_width(0.25)
+//!     .mark("wrist")
+//!     .yaw(35.0)
+//!     .forward(1.6) // finger
+//!     .restore("wrist")
+//!     .yaw(-35.0)
+//!     .forward(1.6); // finger
+//! let projection = Projection::front_perspective(Point::new(140, 250), 30.0, 20.0);
+//! let no_params = []; // ARM has no degrees of freedom
+//! for item_3d in ARM.view().draw_items_3d(&no_params)? {
+//!     item_3d.project(&projection).draw(&mut display)?; // any embedded-graphics target
 //! }
-//! match items.next() {
-//!     Some(Item3d::Disk(disk)) => {
-//!         let _ = (disk.pose(), disk.radius(), disk.color());
-//!     }
-//!     _ => return Err(linkage_blaze::Error::EmptyLinkage),
-//! }
-//! match items.next() {
-//!     Some(Item3d::Sphere(sphere)) => {
-//!         let _ = (sphere.pose(), sphere.radius(), sphere.color());
-//!     }
-//!     _ => return Err(linkage_blaze::Error::EmptyLinkage),
-//! }
-//! let _screen_direction = projection.project_dir(
-//!     linkage_blaze::Pose::start(),
-//!     Vec3::from([1.0, 0.0, 0.0]),
-//!     1.0,
-//! );
+//! # // Keep the docs' picture honest: these pixels must match the embedded PNG.
+//! # let golden = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/assets/render_example.png");
+//! # let mut reader = png::Decoder::new(std::io::BufReader::new(std::fs::File::open(golden)?)).read_info()?;
+//! # let mut golden_bytes = vec![0; reader.output_buffer_size().ok_or("PNG too large")?];
+//! # let frame = reader.next_frame(&mut golden_bytes)?;
+//! # let pixel_bytes: Vec<u8> = display.0.iter().flat_map(|color| [color.r(), color.g(), color.b()]).collect();
+//! # assert!(pixel_bytes == golden_bytes[..frame.buffer_size()], "pixels differ from {golden}");
 //! # Ok(())
 //! # }
 //! ```
@@ -59,6 +85,29 @@ use embedded_graphics::{
 };
 
 /// A drawable pen-down movement emitted while evaluating a linkage.
+///
+/// Its accessors give the 3D data for renderers that skip [`Item3d::project`].
+///
+/// # Example
+///
+/// ```rust
+/// # use linkage_blaze::{LinkageFixed, LinkageView, Rgb888, Vec3, WebColors, render::Item3d};
+/// # fn main() -> Result<(), linkage_blaze::Error> {
+/// const ONE_LINE: LinkageView<0, 0> = LinkageFixed::<0, 0, 5>::start()
+///     .pen_width(0.5)
+///     .pen_color(Rgb888::CSS_STEEL_BLUE)
+///     .forward(2.0)
+///     .view();
+/// let no_params = []; // ONE_LINE has no degrees of freedom
+/// let item_3d = ONE_LINE.draw_items_3d(&no_params)?.next().unwrap(); // the line's one item
+/// let Item3d::Stroke(stroke) = item_3d else { panic!("expected a stroke") };
+/// assert_eq!(stroke.start().position(), Vec3::from([0.0, 0.0, 0.0]));
+/// assert_eq!(stroke.end().position(), Vec3::from([2.0, 0.0, 0.0]));
+/// assert_eq!(stroke.color(), Rgb888::CSS_STEEL_BLUE);
+/// assert_eq!(stroke.width(), 0.5); // linkage units, before projection
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Stroke {
     pub(crate) start: Pose,
@@ -69,25 +118,25 @@ pub struct Stroke {
 
 impl Stroke {
     /// Return the pose at the start of the segment.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Stroke` example](Stroke#example).
     #[must_use]
     pub const fn start(self) -> Pose {
         self.start
     }
     /// Return the pose at the end of the segment.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Stroke` example](Stroke#example).
     #[must_use]
     pub const fn end(self) -> Pose {
         self.end
     }
     /// Return the segment color.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Stroke` example](Stroke#example).
     #[must_use]
     pub const fn color(self) -> Rgb888 {
         self.color
     }
     /// Return the segment width in linkage units.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Stroke` example](Stroke#example).
     #[must_use]
     pub const fn width(self) -> f32 {
         self.width
@@ -95,6 +144,30 @@ impl Stroke {
 }
 
 /// A filled disk emitted while evaluating a linkage.
+///
+/// The disk lies in the plane of its pose's forward and left axes. Its
+/// accessors give the 3D data for renderers that skip [`Item3d::project`].
+///
+/// # Example
+///
+/// ```rust
+/// # use linkage_blaze::{LinkageFixed, LinkageView, Rgb888, Vec3, WebColors, render::Item3d};
+/// # fn main() -> Result<(), linkage_blaze::Error> {
+/// const ONE_DISK: LinkageView<0, 0> = LinkageFixed::<0, 0, 6>::start()
+///     .pen_up() // move without drawing
+///     .forward(1.0)
+///     .pen_color(Rgb888::CSS_SEA_GREEN)
+///     .disk(0.75)
+///     .view();
+/// let no_params = []; // ONE_DISK has no degrees of freedom
+/// let item_3d = ONE_DISK.draw_items_3d(&no_params)?.next().unwrap(); // the disk
+/// let Item3d::Disk(disk) = item_3d else { panic!("expected a disk") };
+/// assert_eq!(disk.pose().position(), Vec3::from([1.0, 0.0, 0.0]));
+/// assert_eq!(disk.radius(), 0.75); // linkage units, before projection
+/// assert_eq!(disk.color(), Rgb888::CSS_SEA_GREEN);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Disk {
     pub(crate) pose: Pose,
@@ -104,26 +177,49 @@ pub struct Disk {
 
 impl Disk {
     /// Return the disk center pose.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Disk` example](Disk#example).
     #[must_use]
     pub const fn pose(self) -> Pose {
         self.pose
     }
     #[must_use]
     /// Return the disk radius in linkage units.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Disk` example](Disk#example).
     pub const fn radius(self) -> f32 {
         self.radius
     }
     #[must_use]
     /// Return the disk color.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Disk` example](Disk#example).
     pub const fn color(self) -> Rgb888 {
         self.color
     }
 }
 
 /// A sphere emitted while evaluating a linkage.
+///
+/// Its accessors give the 3D data for renderers that skip [`Item3d::project`].
+///
+/// # Example
+///
+/// ```rust
+/// # use linkage_blaze::{LinkageFixed, LinkageView, Rgb888, Vec3, WebColors, render::Item3d};
+/// # fn main() -> Result<(), linkage_blaze::Error> {
+/// const ONE_SPHERE: LinkageView<0, 0> = LinkageFixed::<0, 0, 6>::start()
+///     .pen_up() // move without drawing
+///     .up(2.0)
+///     .pen_color(Rgb888::CSS_GOLDENROD)
+///     .sphere(0.5)
+///     .view();
+/// let no_params = []; // ONE_SPHERE has no degrees of freedom
+/// let item_3d = ONE_SPHERE.draw_items_3d(&no_params)?.next().unwrap(); // the sphere
+/// let Item3d::Sphere(sphere) = item_3d else { panic!("expected a sphere") };
+/// assert_eq!(sphere.pose().position(), Vec3::from([0.0, 0.0, 2.0]));
+/// assert_eq!(sphere.radius(), 0.5); // linkage units, before projection
+/// assert_eq!(sphere.color(), Rgb888::CSS_GOLDENROD);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Sphere {
     pub(crate) pose: Pose,
@@ -133,20 +229,20 @@ pub struct Sphere {
 
 impl Sphere {
     /// Return the sphere center pose.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Sphere` example](Sphere#example).
     #[must_use]
     pub const fn pose(self) -> Pose {
         self.pose
     }
     #[must_use]
     /// Return the sphere radius in linkage units.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Sphere` example](Sphere#example).
     pub const fn radius(self) -> f32 {
         self.radius
     }
     #[must_use]
     /// Return the sphere color.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Sphere` example](Sphere#example).
     pub const fn color(self) -> Rgb888 {
         self.color
     }
@@ -168,7 +264,7 @@ impl Item3d {
     ///
     /// The projection controls the camera orientation, scale, target pixel,
     /// and optional perspective depth scaling.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [module example](crate::render#example).
     #[must_use]
     pub fn project(self, projection: &Projection) -> Item2d {
         match self {
@@ -206,7 +302,7 @@ impl Item3d {
 /// [`Rgb888`] color, so it draws onto any
 /// [`DrawTarget`]. For a display with another color type, such as `Rgb565`,
 /// draw through `target.color_converted()`.
-/// See the [rendering evaluated items example](#rendering-evaluated-items).
+/// See the [module example](crate::render#example).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Item2d {
     /// A line stroke from `start` to `end` with the given pixel width.
@@ -253,7 +349,7 @@ impl Drawable for Item2d {
     /// Strokes use the embedded-graphics [`Line`] primitive and circles use
     /// [`Circle`]; ellipses are rasterized pixel by pixel. Edge-on (degenerate)
     /// ellipses draw nothing.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [module example](crate::render#example).
     fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
     where
         D: DrawTarget<Color = Self::Color>,
@@ -335,6 +431,35 @@ fn ellipse_points(
 /// camera, [`top_orthographic`](Self::top_orthographic) for a top camera, or
 /// [`front_perspective`](Self::front_perspective) when depth should affect
 /// scale. [`Item3d::project`] and [`crate::Pose::project`] consume the result.
+///
+/// # Example
+///
+/// ```rust
+/// # use embedded_graphics::prelude::Point;
+/// # use linkage_blaze::{Mat3, Pose, Vec3, render::Projection};
+/// let near = Pose::new(Mat3::IDENTITY, Vec3::from([0.0, 2.0, 3.0]));
+/// let far = Pose::new(Mat3::IDENTITY, Vec3::from([20.0, 2.0, 3.0]));
+///
+/// // Front view: world +Y is screen left, world +Z is screen up.
+/// let front = Projection::front_orthographic(Point::new(100, 100), 10.0);
+/// assert_eq!(near.project(&front), (80.0, 70.0));
+/// assert_eq!(far.project(&front), (80.0, 70.0)); // depth doesn't matter
+///
+/// // Top view: world +Y is screen left, world +X is screen up.
+/// let top = Projection::top_orthographic(Point::new(100, 100), 10.0);
+/// assert_eq!(near.project(&top), (80.0, 100.0));
+///
+/// // Perspective: farther poses shrink toward the target origin.
+/// let perspective = Projection::front_perspective(Point::new(100, 100), 10.0, 20.0);
+/// assert_eq!(far.project(&perspective), (90.0, 85.0));
+/// assert_eq!(perspective.project_radius(far, 1.0), 5.0);
+///
+/// // A world direction in pixels: 2 units of +Z is 20 pixels up the screen.
+/// assert_eq!(front.project_dir(near, Vec3::from([0.0, 0.0, 1.0]), 2.0), (0.0, -20.0));
+/// // Stroke widths scale but never drop below one pixel.
+/// assert_eq!(front.project_width(0.5), 5.0);
+/// assert_eq!(front.project_width(0.01), 1.0);
+/// ```
 pub struct Projection {
     pub(crate) rotation: super::Mat3,
     pub(crate) target_origin: Point,
@@ -348,7 +473,7 @@ const NEG_Z_BASIS: super::Mat3 = super::Mat3([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], 
 
 impl Projection {
     /// Create an orthographic front view looking along negative X.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Projection` example](Projection#example).
     pub const fn front_orthographic(target_origin: Point, scale: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
@@ -359,7 +484,7 @@ impl Projection {
     }
 
     /// Create an orthographic top view looking along negative Z.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Projection` example](Projection#example).
     pub const fn top_orthographic(target_origin: Point, scale: f32) -> Self {
         Self {
             rotation: NEG_Z_BASIS,
@@ -370,7 +495,7 @@ impl Projection {
     }
 
     /// Create a perspective front view looking along negative X.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Projection` example](Projection#example).
     pub const fn front_perspective(target_origin: Point, scale: f32, focal: f32) -> Self {
         Self {
             rotation: NEG_X_BASIS,
@@ -397,7 +522,7 @@ impl Projection {
     }
 
     /// Project a world-space direction, scaled by a world-space radius.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Projection` example](Projection#example).
     pub fn project_dir(&self, pose: Pose, world_dir: Vec3, radius: f32) -> (f32, f32) {
         let factor = self.depth_factor(self.world_to_camera(pose.position())[0]);
         let direction = self.world_to_camera(world_dir);
@@ -406,14 +531,62 @@ impl Projection {
     }
 
     /// Convert a world-space sphere radius to pixels at a pose's depth.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Projection` example](Projection#example).
     pub fn project_radius(&self, pose: Pose, radius: f32) -> f32 {
         radius * self.scale * self.depth_factor(self.world_to_camera(pose.position())[0])
     }
 
     /// Convert a world-space stroke width to pixels.
-    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    /// See the [`Projection` example](Projection#example).
     pub fn project_width(&self, width: f32) -> f32 {
         (width * self.scale).max(1.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Projection;
+    use crate::{
+        LinkageFixed, Rgb888,
+        test_helpers::{Canvas, assert_png_matches_expected},
+    };
+    use embedded_graphics::{
+        pixelcolor::WebColors,
+        prelude::{Drawable, Point},
+    };
+    use std::{boxed::Box, error::Error as StdError};
+
+    /// The robot arm from the module example. Keep the two in sync: the module
+    /// doctest checks its own pixels against the PNG this test writes.
+    const ARM: LinkageFixed<0, 1, 21> = LinkageFixed::start()
+        .pitch(-20.0) // tilt the scene toward the camera
+        .pen_color(Rgb888::CSS_DIM_GRAY)
+        .disk(2.5) // turntable
+        .pitch(-75.0)
+        .pen_width(0.4)
+        .pen_color(Rgb888::CSS_STEEL_BLUE)
+        .forward(3.5) // upper arm
+        .sphere(0.5) // elbow
+        .yaw(-70.0)
+        .pen_color(Rgb888::CSS_DARK_ORANGE)
+        .forward(3.0) // forearm
+        .sphere(0.45) // wrist
+        .pen_color(Rgb888::CSS_CRIMSON)
+        .pen_width(0.25)
+        .mark("wrist")
+        .yaw(35.0)
+        .forward(1.6) // finger
+        .restore("wrist")
+        .yaw(-35.0)
+        .forward(1.6); // finger
+
+    #[test]
+    fn module_example_matches_expected_png() -> Result<(), Box<dyn StdError>> {
+        let mut canvas = Canvas::new();
+        let projection = Projection::front_perspective(Point::new(140, 250), 30.0, 20.0);
+        for item_3d in ARM.view().draw_items_3d(&[])? {
+            let Ok(()) = item_3d.project(&projection).draw(&mut canvas);
+        }
+        assert_png_matches_expected("render_example.png", &canvas)
     }
 }

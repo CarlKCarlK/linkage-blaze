@@ -172,9 +172,10 @@ const LINKAGE: LinkageFixed<0, 0, 3> = LinkageFixed::start()
     .forward(2.0)
     .left(1.0);
 
+let no_params = []; // LINKAGE has no degrees of freedom
 let stroke_count = LINKAGE
     .view()
-    .draw_items_3d(&[])?
+    .draw_items_3d(&no_params)?
     .filter(|item| matches!(item, Item3d::Stroke(_)))
     .count();
 assert_eq!(stroke_count, 2);

@@ -1035,6 +1035,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "embed-doc-image"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af36f591236d9d822425cb6896595658fa558fcebf5ee8accac1d4b92c47166e"
+dependencies = [
+ "base64 0.13.1",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "embedded-can"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2227,6 +2239,7 @@ dependencies = [
  "embassy-executor",
  "embassy-futures",
  "embassy-time",
+ "embed-doc-image",
  "embedded-graphics",
  "futures-executor",
  "heapless 0.9.3",

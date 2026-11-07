@@ -10,6 +10,11 @@
   as the Device Envoy `DrawItem` it replaces.
 - `device-envoy-core` is now an optional dependency, turned on only by the
   `examples-*` features. The library itself no longer depends on Device Envoy.
+- `linkage_blaze::Error` now implements `core::error::Error` (previously only
+  in tests), so it works with `?` into `Box<dyn Error>`.
+- Rewrote the `render` docs: the module example now draws a small robot arm,
+  with its picture embedded via the new `doc-images` feature (on for docs.rs).
+  `Stroke`, `Disk`, `Sphere`, and `Projection` each have their own example.
 
 ## 0.1.11
 

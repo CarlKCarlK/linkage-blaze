@@ -155,7 +155,7 @@ pub(super) struct Canvas {
 }
 
 impl Canvas {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             pixels: vec![Rgb888::WHITE; CANVAS_PIXELS],
         }
