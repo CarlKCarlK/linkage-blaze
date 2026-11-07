@@ -1,0 +1,26 @@
+name: Check out device-envoy
+description: >
+  Checks out device-envoy at the tag in .github/device-envoy-ref and links it where
+  the workspace's [patch.crates-io] expects the sibling checkout (../mcu/device-envoy).
+  Run actions/checkout for Linkage Blaze first.
+
+runs:
+  using: composite
+  steps:
+    - name: Read the device-envoy tag
+      id: ref
+      shell: bash
+      run: echo "ref=$(tr -d '[:space:]' < .github/device-envoy-ref)" >> "$GITHUB_OUTPUT"
+
+    - name: Check out device-envoy
+      uses: actions/checkout@v4
+      with:
+        repository: CarlKCarlK/device-envoy
+        ref: ${{ steps.ref.outputs.ref }}
+        path: device-envoy-src
+
+    - name: Link the sibling checkout
+      shell: bash
+      run: |
+        mkdir -p ../mcu
+        ln -s "$GITHUB_WORKSPACE/device-envoy-src" ../mcu/device-envoy
