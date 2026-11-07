@@ -707,7 +707,7 @@ fn copy_cyd_simulator_assets(repo_root: &Path, source_dir: &Path, output_dir: &P
 
 /// Finds the wasm-bindgen `pkg/<name>.js` import among a frozen snapshot's `.js`
 /// files, so each snapshot rebuilds under the artifact name it was originally
-/// published with (see `specs/RENAME_BALLET_WASM_SPEC.md`), even after
+/// published with (the ballet demo's was renamed in July 2026), even after
 /// `demos.tsv`'s `out_name` column moves on to a new name for future versions.
 /// The import may live in a top-level `app.js` (`./pkg/<name>.js`) or a nested
 /// page such as `viewer/app.js` (`../pkg/<name>.js`), so this walks every `.js`

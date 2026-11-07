@@ -59,7 +59,11 @@ just bump-gallery-version
 - Update the workspace version in `Cargo.toml`.
 - Update the workspace `linkage-blaze` dependency requirement.
 - Update all Device Envoy requirements together when coordinating a Device
-  Envoy release.
+  Envoy release. The workspace's `[patch.crates-io]` applies only when the
+  sibling checkout's version satisfies the requirement. Otherwise Cargo
+  silently builds against crates.io, so set the requirements to the version
+  being released before checking against a Device Envoy branch. A published
+  crate ignores `[patch]`; it always resolves from crates.io.
 - Update the Device Envoy tag in `.github/device-envoy-ref`. The Clippy, MSRV,
   and Pages workflows check out device-envoy at that tag, through
   `.github/actions/checkout-device-envoy`, because the workspace's
@@ -89,8 +93,12 @@ rg -n -i '\bunreleased\b|\btbd\b' CHANGELOG.md
 
 ```bash
 cargo fmt --all -- --check
-rg -n '(?i)\btodo''0+\b' crates xtask specs docs
+rg -n '(?i)\btodo''0+\b' crates xtask docs
 ```
+
+  Planning documents in `specs/` carry a `TODO0` by design, so the sweep
+  leaves them out. Delete a spec once its work ships, moving anything still
+  useful into `docs/`.
 
 - Test the snapshot tooling when demo or gallery versions changed:
 
