@@ -313,11 +313,10 @@ fn ellipse_points(
     let bound_x = (axis_ax.abs() + axis_bx.abs()) as i32 + 1;
     let bound_y = (axis_ay.abs() + axis_by.abs()) as i32 + 1;
     // A degenerate (edge-on) ellipse scans no rows.
-    let rows = if determinant.abs() < 0.5 {
-        1..=0
-    } else {
-        -bound_y..=bound_y
-    };
+    let rows = (determinant.abs() >= 0.5)
+        .then_some(-bound_y..=bound_y)
+        .into_iter()
+        .flatten();
     let center_x = center.0 as i32;
     let center_y = center.1 as i32;
     rows.flat_map(move |local_y| {
