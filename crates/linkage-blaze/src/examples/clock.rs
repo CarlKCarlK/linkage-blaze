@@ -6,8 +6,7 @@
 use core::{fmt, iter};
 
 use crate::{
-    Error as LinkageError, linkage_file,
-    render::{Item2d, Projection},
+    Error as LinkageError, examples::draw_item::device_draw_item, linkage_file, render::Projection,
 };
 use device_envoy_core::{
     UnwrapInfallible,
@@ -202,46 +201,6 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
     let hour = ((hour_12 % 12) as f32 + minute_turn) / 12.0;
     let face_spin = (((second % 20) as f32) / 20.0 + 0.5) % 1.0;
     [hour, face_spin]
-}
-
-// ── Draw-item conversion ──────────────────────────────────────────────────────
-
-/// Convert a Linkage Blaze pixel-space item into the equivalent Device Envoy
-/// draw item, so it can share one streaming pass with the background bitmap.
-fn device_draw_item(item_2d: Item2d) -> DrawItem {
-    match item_2d {
-        Item2d::Stroke {
-            start,
-            end,
-            color,
-            pixel_width,
-        } => DrawItem::Stroke {
-            start,
-            end,
-            color,
-            pixel_width,
-        },
-        Item2d::Ellipse {
-            center,
-            axis_a,
-            axis_b,
-            color,
-        } => DrawItem::Ellipse {
-            center,
-            axis_a,
-            axis_b,
-            color,
-        },
-        Item2d::Circle {
-            center,
-            pixel_radius,
-            color,
-        } => DrawItem::Circle {
-            center,
-            pixel_radius,
-            color,
-        },
-    }
 }
 
 #[cfg(test)]

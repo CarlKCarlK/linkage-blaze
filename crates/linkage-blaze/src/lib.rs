@@ -45,6 +45,8 @@ pub mod examples {
     pub mod ballet;
     #[cfg(feature = "examples-clock")]
     pub mod clock;
+    #[cfg(feature = "examples-clock")]
+    mod draw_item;
     #[cfg(feature = "examples-skeleton-clock")]
     pub mod skeleton_clock;
     #[cfg(feature = "examples-armatron")]
