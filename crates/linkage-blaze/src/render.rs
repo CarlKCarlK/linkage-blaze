@@ -21,7 +21,7 @@
 //!
 //! ```rust
 //! # use embedded_graphics::{pixelcolor::{Rgb888, WebColors}, prelude::*};
-//! # use linkage_blaze::{LinkageFixed, render::Projection};
+//! # use linkage_blaze::{LinkageFixed, LinkageView, render::Projection};
 //! # struct Display(Vec<Rgb888>);
 //! # impl OriginDimensions for Display {
 //! #     fn size(&self) -> Size { Size::new(300, 300) }
@@ -40,7 +40,7 @@
 //! # }
 //! # fn main() -> Result<(), Box<dyn core::error::Error>> {
 //! # let mut display = Display(vec![Rgb888::WHITE; 300 * 300]);
-//! const ARM: LinkageFixed<0, 1, 21> = LinkageFixed::start()
+//! const ARM: LinkageView<0, 1> = LinkageFixed::<0, 1, 21>::start()
 //!     .pitch(-20.0) // tilt the scene toward the camera
 //!     .pen_color(Rgb888::CSS_DIM_GRAY)
 //!     .disk(2.5) // turntable
@@ -60,10 +60,11 @@
 //!     .forward(1.6) // finger
 //!     .restore("wrist")
 //!     .yaw(-35.0)
-//!     .forward(1.6); // finger
+//!     .forward(1.6) // finger
+//!     .view();
 //! let projection = Projection::front_perspective(Point::new(140, 250), 30.0, 20.0);
 //! let no_params = []; // ARM has no degrees of freedom
-//! for item_3d in ARM.view().draw_items_3d(&no_params)? {
+//! for item_3d in ARM.draw_items_3d(&no_params)? {
 //!     item_3d.project(&projection).draw(&mut display)?; // any embedded-graphics target
 //! }
 //! # // Keep the docs' picture honest: these pixels must match the embedded PNG.
@@ -84,7 +85,8 @@ use embedded_graphics::{
     primitives::{Circle, Line, PrimitiveStyle},
 };
 
-/// A pen-down line segment in 3D, from start to end.
+/// A 3D pen-down line segment, from start to end, emitted while evaluating a
+/// linkage.
 ///
 /// To project it to 2D, see [`Item3d::project`].
 ///
@@ -145,8 +147,9 @@ impl Stroke {
 
 /// A filled 3D disk emitted while evaluating a linkage.
 ///
-/// The disk lies in the plane of its pose's forward and left axes. To project
-/// it to 2D, see [`Item3d::project`].
+/// The disk lies in the plane of its pose's forward and left axes.
+///
+/// To project it to 2D, see [`Item3d::project`].
 ///
 /// # Example
 ///
@@ -547,7 +550,7 @@ impl Projection {
 mod tests {
     use super::Projection;
     use crate::{
-        LinkageFixed, Rgb888,
+        LinkageFixed, LinkageView, Rgb888,
         test_helpers::{Canvas, assert_png_matches_expected},
     };
     use embedded_graphics::{
@@ -558,7 +561,7 @@ mod tests {
 
     /// The robot arm from the module example. Keep the two in sync: the module
     /// doctest checks its own pixels against the PNG this test writes.
-    const ARM: LinkageFixed<0, 1, 21> = LinkageFixed::start()
+    const ARM: LinkageView<0, 1> = LinkageFixed::<0, 1, 21>::start()
         .pitch(-20.0) // tilt the scene toward the camera
         .pen_color(Rgb888::CSS_DIM_GRAY)
         .disk(2.5) // turntable
@@ -578,13 +581,15 @@ mod tests {
         .forward(1.6) // finger
         .restore("wrist")
         .yaw(-35.0)
-        .forward(1.6); // finger
+        .forward(1.6) // finger
+        .view();
 
     #[test]
     fn module_example_matches_expected_png() -> Result<(), Box<dyn StdError>> {
         let mut canvas = Canvas::new();
         let projection = Projection::front_perspective(Point::new(140, 250), 30.0, 20.0);
-        for item_3d in ARM.view().draw_items_3d(&[])? {
+        let no_params = []; // ARM has no degrees of freedom
+        for item_3d in ARM.draw_items_3d(&no_params)? {
             let Ok(()) = item_3d.project(&projection).draw(&mut canvas);
         }
         assert_png_matches_expected("render_example.png", &canvas)
