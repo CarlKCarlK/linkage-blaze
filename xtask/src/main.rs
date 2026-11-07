@@ -160,6 +160,67 @@ fn check_all() -> Result<()> {
         )?;
     }
 
+    // Mirror the `check-clippy.yml` CI workflow so lint failures surface locally.
+    for (arguments, description) in [
+        (
+            &[
+                "clippy",
+                "-p",
+                "linkage-blaze",
+                "--all-targets",
+                "--no-default-features",
+                "--",
+                "-D",
+                "warnings",
+            ][..],
+            "linkage-blaze clippy",
+        ),
+        (
+            &[
+                "clippy",
+                "-p",
+                "linkage-blaze",
+                "--all-targets",
+                "--no-default-features",
+                "--features",
+                "alloc",
+                "--",
+                "-D",
+                "warnings",
+            ][..],
+            "linkage-blaze alloc clippy",
+        ),
+        (
+            &[
+                "clippy",
+                "-p",
+                "linkage-blaze",
+                "--all-targets",
+                "--no-default-features",
+                "--features",
+                "bvh",
+                "--",
+                "-D",
+                "warnings",
+            ][..],
+            "linkage-blaze BVH clippy",
+        ),
+        (
+            &[
+                "clippy",
+                "-p",
+                "linkage-blaze-editor-wasm",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ][..],
+            "linkage-blaze-editor-wasm clippy",
+        ),
+    ] {
+        run_cargo_command(&repo_root, arguments, None, description)?;
+    }
+
     run_cargo_command(
         &repo_root,
         &["doc", "-p", "linkage-blaze", "--no-deps", "--all-features"],
