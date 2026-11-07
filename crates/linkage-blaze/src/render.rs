@@ -1,16 +1,17 @@
 //! Evaluated three-dimensional drawing geometry and projection helpers.
 //!
 //! [`Item3d`] values are produced by [`crate::LinkageView::draw_items_3d`].
-//! Use [`Item3d::project`] with a [`Projection`] when adapting them to a
-//! Device Envoy display, or inspect the payloads directly in another renderer.
+//! Use [`Item3d::project`] with a [`Projection`] to get a pixel-space
+//! [`Item2d`], which draws onto any embedded-graphics
+//! [`DrawTarget`]. You can also
+//! inspect either item's payload directly in another renderer.
 //!
 //! # Rendering evaluated items
 //!
 //! ```rust
-//! # use embedded_graphics::prelude::Point;
-//! # use linkage_blaze::{LinkageFixed, Vec3};
-//! # use linkage_blaze::render::Item3d;
-//! # use linkage_blaze::render::Projection;
+//! # use embedded_graphics::{mock_display::MockDisplay, prelude::*};
+//! # use linkage_blaze::{LinkageFixed, Rgb888, Vec3};
+//! # use linkage_blaze::render::{Item3d, Projection};
 //! # fn main() -> Result<(), linkage_blaze::Error> {
 //! const LINKAGE: LinkageFixed<0, 0, 5> = LinkageFixed::start()
 //!     .forward(1.0)
@@ -21,8 +22,11 @@
 //! let mut items = view.draw_items_3d(&[])?;
 //! match items.next() {
 //!     Some(Item3d::Stroke(stroke)) => {
-//!         let _display_item = Item3d::Stroke(stroke).project(&projection);
 //!         let _ = (stroke.start(), stroke.end(), stroke.color(), stroke.width());
+//!         let item_2d = Item3d::Stroke(stroke).project(&projection);
+//!         # let mut display = MockDisplay::<Rgb888>::new();
+//!         # display.set_allow_out_of_bounds_drawing(true);
+//!         let Ok(()) = item_2d.draw(&mut display); // any embedded-graphics target
 //!     }
 //!     _ => return Err(linkage_blaze::Error::EmptyLinkage),
 //! }
@@ -47,10 +51,12 @@
 //! # }
 //! ```
 
-use super::{Pose, Vec3};
-use embedded_graphics::prelude::Point;
-
-use super::Rgb888;
+use super::{Pose, Rgb888, Vec3};
+use embedded_graphics::{
+    Pixel,
+    prelude::{DrawTarget, Drawable, Point, Primitive},
+    primitives::{Circle, Line, PrimitiveStyle},
+};
 
 /// A drawable pen-down movement emitted while evaluating a linkage.
 #[derive(Clone, Copy, Debug)]
@@ -158,15 +164,15 @@ pub enum Item3d {
 }
 
 impl Item3d {
-    /// Project this item into a Device Envoy 2D display draw item.
+    /// Project this item into a pixel-space [`Item2d`].
     ///
     /// The projection controls the camera orientation, scale, target pixel,
     /// and optional perspective depth scaling.
     /// See the [rendering evaluated items example](#rendering-evaluated-items).
     #[must_use]
-    pub fn project(self, projection: &Projection) -> device_envoy_core::cyd::display::DrawItem {
+    pub fn project(self, projection: &Projection) -> Item2d {
         match self {
-            Self::Stroke(stroke) => device_envoy_core::cyd::display::DrawItem::Stroke {
+            Self::Stroke(stroke) => Item2d::Stroke {
                 start: stroke.start().project(projection),
                 end: stroke.end().project(projection),
                 color: stroke.color(),
@@ -174,7 +180,7 @@ impl Item3d {
             },
             Self::Disk(disk) => {
                 let orientation = disk.pose().orientation();
-                device_envoy_core::cyd::display::DrawItem::Ellipse {
+                Item2d::Ellipse {
                     center: disk.pose().project(projection),
                     axis_a: projection.project_dir(
                         disk.pose(),
@@ -185,13 +191,138 @@ impl Item3d {
                     color: disk.color(),
                 }
             }
-            Self::Sphere(sphere) => device_envoy_core::cyd::display::DrawItem::Circle {
+            Self::Sphere(sphere) => Item2d::Circle {
                 center: sphere.pose().project(projection),
                 pixel_radius: projection.project_radius(sphere.pose(), sphere.radius()),
                 color: sphere.color(),
             },
         }
     }
+}
+
+/// Two-dimensional, pixel-space geometry produced by [`Item3d::project`].
+///
+/// `Item2d` implements embedded-graphics [`Drawable`] with
+/// [`Rgb888`] color, so it draws onto any
+/// [`DrawTarget`]. For a display with another color type, such as `Rgb565`,
+/// draw through `target.color_converted()`.
+/// See the [rendering evaluated items example](#rendering-evaluated-items).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Item2d {
+    /// A line stroke from `start` to `end` with the given pixel width.
+    Stroke {
+        /// Start point in pixel coordinates.
+        start: (f32, f32),
+        /// End point in pixel coordinates.
+        end: (f32, f32),
+        /// Stroke color.
+        color: Rgb888,
+        /// Stroke width in pixels.
+        pixel_width: f32,
+    },
+    /// A filled ellipse, such as a projected disk.
+    ///
+    /// The ellipse is the locus of `center + s·axis_a + t·axis_b` with `s²+t² ≤ 1`.
+    Ellipse {
+        /// Center in pixel coordinates.
+        center: (f32, f32),
+        /// First radius vector, measured in pixels.
+        axis_a: (f32, f32),
+        /// Second radius vector, measured in pixels.
+        axis_b: (f32, f32),
+        /// Fill color.
+        color: Rgb888,
+    },
+    /// A filled circle, such as a projected sphere.
+    Circle {
+        /// Center in pixel coordinates.
+        center: (f32, f32),
+        /// Radius in pixels.
+        pixel_radius: f32,
+        /// Fill color.
+        color: Rgb888,
+    },
+}
+
+impl Drawable for Item2d {
+    type Color = Rgb888;
+    type Output = ();
+
+    /// Rasterize this item onto `target`.
+    ///
+    /// Strokes use the embedded-graphics [`Line`] primitive and circles use
+    /// [`Circle`]; ellipses are rasterized pixel by pixel. Edge-on (degenerate)
+    /// ellipses draw nothing.
+    /// See the [rendering evaluated items example](#rendering-evaluated-items).
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        match *self {
+            Self::Stroke {
+                start,
+                end,
+                color,
+                pixel_width,
+            } => {
+                let width = ((pixel_width + 0.5) as u32).max(1);
+                Line::new(
+                    Point::new(start.0 as i32, start.1 as i32),
+                    Point::new(end.0 as i32, end.1 as i32),
+                )
+                .into_styled(PrimitiveStyle::with_stroke(color, width))
+                .draw(target)
+            }
+            Self::Ellipse {
+                center,
+                axis_a,
+                axis_b,
+                color,
+            } => target
+                .draw_iter(ellipse_points(center, axis_a, axis_b).map(|point| Pixel(point, color))),
+            Self::Circle {
+                center,
+                pixel_radius,
+                color,
+            } => {
+                let diameter = (((pixel_radius * 2.0) + 0.5) as u32).max(1);
+                Circle::with_center(Point::new(center.0 as i32, center.1 as i32), diameter)
+                    .into_styled(PrimitiveStyle::with_fill(color))
+                    .draw(target)
+            }
+        }
+    }
+}
+
+/// Points inside the ellipse `center + s·axis_a + t·axis_b` with `s²+t² ≤ 1`,
+/// in row-major order. Yields nothing for a degenerate (edge-on) ellipse.
+fn ellipse_points(
+    center: (f32, f32),
+    axis_a: (f32, f32),
+    axis_b: (f32, f32),
+) -> impl Iterator<Item = Point> {
+    let (axis_ax, axis_ay) = axis_a;
+    let (axis_bx, axis_by) = axis_b;
+    let determinant = axis_ax * axis_by - axis_ay * axis_bx;
+    let inverse_determinant = 1.0 / determinant;
+    let bound_x = (axis_ax.abs() + axis_bx.abs()) as i32 + 1;
+    let bound_y = (axis_ay.abs() + axis_by.abs()) as i32 + 1;
+    // A degenerate (edge-on) ellipse scans no rows.
+    let rows = (determinant.abs() >= 0.5)
+        .then_some(-bound_y..=bound_y)
+        .into_iter()
+        .flatten();
+    let center_x = center.0 as i32;
+    let center_y = center.1 as i32;
+    rows.flat_map(move |local_y| {
+        (-bound_x..=bound_x).filter_map(move |local_x| {
+            let delta_x = local_x as f32;
+            let delta_y = local_y as f32;
+            let s = (axis_by * delta_x - axis_bx * delta_y) * inverse_determinant;
+            let t = (axis_ax * delta_y - axis_ay * delta_x) * inverse_determinant;
+            (s * s + t * t <= 1.0).then(|| Point::new(center_x + local_x, center_y + local_y))
+        })
+    })
 }
 
 /// Camera projection from Linkage Blaze world coordinates to pixel coordinates.

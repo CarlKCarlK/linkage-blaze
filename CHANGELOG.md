@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking:** `Item3d::project` now returns Linkage Blaze's own
+  `render::Item2d` (stroke, ellipse, circle in pixel space) instead of
+  Device Envoy's `DrawItem`. `Item2d` implements embedded-graphics `Drawable`
+  with `Rgb888` color, so it draws onto any `DrawTarget` (use
+  `.color_converted()` for `Rgb565` displays). It rasterizes the same pixels
+  as the Device Envoy `DrawItem` it replaces.
+- `device-envoy-core` is now an optional dependency, turned on only by the
+  `examples-*` features. The library itself no longer depends on Device Envoy.
+
 ## 0.1.11
 
 - Updated the Core, RP, and ESP dependencies and CI/Pages integration to

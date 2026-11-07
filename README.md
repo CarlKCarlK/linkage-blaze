@@ -36,6 +36,10 @@ workspace targets microcontrollers through Device Envoy's CYD (Cheap Yellow
 Display) APIs ([ESP32](https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html)
 , [RP](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html), [WASM](https://docs.rs/device-envoy-core/latest/device_envoy_core/wasm/struct.CydWasm.html)).
 
+The library draws through [embedded-graphics](https://docs.rs/embedded-graphics),
+so figures render on any embedded-graphics display. It does not depend on
+Device Envoy; only the optional `examples-*` features use it.
+
 The default crate configuration is `no_std` and allocation-free, so figures
 live in flash and animate on small microcontrollers. An opt-in `alloc` feature
 adds heap-based conveniences where an allocator is available.

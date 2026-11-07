@@ -5,7 +5,9 @@
 
 use core::{fmt, iter};
 
-use crate::{Error as LinkageError, linkage_file, render::Projection};
+use crate::{
+    Error as LinkageError, examples::draw_item::device_draw_item, linkage_file, render::Projection,
+};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,
@@ -121,12 +123,13 @@ where
 
         // ── Stream the pixels of the updated clock ────────────────────────────────────────
 
-        // Compute the time-dependent linkage parameters, then project the clock's
-        // 3D draw items into pixel-space 2D draw items.
+        // Compute the time-dependent linkage parameters, project the clock's
+        // 3D draw items into pixel-space 2D items, and convert those into
+        // Device Envoy draw items for its streaming rasterizer.
         let params = linkage_params(local_time);
         let draw_items_2d = LINKAGE
             .draw_items_3d(&params)?
-            .map(|draw_item_3d| draw_item_3d.project(&PROJECTION));
+            .map(|draw_item_3d| device_draw_item(draw_item_3d.project(&PROJECTION)));
 
         // Stream the pixels row-major straight to the display with no frame or
         // tile buffer, with the background_bitmap as the first pixel source.
