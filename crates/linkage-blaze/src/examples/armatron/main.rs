@@ -171,8 +171,7 @@ where
         frame.clear();
 
         // Draw the scene before widgets so the UI appears on top.
-        // Linkage items draw in Rgb888; the converter adapts them to the frame's Rgb565.
-        let mut frame_rgb888 = frame.color_converted();
+        let mut frame_rgb888 = frame.color_converted(); // Rgb888 items → Rgb565
         for draw_item_3d in LINKAGE.draw_items_3d(&params)? {
             draw_item_3d
                 .project(&PROJECTION)

@@ -107,8 +107,7 @@ where
             BACKGROUND_BITMAP.copy_to(&mut cyd_frame)?;
 
             // Apply the mocap params to the linkage and draw everything to the frame.
-            // Linkage items draw in Rgb888; the converter adapts them to the frame's Rgb565.
-            let mut cyd_frame_rgb888 = cyd_frame.color_converted();
+            let mut cyd_frame_rgb888 = cyd_frame.color_converted(); // Rgb888 items → Rgb565
             for draw_item_3d in LINKAGE.view().draw_items_3d(&params)? {
                 draw_item_3d
                     .project(&PROJECTION)

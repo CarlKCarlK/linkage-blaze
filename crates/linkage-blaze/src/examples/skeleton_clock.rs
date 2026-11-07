@@ -207,8 +207,7 @@ where
                 BACKGROUND_BITMAP.draw(tile).unwrap_infallible();
 
                 // Draw the projected items from the linkage.
-                // Linkage items draw in Rgb888; the converter adapts them to the tile's Rgb565.
-                let mut tile_rgb888 = tile.color_converted();
+                let mut tile_rgb888 = tile.color_converted(); // Rgb888 items → Rgb565
                 for projected_item in &projected_items {
                     projected_item.draw(&mut tile_rgb888).unwrap_infallible();
                 }
