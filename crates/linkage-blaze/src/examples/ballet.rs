@@ -15,7 +15,7 @@ use crate::{
     render::Projection,
 };
 use device_envoy_core::{
-    Error as CoreError,
+    Error as CoreError, UnwrapInfallible,
     button::Button,
     cyd::{
         CydDisplay,
@@ -23,8 +23,10 @@ use device_envoy_core::{
     },
 };
 use embassy_time::{Duration, Instant};
-use embedded_graphics::mono_font::{MonoFont, ascii::FONT_6X10};
-use embedded_graphics::prelude::Point;
+use embedded_graphics::{
+    mono_font::{MonoFont, ascii::FONT_6X10},
+    prelude::{DrawTargetExt, Drawable, Point},
+};
 
 // ── Screen policy ─────────────────────────────────────────────────────────────
 
@@ -106,7 +108,10 @@ where
 
             // Apply the mocap params to the linkage and draw everything to the frame.
             for draw_item_3d in LINKAGE.view().draw_items_3d(&params)? {
-                draw_item_3d.project(&PROJECTION).draw(&mut cyd_frame);
+                draw_item_3d
+                    .project(&PROJECTION)
+                    .draw(&mut cyd_frame.color_converted())
+                    .unwrap_infallible();
             }
 
             // Create a status line and write it to the frame.

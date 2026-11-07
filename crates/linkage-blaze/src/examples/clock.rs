@@ -5,7 +5,10 @@
 
 use core::{fmt, iter};
 
-use crate::{Error as LinkageError, linkage_file, render::Projection};
+use crate::{
+    Error as LinkageError, linkage_file,
+    render::{Item2d, Projection},
+};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,
@@ -121,12 +124,13 @@ where
 
         // ── Stream the pixels of the updated clock ────────────────────────────────────────
 
-        // Compute the time-dependent linkage parameters, then project the clock's
-        // 3D draw items into pixel-space 2D draw items.
+        // Compute the time-dependent linkage parameters, project the clock's
+        // 3D draw items into pixel-space 2D items, and convert those into
+        // Device Envoy draw items for its streaming rasterizer.
         let params = linkage_params(local_time);
         let draw_items_2d = LINKAGE
             .draw_items_3d(&params)?
-            .map(|draw_item_3d| draw_item_3d.project(&PROJECTION));
+            .map(|draw_item_3d| device_draw_item(draw_item_3d.project(&PROJECTION)));
 
         // Stream the pixels row-major straight to the display with no frame or
         // tile buffer, with the background_bitmap as the first pixel source.
@@ -198,6 +202,46 @@ fn linkage_params(local_time: &OffsetDateTime) -> [f32; 2] {
     let hour = ((hour_12 % 12) as f32 + minute_turn) / 12.0;
     let face_spin = (((second % 20) as f32) / 20.0 + 0.5) % 1.0;
     [hour, face_spin]
+}
+
+// ── Draw-item conversion ──────────────────────────────────────────────────────
+
+/// Convert a Linkage Blaze pixel-space item into the equivalent Device Envoy
+/// draw item, so it can share one streaming pass with the background bitmap.
+fn device_draw_item(item_2d: Item2d) -> DrawItem {
+    match item_2d {
+        Item2d::Stroke {
+            start,
+            end,
+            color,
+            pixel_width,
+        } => DrawItem::Stroke {
+            start,
+            end,
+            color,
+            pixel_width,
+        },
+        Item2d::Ellipse {
+            center,
+            axis_a,
+            axis_b,
+            color,
+        } => DrawItem::Ellipse {
+            center,
+            axis_a,
+            axis_b,
+            color,
+        },
+        Item2d::Circle {
+            center,
+            pixel_radius,
+            color,
+        } => DrawItem::Circle {
+            center,
+            pixel_radius,
+            color,
+        },
+    }
 }
 
 #[cfg(test)]

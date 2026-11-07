@@ -16,6 +16,7 @@ use crate::{
     render::Projection,
 };
 use device_envoy_core::{
+    UnwrapInfallible,
     button::Button,
     cyd::{
         Cyd, CydDisplay, CydTouch,
@@ -23,7 +24,11 @@ use device_envoy_core::{
     },
 };
 use embassy_time::Instant;
-use embedded_graphics::{geometry::Point, pixelcolor::WebColors};
+use embedded_graphics::{
+    geometry::Point,
+    pixelcolor::WebColors,
+    prelude::{DrawTargetExt, Drawable},
+};
 use nanorand::{Rng, WyRand};
 
 use crate::examples::ui::{Error as UiError, UiFrame, UiState};
@@ -167,7 +172,10 @@ where
 
         // Draw the scene before widgets so the UI appears on top.
         for draw_item_3d in LINKAGE.draw_items_3d(&params)? {
-            draw_item_3d.project(&PROJECTION).draw(&mut frame);
+            draw_item_3d
+                .project(&PROJECTION)
+                .draw(&mut frame.color_converted())
+                .unwrap_infallible();
         }
 
         let mut ui_frame = UiFrame::new(&mut ui_state, touch_event, &mut frame);

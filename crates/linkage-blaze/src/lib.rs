@@ -32,7 +32,9 @@ pub mod render;
 /// Platform-neutral example logic for the Linkage Blaze display examples.
 ///
 /// The device boundary is provided by Device Envoy's CYD (Cheap Yellow Display)
-/// traits. This module contains reusable example loops for Armatron, ballet,
+/// traits, so each `examples-*` feature turns on the optional
+/// `device-envoy-core` dependency; the rest of the crate does not use it.
+/// This module contains reusable example loops for Armatron, ballet,
 /// clock, and skeleton-clock applications. Enable the corresponding
 /// `examples-*` feature to include each example.
 pub mod examples {
