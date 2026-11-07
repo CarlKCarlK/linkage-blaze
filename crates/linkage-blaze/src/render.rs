@@ -84,9 +84,9 @@ use embedded_graphics::{
     primitives::{Circle, Line, PrimitiveStyle},
 };
 
-/// A drawable pen-down movement emitted while evaluating a linkage.
+/// A pen-down line segment in 3D, from start to end.
 ///
-/// Its accessors give the 3D data for renderers that skip [`Item3d::project`].
+/// To project it to 2D, see [`Item3d::project`].
 ///
 /// # Example
 ///
@@ -143,10 +143,10 @@ impl Stroke {
     }
 }
 
-/// A filled disk emitted while evaluating a linkage.
+/// A filled 3D disk emitted while evaluating a linkage.
 ///
-/// The disk lies in the plane of its pose's forward and left axes. Its
-/// accessors give the 3D data for renderers that skip [`Item3d::project`].
+/// The disk lies in the plane of its pose's forward and left axes. To project
+/// it to 2D, see [`Item3d::project`].
 ///
 /// # Example
 ///
@@ -196,9 +196,9 @@ impl Disk {
     }
 }
 
-/// A sphere emitted while evaluating a linkage.
+/// A 3D sphere emitted while evaluating a linkage.
 ///
-/// Its accessors give the 3D data for renderers that skip [`Item3d::project`].
+/// To project it to 2D, see [`Item3d::project`].
 ///
 /// # Example
 ///
