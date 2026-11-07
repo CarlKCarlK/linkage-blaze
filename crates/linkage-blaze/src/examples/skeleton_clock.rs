@@ -207,10 +207,10 @@ where
                 BACKGROUND_BITMAP.draw(tile).unwrap_infallible();
 
                 // Draw the projected items from the linkage.
+                // Linkage items draw in Rgb888; the converter adapts them to the tile's Rgb565.
+                let mut tile_rgb888 = tile.color_converted();
                 for projected_item in &projected_items {
-                    projected_item
-                        .draw(&mut tile.color_converted())
-                        .unwrap_infallible();
+                    projected_item.draw(&mut tile_rgb888).unwrap_infallible();
                 }
 
                 // Draw the hour sign and number
