@@ -97,6 +97,69 @@ test("the shared shell provides bounded wheel zoom and reset", async ({ page }) 
   await expect(reset).toBeHidden();
 });
 
+for (const demo of [
+  { slug: "skeleton-clock", viewport: { width: 412, height: 915 } },
+  { slug: "armatron", viewport: { width: 915, height: 412 } },
+]) {
+  test(`${demo.slug} fits the whole device between the corner chips on a phone`, async ({ browser }) => {
+    const context = await browser.newContext({
+      viewport: demo.viewport,
+      hasTouch: true,
+      isMobile: true,
+    });
+    const page = await context.newPage();
+    await page.goto(`/demos/${demo.slug}/v4/`);
+
+    const cardButton = page.locator(".demo-ux-card-tag");
+    await expect(cardButton.locator("strong")).toBeVisible();
+    await expect(cardButton.locator(".demo-ux-card-tag__preview")).toBeHidden();
+
+    const overlaps = (first, second) =>
+      first.x < second.x + second.width && second.x < first.x + first.width
+      && first.y < second.y + second.height && second.y < first.y + first.height;
+    const inside = (box) =>
+      box.x >= 0 && box.y >= 0
+      && box.x + box.width <= demo.viewport.width
+      && box.y + box.height <= demo.viewport.height;
+    await expect.poll(async () => {
+      const screen = await page.locator("#screen").boundingBox();
+      const boot = await page.locator("#boot-button").boundingBox();
+      const chips = await Promise.all([
+        page.locator(".demo-ux-gallery-tag").boundingBox(),
+        cardButton.boundingBox(),
+        page.locator(".demo-ux-device-button").boundingBox(),
+      ]);
+      return inside(screen) && inside(boot)
+        && chips.every((chip) => !overlaps(chip, screen) && !overlaps(chip, boot));
+    }).toBe(true);
+
+    // A two-finger spread zooms the scene; reset restores the fit.
+    const reset = page.locator(".demo-ux-zoom-reset");
+    const simulator = page.locator(".simulator");
+    const fitted = await simulator.evaluate((element) => element.style.transform);
+    const screen = await page.locator("#screen").boundingBox();
+    const centerX = screen.x + screen.width / 2;
+    const centerY = screen.y + screen.height / 2;
+    const touchPoints = (spread) => [
+      { x: centerX - spread, y: centerY, id: 0 },
+      { x: centerX + spread, y: centerY, id: 1 },
+    ];
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: touchPoints(30) });
+    for (let spread = 40; spread <= 80; spread += 10) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: touchPoints(spread) });
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect(reset).toBeVisible();
+    expect(await simulator.evaluate((element) => element.style.transform)).not.toBe(fitted);
+
+    await reset.tap();
+    await expect(reset).toBeHidden();
+    expect(await simulator.evaluate((element) => element.style.transform)).toBe(fitted);
+    await context.close();
+  });
+}
+
 test("the shared details card opens, focuses, and closes with Escape", async ({ page }) => {
   await page.goto("/demos/clock/v4/");
 
