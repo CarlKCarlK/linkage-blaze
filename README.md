@@ -36,6 +36,10 @@ workspace targets microcontrollers through Device Envoy's CYD (Cheap Yellow
 Display) APIs ([ESP32](https://docs.rs/device-envoy-esp/latest/device_envoy_esp/cyd/index.html)
 , [RP](https://docs.rs/device-envoy-rp/latest/device_envoy_rp/cyd/index.html), [WASM](https://docs.rs/device-envoy-core/latest/device_envoy_core/wasm/struct.CydWasm.html)).
 
+The library draws through [embedded-graphics](https://docs.rs/embedded-graphics),
+so figures render on any embedded-graphics display. It does not depend on
+Device Envoy; only the optional `examples-*` features use it.
+
 The default crate configuration is `no_std` and allocation-free, so figures
 live in flash and animate on small microcontrollers. An opt-in `alloc` feature
 adds heap-based conveniences where an allocator is available.
@@ -168,9 +172,10 @@ const LINKAGE: LinkageFixed<0, 0, 3> = LinkageFixed::start()
     .forward(2.0)
     .left(1.0);
 
+let no_params = []; // LINKAGE has no degrees of freedom
 let stroke_count = LINKAGE
     .view()
-    .draw_items_3d(&[])?
+    .draw_items_3d(&no_params)?
     .filter(|item| matches!(item, Item3d::Stroke(_)))
     .count();
 assert_eq!(stroke_count, 2);

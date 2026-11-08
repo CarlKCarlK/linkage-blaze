@@ -1035,6 +1035,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "embed-doc-image"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af36f591236d9d822425cb6896595658fa558fcebf5ee8accac1d4b92c47166e"
+dependencies = [
+ "base64 0.13.1",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "embedded-can"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2220,13 +2232,14 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "linkage-blaze"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "derive_more",
  "device-envoy-core",
  "embassy-executor",
  "embassy-futures",
  "embassy-time",
+ "embed-doc-image",
  "embedded-graphics",
  "futures-executor",
  "heapless 0.9.3",
@@ -2242,7 +2255,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-editor-wasm"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "derive_more",
  "linkage-blaze",
@@ -2251,7 +2264,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-examples-esp"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "derive_more",
  "device-envoy-core",
@@ -2273,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-examples-rp"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -2294,7 +2307,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-examples-wasm"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "device-envoy-core",
  "embassy-executor",
@@ -2310,7 +2323,7 @@ dependencies = [
 
 [[package]]
 name = "linkage-blaze-xtask"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "derive_more",

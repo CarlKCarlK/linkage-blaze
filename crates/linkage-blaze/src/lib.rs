@@ -32,7 +32,9 @@ pub mod render;
 /// Platform-neutral example logic for the Linkage Blaze display examples.
 ///
 /// The device boundary is provided by Device Envoy's CYD (Cheap Yellow Display)
-/// traits. This module contains reusable example loops for Armatron, ballet,
+/// traits, so each `examples-*` feature turns on the optional
+/// `device-envoy-core` dependency; the rest of the crate does not use it.
+/// This module contains reusable example loops for Armatron, ballet,
 /// clock, and skeleton-clock applications. Enable the corresponding
 /// `examples-*` feature to include each example.
 pub mod examples {
@@ -43,6 +45,8 @@ pub mod examples {
     pub mod ballet;
     #[cfg(feature = "examples-clock")]
     pub mod clock;
+    #[cfg(feature = "examples-clock")]
+    mod draw_item;
     #[cfg(feature = "examples-skeleton-clock")]
     pub mod skeleton_clock;
     #[cfg(feature = "examples-armatron")]
@@ -72,7 +76,8 @@ use core::fmt;
 /// assert_eq!((numeric.r(), numeric.g(), numeric.b()), (12, 34, 56));
 /// let named = Rgb888::CSS_BLUE;
 /// assert_eq!(named.b(), 255);
-/// let _item = LINKAGE.view().draw_items_3d(&[])?.next();
+/// let no_params = []; // LINKAGE has no degrees of freedom
+/// let _item = LINKAGE.view().draw_items_3d(&no_params)?.next();
 /// # Ok(())
 /// # }
 /// ```
@@ -324,8 +329,7 @@ impl fmt::Display for Error {
     }
 }
 
-#[cfg(test)]
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 /// A borrowed linkage used to evaluate, compose, and render a linkage.
 ///
@@ -848,7 +852,8 @@ impl<'a, const DOF: usize, const MARKS: usize> LinkageView<'a, DOF, MARKS> {
     ///
     /// # fn main() -> Result<(), linkage_blaze::Error> {
     /// # let view = LINKAGE.view();
-    /// let has_stroke = view.draw_items_3d(&[])?
+    /// let no_params = []; // LINKAGE has no degrees of freedom
+    /// let has_stroke = view.draw_items_3d(&no_params)?
     ///     .any(|item| matches!(item, Item3d::Stroke(_)));
     /// assert!(has_stroke);
     /// # Ok(())
@@ -3861,7 +3866,8 @@ impl<const DOF: usize, const MARKS: usize> Iterator for StyledPosesView<'_, DOF,
 ///
 /// # fn main() -> Result<(), linkage_blaze::Error> {
 /// let view = LINKAGE.view();
-/// let mut items = view.draw_items_3d(&[])?;
+/// let no_params = []; // LINKAGE has no degrees of freedom
+/// let mut items = view.draw_items_3d(&no_params)?;
 /// while let Some(item) = items.next() {
 ///     // Render or otherwise consume `item` here.
 ///     drop(item);

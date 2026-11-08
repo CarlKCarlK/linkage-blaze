@@ -18,7 +18,11 @@ all-features = true
 
 [dependencies]
 derive_more = { version = "2.1.1", default-features = false, features = ["from"] }
-device-envoy-core = { version = "0.2.0", default-features = false }
+# Optional: only the `examples-*` features use Device Envoy. The library itself
+# renders through embedded-graphics and has no Device Envoy dependency.
+device-envoy-core = { version = "0.2.0", default-features = false, optional = true }
+# Embeds example images into the rustdoc output; used only by the `doc-images` feature.
+embed-doc-image = { version = "0.1.4", optional = true }
 embassy-time = "0.5.1"
 embassy-futures = "0.1.2"
 embedded-graphics = { version = "0.8", default-features = false }
@@ -35,24 +39,26 @@ default = []
 alloc = []
 std = ["alloc"]
 bvh = ["std"]
+# Embed example images in the generated docs (docs.rs builds with all features).
+doc-images = ["dep:embed-doc-image"]
 # Each generic example is gated behind its own feature so a consumer compiles
 # only the example it actually uses — in particular `examples-ballet`'s heavy
 # embedded `MOTION` const is evaluated only when that feature is on. Nothing
 # is on by default; every consumer opts in to the examples it needs.
 # The `armatron` example — local armatron state, calibration geometry, and the generic game loop.
-examples-armatron = []
+examples-armatron = ["dep:device-envoy-core"]
 # The `ballet` example embeds a motion-capture const that is slow to evaluate;
 # keep it off unless the `ballet` example is being built. It draws through
 # `device-envoy-core::cyd` but has no `ClockSync` needs, so it stays off the
 # `wifi` feature (→ embassy-executor) that `examples-skeleton-clock`/`examples-clock` need.
-examples-ballet = []
+examples-ballet = ["dep:device-envoy-core"]
 # The `skeleton_clock` example needs device-envoy's `ClockSync` (→ embassy-executor).
 # `ballet` does not, so platforms that only want `ballet` (e.g. the WASM build,
 # which must avoid embassy-executor's unprovided `__pender` arch symbol) can
 # disable this and keep the dependency graph lean.
-examples-skeleton-clock = ["device-envoy-core/wifi"]
+examples-skeleton-clock = ["dep:device-envoy-core", "device-envoy-core/wifi"]
 # The analog `clock` example, like `skeleton_clock`, needs device-envoy's `ClockSync`.
-examples-clock = ["device-envoy-core/wifi"]
+examples-clock = ["dep:device-envoy-core", "device-envoy-core/wifi"]
 
 [[bin]]
 name = "bvh-to-lb"

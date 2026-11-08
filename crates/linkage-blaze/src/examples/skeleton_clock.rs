@@ -5,7 +5,10 @@
 
 use core::{array::from_fn, convert::Infallible, fmt};
 
-use crate::{Error as LinkageError, LinkageFixed, Rgb888, linkage_file, render::Projection};
+use crate::{
+    Error as LinkageError, LinkageFixed, Rgb888, linkage_file,
+    render::{Item2d, Projection},
+};
 use device_envoy_core::{
     UnwrapInfallible,
     button::Button,
@@ -16,7 +19,7 @@ use embedded_graphics::{
     Drawable,
     mono_font::{MonoFont, MonoTextStyle, ascii::FONT_7X13, ascii::FONT_10X20},
     pixelcolor::Rgb565,
-    prelude::{DrawTarget, Point, Size},
+    prelude::{DrawTarget, DrawTargetExt, Point, Size},
     primitives::Rectangle,
     text::{Alignment, Baseline, Text, TextStyleBuilder},
 };
@@ -26,7 +29,7 @@ use time::OffsetDateTime;
 use device_envoy_core::cyd::{
     CydDisplay,
     display::{
-        CydFrame, DrawItem, Image565Fixed, Image888Fixed, MaskFixed, MaskedDrawable, Orientation,
+        CydFrame, Image565Fixed, Image888Fixed, MaskFixed, MaskedDrawable, Orientation,
         mask_byte_count, tga, tiling::TileGrid,
     },
 };
@@ -204,8 +207,9 @@ where
                 BACKGROUND_BITMAP.draw(tile).unwrap_infallible();
 
                 // Draw the projected items from the linkage.
+                let mut tile_rgb888 = tile.color_converted(); // Rgb888 items → Rgb565
                 for projected_item in &projected_items {
-                    projected_item.draw(tile);
+                    projected_item.draw(&mut tile_rgb888).unwrap_infallible();
                 }
 
                 // Draw the hour sign and number
@@ -295,7 +299,7 @@ pub enum Error<FlushError> {
     Flush(FlushError),
     /// The projected-items scratch buffer was smaller than the linkage draw-item count.
     #[from(ignore)]
-    VecOverflow(DrawItem),
+    VecOverflow(Item2d),
 }
 
 // ── Clock time ────────────────────────────────────────────────────────────────
