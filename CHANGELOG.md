@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - **Breaking:** `Item3d::project` now returns Linkage Blaze's own
   `render::Item2d` (stroke, ellipse, circle in pixel space) instead of
