@@ -234,7 +234,7 @@ The import is a text excerpt because rustdoc cannot provide the external asset f
 
 ### 6. Edit a large linkage
 
-Open the [interactive Linkage Blaze editor](https://carlkcarlk.github.io/linkage-blaze/demos/editor/v2/)
+Open the [interactive Linkage Blaze editor](https://carlkcarlk.github.io/linkage-blaze/demos/editor/)
 to edit and preview `.lb.rs` assets. Open an existing file or paste an
 expression, adjust its generated parameter controls while watching the 3D
 preview, and use **Save** or **Save As** to write the edited `.lb.rs` file.
