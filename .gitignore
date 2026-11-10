@@ -5,3 +5,7 @@
 /crates/*/www/pkg
 *.code-workspace
 **/target/
+
+# Playwright output
+test-results/
+playwright-report/
