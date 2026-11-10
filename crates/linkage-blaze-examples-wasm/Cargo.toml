@@ -34,7 +34,7 @@ path = "examples/skeleton_clock.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-device-envoy-core = { version = "0.2.4", features = ["wasm", "wifi"] }
+device-envoy-core = { version = "0.2.5", features = ["wasm", "wifi"] }
 embassy-executor = { version = "0.10.0", features = ["platform-wasm", "executor-thread"] }
 embassy-time = { version = "0.5.1", features = ["wasm", "generic-queue-64"] }
 embedded-graphics = { version = "0.8", default-features = false }
