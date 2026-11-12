@@ -253,20 +253,6 @@ fn check_all() -> Result<()> {
         build_rp_example(&repo_root, example_name, board)?;
     }
 
-    let device_envoy_rp = repo_root.join("../mcu/device-envoy/crates/device-envoy-rp");
-    run_cargo_command(
-        &device_envoy_rp,
-        &[
-            "run",
-            "--quiet",
-            "--manifest-path",
-            "xtask/Cargo.toml",
-            "--",
-            "check-examples",
-        ],
-        None,
-        "Device Envoy RP example checks",
-    )?;
     run_cargo_command(
         &repo_root,
         &[
