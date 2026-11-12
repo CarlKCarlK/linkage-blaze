@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.1
+
+- Update optional Device Envoy Core and the native/WASM example dependencies
+  to 0.3.0, with CI and Pages pinned to Device Envoy `v0.3.0`. Linkage Blaze's
+  public API is unchanged; the library still has no Device Envoy dependency
+  unless an `examples-*` feature is enabled.
+- Browser CYD demos use the current Device Envoy shell: phone layouts fit the
+  device, pinch zoom can be reset, a manually set clock keeps running, and
+  the simulated Wi-Fi notice fades. These improvements are already deployed;
+  existing demo and gallery URLs are retained.
+- Link the README to the editor's latest-version redirect, and use the named
+  dark-cyan color constant in the Armatron assets without changing its color.
+- Stop rebuilding Device Envoy's RP example matrix in `cargo check-all`.
+  Linkage Blaze still validates its own RP, ESP, WASM, and editor consumers.
+
+
 ## 0.2.0
 
 - **Breaking:** `Item3d::project` now returns Linkage Blaze's own
